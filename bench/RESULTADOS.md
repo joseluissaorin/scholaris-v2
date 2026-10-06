@@ -27,7 +27,48 @@ El tiempo cuenta de punta a punta, imprenta incluida. Los vídeos se trocean en 
 
 En calidad, la diferencia más grande está en el libro de 245 páginas. El SPDF 3 tenía **195 páginas vacías** (74.000 caracteres en todo el libro), el título era el nombre del archivo de Z-Library y en 194 páginas el folio era igual a la página física, es decir, no se dedujo. El SPDF 4 tiene 358.000 caracteres, 7 páginas vacías (cubiertas y guardas) y **245 folios**: 229 leídos y contrastados con las etiquetas del PDF, que coinciden en 229 de 232 páginas. Revisé a ojo las páginas 12 («ix») y 100 («87») contra su imagen y están bien.
 
-## Velocidad por documento
+## Segunda tanda: buscable mientras se lee (tubería por tandas)
+
+La ingesta ya no va por fases en serie. Cada tanda (un lote de 24 páginas con capa de texto, un pliego de visión o un tramo de audio) pasa al índice léxico en cuanto está leída, y después recibe su contexto y sus vectores. Al final, una consolidación pone los folios definitivos, las secciones y las costuras entre tandas, atribuye los hablantes en los medios y deja el documento «listo». El mapa de pasos para el Workflow está en `packages/ingesta/NOTAS.md`.
+
+**Primera búsqueda útil.** Es el momento en que la base del SPDF devuelve resultados por FTS a una palabra del documento, medido en el banco.
+
+| Documento | Antes: buscable al final | Ahora: primera búsqueda útil | Todo buscable | «Listo» antes → ahora |
+|---|---|---|---|---|
+| Attention, 15 págs. digitales | 11,2 s | **0,02 s** | 10,3 s | 11,2 s → 10,9 s |
+| El perseguidor, 37 págs. digitales | 13,2 s | **0,05 s** | 14,4 s | 13,2 s → 15,5 s |
+| Casamiento, 43 págs. escaneadas | 24,1 s | **3,3 s** | 17,3 s | 24,1 s → 19,7 s |
+| Discarded Image, 245 págs. | 85 s (mediana) | **4,2-6,2 s** | 32 s / 32 s / 88 s | 85 s (mediana) → 37 s, 38 s y 93 s* |
+| Cabral, vídeo de 54 min | 38 s | **5,9 s** | 12,5 s | 38 s → 38,6 s |
+| Cortázar, vídeo de 2 h | 52 s | **5,4 s** | 13,3 s | 52 s → 52,5 s |
+| Audio o vídeo de 1 min | 5,2-5,7 s | **2,6-2,8 s** | 2,6-2,8 s | 5,2-5,7 s → 7,6-9,7 s** |
+
+Los tiempos son de ingesta, sin la imprenta (en la nube, la imprenta la hace el navegador).
+
+\* Las tres ejecuciones del libro. La de 93 s coincidió con una ráfaga de «fetch failed» de la API.
+
+\*\* Los medios cortos tardan más en estar «listos» que antes. Su consolidación pone en fila la ficha (ahora con el enriquecimiento del agente de metadatos), el reparto de hablantes, el contexto y los vectores, unos 7 s. Aun así, son buscables a los 2,7 s.
+
+**Cuánto se rehace al consolidar.** El troceado corta en el primer párrafo de cada tanda, igual cuando trocea la tanda sola que cuando trocea el documento entero. Por eso solo cambian las costuras. En Attention se reaprovecharon 33 de 37 fragmentos con su contexto y sus vectores. Las costuras se contextualizan y vectorizan mientras las últimas tandas terminan.
+
+**Contexto bloqueado.** Gemini bloquea por `PROHIBITED_CONTENT` un grupo de El perseguidor, el de las escenas de heroína, y la reserva de OpenRouter tardaba 25-41 s. Ahora cada grupo tiene un tope (10 s en la tanda, 20 s al consolidar) y lo que no llega lleva una línea de contexto extractiva (título, autor, año, sección y página). Lo que falló en una tanda ya no se reintenta.
+
+**Vector de imagen de página.** Ya no se calcula en las páginas digitales de solo texto, a la espera del banco de calidad. El perseguidor pasa de 124 a 87 vectores y Attention de 57 a 49. Las piezas idénticas (páginas en blanco o repetidas) se vectorizan una sola vez, y solo se describen figuras reales: fuera los adornos de menos del 1 % de la página y las «figuras» que son la página entera.
+
+**Modo económico** (`--modo economico`, con la Batch API de Gemini, que entrega en JSONL). Probado con el Casamiento:
+
+| | Rápido | Económico |
+|---|---|---|
+| Coste total | 0,206 $ | **0,111 $** (−46 %) |
+| Lectura | 0,166 $ (43 llamadas a 3.8 Flash) | 0,073 $ (1 lote a mitad de precio) |
+| Llamadas | 82 | 41 |
+| «Listo» | 19,7 s | 6,9 min (el lote tardó 6,7 min; el objetivo de Google es 24 h) |
+
+El lector barato (Workers AI) para las páginas «fáciles» está probado con dobles; en el Mac no hay credenciales de Cloudflare.
+
+**OpenRouter en vivo, con las páginas que Gemini rechaza por recitación.** En The Discarded Image, las páginas 1-4 (cubierta y solapa con texto con derechos) las bloquean tanto Flash-Lite como 3.8 Flash. La cascada las pasó a `openrouter:mistral-ocr+google/gemini-3.5-flash-lite`, que las leyó en 5,6 s por 0,011 $ («# C. S. LEWIS / The Discurded Image…», con una errata del OCR de Mistral). Ninguna página del libro se quedó sin leer.
+
+## Velocidad por documento (primera tanda, fases en serie)
 
 | Etiqueta | Tipo | Unidades | Imprenta | Ingesta | Total | s/unidad | $ | Llamadas |
 |---|---|---|---|---|---|---|---|---|
