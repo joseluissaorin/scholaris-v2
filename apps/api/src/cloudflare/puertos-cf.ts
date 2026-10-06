@@ -97,6 +97,8 @@ export async function inteligenciaPara(env: Env, cuentas: Cuentas, usuario: stri
   if (o.sinCache) return fabrica(env, await cuentas.clavesPropias(usuario).catch(() => ({})));
   const propias = await cuentas.clavesPropias(usuario).catch(() => ({}));
   const ia = fabrica(env, propias);
+  // Abre ya la conexión del embebedor: la primera consulta se ahorra ~200 ms. Sin esperarla.
+  void (ia.embebedor as { precalentar?: () => Promise<void> }).precalentar?.().catch(() => undefined);
   cacheIA.set(usuario, { ia, hasta: Date.now() + 600_000 });
   if (cacheIA.size > 200) cacheIA.delete(cacheIA.keys().next().value as string);
   return ia;

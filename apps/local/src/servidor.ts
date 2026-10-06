@@ -136,6 +136,8 @@ export async function crearServidorLocal(o: OpcionesServidor): Promise<ServidorL
       TYPESAFE_API_KEY: propias.typesafe ?? env.TYPESAFE_API_KEY,
     };
     const ia = o.fabricaInteligencia ? o.fabricaInteligencia(e) : crearInteligencia(e, { concurrencia: 12 });
+    // Abre ya la conexión del embebedor: la primera consulta se ahorra ~200 ms.
+    void (ia.embebedor as { precalentar?: () => Promise<void> }).precalentar?.().catch(() => undefined);
     cacheIA.set(usuario, { ia, hasta: Date.now() + 600_000 });
     return ia;
   };
@@ -192,6 +194,8 @@ export async function crearServidorLocal(o: OpcionesServidor): Promise<ServidorL
     id: 'local', correo: env.SCHOLARIS_CORREO ?? 'local@scholaris', nombre: env.SCHOLARIS_NOMBRE ?? 'Scholaris', plan: 'pro', funciones: ['scholaris'], via: 'local',
   };
   if (usuarioLocal) await cuentas.asegurarUsuario(usuarioLocal);
+  // Al arrancar: la inteligencia del usuario local, con el embebedor ya precalentado.
+  if (usuarioLocal && !o.fabricaInteligencia) void inteligenciaDe(usuarioLocal.id).catch(() => undefined);
 
   const appUsuario = crearAppUsuario();
   const plataforma: Plataforma = {

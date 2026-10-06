@@ -184,6 +184,16 @@ describe('subida → ingesta → búsqueda', () => {
     expect(b.cuerpo.resultados[0].fragmento.texto).toMatch(/panóptico/);
     expect(b.cuerpo.resultados[0].citaCorta).toMatch(/Foucault, 1975/);
 
+    // En dos tiempos (SSE): termina con «final», con los mismos resultados que la JSON.
+    const dos = await api('/busqueda', { token: t, cuerpo: { consulta: 'panóptico de Bentham', k: 5 }, cabeceras: { accept: 'text/event-stream' } });
+    expect(dos.estado).toBe(200);
+    expect(dos.r.headers.get('content-type')).toContain('text/event-stream');
+    const eventos = String(dos.cuerpo).split('\n').filter((l) => l.startsWith('event: ')).map((l) => l.slice(7));
+    expect(eventos.at(-1)).toBe('final');
+    expect(eventos.every((e) => e === 'preliminar' || e === 'final')).toBe(true);
+    const datosFinal = JSON.parse(String(dos.cuerpo).split('\n').filter((l) => l.startsWith('data: ')).at(-1)!.slice(6));
+    expect(datosFinal.respuesta.resultados[0].fragmento.texto).toMatch(/panóptico/);
+
     // La búsqueda quedó en el historial (montado desde @scholaris/funciones).
     const h = await api('/historial', { token: t });
     expect(h.estado).toBe(200);

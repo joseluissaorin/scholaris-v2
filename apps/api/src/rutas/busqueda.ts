@@ -4,7 +4,7 @@ import { streamSSE } from 'hono/streaming';
 import type { Resultado } from '@scholaris/nucleo';
 import { bytesAVector } from '@scholaris/nucleo';
 import type {
-  Buscar, BuscarMultilingue, EventoRespuesta, IntencionConsulta, Responder, RespuestaBusqueda, RespuestaMultilingue, ResultadoVista, Similares,
+  Buscar, BuscarMultilingue, EventoBusquedaEnDos, EventoRespuesta, IntencionConsulta, Responder, RespuestaBusqueda, RespuestaMultilingue, ResultadoVista, Similares,
 } from '@scholaris/contrato';
 import { responder, type OpcionesBusqueda, type RespuestaBusqueda as RespuestaBuscador, type Via } from '@scholaris/busqueda';
 import { compactarResultados, registrarBusqueda } from '@scholaris/funciones';
@@ -113,19 +113,46 @@ export function rutasBusqueda(app: Hono<Entorno>): void {
     await consumirBusqueda(p);
     const t0 = Date.now();
     const buscador = await obtenerBuscador(p);
-    const r = await buscador.buscar(b.consulta, opciones(b));
-    r.resultados = await soloAmbito(c, r.resultados);
-    const ms = Date.now() - t0;
-    const salida: RespuestaBusqueda = {
-      resultados: await Promise.all(r.resultados.map((x) => aVista(p, x))),
-      intencion: INTENCION[r.comprension.intencion] ?? 'conceptual',
-      expansion: r.comprension.expansiones.map((e) => e.texto),
-      ms,
-      tiempos: { ...r.tiempos, puerta: Number(c.req.header('x-scholaris-ms-puerta') ?? 0) },
+    const final = async (r: RespuestaBuscador): Promise<RespuestaBusqueda> => {
+      r.resultados = await soloAmbito(c, r.resultados);
+      const ms = Date.now() - t0;
+      const salida: RespuestaBusqueda = {
+        resultados: await Promise.all(r.resultados.map((x) => aVista(p, x))),
+        intencion: INTENCION[r.comprension.intencion] ?? 'conceptual',
+        expansion: r.comprension.expansiones.map((e) => e.texto),
+        ms,
+        tiempos: { ...r.tiempos, puerta: Number(c.req.header('x-scholaris-ms-puerta') ?? 0) },
+      };
+      const evento = await grabar(p, 'busqueda', b, r, { ms });
+      if (evento) salida.evento = evento;
+      return salida;
     };
-    const evento = await grabar(p, 'busqueda', b, r, { ms });
-    if (evento) salida.evento = evento;
-    return c.json(salida);
+    if (!(c.req.header('accept') ?? '').includes('text/event-stream')) return c.json(await final(await buscador.buscar(b.consulta, opciones(b))));
+
+    // En dos tiempos: el orden de la fusión en cuanto lo hay y, después, el reordenado.
+    return streamSSE(c, async (sse) => {
+      const enviar = (e: EventoBusquedaEnDos) => sse.writeSSE({ event: e.tipo, data: JSON.stringify(e) });
+      let preliminar: Promise<void> = Promise.resolve();
+      let terminado = false;
+      try {
+        const r = await buscador.buscar(b.consulta, {
+          ...opciones(b),
+          alPreliminar: (rs) => {
+            preliminar = (async () => {
+              const vistas = await Promise.all((await soloAmbito(c, rs)).map((x) => aVista(p, x)));
+              if (!terminado) await enviar({ tipo: 'preliminar', resultados: vistas, ms: Date.now() - t0 });
+            })().catch((e) => console.error('preliminar', e));
+          },
+        });
+        await preliminar;
+        const salida = await final(r);
+        terminado = true;
+        await enviar({ tipo: 'final', respuesta: salida });
+      } catch (e) {
+        console.error('busqueda', e);
+        await enviar({ tipo: 'error', mensaje: 'No he podido terminar la búsqueda. Vuelve a intentarlo.' });
+      }
+    });
   });
 
   app.post('/busqueda/responder', async (c: Ctx) => {

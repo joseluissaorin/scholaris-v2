@@ -2,6 +2,12 @@
  * Búsqueda.
  *
  *   POST /busqueda              Buscar      → RespuestaBusqueda
+ *        con «accept: text/event-stream», en dos tiempos (EventoBusquedaEnDos):
+ *        «preliminar» con el orden de la fusión en cuanto lo hay (~350 ms) y
+ *        «final» con la RespuestaBusqueda reordenada. Si no hace falta reordenar,
+ *        llega solo «final». Los ids de fragmento son los mismos en los dos: la
+ *        interfaz pinta el preliminar y recoloca cada tarjeta por su id al llegar
+ *        el definitivo (sin vaciar la lista).
  *   POST /busqueda/responder    Responder   → text/event-stream de EventoRespuesta
  *   POST /busqueda/similares    Similares   → RespuestaBusqueda
  *   POST /busqueda/multilingue  BuscarMultilingue → RespuestaMultilingue
@@ -56,6 +62,12 @@ export interface Responder extends Buscar {
   /** Verificar cada cita con el juez antes de darla. */
   verificar?: boolean;
 }
+
+/** Eventos SSE de /busqueda en dos tiempos (campo `event` = `tipo`). */
+export type EventoBusquedaEnDos =
+  | { tipo: 'preliminar'; resultados: ResultadoVista[]; intencion?: IntencionConsulta; ms: number }
+  | { tipo: 'final'; respuesta: RespuestaBusqueda }
+  | { tipo: 'error'; mensaje: string };
 
 /** Eventos SSE de /busqueda/responder (campo `event` = `tipo`). */
 export type EventoRespuesta =

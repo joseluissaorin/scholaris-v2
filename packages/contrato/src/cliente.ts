@@ -22,7 +22,7 @@ import type {
 } from './documentos.js';
 import type { AnadirDocumentos, Biblioteca, Compartir, Miembro, NuevaBiblioteca } from './bibliotecas.js';
 import type {
-  Buscar, BuscarMultilingue, EventoRespuesta, Responder, RespuestaBusqueda, RespuestaMultilingue, Similares,
+  Buscar, BuscarMultilingue, EventoBusquedaEnDos, EventoRespuesta, Responder, RespuestaBusqueda, RespuestaMultilingue, ResultadoVista, Similares,
 } from './busqueda.js';
 import type {
   Autocita, AutocitaIniciada, Bibliografia, FicheroCitas, CitaDocumento, DecisionesAutocita, DetalleAutocita, EstiloCsl, ExportarReferencias,
@@ -210,6 +210,17 @@ export function crearCliente(opciones: OpcionesCliente) {
 
     busqueda: {
       buscar: (p: Buscar) => post<RespuestaBusqueda>('/busqueda', p),
+      /** En dos tiempos: los eventos tal cual («preliminar» y «final»). */
+      buscarEnDos: (p: Buscar) => sse<EventoBusquedaEnDos>('/busqueda', p),
+      /** Igual que `buscar`, pero llama a `alPreliminar` con el primer orden en cuanto llega. */
+      buscarProgresivo: async (p: Buscar, alPreliminar: (resultados: ResultadoVista[]) => void): Promise<RespuestaBusqueda> => {
+        for await (const ev of sse<EventoBusquedaEnDos>('/busqueda', p)) {
+          if (ev.tipo === 'preliminar') alPreliminar(ev.resultados);
+          else if (ev.tipo === 'final') return ev.respuesta;
+          else if (ev.tipo === 'error') throw new ErrorApi(500, 'interno', ev.mensaje);
+        }
+        throw new ErrorApi(500, 'interno', 'La búsqueda terminó sin resultado final.');
+      },
       responder: (p: Responder) => sse<EventoRespuesta>('/busqueda/responder', p),
       similares: (p: Similares) => post<RespuestaBusqueda>('/busqueda/similares', p),
       multilingue: (p: BuscarMultilingue) => post<RespuestaMultilingue>('/busqueda/multilingue', p),
