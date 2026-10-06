@@ -288,3 +288,188 @@ class Scholaris:
 
         otro.pedir = pedir  # type: ignore[method-assign]
         return otro
+
+    # -- bibliotecas como objetos sociales ---------------------------------
+    # Invitar, aceptar, seguir, copiar, enlaces de solo lectura, búsqueda
+    # conjunta, paquetes .scholaris y lotes (ver packages/contrato/src/comunidad.ts).
+
+    def invitar(self, biblioteca: str, correo: str, permiso: str = "lectura", *, mensaje: Optional[str] = None,
+                caduca_dias: Optional[int] = None) -> dict:
+        """Invita por correo (`lectura`, `edicion` o `administrador`). Devuelve la invitación con su `enlace`."""
+        return self.pedir("POST", f"/bibliotecas/{biblioteca}/compartir", json_={
+            "correo": correo, "permiso": permiso, **({"mensaje": mensaje} if mensaje else {}), **({"caducaDias": caduca_dias} if caduca_dias else {})})
+
+    def miembros(self, biblioteca: str) -> List[dict]:
+        return self.pedir("GET", f"/bibliotecas/{biblioteca}/miembros")
+
+    def retirar_acceso(self, biblioteca: str, usuario_o_correo: str) -> dict:
+        return self.pedir("DELETE", f"/bibliotecas/{biblioteca}/miembros/{usuario_o_correo}")
+
+    def invitaciones(self) -> List[dict]:
+        return self.pedir("GET", "/invitaciones")
+
+    def aceptar(self, invitacion: str) -> dict:
+        """Acepta una invitación (por su id o por el token del enlace) y empieza a seguir la biblioteca."""
+        return self.pedir("POST", f"/invitaciones/{invitacion}/aceptar", json_={})
+
+    def rechazar(self, invitacion: str) -> dict:
+        return self.pedir("POST", f"/invitaciones/{invitacion}/rechazar", json_={})
+
+    def seguidas(self) -> List[dict]:
+        return self.pedir("GET", "/seguidas")
+
+    def dejar_de_seguir(self, biblioteca: str) -> dict:
+        return self.pedir("DELETE", f"/seguidas/{biblioteca}")
+
+    def crear_enlace(self, *, biblioteca: Optional[str] = None, documento: Optional[str] = None, clave: Optional[str] = None,
+                     caduca_dias: Optional[int] = None, confirmar_derechos: bool = False) -> dict:
+        """Enlace de solo lectura sin cuenta. Con obras protegidas, `confirmar_derechos=True` (uso privado)."""
+        return self.pedir("POST", "/enlaces", json_={
+            **({"biblioteca": biblioteca} if biblioteca else {}), **({"documento": documento} if documento else {}),
+            **({"clave": clave} if clave else {}), **({"caducaDias": caduca_dias} if caduca_dias else {}),
+            **({"confirmarDerechos": True} if confirmar_derechos else {})})
+
+    def revocar_enlace(self, id: str) -> dict:
+        return self.pedir("DELETE", f"/enlaces/{id}")
+
+    def publico(self, token: str, clave: Optional[str] = None) -> "Scholaris":
+        """El cliente de un enlace de solo lectura, sin cuenta (con su contraseña si la tiene)."""
+        otro = Scholaris(self.base, None, sesion=self.http, tiempo=self.tiempo)
+        otro.clave = None
+        pase = None
+        if clave:
+            pase = otro.pedir("POST", f"/publico/{token}/acceso", json_={"clave": clave})["pase"]
+        original = otro.pedir
+
+        def pedir(metodo: str, ruta: str, **kw: Any) -> Any:
+            if pase:
+                kw["cabeceras"] = {**(kw.get("cabeceras") or {}), "x-scholaris-pase": pase}
+            return original(metodo, f"/publico/{token}{ruta}", **kw)
+
+        otro.pedir = pedir  # type: ignore[method-assign]
+        return otro
+
+    def copiar(self, *, biblioteca: Optional[str] = None, enlace: Optional[str] = None, documentos: Optional[List[str]] = None,
+               nombre: Optional[str] = None, al_progreso: Optional[Callable[[dict], None]] = None) -> dict:
+        """Copia una biblioteca que sigues (o la de un enlace) a la tuya: al instante, sin volver a leer ni
+        duplicar binarios. Va por tandas hasta terminar."""
+        origen = {"biblioteca": biblioteca} if biblioteca else {"enlace": enlace}
+        cuerpo: Dict[str, Any] = {"origen": origen, **({"documentos": documentos} if documentos else {}), **({"destino": {"nombre": nombre}} if nombre else {})}
+        r = self.pedir("POST", "/copias", json_=cuerpo)
+        total = dict(r)
+        while r["pendientes"]:
+            if al_progreso:
+                al_progreso(total)
+            r = self.pedir("POST", "/copias", json_={"origen": origen, "destino": {"biblioteca": total["biblioteca"]}, "documentos": r["pendientes"]})
+            for k in ("copiados", "repetidos", "fallidos"):
+                total[k] = total[k] + r[k]
+            total["pendientes"] = r["pendientes"]
+        return total
+
+    def buscar_conjunta(self, consulta: str, *, alcance: Any = "todo", k: int = 20, filtros: Optional[dict] = None) -> List[dict]:
+        """Busca en lo tuyo y en lo que sigues (`mias`, `seguidas`, `todo` o {"bibliotecas": [...]});
+        cada resultado lleva `origen` (de qué biblioteca y de quién)."""
+        return self.pedir("POST", "/busqueda/conjunta", json_={"consulta": consulta, "k": k, "alcance": alcance, **({"filtros": filtros} if filtros else {})})["resultados"]
+
+    def exportar_paquete(self, biblioteca: str, destino: str, *, originales: bool = True, vectores: bool = True,
+                         documentos: Optional[List[str]] = None) -> str:
+        """Guarda la biblioteca como un .scholaris (zip con manifest.json y los .spdf), en flujo al disco."""
+        params = {**({"originales": "0"} if not originales else {}), **({"vectores": "0"} if not vectores else {}),
+                  **({"documentos": ",".join(documentos)} if documentos else {})}
+        r = self.pedir("GET", f"/bibliotecas/{biblioteca}/paquete", params=params, stream=True)
+        with open(destino, "wb") as f:
+            for trozo in r.iter_content(1 << 20):
+                f.write(trozo)
+        return destino
+
+    def importar_paquete(self, ruta: str, *, nombre: Optional[str] = None, biblioteca: Optional[str] = None,
+                         al_progreso: Optional[Callable[[int, int, str], None]] = None) -> dict:
+        """Importa un .scholaris: crea la biblioteca y mete cada .spdf sin volver a leer nada
+        (lo repetido, por huella, no se duplica)."""
+        import zipfile
+        with zipfile.ZipFile(ruta) as z:
+            m = json.loads(z.read("manifest.json"))
+            if m.get("formato") != "scholaris-biblioteca":
+                raise ValueError("No es un paquete de biblioteca de Scholaris.")
+            b = m["biblioteca"]
+            if not biblioteca:
+                biblioteca = self.pedir("POST", "/bibliotecas", json_={
+                    "nombre": nombre or b["nombre"], **({"descripcion": b["descripcion"]} if b.get("descripcion") else {}),
+                    "derechos": b.get("derechos", "sin_indicar"), **({"notaDerechos": b["notaDerechos"]} if b.get("notaDerechos") else {})})["id"]
+            salida: Dict[str, Any] = {"biblioteca": biblioteca, "importados": [], "repetidos": [], "fallidos": [], "avisos": []}
+            for i, d in enumerate(m["documentos"]):
+                if al_progreso:
+                    al_progreso(i, len(m["documentos"]), d["titulo"])
+                try:
+                    r = self.pedir("POST", "/documentos/importar", datos=z.read(d["archivo"]), params={"biblioteca": biblioteca, "deduplicar": "1"},
+                                   cabeceras={"content-type": "application/x-spdf"})
+                    (salida["repetidos"] if r.get("repetido") else salida["importados"]).append({"origen": d["id"], "documento": r["documento"], **({"tarea": r["tarea"]} if r.get("tarea") else {})})
+                    salida["avisos"] += [a for a in r.get("avisos", []) if a not in salida["avisos"]]
+                except ErrorApi as e:
+                    salida["fallidos"].append({"origen": d["id"], "error": str(e)})
+            return salida
+
+    # -- lotes: llenar una biblioteca de golpe ------------------------------
+
+    def estimar_lote(self, rutas: List[str], *, enlaces: Optional[List[str]] = None) -> dict:
+        """Cuenta, páginas, minutos, tiempo y coste (rápido y económico) y lo que ya estaba."""
+        return self.pedir("POST", "/lotes/estimar", json_={"elementos": self._elementos(rutas, enlaces or [])})
+
+    def llenar(self, rutas: List[str], *, biblioteca: Optional[str] = None, enlaces: Optional[List[str]] = None,
+               modo: Optional[str] = None, concurrencia: int = 3, nombre: Optional[str] = None,
+               al_progreso: Optional[Callable[[dict], None]] = None, cada: float = 3) -> dict:
+        """Llena una biblioteca con muchos ficheros (y enlaces) en un solo lote: los repetidos no se leen,
+        los .spdf se importan sin coste y el resto pasa por la ingesta con concurrencia limitada.
+        `rutas` admite carpetas (se recorren). Devuelve el lote al terminar."""
+        ficheros: List[str] = []
+        for r in rutas:
+            if os.path.isdir(r):
+                for raiz, _, nombres in os.walk(r):
+                    ficheros += [os.path.join(raiz, n) for n in sorted(nombres) if not n.startswith(".")]
+            else:
+                ficheros.append(r)
+        elementos = self._elementos(ficheros, enlaces or [])
+        lote = self.pedir("POST", "/lotes", json_={"elementos": elementos, "concurrencia": concurrencia,
+                                                    **({"biblioteca": biblioteca} if biblioteca else {}), **({"modo": modo} if modo else {}),
+                                                    **({"nombre": nombre} if nombre else {})})
+        por_n = {i + 1: f for i, f in enumerate(ficheros)}
+        while True:
+            for e in self.pedir("POST", f"/lotes/{lote['id']}/siguientes", json_={"max": concurrencia}):
+                ruta = por_n.get(e["n"])
+                try:
+                    if e["clase"] == "spdf":
+                        with open(ruta, "rb") as f:
+                            r = self.pedir("POST", "/documentos/importar", datos=f.read(), cabeceras={"content-type": "application/x-spdf"},
+                                           params={"deduplicar": "1", **({"biblioteca": biblioteca} if biblioteca else {})})
+                        self.pedir("PATCH", f"/lotes/{lote['id']}/elementos/{e['n']}", json_=(
+                            {"estado": "duplicado", "documento": r["documento"]} if r.get("repetido")
+                            else {"estado": "procesando", "documento": r["documento"], "tarea": r["tarea"]} if r.get("tarea")
+                            else {"estado": "listo", "documento": r["documento"]}))
+                    else:
+                        r = self.subir(ruta, bibliotecas=[biblioteca] if biblioteca else None, metadatos=e.get("metadatos"), esperar=False)
+                        if "tarea" in r:
+                            self.pedir("PATCH", f"/lotes/{lote['id']}/elementos/{e['n']}", json_={"estado": "procesando", "documento": r["documento"], "tarea": r["tarea"]})
+                        else:
+                            self.pedir("PATCH", f"/lotes/{lote['id']}/elementos/{e['n']}", json_={"estado": "duplicado", "documento": r["id"]})
+                except Exception as err:  # noqa: BLE001 — el lote apunta el fallo y sigue
+                    self.pedir("PATCH", f"/lotes/{lote['id']}/elementos/{e['n']}", json_={"estado": "error", "error": str(err)[:500]})
+            lote = self.pedir("GET", f"/lotes/{lote['id']}")
+            if al_progreso:
+                al_progreso(lote)
+            if lote["estado"] in ("terminado", "cancelado"):
+                return lote
+            time.sleep(cada)
+
+    def _elementos(self, ficheros: List[str], enlaces: List[str]) -> List[dict]:
+        salida = []
+        for ruta in ficheros:
+            nombre = os.path.basename(ruta)
+            ext = os.path.splitext(nombre)[1].lower()
+            h = hashlib.sha256()
+            with open(ruta, "rb") as f:
+                for trozo in iter(lambda: f.read(1 << 20), b""):
+                    h.update(trozo)
+            salida.append({"clase": "spdf" if ext == ".spdf" else "archivo", "nombre": nombre, "ruta": ruta, "bytes": os.path.getsize(ruta),
+                           "mime": _MIMES_EXTRA.get(ext) or mimetypes.guess_type(nombre)[0] or "application/octet-stream", "huella": h.hexdigest()})
+        salida += [{"clase": "url", "nombre": u, "url": u} for u in enlaces]
+        return salida
