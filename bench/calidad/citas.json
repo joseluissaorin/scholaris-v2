@@ -1,0 +1,334 @@
+[
+ {
+  "id": "c001",
+  "texto": "El autor decidió poner por escrito la leyenda soriana tras desvelarse durante la noche de difuntos por el sonido incesante de las campanas.",
+  "tipo": "apoyo",
+  "documentos": [
+   "Becquer"
+  ],
+  "oro": [
+   "docmux4li0xkqdhc4v6:ct89402"
+  ],
+  "negativos": [
+   "docmux4li0xkqdhc4v6:c18ydkwf",
+   "docmux4li0xkqdhc4v6:c1g5u5xy",
+   "docmux4li0xkqdhc4v6:c1fycol3",
+   "docmux4li0xkqdhc4v6:c2pqxj",
+   "docmux4li0xkqdhc4v6:c9wb4zd",
+   "docmux4li0xkqdhc4v6:c10tx80p"
+  ]
+ },
+ {
+  "id": "c002",
+  "texto": "El conflicto histórico en el monte surgió porque los caballeros templarios tenían reservado el coto exclusivo de caza, lo que despertó el rencor de los hidalgos locales.",
+  "tipo": "apoyo",
+  "documentos": [
+   "Becquer"
+  ],
+  "oro": [
+   "docmux4li0xkqdhc4v6:ct53bl"
+  ],
+  "negativos": [
+   "docmux4li0xkqdhc4v6:c76kkji",
+   "docmux4li0xkqdhc4v6:ctlzfv5",
+   "docmux4li0xkqdhc4v6:c1fycol3",
+   "docmux4li0xkqdhc4v6:c1ebk4ck",
+   "docmux4li0xkqdhc4v6:c14taxr",
+   "docmux4li0xkqdhc4v6:c1g5u5xy"
+  ]
+ },
+ {
+  "id": "c003",
+  "texto": "Alonso reconoció abiertamente que sentía pavor ante la idea de subir a la montaña en plena noche de difuntos debido a las apariciones fantasmales.",
+  "tipo": "apoyo",
+  "documentos": [
+   "Becquer"
+  ],
+  "oro": [
+   "docmux4li0xkqdhc4v6:c18ydkwf"
+  ],
+  "negativos": [
+   "docmux4li0xkqdhc4v6:c1g5u5xy",
+   "docmux4li0xkqdhc4v6:cazq649",
+   "docmux4li0xkqdhc4v6:c1fycol3",
+   "docmux4li0xkqdhc4v6:c14taxr",
+   "docmux4li0xkqdhc4v6:c76kkji"
+  ]
+ },
+ {
+  "id": "c004",
+  "texto": "Al llegar el amanecer, Beatriz descubrió sobre su propio reclinatorio la cinta azul desgarrada y manchada de sangre antes de perecer de espanto.",
+  "tipo": "apoyo",
+  "documentos": [
+   "Becquer"
+  ],
+  "oro": [
+   "docmux4li0xkqdhc4v6:c1kul4yd",
+   "docmux4li0xkqdhc4v6:c11gy773"
+  ],
+  "negativos": [
+   "docmux4li0xkqdhc4v6:ct8x0ge",
+   "docmux4li0xkqdhc4v6:c13c1d46",
+   "docmux4li0xkqdhc4v6:c107r51n",
+   "docmux4li0xkqdhc4v6:c2pqxj",
+   "docmux4li0xkqdhc4v6:cscffxv",
+   "docmux4li0xkqdhc4v6:c18ydkwf"
+  ]
+ },
+ {
+  "id": "c005",
+  "texto": "Alonso regresó victorioso al palacio al amanecer tras haber recuperado la prenda sin sufrir ningún percance en el monte.",
+  "tipo": "negativa",
+  "motivo": "contradicha",
+  "documentos": [
+   "Becquer"
+  ],
+  "oro": [],
+  "negativos": [
+   "docmux4li0xkqdhc4v6:c11gy773",
+   "docmux4li0xkqdhc4v6:c1kul4yd",
+   "docmux4li0xkqdhc4v6:cv41g8n",
+   "docmux4li0xkqdhc4v6:c14taxr",
+   "docmux4li0xkqdhc4v6:ctlzfv5",
+   "docmux4li0xkqdhc4v6:c1i41fyx"
+  ]
+ },
+ {
+  "id": "c006",
+  "texto": "La leyenda fue documentada por primera vez por el autor durante una expedición arqueológica oficial a las ruinas del monasterio de San Polo.",
+  "tipo": "negativa",
+  "motivo": "ajena",
+  "documentos": [
+   "Becquer"
+  ],
+  "oro": [],
+  "negativos": [
+   "docmux4li0xkqdhc4v6:ct89402",
+   "docmux4li0xkqdhc4v6:ctlzfv5",
+   "docmux4li0xkqdhc4v6:c1fycol3"
+  ]
+ },
+ {
+  "id": "c007",
+  "texto": "Diversos caballeros castellanos, entre ellos Hernán Díaz y Don Ramiro, rechazan frontalmente los planes de Alfonso el Casto de ceder el trono a Carlomagno frente a la ausencia de descendencia directa.",
+  "tipo": "apoyo",
+  "documentos": [
+   "Casamiento"
+  ],
+  "oro": [
+   "docmuwowg6cacd2yp5u:t1.1",
+   "docmuwowg6cacd2yp5u:t1.2"
+  ],
+  "negativos": [
+   "docmuwowg6cacd2yp5u:t1.3",
+   "docmuwowg6cacd2yp5u:t4.1",
+   "docmuwowg6cacd2yp5u:t5.6",
+   "docmuwowg6cacd2yp5u:t2.0",
+   "docmuwowg6cacd2yp5u:cxsunz0",
+   "docmuwowg6cacd2yp5u:t4.2"
+  ]
+ },
+ {
+  "id": "c008",
+  "texto": "Antes del enfrentamiento en Roncesvalles, el monarca Alfonso promete a Bernardo entregarle con vida a su padre cautivo a cambio de recibir la fortaleza del Carpio.",
+  "tipo": "apoyo",
+  "documentos": [
+   "Casamiento"
+  ],
+  "oro": [
+   "docmuwowg6cacd2yp5u:t4.8"
+  ],
+  "negativos": [
+   "docmuwowg6cacd2yp5u:t4.7",
+   "docmuwowg6cacd2yp5u:t8.0",
+   "docmuwowg6cacd2yp5u:t7.7",
+   "docmuwowg6cacd2yp5u:t8.7"
+  ]
+ },
+ {
+  "id": "c009",
+  "texto": "Roldán perece en el combate cuerpo a cuerpo frente a Bernardo del Carpio, habiendo arrojado previamente ambos guerreros sus respectivas espadas.",
+  "tipo": "apoyo",
+  "documentos": [
+   "Casamiento"
+  ],
+  "oro": [
+   "docmuwowg6cacd2yp5u:t6.4"
+  ],
+  "negativos": [
+   "docmuwowg6cacd2yp5u:t6.2",
+   "docmuwowg6cacd2yp5u:t6.3",
+   "docmuwowg6cacd2yp5u:t4.3",
+   "docmuwowg6cacd2yp5u:t7.2",
+   "docmuwowg6cacd2yp5u:t6.0",
+   "docmuwowg6cacd2yp5u:t7.6"
+  ]
+ },
+ {
+  "id": "c010",
+  "texto": "Al encontrar a su progenitor fallecido en el castillo, Bernardo acude al convento para sacar a su madre e improvisar un desposorio uniendo la mano de ella con la del cadáver para legitimar su linaje.",
+  "tipo": "apoyo",
+  "documentos": [
+   "Casamiento"
+  ],
+  "oro": [
+   "docmuwowg6cacd2yp5u:t9.0",
+   "docmuwowg6cacd2yp5u:t9.1",
+   "docmuwowg6cacd2yp5u:t9.2"
+  ],
+  "negativos": [
+   "docmuwowg6cacd2yp5u:t8.8",
+   "docmuwowg6cacd2yp5u:t7.7",
+   "docmuwowg6cacd2yp5u:c3kb8f4",
+   "docmuwowg6cacd2yp5u:t1.3",
+   "docmuwowg6cacd2yp5u:t8.0"
+  ]
+ },
+ {
+  "id": "c011",
+  "texto": "Bernardo del Carpio rechaza pactar con los reyes moros por considerar que cualquier alianza con infieles traiciona la fe cristiana.",
+  "tipo": "negativa",
+  "motivo": "contradicha",
+  "documentos": [
+   "Casamiento"
+  ],
+  "oro": [],
+  "negativos": [
+   "docmuwowg6cacd2yp5u:t4.2",
+   "docmuwowg6cacd2yp5u:c1bk95pk"
+  ]
+ },
+ {
+  "id": "c012",
+  "texto": "El texto incluye una loa preliminar donde Lope de Vega dedica explícitamente la comedia al duque de Sessa.",
+  "tipo": "negativa",
+  "motivo": "ajena",
+  "documentos": [
+   "Casamiento"
+  ],
+  "oro": [],
+  "negativos": []
+ },
+ {
+  "id": "c013",
+  "texto": "Prompt-based post-correction on historical Finnish texts yields consistently negative results across all open-weight models evaluated, showing that they are not yet practical for this language.",
+  "tipo": "apoyo",
+  "documentos": [
+   "OCR"
+  ],
+  "oro": [
+   "docmux4l61wbp4q0v35:t0.0",
+   "docmux4l61wbp4q0v35:t1.2",
+   "docmux4l61wbp4q0v35:t3.2",
+   "docmux4l61wbp4q0v35:t1.0"
+  ],
+  "negativos": [
+   "docmux4l61wbp4q0v35:t0.2",
+   "docmux4l61wbp4q0v35:t0.11",
+   "docmux4l61wbp4q0v35:t1.3"
+  ]
+ },
+ {
+  "id": "c014",
+  "texto": "Without removing overgenerated preambles and explanatory text via character alignment, Llama family models exhibit degraded error rates on OCR post-correction.",
+  "tipo": "apoyo",
+  "documentos": [
+   "OCR"
+  ],
+  "oro": [
+   "docmux4l61wbp4q0v35:t0.14",
+   "docmux4l61wbp4q0v35:t2.0"
+  ],
+  "negativos": [
+   "docmux4l61wbp4q0v35:t1.0",
+   "docmux4l61wbp4q0v35:t2.3",
+   "docmux4l61wbp4q0v35:t3.2",
+   "docmux4l61wbp4q0v35:t0.13",
+   "docmux4l61wbp4q0v35:t2.1",
+   "docmux4l61wbp4q0v35:t1.2"
+  ]
+ },
+ {
+  "id": "c015",
+  "texto": "Operating open-weight models at 16-bit precision provides modest character error rate gains over 4-bit quantization, but dramatically expands hardware and memory requirements.",
+  "tipo": "apoyo",
+  "documentos": [
+   "OCR"
+  ],
+  "oro": [
+   "docmux4l61wbp4q0v35:t2.3",
+   "docmux4l61wbp4q0v35:t2.4"
+  ],
+  "negativos": [
+   "docmux4l61wbp4q0v35:t2.2",
+   "docmux4l61wbp4q0v35:t2.1"
+  ]
+ },
+ {
+  "id": "c016",
+  "texto": "Providing preceding textual context, whether corrected or uncorrected, helps mitigate transcription errors right at the boundary of adjoining text segments for larger models.",
+  "tipo": "apoyo",
+  "documentos": [
+   "OCR"
+  ],
+  "oro": [
+   "docmux4l61wbp4q0v35:c1g40xyo",
+   "docmux4l61wbp4q0v35:t3.2"
+  ],
+  "negativos": [
+   "docmux4l61wbp4q0v35:t2.5",
+   "docmux4l61wbp4q0v35:t2.4",
+   "docmux4l61wbp4q0v35:c1854gzy",
+   "docmux4l61wbp4q0v35:t3.3"
+  ]
+ },
+ {
+  "id": "c017",
+  "texto": "Historical spelling normalization, such as standardizing long-s and obsolete character usages, substantially affects error rate calculations during post-correction evaluation.",
+  "tipo": "apoyo",
+  "documentos": [
+   "OCR"
+  ],
+  "oro": [
+   "docmux4l61wbp4q0v35:t0.13",
+   "docmux4l61wbp4q0v35:t0.14",
+   "docmux4l61wbp4q0v35:t2.1",
+   "docmux4l61wbp4q0v35:t2.0"
+  ],
+  "negativos": [
+   "docmux4l61wbp4q0v35:t0.12",
+   "docmux4l61wbp4q0v35:t0.10",
+   "docmux4l61wbp4q0v35:t4.1"
+  ]
+ },
+ {
+  "id": "c018",
+  "texto": "Mixtral-8x7B achieves the best post-correction performance among all open-weight models tested on historical English OCR datasets.",
+  "tipo": "negativa",
+  "motivo": "contradicha",
+  "documentos": [
+   "OCR"
+  ],
+  "oro": [],
+  "negativos": [
+   "docmux4l61wbp4q0v35:t3.2",
+   "docmux4l61wbp4q0v35:t1.2",
+   "docmux4l61wbp4q0v35:t1.0",
+   "docmux4l61wbp4q0v35:t2.2"
+  ]
+ },
+ {
+  "id": "c019",
+  "texto": "The evaluation relies on fine-tuning vision-language foundation models directly on the scanned historical page images alongside the OCR transcripts.",
+  "tipo": "negativa",
+  "motivo": "contradicha",
+  "documentos": [
+   "OCR"
+  ],
+  "oro": [],
+  "negativos": [
+   "docmux4l61wbp4q0v35:t0.5",
+   "docmux4l61wbp4q0v35:t0.2"
+  ]
+ }
+]

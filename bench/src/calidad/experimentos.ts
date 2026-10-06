@@ -8,7 +8,7 @@
 import { writeFileSync } from 'node:fs';
 import type { AjustesBusqueda } from '@scholaris/busqueda';
 import { join } from 'node:path';
-import { DIR_DATOS_CALIDAD } from './estanteria.js';
+import { CORPUS, DIR_DATOS_CALIDAD } from './estanteria.js';
 import { evaluarSistema, medirLatencia, PRODUCCION } from './ejecutar.js';
 import { cargarConsultas, type Consulta } from './juego.js';
 import { montar, type Sistema } from './montaje.js';
@@ -92,7 +92,8 @@ function grupos(m: ReturnType<typeof montar>): Record<string, Sistema[]> {
 
 /** Consultas sobre páginas de texto digital sin figuras (para la pregunta de la ingesta sobre los vectores de página). */
 export function consultasDeTexto(cs: Consulta[]): Consulta[] {
-  return cs.filter((c) => !c.pagina && c.documentos.every((d) => ['Attention', 'Perseguidor', 'Lewis'].includes(d)));
+  const digitales = new Set(CORPUS.filter((d) => d.textoDigital).map((d) => d.corto));
+  return cs.filter((c) => !c.pagina && c.documentos.every((d) => digitales.has(d)));
 }
 
 export async function experimentos(args: string[]): Promise<void> {

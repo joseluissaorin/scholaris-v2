@@ -1,0 +1,35 @@
+{
+  "nombre": "Banco público: documentos de dominio público o con licencia libre",
+  "documentos": [
+    {
+      "etiqueta": "el-casamiento-en-la-",
+      "corto": "Casamiento",
+      "consultas": 0,
+      "citas": { "apoyo": 4, "negativa": 2, "idioma": "es" },
+      "titulo": "Lope de Vega, «El casamiento en la muerte y hechos de Bernardo del Carpio», comedia suelta impresa en Sevilla por la viuda de Francisco Leefdael (c. 1700)",
+      "licencia": "Dominio público (texto). El SPDF publicado lleva el texto leído, las anclas y los vectores, sin las imágenes del escaneado.",
+      "fuente": "Escaneado de una comedia suelta del siglo XVIII; el original no se redistribuye."
+    },
+    {
+      "etiqueta": "ocr-no-free-lunches",
+      "corto": "OCR",
+      "consultas": 22,
+      "citas": { "apoyo": 5, "negativa": 2, "idioma": "en" },
+      "textoDigital": true,
+      "titulo": "Kanerva, Ledins, Käpyaho y Ginter, «OCR Error Post-Correction with LLMs in Historical Documents: No Free Lunches» (arXiv:2502.01205v1, 2025)",
+      "licencia": "CC BY 4.0",
+      "fuente": "https://arxiv.org/abs/2502.01205v1",
+      "original": { "url": "https://arxiv.org/pdf/2502.01205v1", "sha256": "c084e90f96d5dc6c2477ecd8629775a3f88fbee59866e209e03014a4af3c6ca5", "archivo": "ocr-no-free-lunches-2502.01205v1.pdf" }
+    },
+    {
+      "etiqueta": "becquer-monte",
+      "corto": "Becquer",
+      "consultas": 18,
+      "citas": { "apoyo": 4, "negativa": 2, "idioma": "es" },
+      "titulo": "Gustavo Adolfo Bécquer, «El monte de las ánimas», leído por Elena del Valle para LibriVox (19 min)",
+      "licencia": "Dominio público (texto de 1861 y grabación de LibriVox)",
+      "fuente": "https://librivox.org/leyendas-by-gustavo-adolfo-becquer/",
+      "original": { "url": "https://archive.org/download/leyendas_becquer_1208_librivox/leyendas_07_becquer_64kb.mp3", "sha256": "28224889addbada0937b6e116e20ac14021bcabd7151da32d7a6eff19d0624b6", "archivo": "becquer-monte-de-las-animas-librivox.mp3" }
+    }
+  ]
+}

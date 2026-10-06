@@ -1,0 +1,144 @@
+{
+ "nota": "Folios comprobados a ojo sobre la imagen de cada página (cabecera y pie) el 6-10-2026. «visible: false» = la página no imprime número y el esperado sale de la secuencia; «aceptables» son otras respuestas que también se dan por buenas.",
+ "paginas": [
+  {
+   "documento": "Casamiento",
+   "fisica": 1,
+   "esperado": null,
+   "visible": false,
+   "nota": "tapa, guarda o página en blanco"
+  },
+  {
+   "documento": "Casamiento",
+   "fisica": 2,
+   "esperado": null,
+   "visible": false,
+   "nota": "tapa, guarda o página en blanco"
+  },
+  {
+   "documento": "Casamiento",
+   "fisica": 4,
+   "esperado": null,
+   "visible": false,
+   "nota": "tapa, guarda o página en blanco"
+  },
+  {
+   "documento": "Casamiento",
+   "fisica": 6,
+   "esperado": null,
+   "visible": false,
+   "nota": "tapa, guarda o página en blanco"
+  },
+  {
+   "documento": "Casamiento",
+   "fisica": 7,
+   "esperado": "1",
+   "visible": false,
+   "aceptables": [
+    null
+   ],
+   "nota": "portada de la comedia, sin número impreso; la 8 lleva «2»"
+  },
+  {
+   "documento": "Casamiento",
+   "fisica": 8,
+   "esperado": "2",
+   "visible": true
+  },
+  {
+   "documento": "Casamiento",
+   "fisica": 11,
+   "esperado": "5",
+   "visible": true
+  },
+  {
+   "documento": "Casamiento",
+   "fisica": 15,
+   "esperado": "9",
+   "visible": true
+  },
+  {
+   "documento": "Casamiento",
+   "fisica": 20,
+   "esperado": "14",
+   "visible": true
+  },
+  {
+   "documento": "Casamiento",
+   "fisica": 25,
+   "esperado": "19",
+   "visible": true
+  },
+  {
+   "documento": "Casamiento",
+   "fisica": 30,
+   "esperado": "24",
+   "visible": true
+  },
+  {
+   "documento": "Casamiento",
+   "fisica": 34,
+   "esperado": "28",
+   "visible": true
+  },
+  {
+   "documento": "Casamiento",
+   "fisica": 35,
+   "esperado": "29",
+   "visible": true
+  },
+  {
+   "documento": "Casamiento",
+   "fisica": 36,
+   "esperado": "30",
+   "visible": true
+  },
+  {
+   "documento": "Casamiento",
+   "fisica": 37,
+   "esperado": "31",
+   "visible": true
+  },
+  {
+   "documento": "Casamiento",
+   "fisica": 38,
+   "esperado": "32",
+   "visible": true
+  },
+  {
+   "documento": "Casamiento",
+   "fisica": 39,
+   "esperado": null,
+   "visible": false,
+   "nota": "guarda o contratapa en blanco tras la última página impresa (32)"
+  },
+  {
+   "documento": "Casamiento",
+   "fisica": 40,
+   "esperado": null,
+   "visible": false,
+   "nota": "guarda o contratapa en blanco tras la última página impresa (32)"
+  },
+  {
+   "documento": "Casamiento",
+   "fisica": 41,
+   "esperado": null,
+   "visible": false,
+   "nota": "guarda o contratapa en blanco tras la última página impresa (32)"
+  },
+  {
+   "documento": "Casamiento",
+   "fisica": 42,
+   "esperado": null,
+   "visible": false,
+   "nota": "guarda o contratapa en blanco tras la última página impresa (32)"
+  },
+  {
+   "documento": "Casamiento",
+   "fisica": 43,
+   "esperado": null,
+   "visible": false,
+   "nota": "guarda o contratapa en blanco tras la última página impresa (32)"
+  }
+ ]
+}

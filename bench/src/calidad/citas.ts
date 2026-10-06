@@ -13,7 +13,7 @@ import { join } from 'node:path';
 import { anclaACita, enParalelo, type Ancla, type Fragmento } from '@scholaris/nucleo';
 import { autocitar, verificarAfirmacion } from '@scholaris/citas';
 import { contieneLiteral } from '@scholaris/busqueda';
-import { DIR_DATOS_CALIDAD, mapaDocumentos } from './estanteria.js';
+import { CORPUS, DIR_DATOS_CALIDAD, mapaDocumentos } from './estanteria.js';
 import { RUTA_CITAS } from './juego.js';
 import { buscadorPara, montar, SISTEMAS, type Montaje } from './montaje.js';
 import { montarJueces } from './juzgar.js';
@@ -59,11 +59,8 @@ const ESQUEMA_PROPONER = {
   required: ['afirmaciones'],
 };
 
-const PLAN: Record<string, { apoyo: number; negativa: number; idioma: string }> = {
-  Lewis: { apoyo: 7, negativa: 3, idioma: 'es' }, Attention: { apoyo: 4, negativa: 1, idioma: 'en' },
-  Perseguidor: { apoyo: 5, negativa: 2, idioma: 'es' }, Casamiento: { apoyo: 3, negativa: 1, idioma: 'es' },
-  Cabral: { apoyo: 5, negativa: 2, idioma: 'es' }, CortazarTV: { apoyo: 6, negativa: 2, idioma: 'es' },
-};
+/** Afirmaciones por documento: las de corpus.json («citas»). */
+const PLAN: Record<string, { apoyo: number; negativa: number; idioma: string }> = Object.fromEntries(CORPUS.filter((d) => d.citas).map((d) => [d.corto, d.citas!]));
 
 export async function proponerCitas(): Promise<void> {
   const m = montar();

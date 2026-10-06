@@ -9,10 +9,11 @@
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { anclaACita, type Ancla } from '@scholaris/nucleo';
-import { DIR_DATOS_CALIDAD, mapaDocumentos } from './estanteria.js';
+import { CORPUS, DIR_DATOS_CALIDAD, mapaDocumentos } from './estanteria.js';
 import { montar } from './montaje.js';
 
-const CUANTAS: Record<string, number> = { Lewis: 30, Attention: 14, Perseguidor: 20, Casamiento: 15, Cabral: 18, CortazarTV: 26, '3b1b': 3, Audio: 0, Slerexe: 3 };
+/** Consultas por documento: las de corpus.json («consultas»); `--solo A,B` limita a esos documentos. */
+const CUANTAS: Record<string, number> = Object.fromEntries(CORPUS.map((d) => [d.corto, d.consultas ?? 0]));
 
 const SISTEMA = `Preparas el banco de pruebas de recuperación de una biblioteca académica. Recibes UN documento partido en fragmentos con su id.
 Propón consultas de búsqueda REALISTAS, como las escribiría un investigador o un estudiante, y para cada una los ids de los fragmentos que la responden (1-4).
@@ -45,13 +46,15 @@ const ESQUEMA = {
   required: ['consultas'],
 };
 
-export async function proponer(): Promise<void> {
+export async function proponer(args: string[] = []): Promise<void> {
+  const i = args.indexOf('--solo');
+  const solo = i >= 0 ? new Set(args[i + 1]!.split(',')) : null;
   const m = montar();
   const docs = mapaDocumentos(m.sql.bd);
   const salida: unknown[] = [];
   await Promise.all([...docs].map(async ([id, d]) => {
     const n = CUANTAS[d.corto] ?? 0;
-    if (!n) return;
+    if (!n || (solo && !solo.has(d.corto))) return;
     const frags = m.sql.bd.prepare('SELECT id, texto, ancla FROM fragmentos WHERE documento = ? ORDER BY orden').all(id) as Array<{ id: string; texto: string; ancla: string }>;
     const cuerpo = frags.map((f) => `[${f.id}] (${anclaACita(JSON.parse(f.ancla) as Ancla)})\n${f.texto}`).join('\n\n');
     const r = await m.redactor.generar<{ consultas: Array<{ consulta: string; clase: string; fragmentos: string[]; nota?: string }> }>({

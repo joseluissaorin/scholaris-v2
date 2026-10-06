@@ -1,0 +1,1079 @@
+[
+ {
+  "consulta": "por qué los nobles castellanos no quieren entregar el reino a Carlomagno",
+  "clases": [
+   "es",
+   "conceptual"
+  ],
+  "idioma": "es",
+  "documentos": [
+   "Casamiento"
+  ],
+  "semilla": [
+   "docmuwowg6cacd2yp5u:t1.1",
+   "docmuwowg6cacd2yp5u:t1.2"
+  ],
+  "origen": "gemini-revisada",
+  "id": "q007"
+ },
+ {
+  "consulta": "¿Qué prenda y qué colores ordena Belerma a Celio que vista Durandarte para el torneo?",
+  "clases": [
+   "es",
+   "factual"
+  ],
+  "idioma": "es",
+  "documentos": [
+   "Casamiento"
+  ],
+  "semilla": [
+   "docmuwowg6cacd2yp5u:t2.2"
+  ],
+  "origen": "gemini",
+  "id": "q008"
+ },
+ {
+  "consulta": "«porque qualquiera que ama, Iguala al Camaleon»",
+  "clases": [
+   "es",
+   "literal"
+  ],
+  "idioma": "es",
+  "documentos": [
+   "Casamiento"
+  ],
+  "semilla": [
+   "docmuwowg6cacd2yp5u:t2.1"
+  ],
+  "origen": "gemini",
+  "id": "q009"
+ },
+ {
+  "consulta": "España que fue de Hispalo o de Hisperio asi llamada de los Celtas y Fenicios",
+  "clases": [
+   "es",
+   "grafia"
+  ],
+  "idioma": "es",
+  "documentos": [
+   "Casamiento"
+  ],
+  "semilla": [
+   "docmuwowg6cacd2yp5u:t3.8"
+  ],
+  "origen": "gemini",
+  "id": "q010"
+ },
+ {
+  "consulta": "Why does Durandarte challenge Oliveros to a fight outside Paris?",
+  "clases": [
+   "en",
+   "interlingue"
+  ],
+  "idioma": "en",
+  "documentos": [
+   "Casamiento"
+  ],
+  "semilla": [
+   "docmuwowg6cacd2yp5u:t2.6",
+   "docmuwowg6cacd2yp5u:t3.3"
+  ],
+  "origen": "gemini",
+  "id": "q011"
+ },
+ {
+  "consulta": "¿Qué presagio o pesadilla relata Belerma a Durandarte antes de su partida a la guerra de España?",
+  "clases": [
+   "es",
+   "factual"
+  ],
+  "idioma": "es",
+  "documentos": [
+   "Casamiento"
+  ],
+  "semilla": [
+   "docmuwowg6cacd2yp5u:t4.4"
+  ],
+  "origen": "gemini",
+  "id": "q012"
+ },
+ {
+  "consulta": "el rey Alfonso promete liberar al conde don Sancho a cambio del castillo del Carpio",
+  "clases": [
+   "es",
+   "conceptual"
+  ],
+  "idioma": "es",
+  "documentos": [
+   "Casamiento"
+  ],
+  "semilla": [
+   "docmuwowg6cacd2yp5u:t4.8"
+  ],
+  "origen": "gemini-revisada",
+  "id": "q013"
+ },
+ {
+  "consulta": "«Por muchas partes herido sale el viejo Carlo Magno»",
+  "clases": [
+   "es",
+   "literal"
+  ],
+  "idioma": "es",
+  "documentos": [
+   "Casamiento"
+  ],
+  "semilla": [
+   "docmuwowg6cacd2yp5u:t6.3"
+  ],
+  "origen": "gemini",
+  "id": "q014"
+ },
+ {
+  "consulta": "Como muere Durandarte y pide a Montesinos que entregue su corazon a Belerma",
+  "clases": [
+   "es",
+   "grafia"
+  ],
+  "idioma": "es",
+  "documentos": [
+   "Casamiento"
+  ],
+  "semilla": [
+   "docmuwowg6cacd2yp5u:t6.1",
+   "docmuwowg6cacd2yp5u:t6.2"
+  ],
+  "origen": "gemini",
+  "id": "q015"
+ },
+ {
+  "consulta": "How did Roland die in the battle against Bernardo del Carpio?",
+  "clases": [
+   "en",
+   "interlingue"
+  ],
+  "idioma": "en",
+  "documentos": [
+   "Casamiento"
+  ],
+  "semilla": [
+   "docmuwowg6cacd2yp5u:t6.4"
+  ],
+  "origen": "gemini",
+  "id": "q016"
+ },
+ {
+  "consulta": "origen legendario del nombre de la Peña de Francia",
+  "clases": [
+   "es",
+   "conceptual"
+  ],
+  "idioma": "es",
+  "documentos": [
+   "Casamiento"
+  ],
+  "semilla": [
+   "docmuwowg6cacd2yp5u:t6.7",
+   "docmuwowg6cacd2yp5u:t7.3",
+   "docmuwowg6cacd2yp5u:t7.4"
+  ],
+  "origen": "gemini-revisada",
+  "id": "q017"
+ },
+ {
+  "consulta": "«En el carrillo derecho tiene juntas dos señales»",
+  "clases": [
+   "es",
+   "literal"
+  ],
+  "idioma": "es",
+  "documentos": [
+   "Casamiento"
+  ],
+  "semilla": [
+   "docmuwowg6cacd2yp5u:t7.2"
+  ],
+  "origen": "gemini",
+  "id": "q018"
+ },
+ {
+  "consulta": "¿De qué manera salva Bernardo del Carpio al rey Don Alfonso del ataque de un oso durante la cacería?",
+  "clases": [
+   "es",
+   "factual"
+  ],
+  "idioma": "es",
+  "documentos": [
+   "Casamiento"
+  ],
+  "semilla": [
+   "docmuwowg6cacd2yp5u:t8.5",
+   "docmuwowg6cacd2yp5u:t8.7"
+  ],
+  "origen": "gemini",
+  "id": "q019"
+ },
+ {
+  "consulta": "«las maromas a los bueyes, y la palabra a los hombres, el juramento a los Reyes»",
+  "clases": [
+   "es",
+   "grafia"
+  ],
+  "idioma": "es",
+  "documentos": [
+   "Casamiento"
+  ],
+  "semilla": [
+   "docmuwowg6cacd2yp5u:t7.6"
+  ],
+  "origen": "gemini",
+  "id": "q020"
+ },
+ {
+  "consulta": "How does Bernardo legitimize his lineage using the corpse of his father Don Sancho Diaz?",
+  "clases": [
+   "en",
+   "interlingue"
+  ],
+  "idioma": "en",
+  "documentos": [
+   "Casamiento"
+  ],
+  "semilla": [
+   "docmuwowg6cacd2yp5u:t9.1",
+   "docmuwowg6cacd2yp5u:t9.2"
+  ],
+  "origen": "gemini",
+  "id": "q021"
+ },
+ {
+  "consulta": "Bernardo del Carpio fights against Charlemagne",
+  "clases": [
+   "es",
+   "interlingue",
+   "factual"
+  ],
+  "idioma": "es",
+  "documentos": [
+   "Casamiento"
+  ],
+  "semilla": [],
+  "origen": "manual",
+  "id": "q145"
+ },
+ {
+  "consulta": "Bernardo quiere saber quién es su padre",
+  "clases": [
+   "es",
+   "grafia",
+   "conceptual"
+  ],
+  "idioma": "es",
+  "documentos": [
+   "Casamiento"
+  ],
+  "semilla": [],
+  "origen": "manual",
+  "id": "q158"
+ },
+ {
+  "consulta": "cuando el rey deja la corona",
+  "clases": [
+   "es",
+   "grafia"
+  ],
+  "idioma": "es",
+  "documentos": [
+   "Casamiento"
+  ],
+  "semilla": [],
+  "origen": "manual",
+  "id": "q159"
+ },
+ {
+  "consulta": "la muerte de Durandarte en Lope de Vega",
+  "clases": [
+   "es",
+   "filtro",
+   "autor"
+  ],
+  "idioma": "es",
+  "documentos": [
+   "Casamiento"
+  ],
+  "semilla": [],
+  "origen": "manual",
+  "id": "q165"
+ },
+ {
+  "id": "q174",
+  "consulta": "página 24 de El casamiento en la muerte",
+  "clases": [
+   "es",
+   "pagina"
+  ],
+  "idioma": "es",
+  "documentos": [
+   "Casamiento"
+  ],
+  "semilla": [],
+  "origen": "manual",
+  "pagina": {
+   "documento": "Casamiento",
+   "fisica": 30
+  }
+ },
+ {
+  "id": "q175",
+  "consulta": "folio 31 de El casamiento en la muerte",
+  "clases": [
+   "es",
+   "pagina"
+  ],
+  "idioma": "es",
+  "documentos": [
+   "Casamiento"
+  ],
+  "semilla": [],
+  "origen": "manual",
+  "pagina": {
+   "documento": "Casamiento",
+   "fisica": 37
+  }
+ },
+ {
+  "id": "q201",
+  "consulta": "origen de la leyenda que Bécquer oyó en Soria durante la noche de difuntos",
+  "clases": [
+   "es",
+   "conceptual"
+  ],
+  "idioma": "es",
+  "documentos": [
+   "Becquer"
+  ],
+  "semilla": [
+   "docmux4li0xkqdhc4v6:ct89402"
+  ],
+  "origen": "gemini-revisada"
+ },
+ {
+  "id": "q202",
+  "consulta": "¿De qué lugar empujan las nieves a los lobos hacia el monte?",
+  "clases": [
+   "es",
+   "factual"
+  ],
+  "idioma": "es",
+  "documentos": [
+   "Becquer"
+  ],
+  "semilla": [
+   "docmux4li0xkqdhc4v6:c1fycol3"
+  ],
+  "origen": "gemini-revisada"
+ },
+ {
+  "id": "q203",
+  "consulta": "«Ese monte que hoy llaman de las ánimas pertenecía a los templarios»",
+  "clases": [
+   "es",
+   "literal"
+  ],
+  "idioma": "es",
+  "documentos": [
+   "Becquer"
+  ],
+  "semilla": [
+   "docmux4li0xkqdhc4v6:c76kkji"
+  ],
+  "origen": "gemini-revisada"
+ },
+ {
+  "id": "q204",
+  "consulta": "Why did the Castilian nobles resent the Knights Templar summoned by the king to Soria?",
+  "clases": [
+   "en",
+   "interlingue"
+  ],
+  "idioma": "en",
+  "documentos": [
+   "Becquer"
+  ],
+  "semilla": [
+   "docmux4li0xkqdhc4v6:ct53bl"
+  ],
+  "origen": "gemini-revisada"
+ },
+ {
+  "id": "q205",
+  "consulta": "¿Qué cuenta la narradora sobre el resultado de la sangrienta cacería entre templarios e hidalgos?",
+  "clases": [
+   "es",
+   "medio"
+  ],
+  "idioma": "es",
+  "documentos": [
+   "Becquer"
+  ],
+  "semilla": [
+   "docmux4li0xkqdhc4v6:ctlzfv5"
+  ],
+  "origen": "gemini-revisada"
+ },
+ {
+  "id": "q206",
+  "consulta": "leyenda sobre rastro de esqueletos en la nieve la noche de difuntos",
+  "clases": [
+   "es",
+   "conceptual"
+  ],
+  "idioma": "es",
+  "documentos": [
+   "Becquer"
+  ],
+  "semilla": [
+   "docmux4li0xkqdhc4v6:c1g5u5xy"
+  ],
+  "origen": "gemini-revisada"
+ },
+ {
+  "id": "q207",
+  "consulta": "«miraba el reflejo de la hoguera chispear en las azules pupilas»",
+  "clases": [
+   "es",
+   "literal"
+  ],
+  "idioma": "es",
+  "documentos": [
+   "Becquer"
+  ],
+  "semilla": [
+   "docmux4li0xkqdhc4v6:c1i41fyx"
+  ],
+  "origen": "gemini-revisada"
+ },
+ {
+  "id": "q208",
+  "consulta": "¿De qué lugar provenía la educación refinada y corte de Beatriz?",
+  "clases": [
+   "es",
+   "factual"
+  ],
+  "idioma": "es",
+  "documentos": [
+   "Becquer"
+  ],
+  "semilla": [
+   "docmux4li0xkqdhc4v6:c1inndeu"
+  ],
+  "origen": "gemini-revisada"
+ },
+ {
+  "id": "q209",
+  "consulta": "motivo por el que una mujer rechaza aceptar un regalo salvo en fecha señalada",
+  "clases": [
+   "es",
+   "conceptual"
+  ],
+  "idioma": "es",
+  "documentos": [
+   "Becquer"
+  ],
+  "semilla": [
+   "docmux4li0xkqdhc4v6:c1inndeu",
+   "docmux4li0xkqdhc4v6:c1842tkl"
+  ],
+  "origen": "gemini-revisada"
+ },
+ {
+  "id": "q210",
+  "consulta": "«¿Te acuerdas de la banda azul que llevé hoy a la cacería»",
+  "clases": [
+   "es",
+   "literal"
+  ],
+  "idioma": "es",
+  "documentos": [
+   "Becquer"
+  ],
+  "semilla": [
+   "docmux4li0xkqdhc4v6:ct8x0ge"
+  ],
+  "origen": "gemini-revisada"
+ },
+ {
+  "id": "q211",
+  "consulta": "¿Por qué sobrenombre era conocido Alonso en toda Castilla por su habilidad cazadora?",
+  "clases": [
+   "es",
+   "factual"
+  ],
+  "idioma": "es",
+  "documentos": [
+   "Becquer"
+  ],
+  "semilla": [
+   "docmux4li0xkqdhc4v6:c14taxr"
+  ],
+  "origen": "gemini-revisada"
+ },
+ {
+  "id": "q212",
+  "consulta": "What reasons does Alonso give for being terrified of the Mount of Spirits on All Souls' Night?",
+  "clases": [
+   "en",
+   "interlingue"
+  ],
+  "idioma": "en",
+  "documentos": [
+   "Becquer"
+  ],
+  "semilla": [
+   "docmux4li0xkqdhc4v6:c18ydkwf"
+  ],
+  "origen": "gemini-revisada"
+ },
+ {
+  "id": "q213",
+  "consulta": "¿Cómo describe la voz de la narración la burla de Beatriz que incita a Alonso a marchar?",
+  "clases": [
+   "es",
+   "medio"
+  ],
+  "idioma": "es",
+  "documentos": [
+   "Becquer"
+  ],
+  "semilla": [
+   "docmux4li0xkqdhc4v6:cazq649"
+  ],
+  "origen": "gemini-revisada"
+ },
+ {
+  "id": "q214",
+  "consulta": "alucinaciones auditivas y ruidos nocturnos de puertas abriéndose en una habitación vacía",
+  "clases": [
+   "es",
+   "conceptual"
+  ],
+  "idioma": "es",
+  "documentos": [
+   "Becquer"
+  ],
+  "semilla": [
+   "docmux4li0xkqdhc4v6:cscffxv",
+   "docmux4li0xkqdhc4v6:c107r51n"
+  ],
+  "origen": "gemini-revisada"
+ },
+ {
+  "id": "q215",
+  "consulta": "«unas pisadas lentas sonaban sobre la alfombra»",
+  "clases": [
+   "es",
+   "literal"
+  ],
+  "idioma": "es",
+  "documentos": [
+   "Becquer"
+  ],
+  "semilla": [
+   "docmux4li0xkqdhc4v6:c2pqxj"
+  ],
+  "origen": "gemini-revisada"
+ },
+ {
+  "id": "q216",
+  "consulta": "¿Qué objeto ensangrentado encuentra la protagonista sobre el reclinatorio al amanecer?",
+  "clases": [
+   "es",
+   "factual"
+  ],
+  "idioma": "es",
+  "documentos": [
+   "Becquer"
+  ],
+  "semilla": [
+   "docmux4li0xkqdhc4v6:c1kul4yd"
+  ],
+  "origen": "gemini-revisada"
+ },
+ {
+  "id": "q217",
+  "consulta": "What horrific vision did the lost hunter report witnessing around Alonso's grave?",
+  "clases": [
+   "en",
+   "interlingue"
+  ],
+  "idioma": "en",
+  "documentos": [
+   "Becquer"
+  ],
+  "semilla": [
+   "docmux4li0xkqdhc4v6:c1ebk4ck"
+  ],
+  "origen": "gemini-revisada"
+ },
+ {
+  "id": "q218",
+  "consulta": "¿De qué murió Beatriz al enterarse del destino de su primo según la lectora?",
+  "clases": [
+   "es",
+   "medio"
+  ],
+  "idioma": "es",
+  "documentos": [
+   "Becquer"
+  ],
+  "semilla": [
+   "docmux4li0xkqdhc4v6:c11gy773"
+  ],
+  "origen": "gemini-revisada"
+ },
+ {
+  "id": "q219",
+  "consulta": "How did the authors eliminate introductory phrases or explanatory chatter produced by language models alongside the corrected text?",
+  "clases": [
+   "en",
+   "conceptual"
+  ],
+  "idioma": "en",
+  "documentos": [
+   "OCR"
+  ],
+  "semilla": [
+   "docmux4l61wbp4q0v35:t0.14",
+   "docmux4l61wbp4q0v35:t1.0"
+  ],
+  "origen": "gemini-revisada"
+ },
+ {
+  "id": "q220",
+  "consulta": "What were the optimal values found via Optuna for temperature, top_k, and top_p when prompting LLMs on English text?",
+  "clases": [
+   "en",
+   "factual"
+  ],
+  "idioma": "en",
+  "documentos": [
+   "OCR"
+  ],
+  "semilla": [
+   "docmux4l61wbp4q0v35:t1.1"
+  ],
+  "origen": "gemini-revisada"
+ },
+ {
+  "id": "q221",
+  "consulta": "«The final dataset consists of 449 pages, with 449,088 OCR words, and 461,305 GT words of text.»",
+  "clases": [
+   "en",
+   "literal"
+  ],
+  "idioma": "en",
+  "documentos": [
+   "OCR"
+  ],
+  "semilla": [
+   "docmux4l61wbp4q0v35:t0.6",
+   "docmux4l61wbp4q0v35:t0.7"
+  ],
+  "origen": "gemini-revisada"
+ },
+ {
+  "id": "q222",
+  "consulta": "¿Cuál fue el motivo para no utilizar modelos comerciales de gran tamaño en la corrección completa de las colecciones históricas?",
+  "clases": [
+   "es",
+   "interlingue"
+  ],
+  "idioma": "es",
+  "documentos": [
+   "OCR"
+  ],
+  "semilla": [
+   "docmux4l61wbp4q0v35:t0.2",
+   "docmux4l61wbp4q0v35:t0.10"
+  ],
+  "origen": "gemini-revisada"
+ },
+ {
+  "id": "q223",
+  "consulta": "How does input text length influence OCR error reduction in language models, and what happens when segments are very brief?",
+  "clases": [
+   "en",
+   "conceptual"
+  ],
+  "idioma": "en",
+  "documentos": [
+   "OCR"
+  ],
+  "semilla": [
+   "docmux4l61wbp4q0v35:t2.3",
+   "docmux4l61wbp4q0v35:t2.4"
+  ],
+  "origen": "gemini-revisada"
+ },
+ {
+  "id": "q224",
+  "consulta": "What was the relative CER improvement achieved by Llama-3.1-70B on the English test dataset?",
+  "clases": [
+   "en",
+   "factual"
+  ],
+  "idioma": "en",
+  "documentos": [
+   "OCR"
+  ],
+  "semilla": [
+   "docmux4l61wbp4q0v35:t1.0",
+   "docmux4l61wbp4q0v35:t1.2"
+  ],
+  "origen": "gemini-revisada"
+ },
+ {
+  "id": "q225",
+  "consulta": "«The alignment is configured to ignore whitespace and the '-' character, to avoid text formatting discrepancies»",
+  "clases": [
+   "en",
+   "literal"
+  ],
+  "idioma": "en",
+  "documentos": [
+   "OCR"
+  ],
+  "semilla": [
+   "docmux4l61wbp4q0v35:t1.0"
+  ],
+  "origen": "gemini-revisada"
+ },
+ {
+  "id": "q226",
+  "consulta": "¿Cómo afectó el reemplazo ortográfico de la ese larga o la doble uve en la evaluación numérica de los textos corregidos?",
+  "clases": [
+   "es",
+   "interlingue"
+  ],
+  "idioma": "es",
+  "documentos": [
+   "OCR"
+  ],
+  "semilla": [
+   "docmux4l61wbp4q0v35:t0.13",
+   "docmux4l61wbp4q0v35:t2.0",
+   "docmux4l61wbp4q0v35:t2.1"
+  ],
+  "origen": "gemini-revisada"
+ },
+ {
+  "id": "q227",
+  "consulta": "Why did open-weight language models fail to produce positive error reduction when tested on the Finnish corpus?",
+  "clases": [
+   "en",
+   "conceptual"
+  ],
+  "idioma": "en",
+  "documentos": [
+   "OCR"
+  ],
+  "semilla": [
+   "docmux4l61wbp4q0v35:t1.2",
+   "docmux4l61wbp4q0v35:t3.2"
+  ],
+  "origen": "gemini-revisada"
+ },
+ {
+  "id": "q228",
+  "consulta": "Which OCR software version generated the primary text used from the National Library of Finland ground truth collection?",
+  "clases": [
+   "en",
+   "factual"
+  ],
+  "idioma": "en",
+  "documentos": [
+   "OCR"
+  ],
+  "semilla": [
+   "docmux4l61wbp4q0v35:t0.8"
+  ],
+  "origen": "gemini-revisada"
+ },
+ {
+  "id": "q229",
+  "consulta": "«The segments are corrected individually and the CER% improvement over the segments is calculated.»",
+  "clases": [
+   "en",
+   "literal"
+  ],
+  "idioma": "en",
+  "documentos": [
+   "OCR"
+  ],
+  "semilla": [
+   "docmux4l61wbp4q0v35:t2.3"
+  ],
+  "origen": "gemini-revisada"
+ },
+ {
+  "id": "q230",
+  "consulta": "¿Qué criterios de descarte se aplicaron a las páginas del conjunto ECCO-TCP antes del experimento?",
+  "clases": [
+   "es",
+   "interlingue"
+  ],
+  "idioma": "es",
+  "documentos": [
+   "OCR"
+  ],
+  "semilla": [
+   "docmux4l61wbp4q0v35:t0.5",
+   "docmux4l61wbp4q0v35:t0.6",
+   "docmux4l61wbp4q0v35:t0.7"
+  ],
+  "origen": "gemini-revisada"
+ },
+ {
+  "id": "q231",
+  "consulta": "What differences exist between Left-corrected-concatenate (LCC) and Left-uncorrected-concatenate (LUC) when correcting text segments sequentially?",
+  "clases": [
+   "en",
+   "conceptual"
+  ],
+  "idioma": "en",
+  "documentos": [
+   "OCR"
+  ],
+  "semilla": [
+   "docmux4l61wbp4q0v35:c1g40xyo"
+  ],
+  "origen": "gemini-revisada"
+ },
+ {
+  "id": "q232",
+  "consulta": "How much memory does Llama-3.1-70B consume during inference under 4-bit quantization compared to 16-bit floating point precision?",
+  "clases": [
+   "en",
+   "factual"
+  ],
+  "idioma": "en",
+  "documentos": [
+   "OCR"
+  ],
+  "semilla": [
+   "docmux4l61wbp4q0v35:t2.3",
+   "docmux4l61wbp4q0v35:t2.4"
+  ],
+  "origen": "gemini-revisada"
+ },
+ {
+  "id": "q233",
+  "consulta": "«High degrees of quantization substantially reduce model memory footprint and increase inference speed, but can be assumed to potentially degrade model performance.»",
+  "clases": [
+   "en",
+   "literal"
+  ],
+  "idioma": "en",
+  "documentos": [
+   "OCR"
+  ],
+  "semilla": [
+   "docmux4l61wbp4q0v35:t2.2"
+  ],
+  "origen": "gemini-revisada"
+ },
+ {
+  "id": "q234",
+  "consulta": "¿Qué impacto tiene prescindir de la eliminación de texto extra en los resultados de la familia de modelos Llama?",
+  "clases": [
+   "es",
+   "interlingue"
+  ],
+  "idioma": "es",
+  "documentos": [
+   "OCR"
+  ],
+  "semilla": [
+   "docmux4l61wbp4q0v35:t2.0"
+  ],
+  "origen": "gemini-revisada"
+ },
+ {
+  "id": "q235",
+  "consulta": "What methods did early ICDAR shared tasks establish for correcting optical character recognition mistakes?",
+  "clases": [
+   "en",
+   "conceptual"
+  ],
+  "idioma": "en",
+  "documentos": [
+   "OCR"
+  ],
+  "semilla": [
+   "docmux4l61wbp4q0v35:t0.2",
+   "docmux4l61wbp4q0v35:t0.3"
+  ],
+  "origen": "gemini-revisada"
+ },
+ {
+  "id": "q236",
+  "consulta": "How many digitized publications are included in the Eighteenth Century Collections Online (ECCO) dataset?",
+  "clases": [
+   "en",
+   "factual"
+  ],
+  "idioma": "en",
+  "documentos": [
+   "OCR"
+  ],
+  "semilla": [
+   "docmux4l61wbp4q0v35:t0.3"
+  ],
+  "origen": "gemini-revisada"
+ },
+ {
+  "id": "q237",
+  "consulta": "«The example-wise CER% values are further clipped not to go below -100% to prevent extremely large negative scores»",
+  "clases": [
+   "en",
+   "literal"
+  ],
+  "idioma": "en",
+  "documentos": [
+   "OCR"
+  ],
+  "semilla": [
+   "docmux4l61wbp4q0v35:t0.11"
+  ],
+  "origen": "gemini-revisada"
+ },
+ {
+  "id": "q238",
+  "consulta": "¿Dónde han alojado los autores el código y los conjuntos de datos para asegurar la reproducibilidad de los resultados?",
+  "clases": [
+   "es",
+   "interlingue"
+  ],
+  "idioma": "es",
+  "documentos": [
+   "OCR"
+  ],
+  "semilla": [
+   "docmux4l61wbp4q0v35:t3.2"
+  ],
+  "origen": "gemini-revisada"
+ },
+ {
+  "id": "q239",
+  "consulta": "Why does post-correction based purely on language model text generation set an upper boundary on restoring missing content from historical documents?",
+  "clases": [
+   "en",
+   "conceptual"
+  ],
+  "idioma": "en",
+  "documentos": [
+   "OCR"
+  ],
+  "semilla": [
+   "docmux4l61wbp4q0v35:t4.0"
+  ],
+  "origen": "gemini-revisada"
+ },
+ {
+  "id": "q240",
+  "consulta": "How many development set pages were selected to investigate segment length effects and prompts at boundaries?",
+  "clases": [
+   "en",
+   "factual"
+  ],
+  "idioma": "en",
+  "documentos": [
+   "OCR"
+  ],
+  "semilla": [
+   "docmux4l61wbp4q0v35:c1854gzy"
+  ],
+  "origen": "gemini-revisada"
+ },
+ {
+  "id": "q241",
+  "consulta": "leyendas y comedias españolas sobre caballeros castellanos y la nobleza de Castilla",
+  "clases": [
+   "es",
+   "cruzada",
+   "conceptual"
+  ],
+  "idioma": "es",
+  "documentos": [
+   "Casamiento",
+   "Becquer"
+  ],
+  "semilla": [],
+  "origen": "manual"
+ },
+ {
+  "id": "q242",
+  "consulta": "historical spellings such as the long s and their effect on reading old printed texts",
+  "clases": [
+   "en",
+   "cruzada",
+   "grafia"
+  ],
+  "idioma": "en",
+  "documentos": [
+   "OCR",
+   "Casamiento"
+  ],
+  "semilla": [],
+  "origen": "manual"
+ },
+ {
+  "id": "q243",
+  "consulta": "qué cuenta Bécquer de los templarios de Soria",
+  "clases": [
+   "es",
+   "filtro",
+   "autor",
+   "medio"
+  ],
+  "idioma": "es",
+  "documentos": [
+   "Becquer"
+  ],
+  "semilla": [],
+  "origen": "manual"
+ },
+ {
+  "id": "q244",
+  "consulta": "corrección de errores de OCR con modelos de lenguaje en trabajos de 2025",
+  "clases": [
+   "es",
+   "filtro",
+   "interlingue"
+  ],
+  "idioma": "es",
+  "documentos": [
+   "OCR"
+  ],
+  "semilla": [],
+  "origen": "manual"
+ },
+ {
+  "id": "q245",
+  "consulta": "página 3 del artículo sobre corrección de OCR con LLM",
+  "clases": [
+   "es",
+   "pagina"
+  ],
+  "idioma": "es",
+  "documentos": [
+   "OCR"
+  ],
+  "semilla": [],
+  "origen": "manual",
+  "pagina": {
+   "documento": "OCR",
+   "fisica": 3
+  }
+ }
+]

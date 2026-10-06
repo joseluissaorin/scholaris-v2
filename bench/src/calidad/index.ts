@@ -21,7 +21,7 @@ export async function calidad(args: string[]): Promise<void> {
       console.log(await construirEstanteria({ actualizar: resto.includes('--actualizar') }));
       return;
     }
-    case 'proponer': return (await import('./proponer.js')).proponer();
+    case 'proponer': return (await import('./proponer.js')).proponer(resto);
     case 'pool': return (await import('./pool.js')).pool(resto);
     case 'citas-proponer': return (await import('./citas.js')).proponerCitas();
     case 'citas-juzgar': return (await import('./citas.js')).juzgarCitas();

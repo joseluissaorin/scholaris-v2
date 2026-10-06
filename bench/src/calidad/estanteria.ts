@@ -5,7 +5,7 @@
  * los mismos fragmentos. Se reconstruye con `pnpm bench calidad estanteria`.
  */
 import { copyFileSync, existsSync, mkdirSync, rmSync, readFileSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { createHash } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import { gunzipSync } from 'node:zlib';
@@ -13,21 +13,56 @@ import { ESQUEMA_V4, rellenarTextoBusqueda } from '@scholaris/spdf';
 import type { SQL, ValorSQL } from '@scholaris/nucleo';
 import { RAIZ, SALIDA } from '../ingesta.js';
 
-export const DIR_CALIDAD = join(RAIZ, 'calidad');
-export const DIR_DATOS_CALIDAD = join(RAIZ, 'datos', 'calidad');
+/**
+ * Dos juegos de pruebas con el mismo código:
+ *
+ *   público (por defecto)  bench/calidad: documentos de dominio público o con licencia
+ *                          libre, con sus SPDF en bench/calidad/fuentes; cualquiera puede
+ *                          reproducirlo con una clave de Gemini.
+ *   privado                SCHOLARIS_BANCO=privado: el juego grande sobre libros y
+ *                          entrevistas con derechos; vive en bench/datos/calidad (fuera de git).
+ *
+ * SCHOLARIS_BANCO también admite una ruta a otro juego con la misma forma.
+ */
+const BANCO = process.env.SCHOLARIS_BANCO ?? 'publico';
+const PRIVADO = BANCO === 'privado';
+
+/** El juego: consultas, juicios, citas, folios, corpus.json, RESULTADOS.md e historial. */
+export const DIR_CALIDAD = PRIVADO ? join(RAIZ, 'datos', 'calidad', 'juego') : BANCO === 'publico' ? join(RAIZ, 'calidad') : resolve(BANCO);
+/** Lo que se regenera (estantería, cachés, pool, experimentos): siempre fuera de git. */
+export const DIR_DATOS_CALIDAD = PRIVADO ? join(RAIZ, 'datos', 'calidad') : BANCO === 'publico' ? join(RAIZ, 'datos', 'calidad-publica') : join(resolve(BANCO), 'datos');
 export const RUTA_ESTANTERIA = join(DIR_DATOS_CALIDAD, 'estanteria.sqlite');
 
-/** Los SPDF de la biblioteca de pruebas (etiquetas de bench/datos/salida). */
-export const SPDF_BANCO = [
-  'discarded', 'attention_2017', 'cortazar1959persegui', 'el-casamiento-en-la-',
-  'serrano', 'cortazar-afondo', '3b1b_1min_real', 'audio_conference', 'scanned_ocr_test',
-];
+/** Un documento del juego (corpus.json). */
+export interface DocCorpus {
+  /** Etiqueta del SPDF (bench/datos/salida/<etiqueta>.spdf o <juego>/fuentes/<etiqueta>.spdf). */
+  etiqueta: string;
+  /** Nombre corto y estable para los informes y los juicios. */
+  corto: string;
+  /** Cuántas consultas pide `proponer` y qué afirmaciones pide `citas-proponer`. */
+  consultas?: number;
+  citas?: { apoyo: number; negativa: number; idioma: string };
+  /** PDF digital sin láminas: entra en el experimento «vista» (vectores de página en texto). */
+  textoDigital?: boolean;
+  titulo?: string;
+  fuente?: string;
+  licencia?: string;
+  original?: { url: string; sha256: string; archivo: string };
+}
+
+function cargarCorpus(): DocCorpus[] {
+  const ruta = join(DIR_CALIDAD, 'corpus.json');
+  if (!existsSync(ruta)) throw new Error(`Falta ${ruta}`);
+  return (JSON.parse(readFileSync(ruta, 'utf8')) as { documentos: DocCorpus[] }).documentos;
+}
+
+export const CORPUS: DocCorpus[] = cargarCorpus();
+
+/** Los SPDF de la biblioteca de pruebas (etiquetas). */
+export const SPDF_BANCO = CORPUS.map((d) => d.etiqueta);
 
 /** Nombre corto y estable de cada documento para los informes. */
-export const CORTO: Record<string, string> = {
-  discarded: 'Lewis', attention_2017: 'Attention', cortazar1959persegui: 'Perseguidor', 'el-casamiento-en-la-': 'Casamiento',
-  serrano: 'Cabral', 'cortazar-afondo': 'CortazarTV', '3b1b_1min_real': '3b1b', audio_conference: 'Audio', scanned_ocr_test: 'Slerexe',
-};
+export const CORTO: Record<string, string> = Object.fromEntries(CORPUS.map((d) => [d.etiqueta, d.corto]));
 
 function columnas(bd: DatabaseSync, tabla: string, esquema = 'main'): string[] {
   return (bd.prepare(`PRAGMA ${esquema}.table_info(${tabla})`).all() as Array<{ name: string }>).map((f) => f.name);
@@ -46,7 +81,8 @@ export async function construirEstanteria(o: { actualizar?: boolean } = {}): Pro
   mkdirSync(fuentes, { recursive: true });
   for (const etiqueta of SPDF_BANCO) {
     const congelada = join(fuentes, `${etiqueta}.sqlite`);
-    if (o.actualizar || !existsSync(congelada)) {
+    const publicado = join(DIR_CALIDAD, 'fuentes', `${etiqueta}.spdf`);
+    if (o.actualizar || (!existsSync(congelada) && !existsSync(publicado))) {
       const origen = join(SALIDA, `${etiqueta}.sqlite`);
       if (existsSync(origen)) copyFileSync(origen, congelada);
     }
@@ -54,8 +90,10 @@ export async function construirEstanteria(o: { actualizar?: boolean } = {}): Pro
   for (const etiqueta of SPDF_BANCO) {
     let ruta = join(fuentes, `${etiqueta}.sqlite`);
     if (!existsSync(ruta)) {
-      const gz = join(SALIDA, `${etiqueta}.spdf`);
-      if (!existsSync(gz)) throw new Error(`Falta ${etiqueta}.spdf en ${SALIDA}`);
+      // El juego público trae sus SPDF en <juego>/fuentes; si no, los de bench/datos/salida.
+      const publicado = join(DIR_CALIDAD, 'fuentes', `${etiqueta}.spdf`);
+      const gz = existsSync(publicado) ? publicado : join(SALIDA, `${etiqueta}.spdf`);
+      if (!existsSync(gz)) throw new Error(`Falta ${etiqueta}.spdf en ${join(DIR_CALIDAD, 'fuentes')} o en ${SALIDA}`);
       ruta = join(DIR_DATOS_CALIDAD, `${etiqueta}.tmp.sqlite`);
       const b = readFileSync(gz);
       writeFileSync(ruta, b[0] === 0x1f ? gunzipSync(b) : b);

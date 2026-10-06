@@ -9,3 +9,6 @@ bench/resultados/*.local.*
 .DS_Store
 coverage/
 *.tsbuildinfo
+# Resultados del banco sobre material con derechos y pruebas sueltas (quedan en local)
+bench/resultados/
+bench/src/estado-tmp*.ts
