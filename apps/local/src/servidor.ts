@@ -11,12 +11,18 @@
  * (SCHOLARIS_TOKEN). Con CLERK_PUBLISHABLE_KEY, multiusuario como la nube.
  * La inteligencia llega por las mismas APIs con las claves del entorno o las
  * del usuario; InferBox (INFERBOX_URL) es opcional.
+ *
+ * Sin conexión (SCHOLARIS_SIN_CONEXION=1 + INFERENCIA_URL): toda la
+ * inteligencia en el servidor propio, nada de claves de nube (ni las del
+ * usuario), sin Clerk, sin YouTube y sin catálogos (OpenAlex, Crossref, Open
+ * Library, Wikidata) salvo SCHOLARIS_CATALOGOS=1. La guardia de red
+ * (guardia-red.ts) la instala principal.ts.
  */
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync, rmSync } from 'node:fs';
 import { extname, join, resolve } from 'node:path';
 import { randomBytes } from 'node:crypto';
 import type { IndiceVectorial, Inteligencia } from '@scholaris/nucleo';
-import { crearInteligencia, type EntornoInteligencia } from '@scholaris/proveedores';
+import { crearInteligencia, modoSinConexion, type EntornoInteligencia } from '@scholaris/proveedores';
 import { crearAppUsuario, crearPuerta, VERSION, type Plataforma } from '@scholaris/api/app';
 import type { ConfigInstancia, PuertosUsuario, UsuarioSesion } from '@scholaris/api/puertos';
 import { Cuentas } from '@scholaris/api/compartido/cuentas';
@@ -29,6 +35,7 @@ import { SqlLocal, type BaseSqlite } from './sql.js';
 import { CentralTiempoReal } from './tiempo-real.js';
 import { ColaLocal } from './cola.js';
 import { cargarSqliteVec, crearIndiceLocal } from './indice-sqlite-vec.js';
+import { crearRasterizador } from './rasterizar-pdf.js';
 
 export interface DriverSqlite {
   abrir(ruta: string): BaseSqlite;
@@ -92,13 +99,17 @@ export async function crearServidorLocal(o: OpcionesServidor): Promise<ServidorL
 
   const almacen = crearAlmacenDisco(join(datos, 'almacen'), { secreto, origen: () => origen });
   const tiempoReal = new CentralTiempoReal();
-  const conClerk = !!env.CLERK_PUBLISHABLE_KEY;
+  const sinConexion = modoSinConexion(env);
+  const catalogos = !sinConexion || env.SCHOLARIS_CATALOGOS === '1';
+  if (sinConexion && env.CLERK_PUBLISHABLE_KEY) console.warn('[sin conexión] se ignora CLERK_PUBLISHABLE_KEY: Clerk vive en internet. Usa SCHOLARIS_TOKEN o SCHOLARIS_USUARIOS.');
+  const conClerk = !sinConexion && !!env.CLERK_PUBLISHABLE_KEY;
+  const rasterizar = sinConexion ? crearRasterizador() : undefined;
 
   const config: ConfigInstancia = {
     modo: 'local', version: VERSION, origen,
     ...(conClerk ? { clerkPublishableKey: env.CLERK_PUBLISHABLE_KEY } : {}),
     requiereAutenticacion: conClerk || !!env.SCHOLARIS_TOKEN || !!env.SCHOLARIS_USUARIOS,
-    conversionServidor: true, youtube: !!env.GEMINI_API_KEY, mcp: true, inferbox: !!env.INFERBOX_URL,
+    conversionServidor: true, youtube: !sinConexion && !!env.GEMINI_API_KEY, mcp: true, inferbox: !!env.INFERBOX_URL || (sinConexion && !!env.INFERENCIA_URL),
     bytesMaximos: 16 * 1024 * 1024 * 1024, tamParte: TAM_PARTE,
     espacioNombres: (u) => u,
   };
@@ -130,14 +141,15 @@ export async function crearServidorLocal(o: OpcionesServidor): Promise<ServidorL
   const inteligenciaDe = async (usuario: string): Promise<Inteligencia> => {
     const hay = cacheIA.get(usuario);
     if (hay && hay.hasta > Date.now()) return hay.ia;
-    const propias = await cuentas.clavesPropias(usuario).catch(() => ({} as Record<string, string>));
+    // Sin conexión, ni las claves propias del usuario: nada de nube.
+    const propias = sinConexion ? {} as Record<string, string> : await cuentas.clavesPropias(usuario).catch(() => ({} as Record<string, string>));
     const e: EntornoInteligencia = {
       ...env,
       GEMINI_API_KEY: propias.gemini ?? env.GEMINI_API_KEY,
       OPENROUTER_API_KEY: propias.openrouter ?? env.OPENROUTER_API_KEY,
       TYPESAFE_API_KEY: propias.typesafe ?? env.TYPESAFE_API_KEY,
     };
-    const ia = o.fabricaInteligencia ? o.fabricaInteligencia(e) : crearInteligencia(e, { concurrencia: 12 });
+    const ia = o.fabricaInteligencia ? o.fabricaInteligencia(e) : crearInteligencia(e, { concurrencia: 12, ...(rasterizar ? { rasterizar } : {}) });
     // Abre ya la conexión del embebedor: la primera consulta se ahorra ~200 ms.
     void (ia.embebedor as { precalentar?: () => Promise<void> }).precalentar?.().catch(() => undefined);
     cacheIA.set(usuario, { ia, hasta: Date.now() + 600_000 });
@@ -184,8 +196,10 @@ export async function crearServidorLocal(o: OpcionesServidor): Promise<ServidorL
     },
     ...(o.convertir ? { convertir: o.convertir } : {}),
     concurrencia: Number(env.SCHOLARIS_CONCURRENCIA ?? 2),
-    sinVerificacion: env.SCHOLARIS_SIN_VERIFICACION === '1',
+    // Sin conexión, la verificación y el enriquecimiento de metadatos (catálogos en internet) se apagan.
+    sinVerificacion: env.SCHOLARIS_SIN_VERIFICACION === '1' || !catalogos,
     gemini: async (u) => {
+      if (sinConexion) return undefined;
       const propias = await cuentas.clavesPropias(u).catch(() => ({} as Record<string, string>));
       const clave = propias.gemini ?? env.GEMINI_API_KEY;
       return clave ? { clave, ...(env.GEMINI_BASE_URL ? { baseUrl: env.GEMINI_BASE_URL } : {}) } : undefined;

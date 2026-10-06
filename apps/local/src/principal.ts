@@ -7,6 +7,8 @@
  *   WEB_DIR           web construida (apps/web/dist)
  *   GEMINI_API_KEY, OPENROUTER_API_KEY, TYPESAFE_API_KEY   inteligencia por API
  *   INFERBOX_URL, INFERBOX_API_KEY                         opcional, sin conexión
+ *   SCHOLARIS_SIN_CONEXION=1, INFERENCIA_URL, INFERENCIA_…  todo en el servidor propio y guardia de red
+ *   SCHOLARIS_CATALOGOS=1                                  sin conexión, pero con los catálogos abiertos de metadatos
  *   SCHOLARIS_TOKEN   token fijo para un solo usuario (opcional)
  *   SCHOLARIS_USUARIOS varias personas sin Clerk: "token:id:correo:Nombre;…"
  *   CLERK_PUBLISHABLE_KEY                                  multiusuario con Clerk
@@ -24,6 +26,8 @@ import type { BaseSqlite } from './sql.js';
 import type { MensajeCliente } from '@scholaris/contrato';
 import type { ArchivoConvertir } from '@scholaris/api/compartido/motor-ingesta';
 import { conversorRemoto } from '@scholaris/api/compartido/conversor-remoto';
+import { ANFITRIONES_CATALOGOS, configuracionSinConexion, modoSinConexion } from '@scholaris/proveedores';
+import { instalarGuardiaDeRed } from './guardia-red.js';
 
 export const driverNode: DriverSqlite = {
   abrir: (ruta) => new Database(ruta) as unknown as BaseSqlite,
@@ -47,8 +51,23 @@ export function fetchEnParalelo(): void {
   setGlobalDispatcher(new Agent({ connections: 256, pipelining: 1, keepAliveTimeout: 30_000 }));
 }
 
+/**
+ * Modo sin conexión: comprueba la configuración (URLs locales) y cierra la red
+ * a todo lo que no sea local. Devuelve la guardia o null si no hace falta.
+ */
+export function prepararSinConexion(env: Record<string, string | undefined> = process.env) {
+  if (!modoSinConexion(env)) return null;
+  const cfg = configuracionSinConexion(env);
+  const permitidos = [...cfg.permitidos, ...(env.SCHOLARIS_CATALOGOS === '1' ? ANFITRIONES_CATALOGOS : [])];
+  const guardia = instalarGuardiaDeRed({ permitidos });
+  console.log(`[sin conexión] inteligencia en ${cfg.url} (${cfg.sabor}); toda petición a internet se bloquea y se anota${permitidos.length ? ` (permitidos: ${permitidos.join(', ')})` : ''}`);
+  return guardia;
+}
+
 export async function arrancarNode(opciones: { puerto?: number; datos?: string; web?: string } = {}) {
   fetchEnParalelo();
+  // Después de fetchEnParalelo: la guardia pone su propio despachador (con las mismas conexiones).
+  prepararSinConexion();
   const aqui = dirname(fileURLToPath(import.meta.url));
   const puerto = opciones.puerto ?? Number(process.env.PORT ?? 8790);
   const s = await crearServidorLocal({

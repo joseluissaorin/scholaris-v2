@@ -66,7 +66,10 @@ export function modoSinConexion(env: { SCHOLARIS_SIN_CONEXION?: unknown; [otra: 
 export function esAnfitrionLocal(anfitrion: string, permitidos: string[] = []): boolean {
   const h = anfitrion.toLowerCase().replace(/^\[|\]$/g, '').replace(/\.$/, '');
   if (!h) return false;
-  if (permitidos.map((x) => x.trim().toLowerCase()).filter(Boolean).includes(h)) return true;
+  // Permitidos: anfitrión exacto o, empezando por punto, todo un dominio («.wikipedia.org»).
+  for (const p of permitidos.map((x) => x.trim().toLowerCase()).filter(Boolean)) {
+    if (p === h || (p.startsWith('.') && (h.endsWith(p) || h === p.slice(1)))) return true;
+  }
   if (h === 'localhost' || h.endsWith('.localhost')) return true;
   if (/^(local|lan|internal|home\.arpa)$/.test(h) || /\.(local|lan|internal|home\.arpa)$/.test(h)) return true;
   if (h === 'host.docker.internal') return true;
@@ -84,6 +87,16 @@ export function esAnfitrionLocal(anfitrion: string, permitidos: string[] = []): 
   // Un nombre sin punto solo lo resuelve la red local (Docker, /etc/hosts, mDNS).
   return !h.includes('.');
 }
+
+/**
+ * Los catálogos abiertos que consulta el enriquecimiento de metadatos y el
+ * enlace con Wikidata. Solo se abren con SCHOLARIS_CATALOGOS=1 (a sabiendas:
+ * entonces salen a internet el título, los autores y el ISBN, nunca el texto).
+ */
+export const ANFITRIONES_CATALOGOS = [
+  'api.openalex.org', 'api.crossref.org', 'api.datacite.org', 'openlibrary.org', 'covers.openlibrary.org', 'www.wikidata.org', 'query.wikidata.org',
+  '.wikipedia.org', 'www.googleapis.com', 'books.google.com', 'export.arxiv.org', 'arxiv.org', 'doi.org',
+];
 
 export function esUrlLocal(url: string, permitidos: string[] = []): boolean {
   try { return esAnfitrionLocal(new URL(url).hostname, permitidos); } catch { return false; }

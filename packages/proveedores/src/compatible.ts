@@ -178,7 +178,7 @@ export function crearOpenAICompatible(config: ConfigCompatible): ClienteCompatib
   const defecto = MODELOS_POR_DEFECTO[sabor];
   const modelos = {
     lector: config.modelos?.lector || defecto.lector,
-    embebedor: config.modelos?.embebedor || defecto.embebedor,
+    embebedor: config.modelos?.embebedor || (config.urlEmbebedor ? 'embeddinggemma-2' : defecto.embebedor),
     reordenador: config.modelos?.reordenador || defecto.reordenador,
     transcriptor: config.modelos?.transcriptor || defecto.transcriptor,
   };
