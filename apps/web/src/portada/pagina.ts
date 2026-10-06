@@ -11,7 +11,7 @@ import { DIBUJOS, type NombreDibujo } from './dibujo/dibujos';
 import { CSS_TINTAS } from './dibujo/tintas';
 import { TEXTOS, type Capitulo, type Textos } from './textos';
 
-export const ORIGEN = (typeof process !== 'undefined' && process.env.SCHOLARIS_ORIGEN) || 'https://scholaris-v2.jlsf2005.workers.dev';
+export const ORIGEN = (typeof process !== 'undefined' && process.env.SCHOLARIS_ORIGEN) || 'https://scholaris.joseluissaorin.com';
 
 /** Rutas de la aplicación a las que llevan las llamadas a la acción. */
 export const ENTRAR = '/?entrar';

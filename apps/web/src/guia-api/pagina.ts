@@ -10,7 +10,7 @@ import { llmsTxtV1, PREFIJO_V1 } from '@scholaris/contrato';
 import sesion from './sesion.json';
 import { TEXTOS, type Lengua, type TextosGuia } from './textos';
 
-export const ORIGEN = (typeof process !== 'undefined' && process.env.SCHOLARIS_ORIGEN) || 'https://scholaris-v2.jlsf2005.workers.dev';
+export const ORIGEN = (typeof process !== 'undefined' && process.env.SCHOLARIS_ORIGEN) || 'https://scholaris.joseluissaorin.com';
 const B = `${ORIGEN}${PREFIJO_V1}`;
 const CREAR_CLAVE = '/ajustes/claves';
 

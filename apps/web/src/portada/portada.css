@@ -358,5 +358,5 @@ img, svg { display: block; max-width: 100%; }
   .boton { box-shadow: none; }
   .especimen { box-shadow: none; }
   a[href^='http']::after { content: ' (' attr(href) ')'; font-size: 0.8em; color: var(--apagado); }
-  .colofon::after { content: 'scholaris-v2.jlsf2005.workers.dev/acerca'; display: block; margin-top: 1rem; font-family: var(--mono); font-size: 8pt; }
+  .colofon::after { content: 'scholaris.joseluissaorin.com/acerca'; display: block; margin-top: 1rem; font-family: var(--mono); font-size: 8pt; }
 }
