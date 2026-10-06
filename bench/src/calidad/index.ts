@@ -11,6 +11,7 @@
  *   remapear          lleva juicios, semillas y oro de citas a una estantería reconstruida
  *   revisar           confirmar o corregir juicios a mano
  *   experimentos      barridos de ajustes (vías, rrf, pesos, reordenadores, expansiones, contiguos, vista)
+ *   folios-rehacer    recalcula los folios de las fuentes congeladas sin releer (--simular: sin escribir)
  */
 export async function calidad(args: string[]): Promise<void> {
   const [orden, ...resto] = args;
@@ -28,6 +29,7 @@ export async function calidad(args: string[]): Promise<void> {
     case 'experimentos': return (await import('./experimentos.js')).experimentos(resto);
     case 'remapear': return (await import('./remapear.js')).remapear();
     case 'revisar': return (await import('./revisar.js')).revisar(resto);
+    case 'folios-rehacer': return (await import('./folios-rehacer.js')).foliosRehacer(resto);
     case undefined: return (await import('./ejecutar.js')).ejecutar([]);
     default:
       if (orden.startsWith('--')) return (await import('./ejecutar.js')).ejecutar(args);
