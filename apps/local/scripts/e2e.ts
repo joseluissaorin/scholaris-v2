@@ -44,7 +44,7 @@ if (s.duplicado) {
     const p = await api.subidas.recursos(s.subida, { recursos: [{ ruta: 'paquete.json', mime: 'application/json' }] });
     await fetch(p.recursos[0]!.subida.url!, { method: 'PUT', body: JSON.stringify(r.paquete), headers: { 'content-type': 'application/json' } });
     console.log(`[${seg()}] partes subidas`);
-    ing = await api.subidas.ingestar(s.subida, { paquete: 'paquete.json' });
+    ing = await api.subidas.ingestar(s.subida, { paquete: 'paquete.json', ...(process.argv.includes('--economico') ? { modo: 'economico' as const } : {}) });
   } else ing = await api.subidas.ingestar(s.subida, {});
   console.log(`[${seg()}] tarea ${ing.tarea}`);
 
@@ -52,11 +52,13 @@ if (s.duplicado) {
   const ws = new WebSocket(b.url.startsWith('/') ? base.replace(/^http/, 'ws') + b.url : b.url);
   const latido = setInterval(() => ws.readyState === 1 && ws.send(JSON.stringify({ tipo: 'ping', t: Date.now() })), 30_000);
   let primera = false;
+  let buscable = false;
   const fin = new Promise<EventoTiempoReal>((res) => {
     ws.on('message', (m) => {
       const e = JSON.parse(String(m)) as EventoTiempoReal;
       if (e.tipo === 'progreso') process.stdout.write(`\r[${seg()}] ${e.progreso.fase.padEnd(10)} ${(e.progreso.total * 100).toFixed(0).padStart(3)} % ${e.progreso.mensaje ?? ''}`.padEnd(100));
-      if (e.tipo === 'unidades' && !primera) { primera = true; console.log(`\n[${seg()}] primeras unidades legibles (${e.desde}-${e.hasta})`); }
+      if (e.tipo === 'unidades' && !primera) { primera = true; console.log(`\n[${seg()}] primeras unidades legibles (${e.desde}-${e.hasta})${e.buscables ? ' y buscables' : ''}`); }
+      if (e.tipo === 'unidades' && e.buscables && !buscable) { buscable = true; console.log(`\n[${seg()}] primer texto buscable (${e.desde}-${e.hasta})`); }
       if (e.tipo === 'fin') res(e);
     });
   });
