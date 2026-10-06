@@ -10,11 +10,11 @@ import { useQuery } from '@tanstack/react-query';
 import { cx, Icono, type NombreIcono } from '@scholaris/ui';
 import { disparar } from '../../lib/acciones';
 import { useSesion } from '../../sesion';
-import { esSimulado } from '../../datos/api';
+import { api, esSimulado } from '../../datos/api';
 import { q } from '../../datos/consultas';
 import { Logo } from './logo';
 
-type Destino = '/' | '/buscar' | '/escribir' | '/explorar' | '/ajustes';
+type Destino = '/' | '/buscar' | '/escribir' | '/explorar' | '/ajustes' | '/invitaciones';
 
 export const SECCIONES: Array<{ a: Destino; etiqueta: string; icono: NombreIcono; sub?: Array<{ a: string; etiqueta: string }> }> = [
   { a: '/', etiqueta: 'Biblioteca', icono: 'biblioteca' },
@@ -25,6 +25,14 @@ export const SECCIONES: Array<{ a: Destino; etiqueta: string; icono: NombreIcono
 
 const esMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform);
 export const TECLA_MOD = esMac ? '⌘' : 'Ctrl';
+
+/** Invitaciones por responder y avisos sin leer (compartir, copias, lotes terminados). */
+function useInvitacionesPendientes() {
+  const { data: inv } = useQuery({ queryKey: ['invitaciones'], queryFn: () => api().invitaciones.listar(), staleTime: 60_000, refetchInterval: 120_000, enabled: !esSimulado() });
+  const { data: avisos } = useQuery({ queryKey: ['notificaciones', 'pendientes'], queryFn: () => api().notificaciones.listar(true), staleTime: 60_000, refetchInterval: 120_000, enabled: !esSimulado() });
+  const otros = (avisos ?? []).filter((a) => a.tipo !== 'invitacion' && !a.leida).length;
+  return (inv?.length ?? 0) + otros;
+}
 
 function useAlertasPendientes() {
   const { data } = useQuery({ ...q.alertas(), staleTime: 60_000 });
@@ -69,6 +77,7 @@ function useCorreo() {
 function ContenidoBarra({ alNavegar }: { alNavegar?: () => void }) {
   const ruta = useRouterState({ select: (s) => s.location.pathname });
   const pendientes = useAlertasPendientes();
+  const invitaciones = useInvitacionesPendientes();
   const nombre = useNombre();
   const correo = useCorreo();
   const sesion = useSesion();
@@ -125,6 +134,11 @@ function ContenidoBarra({ alNavegar }: { alNavegar?: () => void }) {
           </div>
         ))}
         <div className="mt-3 border-t border-barra-2/70 pt-3">
+          <Link to="/invitaciones" onClick={alNavegar} aria-current={activa('/invitaciones') ? 'page' : undefined} className={cx('relative mb-0.5 flex items-center rounded-xl px-3 py-2 text-[0.875rem] font-medium transition-colors', activa('/invitaciones') ? 'bg-barra-2 text-sobre-barra' : 'text-sobre-barra-2 hover:bg-barra-2 hover:text-sobre-barra')}>
+            {activa('/invitaciones') ? <span aria-hidden className="absolute left-0 top-1/2 h-5 w-1 -translate-y-1/2 rounded-full bg-amarillo" /> : null}
+            <Icono nombre="enlace" tam={16} className="mr-3" /><span className="flex-1">Invitaciones</span>
+            {invitaciones ? <span className="grid h-5 min-w-5 place-items-center rounded-full bg-rojo px-1 text-[0.625rem] font-bold text-cream-50" aria-label={`${invitaciones} sin ver`}>{invitaciones}</span> : null}
+          </Link>
           <Link to="/ajustes" onClick={alNavegar} aria-current={activa('/ajustes') ? 'page' : undefined} className={cx('relative flex items-center rounded-xl px-3 py-2 text-[0.875rem] font-medium transition-colors', activa('/ajustes') ? 'bg-barra-2 text-sobre-barra' : 'text-sobre-barra-2 hover:bg-barra-2 hover:text-sobre-barra')}>
             <Icono nombre="ajustes" tam={16} className="mr-3" />Ajustes
           </Link>

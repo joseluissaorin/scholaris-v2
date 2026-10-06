@@ -1,5 +1,5 @@
 import { lazy, Suspense, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { createFileRoute, useNavigate } from '@tanstack/react-router';
+import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useWindowVirtualizer } from '@tanstack/react-virtual';
 import type { TipoEntrada } from '@scholaris/nucleo';
@@ -25,6 +25,9 @@ import { NotaMargen } from '../bocetos/nota-margen';
 import { Cifra } from '../movimiento/cifra';
 
 const Compartir = lazy(() => import('../componentes/biblioteca/compartir'));
+const LlenarBiblioteca = lazy(() => import('../componentes/biblioteca/llenar'));
+const ExportarPaquete = lazy(() => import('../componentes/biblioteca/paquetes').then((m) => ({ default: m.ExportarPaquete })));
+const ImportarPaquete = lazy(() => import('../componentes/biblioteca/paquetes').then((m) => ({ default: m.ImportarPaquete })));
 
 const GRUPOS: Array<{ id: string; nombre: string; tipos: TipoEntrada[]; punto?: 'rojo' | 'azul' | 'amarillo' | 'tinta' }> = [
   { id: 'libros', nombre: 'Libros y artículos', tipos: ['pdf', 'epub'], punto: 'azul' },
@@ -76,11 +79,18 @@ function PaginaBiblioteca() {
   const navegar = useNavigate({ from: '/' });
   const { data, isPending } = useQuery(q.documentos());
   const { data: bibliotecas = [] } = useQuery(q.bibliotecas());
+  // Las que sigues viven en la estantería de otra persona: tienen su propia vista.
+  const propias = bibliotecas.filter((b) => b.permiso === 'propietario');
+  const seguidas = bibliotecas.filter((b) => b.permiso !== 'propietario');
   const ingestas = useIngestas();
   const [texto, setTexto] = useState(busqueda.q ?? '');
   const diferido = useDeferredValue(texto);
   const [nueva, setNueva] = useState(false);
   const [compartir, setCompartir] = useState(false);
+  // Llenar la biblioteca de golpe, exportar e importar paquetes.
+  const [llenar, setLlenar] = useState(false);
+  const [exportar, setExportar] = useState(false);
+  const [importar, setImportar] = useState(false);
   const orden = busqueda.orden ?? 'recientes';
   const vista = busqueda.vista ?? 'rejilla';
 
@@ -160,7 +170,7 @@ function PaginaBiblioteca() {
             {/* Colecciones en el móvil: en fila, como las acciones de siempre */}
             <div className="sin-barra -mx-4 flex gap-2 overflow-x-auto px-4 pb-1 lg:hidden">
               <Chip activo={!busqueda.col} onClick={() => fijar({ col: undefined })}>Toda la biblioteca</Chip>
-              {bibliotecas.map((b) => <Chip key={b.id} punto={(b.color as 'rojo') ?? 'tinta'} activo={busqueda.col === b.id} onClick={() => fijar({ col: busqueda.col === b.id ? undefined : b.id })}>{b.nombre}</Chip>)}
+              {propias.map((b) => <Chip key={b.id} punto={(b.color as 'rojo') ?? 'tinta'} activo={busqueda.col === b.id} onClick={() => fijar({ col: busqueda.col === b.id ? undefined : b.id })}>{b.nombre}</Chip>)}
               <Chip icono="mas" onClick={() => setNueva(true)}>Nueva</Chip>
             </div>
           </div>
@@ -213,7 +223,7 @@ function PaginaBiblioteca() {
                 <NotaMargen id="biblioteca-acciones" nombre="nota-aqui" className="-top-12 right-0 w-28" espera={1800} />
                 <h2 className="rotulo mb-2.5 text-[0.75rem] text-coffee-700">Acciones</h2>
                 <div className="space-y-0.5">
-                  {([['subir', 'Añadir documentos', () => disparar('archivos')], ['enlace', 'Desde un enlace', () => disparar('enlace')], ['pila', 'Importar un .spdf', () => disparar('spdf')], ['buscar', 'Búsqueda semántica', () => disparar('paleta')]] as const).map(([i, t, f]) => (
+                  {([['subir', 'Añadir documentos', () => disparar('archivos')], ['rayo', 'Llenar biblioteca', () => setLlenar(true)], ['enlace', 'Desde un enlace', () => disparar('enlace')], ['pila', 'Importar un .spdf', () => disparar('spdf')], ['descargar', 'Importar paquete', () => setImportar(true)], ['buscar', 'Búsqueda semántica', () => disparar('paleta')]] as const).map(([i, t, f]) => (
                     <button key={t} type="button" onClick={f} className="tactil flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-[0.8125rem] text-coffee-600 hover:translate-x-0.5 hover:bg-cream-200 hover:text-coffee-800 active:scale-[0.98]">
                       <Icono nombre={i} tam={16} className="text-coffee-400" />{t}
                     </button>
@@ -229,7 +239,7 @@ function PaginaBiblioteca() {
                   <button type="button" onClick={() => fijar({ col: undefined })} className={cx('flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-[0.8125rem] transition-colors', !busqueda.col ? 'bg-cream-50 font-semibold text-coffee-800 shadow-[var(--relieve)]' : 'text-coffee-600 hover:bg-cream-200')}>
                     <Icono nombre="biblioteca" tam={15} className="text-coffee-400" /><span className="flex-1">Toda la biblioteca</span><span className="tnum text-[0.75rem] text-coffee-400">{todos.length}</span>
                   </button>
-                  {bibliotecas.map((b) => (
+                  {propias.map((b) => (
                     <button key={b.id} type="button" onClick={() => fijar({ col: busqueda.col === b.id ? undefined : b.id })} className={cx('flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-[0.8125rem] transition-colors', busqueda.col === b.id ? 'bg-cream-50 font-semibold text-coffee-800 shadow-[var(--relieve)]' : 'text-coffee-600 hover:bg-cream-200')}>
                       <span className={cx('h-2.5 w-2.5 shrink-0 rounded-full', puntoColeccion(b.color))} />
                       <span className="min-w-0 flex-1 truncate">{b.nombre}</span>
@@ -237,10 +247,31 @@ function PaginaBiblioteca() {
                       <span className="tnum text-[0.75rem] text-coffee-400">{b.documentos}</span>
                     </button>
                   ))}
-                  {!bibliotecas.length ? <p className="px-3 py-2 text-[0.75rem] text-coffee-400">Aún no hay colecciones.</p> : null}
+                  {!propias.length ? <p className="px-3 py-2 text-[0.75rem] text-coffee-400">Aún no hay colecciones.</p> : null}
                 </div>
+                {seguidas.length ? (
+                  <>
+                    <h2 className="rotulo mb-2 mt-5 text-[0.75rem] text-coffee-700">Que sigues</h2>
+                    <div className="space-y-0.5">
+                      {seguidas.map((b) => (
+                        <Link key={b.id} to="/compartida/$id" params={{ id: b.id }} className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-[0.8125rem] text-coffee-600 transition-colors hover:bg-cream-200">
+                          <span className="h-2.5 w-2.5 shrink-0 rounded-full border-2 border-azul" />
+                          <span className="min-w-0 flex-1 truncate">{b.nombre}</span>
+                          <span className="max-w-[5.5rem] truncate text-[0.6875rem] text-coffee-400">{b.propietarioNombre}</span>
+                        </Link>
+                      ))}
+                    </div>
+                  </>
+                ) : null}
                 {coleccion ? <Boton variante="linea" tam="p" icono="citar" className="mt-3 w-full" onClick={() => void copiarBibliografia({ biblioteca: coleccion.id })}>Copiar su bibliografía</Boton> : null}
-                {coleccion && coleccion.permiso === 'propietario' ? <Boton variante="linea" tam="p" icono="enlace" className="mt-2 w-full" onClick={() => setCompartir(true)}>Compartir «{coleccion.nombre}»</Boton> : null}
+                {coleccion && coleccion.permiso === 'propietario' ? (
+                  <>
+                    <Boton variante="linea" tam="p" icono="enlace" className="mt-2 w-full" onClick={() => setCompartir(true)}>Compartir «{coleccion.nombre}»</Boton>
+                    <Boton variante="linea" tam="p" icono="rayo" className="mt-2 w-full" onClick={() => setLlenar(true)}>Llenar esta colección</Boton>
+                    <Boton variante="linea" tam="p" icono="descargar" className="mt-2 w-full" onClick={() => setExportar(true)}>Exportar paquete</Boton>
+                  </>
+                ) : null}
+                {coleccion?.copiadaDe ? <p className="mt-3 px-3 text-[0.75rem] text-coffee-400">Copiada de «{coleccion.copiadaDe.nombre}», de {coleccion.copiadaDe.de}</p> : null}
                 {coleccion && coleccion.permiso !== 'propietario' ? <p className="mt-3 px-3 text-[0.75rem] text-coffee-400">Compartida contigo · {coleccion.permiso === 'edicion' ? 'puedes editar' : 'solo lectura'}</p> : null}
               </div>
             </aside>
@@ -251,6 +282,9 @@ function PaginaBiblioteca() {
       <BarraSeleccion visibles={visibles} />
       <NuevaColeccion abierta={nueva} alCambiar={setNueva} />
       {compartir && coleccion ? <Suspense fallback={null}><Compartir biblioteca={coleccion} alCerrar={() => setCompartir(false)} /></Suspense> : null}
+      {llenar ? <Suspense fallback={null}><LlenarBiblioteca bibliotecas={bibliotecas} inicial={coleccion?.permiso === 'propietario' ? coleccion.id : undefined} alCerrar={() => setLlenar(false)} /></Suspense> : null}
+      {exportar && coleccion ? <Suspense fallback={null}><ExportarPaquete biblioteca={coleccion} alCerrar={() => setExportar(false)} /></Suspense> : null}
+      {importar ? <Suspense fallback={null}><ImportarPaquete alCerrar={() => setImportar(false)} /></Suspense> : null}
     </>
   );
 }

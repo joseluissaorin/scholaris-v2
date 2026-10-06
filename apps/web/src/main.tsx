@@ -1,4 +1,4 @@
-import { StrictMode, Suspense, use, useEffect, useState } from 'react';
+import { lazy, StrictMode, Suspense, use, useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { createRouter, RouterProvider } from '@tanstack/react-router';
@@ -82,8 +82,12 @@ function EnrutadorConArmazon() {
   );
 }
 
+/** Un enlace de solo lectura (`/p/<token>`): sin cuenta, fuera del marco y de Clerk. */
+const VistaPublica = lazy(() => import('./publico/vista-publica'));
+
 function Aplicacion() {
   const config = use(promesaConfig);
+  if (location.pathname.startsWith('/p/')) return <VistaPublica />;
   return (
     <ProveedorSesion config={config} espera={<EsperaMarco />}>
       <EnrutadorConArmazon />

@@ -27,6 +27,23 @@ function quiereSimulado(): boolean {
   try { return new URLSearchParams(location.search).has('demostracion') || sessionStorage.getItem('scholaris.demostracion') === '1'; } catch { return false; }
 }
 
+/**
+ * Local con varias personas (SCHOLARIS_USUARIOS): cada una entra con su token,
+ * que llega una vez por `?token=` y se queda en este navegador.
+ */
+function tokenLocal(): string | null {
+  try {
+    const u = new URL(location.href);
+    const t = u.searchParams.get('token');
+    if (t && !u.pathname.startsWith('/invitaciones')) {
+      localStorage.setItem('scholaris.token', t);
+      u.searchParams.delete('token');
+      history.replaceState(history.state, '', u.toString());
+    }
+    return localStorage.getItem('scholaris.token');
+  } catch { return null; }
+}
+
 let arranque: Promise<ConfigPublica> | null = null;
 
 /** Lee `/config` (sin autenticar) y deja el cliente listo. */
@@ -34,7 +51,7 @@ export function arrancar(): Promise<ConfigPublica> {
   arranque ??= (async () => {
     const base = (import.meta.env.VITE_API as string | undefined) ?? '';
     if (!quiereSimulado()) {
-      const real = crearCliente({ base, token: () => proveedorToken?.() ?? null });
+      const real = crearCliente({ base, token: () => proveedorToken?.() ?? tokenLocal() });
       try {
         const config = await real.config();
         cliente = real;

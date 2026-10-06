@@ -248,6 +248,8 @@ export function crearCliente(opciones: OpcionesCliente) {
 
     seguidas: {
       listar: () => get<BibliotecaSeguida[]>('/seguidas'),
+      /** Seguir una colección desde un enlace de solo lectura (con el pase si tiene contraseña). */
+      porEnlace: (enlace: string, pase?: string) => post<BibliotecaSeguida>('/seguidas', { enlace, ...(pase ? { pase } : {}) }),
       dejar: (biblioteca: string) => del(`/seguidas/${e(biblioteca)}`),
     },
 

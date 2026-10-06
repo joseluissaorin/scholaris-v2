@@ -269,17 +269,37 @@ export async function ingerirUrl(url: string, biblioteca?: string): Promise<Inge
   return i;
 }
 
-async function correr(i: Ingesta, archivo: File, biblioteca?: string, fotos?: File[]) {
+/** Lo que deja una ingesta lanzada desde la web (lo usan los lotes para apuntar cada elemento). */
+export interface ResultadoIngesta { documento?: string; tarea?: string; duplicado?: string; error?: string }
+
+/** Extras de una ingesta de lote: el modo del lote, los metadatos que ya se saben y la huella ya calculada. */
+interface ExtrasIngesta { modo?: ModoIngesta; metadatos?: Record<string, unknown>; huella?: string; alCrear?: (documento: string) => void }
+
+/**
+ * Una ingesta para un lote: la misma tarjeta en la mesa de entrada y la misma
+ * imprenta, pero devuelve el documento y la tarea en cuanto el servidor la acepta.
+ */
+export function ingerirParaLote(archivo: File, opciones: { biblioteca?: string } & ExtrasIngesta = {}): Promise<ResultadoIngesta> {
+  const i = nueva(nombreLegible(archivo.name), deducirTipo(archivo), archivo.size);
+  return correr(i, archivo, opciones.biblioteca, undefined, opciones);
+}
+
+async function correr(i: Ingesta, archivo: File, biblioteca?: string, fotos?: File[], extras: ExtrasIngesta = {}): Promise<ResultadoIngesta> {
   let conversion: Conversion | null = null;
   controles.set(i.id, { cancelar: () => conversion?.cancelar() });
   try {
     // La huella antes de subir: si el fichero ya está en la biblioteca, no se sube ni se lee otra vez.
-    const huella = !fotos && archivo.size < 512 * 1024 ** 2 ? await sha256Archivo(archivo) : undefined;
-    const sub = await api().subidas.crear({ nombre: archivo.name, mime: archivo.type || 'application/octet-stream', bytes: i.bytes, tipo: i.tipo, ...(huella ? { huella } : {}), ...(biblioteca ? { bibliotecas: [biblioteca] } : {}) });
+    const huella = extras.huella ?? (!fotos && archivo.size < 512 * 1024 ** 2 ? await sha256Archivo(archivo) : undefined);
+    const sub = await api().subidas.crear({
+      nombre: archivo.name, mime: archivo.type || 'application/octet-stream', bytes: i.bytes, tipo: i.tipo, ...(huella ? { huella } : {}), ...(biblioteca ? { bibliotecas: [biblioteca] } : {}),
+      ...(extras.metadatos ? { metadatos: extras.metadatos } : {}),
+    });
     if (sub.duplicado) {
       poner(i.id, { etapa: 'duplicado', documento: sub.duplicado, avance: 1, mensaje: 'Ya estaba en tu biblioteca', fin: Date.now() });
-      return;
+      setTimeout(() => retirarIngesta(i.id), 5200);
+      return { duplicado: sub.duplicado };
     }
+    extras.alCrear?.(sub.documento);
     poner(i.id, { documento: sub.documento, mensaje: 'Subiendo y convirtiendo…', etapa: 'convirtiendo' });
 
     // 1. El original sube en paralelo a todo lo demás (por partes si es grande).
@@ -332,13 +352,15 @@ async function correr(i: Ingesta, archivo: File, biblioteca?: string, fotos?: Fi
     // Con paquete, la lectura empieza ya: el original sigue subiendo y el servidor lo espera al final.
     if (!paquete) await original;
     poner(i.id, { etapa: 'procesando', mensaje: 'Leyendo…', avance: 0.32 });
-    const r = await api().subidas.ingestar(sub.subida, { ...(paquete ? { paquete: 'paquete.json' } : {}), ...opcionesIngesta() });
+    const r = await api().subidas.ingestar(sub.subida, { ...(paquete ? { paquete: 'paquete.json' } : {}), ...(extras.modo ? (extras.modo === 'economico' ? { modo: 'economico' as const } : {}) : opcionesIngesta()) });
     poner(i.id, { tarea: r.tarea, documento: r.documento });
     void clienteConsultas.invalidateQueries({ queryKey: ['documentos'] });
     if (paquete) await original;
+    return { documento: r.documento, tarea: r.tarea };
   } catch (e) {
-    if (estado.find((x) => x.id === i.id)?.etapa === 'cancelada') return;
+    if (estado.find((x) => x.id === i.id)?.etapa === 'cancelada') return { error: 'Cancelado' };
     poner(i.id, { etapa: 'error', error: mensajeDe(e), fin: Date.now() });
+    return { error: mensajeDe(e) };
   } finally {
     controles.delete(i.id);
   }
@@ -376,7 +398,7 @@ function opcionesIngesta(): Record<string, unknown> {
   return modoIngesta() === 'economico' ? { modo: 'economico' } : {};
 }
 
-async function sha256Archivo(f: File): Promise<string | undefined> {
+export async function sha256Archivo(f: File): Promise<string | undefined> {
   try {
     const h = await crypto.subtle.digest('SHA-256', await f.arrayBuffer());
     return [...new Uint8Array(h)].map((b) => b.toString(16).padStart(2, '0')).join('');

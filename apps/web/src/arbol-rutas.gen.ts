@@ -14,6 +14,7 @@ import { Route as AjustesRouteImport } from './rutas/ajustes'
 import { Route as BuscarRouteImport } from './rutas/buscar'
 import { Route as EscribirRouteImport } from './rutas/escribir'
 import { Route as ExplorarRouteImport } from './rutas/explorar'
+import { Route as InvitacionesRouteImport } from './rutas/invitaciones'
 import { Route as AjustesIndexRouteImport } from './rutas/ajustes.index'
 import { Route as AjustesAparienciaRouteImport } from './rutas/ajustes.apariencia'
 import { Route as AjustesClavesRouteImport } from './rutas/ajustes.claves'
@@ -21,6 +22,7 @@ import { Route as AjustesPrivacidadRouteImport } from './rutas/ajustes.privacida
 import { Route as BuscarIndexRouteImport } from './rutas/buscar.index'
 import { Route as BuscarHistorialRouteImport } from './rutas/buscar.historial'
 import { Route as BuscarVigilantesRouteImport } from './rutas/buscar.vigilantes'
+import { Route as CompartidaIdRouteImport } from './rutas/compartida.$id'
 import { Route as EscribirIndexRouteImport } from './rutas/escribir.index'
 import { Route as EscribirCuadernosRouteImport } from './rutas/escribir.cuadernos'
 import { Route as ExplorarIndexRouteImport } from './rutas/explorar.index'
@@ -30,6 +32,8 @@ import { Route as ExplorarEntidadesRouteImport } from './rutas/explorar.entidade
 import { Route as ExplorarGrafoRouteImport } from './rutas/explorar.grafo'
 import { Route as ExplorarPerspectivasRouteImport } from './rutas/explorar.perspectivas'
 import { Route as LectorIdRouteImport } from './rutas/lector.$id'
+import { Route as LotesIdRouteImport } from './rutas/lotes.$id'
+import { Route as RecibirTokenRouteImport } from './rutas/recibir.$token'
 import { Route as DocumentosIdContenidoRouteImport } from './rutas/documentos.$id.contenido'
 
 const IndexRoute = IndexRouteImport.update({
@@ -55,6 +59,11 @@ const EscribirRoute = EscribirRouteImport.update({
 const ExplorarRoute = ExplorarRouteImport.update({
   id: '/explorar',
   path: '/explorar',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const InvitacionesRoute = InvitacionesRouteImport.update({
+  id: '/invitaciones',
+  path: '/invitaciones',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AjustesIndexRoute = AjustesIndexRouteImport.update({
@@ -91,6 +100,11 @@ const BuscarVigilantesRoute = BuscarVigilantesRouteImport.update({
   id: '/vigilantes',
   path: '/vigilantes',
   getParentRoute: () => BuscarRoute,
+} as any)
+const CompartidaIdRoute = CompartidaIdRouteImport.update({
+  id: '/compartida/$id',
+  path: '/compartida/$id',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const EscribirIndexRoute = EscribirIndexRouteImport.update({
   id: '/',
@@ -137,6 +151,16 @@ const LectorIdRoute = LectorIdRouteImport.update({
   path: '/lector/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
+const LotesIdRoute = LotesIdRouteImport.update({
+  id: '/lotes/$id',
+  path: '/lotes/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RecibirTokenRoute = RecibirTokenRouteImport.update({
+  id: '/recibir/$token',
+  path: '/recibir/$token',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const DocumentosIdContenidoRoute = DocumentosIdContenidoRouteImport.update({
   id: '/documentos/$id/contenido',
   path: '/documentos/$id/contenido',
@@ -149,11 +173,13 @@ export interface FileRoutesByFullPath {
   '/buscar': typeof BuscarRouteWithChildren
   '/escribir': typeof EscribirRouteWithChildren
   '/explorar': typeof ExplorarRouteWithChildren
+  '/invitaciones': typeof InvitacionesRoute
   '/ajustes/apariencia': typeof AjustesAparienciaRoute
   '/ajustes/claves': typeof AjustesClavesRoute
   '/ajustes/privacidad': typeof AjustesPrivacidadRoute
   '/buscar/historial': typeof BuscarHistorialRoute
   '/buscar/vigilantes': typeof BuscarVigilantesRoute
+  '/compartida/$id': typeof CompartidaIdRoute
   '/escribir/cuadernos': typeof EscribirCuadernosRoute
   '/explorar/conceptos': typeof ExplorarConceptosRoute
   '/explorar/corpus': typeof ExplorarCorpusRoute
@@ -161,6 +187,8 @@ export interface FileRoutesByFullPath {
   '/explorar/grafo': typeof ExplorarGrafoRoute
   '/explorar/perspectivas': typeof ExplorarPerspectivasRoute
   '/lector/$id': typeof LectorIdRoute
+  '/lotes/$id': typeof LotesIdRoute
+  '/recibir/$token': typeof RecibirTokenRoute
   '/ajustes/': typeof AjustesIndexRoute
   '/buscar/': typeof BuscarIndexRoute
   '/escribir/': typeof EscribirIndexRoute
@@ -169,11 +197,13 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/invitaciones': typeof InvitacionesRoute
   '/ajustes/apariencia': typeof AjustesAparienciaRoute
   '/ajustes/claves': typeof AjustesClavesRoute
   '/ajustes/privacidad': typeof AjustesPrivacidadRoute
   '/buscar/historial': typeof BuscarHistorialRoute
   '/buscar/vigilantes': typeof BuscarVigilantesRoute
+  '/compartida/$id': typeof CompartidaIdRoute
   '/escribir/cuadernos': typeof EscribirCuadernosRoute
   '/explorar/conceptos': typeof ExplorarConceptosRoute
   '/explorar/corpus': typeof ExplorarCorpusRoute
@@ -181,6 +211,8 @@ export interface FileRoutesByTo {
   '/explorar/grafo': typeof ExplorarGrafoRoute
   '/explorar/perspectivas': typeof ExplorarPerspectivasRoute
   '/lector/$id': typeof LectorIdRoute
+  '/lotes/$id': typeof LotesIdRoute
+  '/recibir/$token': typeof RecibirTokenRoute
   '/ajustes': typeof AjustesIndexRoute
   '/buscar': typeof BuscarIndexRoute
   '/escribir': typeof EscribirIndexRoute
@@ -194,11 +226,13 @@ export interface FileRoutesById {
   '/buscar': typeof BuscarRouteWithChildren
   '/escribir': typeof EscribirRouteWithChildren
   '/explorar': typeof ExplorarRouteWithChildren
+  '/invitaciones': typeof InvitacionesRoute
   '/ajustes/apariencia': typeof AjustesAparienciaRoute
   '/ajustes/claves': typeof AjustesClavesRoute
   '/ajustes/privacidad': typeof AjustesPrivacidadRoute
   '/buscar/historial': typeof BuscarHistorialRoute
   '/buscar/vigilantes': typeof BuscarVigilantesRoute
+  '/compartida/$id': typeof CompartidaIdRoute
   '/escribir/cuadernos': typeof EscribirCuadernosRoute
   '/explorar/conceptos': typeof ExplorarConceptosRoute
   '/explorar/corpus': typeof ExplorarCorpusRoute
@@ -206,6 +240,8 @@ export interface FileRoutesById {
   '/explorar/grafo': typeof ExplorarGrafoRoute
   '/explorar/perspectivas': typeof ExplorarPerspectivasRoute
   '/lector/$id': typeof LectorIdRoute
+  '/lotes/$id': typeof LotesIdRoute
+  '/recibir/$token': typeof RecibirTokenRoute
   '/ajustes/': typeof AjustesIndexRoute
   '/buscar/': typeof BuscarIndexRoute
   '/escribir/': typeof EscribirIndexRoute
@@ -220,11 +256,13 @@ export interface FileRouteTypes {
     | '/buscar'
     | '/escribir'
     | '/explorar'
+    | '/invitaciones'
     | '/ajustes/apariencia'
     | '/ajustes/claves'
     | '/ajustes/privacidad'
     | '/buscar/historial'
     | '/buscar/vigilantes'
+    | '/compartida/$id'
     | '/escribir/cuadernos'
     | '/explorar/conceptos'
     | '/explorar/corpus'
@@ -232,6 +270,8 @@ export interface FileRouteTypes {
     | '/explorar/grafo'
     | '/explorar/perspectivas'
     | '/lector/$id'
+    | '/lotes/$id'
+    | '/recibir/$token'
     | '/ajustes/'
     | '/buscar/'
     | '/escribir/'
@@ -240,11 +280,13 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/invitaciones'
     | '/ajustes/apariencia'
     | '/ajustes/claves'
     | '/ajustes/privacidad'
     | '/buscar/historial'
     | '/buscar/vigilantes'
+    | '/compartida/$id'
     | '/escribir/cuadernos'
     | '/explorar/conceptos'
     | '/explorar/corpus'
@@ -252,6 +294,8 @@ export interface FileRouteTypes {
     | '/explorar/grafo'
     | '/explorar/perspectivas'
     | '/lector/$id'
+    | '/lotes/$id'
+    | '/recibir/$token'
     | '/ajustes'
     | '/buscar'
     | '/escribir'
@@ -264,11 +308,13 @@ export interface FileRouteTypes {
     | '/buscar'
     | '/escribir'
     | '/explorar'
+    | '/invitaciones'
     | '/ajustes/apariencia'
     | '/ajustes/claves'
     | '/ajustes/privacidad'
     | '/buscar/historial'
     | '/buscar/vigilantes'
+    | '/compartida/$id'
     | '/escribir/cuadernos'
     | '/explorar/conceptos'
     | '/explorar/corpus'
@@ -276,6 +322,8 @@ export interface FileRouteTypes {
     | '/explorar/grafo'
     | '/explorar/perspectivas'
     | '/lector/$id'
+    | '/lotes/$id'
+    | '/recibir/$token'
     | '/ajustes/'
     | '/buscar/'
     | '/escribir/'
@@ -289,7 +337,11 @@ export interface RootRouteChildren {
   BuscarRoute: typeof BuscarRouteWithChildren
   EscribirRoute: typeof EscribirRouteWithChildren
   ExplorarRoute: typeof ExplorarRouteWithChildren
+  InvitacionesRoute: typeof InvitacionesRoute
+  CompartidaIdRoute: typeof CompartidaIdRoute
   LectorIdRoute: typeof LectorIdRoute
+  LotesIdRoute: typeof LotesIdRoute
+  RecibirTokenRoute: typeof RecibirTokenRoute
   DocumentosIdContenidoRoute: typeof DocumentosIdContenidoRoute
 }
 
@@ -328,6 +380,13 @@ declare module '@tanstack/react-router' {
       path: '/explorar'
       fullPath: '/explorar'
       preLoaderRoute: typeof ExplorarRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/invitaciones': {
+      id: '/invitaciones'
+      path: '/invitaciones'
+      fullPath: '/invitaciones'
+      preLoaderRoute: typeof InvitacionesRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/ajustes/': {
@@ -378,6 +437,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/buscar/vigilantes'
       preLoaderRoute: typeof BuscarVigilantesRouteImport
       parentRoute: typeof BuscarRoute
+    }
+    '/compartida/$id': {
+      id: '/compartida/$id'
+      path: '/compartida/$id'
+      fullPath: '/compartida/$id'
+      preLoaderRoute: typeof CompartidaIdRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/escribir/': {
       id: '/escribir/'
@@ -440,6 +506,20 @@ declare module '@tanstack/react-router' {
       path: '/lector/$id'
       fullPath: '/lector/$id'
       preLoaderRoute: typeof LectorIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/lotes/$id': {
+      id: '/lotes/$id'
+      path: '/lotes/$id'
+      fullPath: '/lotes/$id'
+      preLoaderRoute: typeof LotesIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/recibir/$token': {
+      id: '/recibir/$token'
+      path: '/recibir/$token'
+      fullPath: '/recibir/$token'
+      preLoaderRoute: typeof RecibirTokenRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/documentos/$id/contenido': {
@@ -526,7 +606,11 @@ const rootRouteChildren: RootRouteChildren = {
   BuscarRoute: BuscarRouteWithChildren,
   EscribirRoute: EscribirRouteWithChildren,
   ExplorarRoute: ExplorarRouteWithChildren,
+  InvitacionesRoute: InvitacionesRoute,
+  CompartidaIdRoute: CompartidaIdRoute,
   LectorIdRoute: LectorIdRoute,
+  LotesIdRoute: LotesIdRoute,
+  RecibirTokenRoute: RecibirTokenRoute,
   DocumentosIdContenidoRoute: DocumentosIdContenidoRoute,
 }
 export const routeTree = rootRouteImport

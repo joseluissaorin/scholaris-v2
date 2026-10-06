@@ -13,6 +13,7 @@
  *   POST   /invitaciones/:id/aceptar             → BibliotecaSeguida      (:id o el token del correo)
  *   POST   /invitaciones/:id/rechazar            → Ok
  *   GET    /seguidas                             → BibliotecaSeguida[]
+ *   POST   /seguidas  { enlace, pase? }          → BibliotecaSeguida   (seguir desde un enlace, mientras viva)
  *   DELETE /seguidas/:biblioteca                 → Ok   (dejar de seguir)
  *   GET    /notificaciones?pendientes=1          → Notificacion[]
  *   POST   /notificaciones/leidas  { ids? }      → Ok   (sin ids, todas)
