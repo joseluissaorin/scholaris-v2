@@ -4,6 +4,7 @@
  */
 
 import { enParalelo, reintentar, type PalabraTranscrita, type Transcriptor } from '@scholaris/nucleo';
+import type { PalabrasTiempo } from '@scholaris/spdf';
 import type { FuentePaquete, Procedencia, TramoPlan, UnidadLeida } from '../tipos.js';
 import { Cobertura } from '../cobertura.js';
 
@@ -108,7 +109,38 @@ export function casarHablantes(tramos: Array<Pick<ResultadoTranscripcionTramo, '
   }
 }
 
-interface Frase { texto: string; t0: number; t1: number; hablante?: string }
+/** Una palabra tal como queda en el texto (la puntuación suelta pegada a su vecina), con su instante. */
+export interface Ficha { texto: string; t0: number; t1: number }
+interface Frase { texto: string; t0: number; t1: number; hablante?: string; fichas: Ficha[] }
+
+const CIERRE = /^[,.;:!?…»”)\]]+$/u;
+const APERTURA = /^[«“(¿¡\[]+$/u;
+
+/**
+ * Las palabras del transcriptor como fichas del texto: la puntuación que llega
+ * como palabra aparte se pega a la anterior («hola ,» → «hola,») y la de
+ * apertura a la siguiente («¿ eres» → «¿eres»). Así cada palabra del texto
+ * (separada por espacios) tiene exactamente un instante.
+ */
+export function fichasDe(palabras: PalabraTranscrita[]): Ficha[] {
+  const fichas: Ficha[] = [];
+  let apertura: Ficha | null = null;
+  for (const p of palabras) {
+    const piezas = p.texto.trim().split(/\s+/).filter(Boolean);
+    piezas.forEach((texto, k) => {
+      // Un «palabra» con espacios dentro se reparte su intervalo.
+      const d = (p.t1 - p.t0) / piezas.length;
+      const f: Ficha = { texto, t0: p.t0 + d * k, t1: p.t0 + d * (k + 1) };
+      const ultima = fichas.at(-1);
+      if (CIERRE.test(f.texto) && ultima && !apertura) { ultima.texto += f.texto; ultima.t1 = Math.max(ultima.t1, f.t1); return; }
+      if (apertura) { f.texto = apertura.texto + f.texto; f.t0 = apertura.t0; apertura = null; }
+      if (APERTURA.test(f.texto)) { apertura = f; return; }
+      fichas.push(f);
+    });
+  }
+  if (apertura) fichas.push(apertura);
+  return fichas;
+}
 
 /** Agrupa palabras en frases: puntuación final, o pausa larga si el ASR no puntúa. */
 export function frasesDe(palabras: PalabraTranscrita[]): Frase[] {
@@ -119,8 +151,8 @@ export function frasesDe(palabras: PalabraTranscrita[]): Frase[] {
     if (!actual.length) return;
     const primera = actual[0] as PalabraTranscrita;
     const ultima = actual.at(-1) as PalabraTranscrita;
-    const texto = actual.map((p) => p.texto.trim()).join(' ').replace(/\s+([,.;:!?…»”)])/g, '$1').replace(/([«“(¿¡])\s+/g, '$1');
-    frases.push({ texto, t0: primera.t0, t1: ultima.t1, ...(primera.hablante ? { hablante: primera.hablante } : {}) });
+    const fichas = fichasDe(actual);
+    if (fichas.length) frases.push({ texto: fichas.map((f) => f.texto).join(' '), t0: primera.t0, t1: ultima.t1, ...(primera.hablante ? { hablante: primera.hablante } : {}), fichas });
     actual = [];
   };
   for (let i = 0; i < palabras.length; i++) {
@@ -135,6 +167,17 @@ export function frasesDe(palabras: PalabraTranscrita[]): Frase[] {
   }
   cerrar();
   return frases;
+}
+
+/** Instantes compactos de una unidad: centésimas desde t0, inicio y duración alternos. */
+export function palabrasCompactas(fichas: Ficha[], t0: number): PalabrasTiempo {
+  const base = Math.round(t0 * 100);
+  const cs: number[] = [];
+  for (const f of fichas) {
+    const a = Math.max(0, Math.round(f.t0 * 100) - base);
+    cs.push(a, Math.max(1, Math.round(f.t1 * 100) - base - a));
+  }
+  return { v: 1, t0: base / 100, cs };
 }
 
 export interface OpcionesSegmentar { minimo?: number; objetivo?: number; maximo?: number }
@@ -197,6 +240,8 @@ export function segmentarTranscripcion(palabras: PalabraTranscrita[], opciones: 
       t1,
       ...(hablante ? { hablante } : {}),
       ancla: { tipo: 'tiempo', t0: redondear(t0), t1: redondear(t1), ...(hablante ? { hablante } : {}) },
+      // El instante exacto de cada palabra del texto (sin las marcas de turno), en el mismo orden.
+      palabras: palabrasCompactas(fr.flatMap((f) => f.fichas), redondear(t0)),
     } satisfies UnidadLeida;
   });
 }

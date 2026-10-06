@@ -298,6 +298,7 @@ function aFilaUnidad(doc: string, u: UnidadLeida, paquete: PaqueteConversion, id
     texto: u.texto, notas: u.notas, lector: u.lector, confianza: u.confianza,
     ...(u.cabecera ? { cabecera: u.cabecera } : {}), ...(u.pie ? { pie: u.pie } : {}),
     ...(imagen ? { imagen } : {}), ...(miniatura ? { miniatura } : {}),
+    ...(u.palabras ? { palabras: u.palabras } : {}),
   };
 }
 

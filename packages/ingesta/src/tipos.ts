@@ -174,6 +174,8 @@ export interface UnidadLeida {
   t0?: number;
   t1?: number;
   hablante?: string;
+  /** Medios: el instante exacto de cada palabra del texto (sin las marcas «**Nombre:**»). */
+  palabras?: import('@scholaris/spdf').PalabrasTiempo;
   /** Ancla definitiva (la pone el paso de folios o el de medios). */
   ancla?: Ancla;
 }

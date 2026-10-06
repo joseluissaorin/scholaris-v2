@@ -54,3 +54,26 @@ describe('casarHablantes', () => {
     expect(t2.palabras.map((p) => p.hablante)).toEqual(['A', 'A·1']);
   });
 });
+
+describe('instantes por palabra', () => {
+  const palabrasDelTexto = (t: string) => t.replace(/\*\*[^*\n]+?:\*\*/g, ' ').split(/\s+/).filter(Boolean);
+  it('cada palabra del texto (sin marcas de turno) tiene su instante exacto, puntuación suelta incluida', async () => {
+    const { segmentarTranscripcion } = await import('../src/pasos/medios.js');
+    const ws = [
+      { texto: 'Buenas', t0: 10, t1: 10.4, hablante: 'A' }, { texto: 'noches', t0: 10.5, t1: 11, hablante: 'A' }, { texto: ',', t0: 11, t1: 11.05, hablante: 'A' },
+      { texto: '¿', t0: 11.2, t1: 11.25, hablante: 'A' }, { texto: 'Eres', t0: 11.3, t1: 11.6, hablante: 'A' }, { texto: 'un místico?', t0: 11.7, t1: 12.5, hablante: 'A' },
+      { texto: 'Es', t0: 13, t1: 13.2, hablante: 'B' }, { texto: 'inevitable.', t0: 13.3, t1: 14, hablante: 'B' },
+    ];
+    const [u] = segmentarTranscripcion(ws);
+    expect(u?.texto).toBe('**A:** Buenas noches, ¿Eres un místico?\n\n**B:** Es inevitable.');
+    const fichas = palabrasDelTexto(u!.texto);
+    expect(u?.palabras?.cs.length).toBe(fichas.length * 2);
+    const { instantesDePalabras } = await import('@scholaris/spdf');
+    const ts = instantesDePalabras(u!.palabras!);
+    expect(fichas[2]).toBe('¿Eres');
+    expect(ts[2]).toEqual([11.2, 11.6]);
+    // «un místico?» llegó como una sola «palabra»: su intervalo se reparte.
+    expect(ts[3]).toEqual([11.7, 12.1]);
+    expect(ts[6]).toEqual([13.3, 14]);
+  });
+});
