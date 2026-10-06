@@ -19,6 +19,7 @@ import { alBorrarDocumento } from '@scholaris/funciones';
 import { rehacerFicha, unidadDeFila } from '@scholaris/ingesta';
 import type { PuertosUsuario } from '../puertos.js';
 import { lanzarIngesta, prefijoDocumento } from './subidas.js';
+import { extrasFigura } from './contenido.js';
 import { claveDe, cursorADesplazamiento, desplazamientoACursor, entero, etiquetaAncla, exigirEscritura, json, prm, puertos, type Ctx } from './util.js';
 
 type Fila = Record<string, ValorSQL>;
@@ -323,6 +324,7 @@ export function rutasDocumentos(app: Hono<Entorno>): void {
       const v: FiguraVista = { id: g.id, unidad: ordenes.get(g.unidad) ?? 0, imagenUrl: g.imagen ? await p.almacen.urlLectura(claveDe(p.usuario.id, id, g.imagen)) : '', ancla: g.ancla, etiqueta: etiquetaAncla(g.ancla) };
       if (g.pie) v.pie = g.pie;
       if (g.descripcion) v.descripcion = g.descripcion;
+      Object.assign(v, extrasFigura(g.ancla));
       return v;
     })));
   });

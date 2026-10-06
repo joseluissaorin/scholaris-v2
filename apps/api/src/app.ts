@@ -37,7 +37,9 @@ import { rutasSpdf } from './rutas/spdf.js';
 import { rutasMedios } from './rutas/medios.js';
 import { montarFunciones } from './rutas/funciones.js';
 import { rutasMcp } from './rutas/mcp.js';
+import { rutasContenido } from './rutas/contenido.js';
 import { restringirAmbito } from './rutas/ambito.js';
+import { montarSocial, type MensajeCorreo } from './rutas/social.js';
 import { montarV1 } from './rutas/v1.js';
 
 export { VERSION } from './version.js';
@@ -65,6 +67,7 @@ export function crearAppUsuario() {
   rutasCuenta(sub);
   rutasSubidas(sub);
   rutasDocumentos(sub);
+  rutasContenido(sub);
   rutasSpdf(sub);
   rutasMedios(sub);
   rutasBibliotecas(sub);
@@ -90,6 +93,10 @@ export interface Plataforma {
   usuarioLocal?: UsuarioSesion;
   /** Token fijo opcional del modo local (SCHOLARIS_TOKEN). */
   tokenLocal?: string;
+  /** Local con varias personas sin Clerk: token → usuario (SCHOLARIS_USUARIOS). */
+  usuariosLocales?: Map<string, UsuarioSesion>;
+  /** Manda un correo (invitaciones). Sin él, la invitación da un enlace para copiar. */
+  correo?(m: MensajeCorreo): Promise<boolean>;
   /**
    * Token de administración (migraciones): con la cabecera `x-scholaris-como`
    * actúa como ese usuario. Solo existe si se define el secreto ADMIN_TOKEN.
@@ -173,10 +180,15 @@ export function crearPuerta(pl: Plataforma) {
     return pl.tiempoReal(c.req.raw, { usuario: d.u, tarea: d.t });
   });
 
+  // Enlaces de solo lectura: sin cuenta.
+  montarSocial(app, pl, 'publico');
+
   // --- Autenticación ------------------------------------------------------
   const autenticar = async (peticion: Request): Promise<UsuarioSesion> => {
     const cab = peticion.headers.get('authorization') ?? '';
     const token = /^Bearer\s+(.+)$/i.exec(cab)?.[1]?.trim() ?? new URL(peticion.url).searchParams.get('token') ?? '';
+    const local = token ? pl.usuariosLocales?.get(token) : undefined;
+    if (local) return local;
     if (pl.usuarioLocal) {
       if (pl.tokenLocal && token !== pl.tokenLocal) fallo('no_autenticado', 'Falta el token de esta instancia (SCHOLARIS_TOKEN).');
       return pl.usuarioLocal;
@@ -253,6 +265,9 @@ export function crearPuerta(pl: Plataforma) {
     ws.search = `?billete=${encodeURIComponent(billete)}`;
     return c.json<Billete>({ billete, url: ws.toString(), caduca: new Date(Date.now() + 60_000).toISOString() });
   });
+
+  // Invitaciones, miembros, enlaces, copias y búsqueda conjunta (cruzan estanterías).
+  montarSocial(app, pl, 'autenticado');
 
   // Bibliotecas compartidas: a la estantería del PROPIETARIO, con el ámbito del invitado.
   app.all(`${PREFIJO_API}/compartidas/:biblioteca/*`, async (c) => {

@@ -13,8 +13,9 @@ import { cuerpoJson, exigir, fallo } from '../compartido/errores.js';
 import { obtenerBuscador } from '../compartido/servicios.js';
 import { LIMITES } from '../compartido/planes.js';
 import type { PuertosUsuario } from '../puertos.js';
+import { figuraDeResultado } from './contenido.js';
 import { citaCorta, claveDe, etiquetaAncla, puertos, type Ctx } from './util.js';
-import { filtrosEnAmbito } from './ambito.js';
+import { documentosDelAmbito, filtrosEnAmbito } from './ambito.js';
 
 const INTENCION: Record<string, IntencionConsulta> = { conceptual: 'conceptual', visual: 'visual', cita: 'literal', temporal: 'temporal' };
 
@@ -28,6 +29,8 @@ export async function aVista(p: PuertosUsuario, r: Resultado): Promise<Resultado
   };
   const [u] = await p.sql.ejecutar<{ m: string | null }>('SELECT COALESCE(miniatura, imagen) AS m FROM unidades WHERE id = ?', r.fragmento.unidad);
   if (u?.m) v.miniaturaUrl = await p.almacen.urlLectura(claveDe(p.usuario.id, r.documento.id, u.m));
+  const figura = await figuraDeResultado(p, r.documento.id, r.fragmento, r.vias).catch(() => undefined);
+  if (figura) v.figura = figura;
   return v;
 }
 
@@ -69,9 +72,8 @@ function sinRepetidos(rs: Resultado[]): Resultado[] {
 /** Por si acaso: fuera lo que no sea de la biblioteca compartida. */
 async function soloAmbito(c: Ctx, rs0: Resultado[]): Promise<Resultado[]> {
   const rs = sinRepetidos(rs0);
-  const a = c.get('usuario').ambito;
-  if (!a) return rs;
-  const ok = new Set((await puertos(c).sql.ejecutar<{ id: string }>('SELECT d.id FROM documentos d, json_each(d.bibliotecas) je WHERE je.value = ?', a.biblioteca)).map((f) => f.id));
+  const ok = await documentosDelAmbito(c);
+  if (!ok) return rs;
   return rs.filter((r) => ok.has(r.documento.id));
 }
 
