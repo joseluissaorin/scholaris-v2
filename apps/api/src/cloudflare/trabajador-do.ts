@@ -19,7 +19,7 @@ export class Trabajador extends DurableObject<Env> {
   private async contexto(p: ParamsIngesta): Promise<ContextoMotor> {
     const env = this.env;
     const cuentas = cuentasDesdeEnv(env);
-    const ia = await inteligenciaPara(env, cuentas, p.usuario, { sinCache: true });
+    const ia = await inteligenciaPara(env, cuentas, p.usuario, { sinCache: true, economico: p.modo === 'economico' });
     const gemini = await geminiPara(env, cuentas, p.usuario);
     const estanteria = env.ESTANTERIA.getByName(p.usuario);
     const emisor = emisorDesdeEnv(env, p.usuario);

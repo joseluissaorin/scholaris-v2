@@ -1,0 +1,29 @@
+import { describe, expect, it } from 'vitest';
+import { recordarDemostracion, redireccionPortada } from '../src/cloudflare/portada.js';
+
+const pide = (ruta: string, cabeceras: Record<string, string> = {}) => new Request(`https://scholaris.test${ruta}`, { headers: cabeceras });
+
+describe('portada', () => {
+  it('«/» sin sesión va a /acerca o /en según el idioma', () => {
+    expect(redireccionPortada(pide('/'))?.headers.get('location')).toBe('/acerca');
+    expect(redireccionPortada(pide('/', { 'accept-language': 'es-ES,es;q=0.9' }))?.headers.get('location')).toBe('/acerca');
+    expect(redireccionPortada(pide('/', { 'accept-language': 'en-GB,en;q=0.8' }))?.headers.get('location')).toBe('/en');
+  });
+  it('con sesión, con consulta, en otras rutas o en demostración se sirve la aplicación', () => {
+    expect(redireccionPortada(pide('/', { cookie: 'a=1; __session=eyJ' }))).toBeNull();
+    expect(redireccionPortada(pide('/', { cookie: '__client_uat_x1=1712345' }))).toBeNull();
+    expect(redireccionPortada(pide('/', { cookie: 'scholaris_demostracion=1' }))).toBeNull();
+    expect(redireccionPortada(pide('/?entrar'))).toBeNull();
+    expect(redireccionPortada(pide('/?demostracion'))).toBeNull();
+    expect(redireccionPortada(pide('/biblioteca'))).toBeNull();
+    expect(redireccionPortada(new Request('https://scholaris.test/', { method: 'POST' }))).toBeNull();
+  });
+  it('__client_uat=0 (sesión cerrada) no cuenta como sesión', () => {
+    expect(redireccionPortada(pide('/', { cookie: '__client_uat=0' }))?.status).toBe(302);
+  });
+  it('«/?demostracion» deja la cookie de la demostración', () => {
+    const r = recordarDemostracion(pide('/?demostracion'), new Response('<html>'));
+    expect(r.headers.get('set-cookie')).toContain('scholaris_demostracion=1');
+    expect(recordarDemostracion(pide('/'), new Response('x')).headers.get('set-cookie')).toBeNull();
+  });
+});

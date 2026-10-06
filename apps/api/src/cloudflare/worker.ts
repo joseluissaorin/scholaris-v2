@@ -7,6 +7,7 @@
  *   queue      Trabajo de fondo (vigilantes programados).
  *   scheduled  Cron: encola los vigilantes diarios (y los semanales los lunes).
  */
+import { recordarDemostracion, redireccionPortada } from './portada.js';
 import { prepararMotorWorkers } from '@scholaris/spdf/workers';
 import { PREFIJO_API } from '@scholaris/contrato';
 import { crearPuerta, type Plataforma } from '../app.js';
@@ -77,7 +78,10 @@ const normal: ExportedHandler<Env> = {
     }
     // La web: estáticos y, para las rutas de la SPA, index.html.
     if (!env.ASSETS) return new Response('Scholaris API', { status: 200 });
-    const r = await env.ASSETS.fetch(peticion);
+    // «/» sin sesión de Clerk: directo a la portada estática, sin cargar la aplicación.
+    const portada = redireccionPortada(peticion);
+    if (portada) return portada;
+    const r = recordarDemostracion(peticion, await env.ASSETS.fetch(peticion));
     if (r.status === 404 && peticion.method === 'GET' && esPagina(url.pathname)) {
       return env.ASSETS.fetch(new Request(new URL('/index.html', url), peticion));
     }

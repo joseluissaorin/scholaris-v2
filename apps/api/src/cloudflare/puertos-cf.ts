@@ -67,9 +67,11 @@ export function entornoInteligencia(env: Env, propias: Partial<Record<string, st
 
 const cacheIA = new Map<string, { ia: Inteligencia; hasta: number }>();
 
-type FabricaIA = (env: Env, propias: Partial<Record<string, string>>) => Inteligencia;
-let fabrica: FabricaIA = (env, propias) => crearInteligencia(entornoInteligencia(env, propias), {
+type FabricaIA = (env: Env, propias: Partial<Record<string, string>>, o?: { economico?: boolean }) => Inteligencia;
+let fabrica: FabricaIA = (env, propias, o = {}) => crearInteligencia(entornoInteligencia(env, propias), {
   concurrencia: 16,
+  // Modo económico: Batch API de Gemini para lo difícil y Workers AI (env.AI) para lo fácil.
+  ...(o.economico ? { lotes: true } : {}),
   alPasarLector: (i) => console.log(JSON.stringify({ que: 'cascada', ...i })),
 });
 
@@ -88,7 +90,8 @@ export async function geminiPara(env: Env, cuentas: Cuentas, usuario: string): P
 }
 
 /** Inteligencia del usuario, cacheada 10 minutos por aislamiento. */
-export async function inteligenciaPara(env: Env, cuentas: Cuentas, usuario: string, o: { sinCache?: boolean } = {}): Promise<Inteligencia> {
+export async function inteligenciaPara(env: Env, cuentas: Cuentas, usuario: string, o: { sinCache?: boolean; economico?: boolean } = {}): Promise<Inteligencia> {
+  if (o.economico) return fabrica(env, await cuentas.clavesPropias(usuario).catch(() => ({})), { economico: true });
   const hay = o.sinCache ? undefined : cacheIA.get(usuario);
   if (hay && hay.hasta > Date.now()) return hay.ia;
   if (o.sinCache) return fabrica(env, await cuentas.clavesPropias(usuario).catch(() => ({})));
