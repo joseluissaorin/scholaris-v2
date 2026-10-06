@@ -566,7 +566,10 @@ export async function pasoMetadatos(
   let colofon: Colofon | null = null;
   let orcid = new Map<string, string>();
   try {
-    const r = await enriquecer({ base: intermedia, texto: medio ? '' : textoColofon(entrada.unidades, entrada.ultimas), tipo: entrada.tipo }, consultor);
+    // En un medio, las pruebas de la grabación: transcripción entera, hablantes con nombre (de la atribución, no de esta lectura) y duración.
+    const nombrados = [...new Set(entrada.unidades.map((u) => u.hablante ?? '').filter((h) => h && !/^(H|SPEAKER_?|hablante\s*)\d+$/i.test(h)))];
+    const grabacion = medio ? { texto: entrada.unidades.map((u) => u.texto).join(' '), hablantes: nombrados, ...(entrada.duracion ? { duracion: entrada.duracion } : {}) } : undefined;
+    const r = await enriquecer({ base: intermedia, texto: medio ? '' : textoColofon(entrada.unidades, entrada.ultimas), tipo: entrada.tipo, ...(grabacion ? { grabacion } : {}) }, consultor);
     colofon = r.colofon;
     orcid = r.orcid;
     for (const h of r.hallazgos) candidatos.push({ fuente: h.fuente, confianza: h.confianza, ...(h.porCampo ? { porCampo: h.porCampo } : {}), ...(h.anula ? { anula: h.anula } : {}), datos: h.datos });

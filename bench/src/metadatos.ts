@@ -32,6 +32,8 @@ const RESULTADOS = join(raiz, 'resultados', 'metadatos');
 // ---------------------------------------------------------------------------
 
 interface Oro {
+  /** SPDF del que se toma el texto (por defecto, la etiqueta). */
+  spdf?: string;
   archivo: string;
   tipo: string;
   duracion?: number;
@@ -60,7 +62,7 @@ const ORO: Record<string, Oro> = {
   cortazar1959persegui: {
     archivo: 'cortazar1959perseguidor.pdf', tipo: 'pdf',
     autores: ['cortazar'],
-    campos: { titulo: 'El perseguidor', anioObra: 1959, tipoCSL: 'chapter', contenedor: contiene('contenedor', 'armas secretas'), idioma: 'es' },
+    campos: { titulo: 'El perseguidor', anioObra: 1959, tipoCSL: 'chapter', contenedor: contiene('contenedor', 'armas secretas'), editorial: contiene('editorial', 'sudamericana'), idioma: 'es' },
   },
   'el-casamiento-en-la-': {
     archivo: 'el-casamiento-en-la-muerte-y-hechos-de-b.pdf', tipo: 'pdf_escaneado',
@@ -89,6 +91,16 @@ const ORO: Record<string, Oro> = {
       titulo: (m) => /cort[áa]zar/i.test(m.titulo) && !/^a fondo$/i.test(m.titulo), anio: 1977, tipoCSL: (m) => m.tipoCSL === 'broadcast' || m.tipoCSL === 'interview',
       editorial: contiene('editorial', 'rtve', 'tve', 'televisión española'), contenedor: contiene('contenedor', 'a fondo'),
       entrevistador: (m) => Boolean(m.entrevistadores?.some((a) => a.nombre === 'Joaquín' && a.apellidos === 'Soler Serrano')),
+    },
+  },
+  // La misma entrevista a Cabral, subida con un nombre de archivo que engaña (el defecto del preview: «Entrevista a Alberto Cortez»).
+  // Tiene que ganar lo que dice la grabación, o no asignarse nada.
+  'serrano-engano': {
+    spdf: 'serrano', archivo: 'A fondo - Alberto Cortez.mp4', tipo: 'video', duracion: 3219,
+    autores: ['cabral'],
+    campos: {
+      titulo: (m) => /cabral/i.test(m.titulo) && !/cortez/i.test(m.titulo), sinCortez: (m) => !m.autores.some((a) => /cortez/i.test(a.apellidos)), anio: 1978,
+      contenedor: contiene('contenedor', 'a fondo'), entrevistador: (m) => Boolean(m.entrevistadores?.some((a) => a.apellidos === 'Soler Serrano')),
     },
   },
   // «Vectors | Chapter 1, Essence of linear algebra», 3Blue1Brown (Grant Sanderson): el capítulo dentro de la serie.
@@ -167,7 +179,7 @@ async function main() {
   for (const etiqueta of casos) {
     const oro = ORO[etiqueta];
     if (!oro) { console.error(`Sin ficha de referencia: ${etiqueta}`); continue; }
-    const { antes: delSpdf, unidades } = cargar(etiqueta);
+    const { antes: delSpdf, unidades } = cargar(oro.spdf ?? etiqueta);
     const antes = congeladas[etiqueta] ?? delSpdf;
     const medio = oro.tipo === 'video' || oro.tipo === 'audio';
     const t0 = Date.now();

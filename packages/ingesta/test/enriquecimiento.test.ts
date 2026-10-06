@@ -169,23 +169,50 @@ describe('enriquecer', () => {
     expect(r.avisos).toEqual([]);
   });
 
-  it('RTVE Play: título del episodio y fecha de emisión del catálogo (Cabral es de 1978)', async () => {
-    const http = httpFalso([
-      ['rtve.es/play/videos/a-fondo/', '<html>… https://www.rtve.es/api/programas/73250 …</html>'],
-      ['api/programas/73250/videos.json', { page: { totalPages: 1, items: [
-        { id: '1051583', title: 'Julio Cortázar', dateOfEmission: '20-03-1977 00:00:00', htmlUrl: 'https://www.rtve.es/play/videos/a-fondo/julio-cortazar/1051583/', description: '<p>Joaqu&iacute;n Soler Serrano entrevista al escritor argentino Julio Cort&aacute;zar.</p>' },
-        { id: '3127003', title: 'Facundo Cabral', dateOfEmission: '02-07-1978 00:00:00', htmlUrl: 'https://www.rtve.es/play/videos/a-fondo/facundo-cabral/3127003/', description: '<p>Joaqu&iacute;n Soler Serrano entrevista al cantautor y escritor argentino.</p>' },
-      ] } }],
-      ...wikidataAFondo,
-    ]);
+  const catalogoAFondo: Array<[string, unknown]> = [
+    ['rtve.es/play/videos/a-fondo/', '<html>… https://www.rtve.es/api/programas/73250 …</html>'],
+    ['api/programas/73250/videos.json', { page: { totalPages: 1, items: [
+      { id: '1051583', title: 'Julio Cortázar', dateOfEmission: '20-03-1977 00:00:00', duration: 7_400_000, htmlUrl: 'https://www.rtve.es/play/videos/a-fondo/julio-cortazar/1051583/', description: '<p>Joaqu&iacute;n Soler Serrano entrevista al escritor argentino Julio Cort&aacute;zar.</p>' },
+      { id: '3127003', title: 'Facundo Cabral', dateOfEmission: '02-07-1978 00:00:00', duration: 3_300_000, htmlUrl: 'https://www.rtve.es/play/videos/a-fondo/facundo-cabral/3127003/', description: '<p>Joaqu&iacute;n Soler Serrano entrevista al cantautor y escritor argentino.</p>' },
+      { id: '3000001', title: 'Alberto Cortez', dateOfEmission: '11-11-1979 00:00:00', duration: 3_500_000, htmlUrl: 'https://www.rtve.es/play/videos/a-fondo/alberto-cortez/3000001/', description: '<p>Joaqu&iacute;n Soler Serrano entrevista al cantautor.</p>' },
+    ] } }],
+    ...wikidataAFondo,
+  ];
+  // Una transcripción de la entrevista a Cabral: se le nombra muchas veces; a Cortez, una de pasada.
+  const transcripcionCabral = `${'Joaquín Soler Serrano: Facundo Cabral, bienvenido a A fondo. Cabral, ¿eres un místico? Facundo Cabral: Es inevitable, Joaquín. '.repeat(16)} Mi amigo Alberto Cortez canta conmigo a veces.`;
+
+  it('RTVE Play: el episodio que respalda la grabación, con su fecha (Cabral es de 1978)', async () => {
+    const http = httpFalso(catalogoAFondo);
     // La lectura se equivoca de año (lo saca del nombre del archivo, «serrano1977fondo»).
     const base = { titulo: 'A fondo', autores: [{ nombre: 'Joaquín', apellidos: 'Soler Serrano' }, { nombre: 'Facundo', apellidos: 'Cabral' }], anio: 1977, tipoCSL: 'broadcast' };
-    const r = await enriquecer({ base, texto: '', tipo: 'video' }, crearConsultor({ http }));
+    const r = await enriquecer({ base, texto: '', tipo: 'video', grabacion: { texto: transcripcionCabral, hablantes: ['Joaquín Soler Serrano', 'Facundo Cabral'], duracion: 3219 } }, crearConsultor({ http }));
     const m = fusionar(base, r.hallazgos);
     expect(m).toMatchObject({ titulo: 'Facundo Cabral', contenedor: 'A fondo', editorial: 'RTVE', anio: 1978, fecha: '1978-07-02', url: 'https://www.rtve.es/play/videos/a-fondo/facundo-cabral/3127003/' });
     expect(m.procedencia?.anio?.fuente).toBe('rtve');
     expect(m.autores.map((a) => a.apellidos)).toEqual(['Cabral']);
     expect(m.entrevistadores?.map((a) => a.apellidos)).toEqual(['Soler Serrano']);
+  });
+
+  it('si la lectura dice otro invitado que la grabación no respalda, gana la grabación', async () => {
+    const http = httpFalso(catalogoAFondo);
+    const base = { titulo: 'Entrevista a Alberto Cortez', contenedor: 'A fondo', autores: [{ nombre: 'Alberto', apellidos: 'Cortez' }], entrevistadores: [{ nombre: 'Joaquín', apellidos: 'Soler Serrano' }], tipoCSL: 'interview' };
+    const r = await enriquecer({ base, texto: '', tipo: 'video', grabacion: { texto: transcripcionCabral, hablantes: [], duracion: 3219 } }, crearConsultor({ http }));
+    const m = fusionar(base, r.hallazgos);
+    expect(m).toMatchObject({ titulo: 'Facundo Cabral', anio: 1978 });
+    expect(m.autores.map((a) => a.apellidos)).toEqual(['Cabral']);
+    expect(r.avisos.join(' ')).toMatch(/Alberto Cortez/);
+  });
+
+  it('con duda (dos invitados igual de nombrados) o una duración que no cuadra, no se asigna episodio', async () => {
+    const http = httpFalso(catalogoAFondo);
+    const base = { titulo: 'A fondo', autores: [{ nombre: 'Facundo', apellidos: 'Cabral' }], tipoCSL: 'broadcast' };
+    const dudosa = `${'Facundo Cabral y Alberto Cortez cantan juntos. '.repeat(40)}`;
+    const r1 = await enriquecer({ base, texto: '', tipo: 'video', grabacion: { texto: dudosa, hablantes: [] } }, crearConsultor({ http }));
+    expect(r1.hallazgos.some((h) => h.fuente === 'rtve' && h.datos.fecha)).toBe(false);
+    expect(r1.avisos.join(' ')).toMatch(/duda/);
+    const r2 = await enriquecer({ base, texto: '', tipo: 'video', grabacion: { texto: transcripcionCabral, hablantes: [], duracion: 7300 } }, crearConsultor({ http }));
+    expect(r2.hallazgos.some((h) => h.datos.fecha)).toBe(false);
+    expect(r2.avisos.join(' ')).toMatch(/dura/);
   });
 
   it('un pódcast con título de episodio leído no se toca el título', async () => {

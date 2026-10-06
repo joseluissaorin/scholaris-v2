@@ -286,7 +286,47 @@ export async function wikipediaContenedor(articulo: string, autorQid: string, ti
   if (!mejor) return null;
   const d: Partial<MetadatosDocumento> = { contenedor: mejor.etiqueta };
   if (mejor.anio) d.anioOriginal = mejor.anio;
-  return { fuente: 'wikipedia', confianza: 0.8, porCampo: { anioOriginal: 0.75 }, datos: d, id: articulo };
+  const porCampo: Hallazgo['porCampo'] = { anioOriginal: 0.75 };
+  // La primera edición del libro que la contiene (ficha de Wikipedia): editorial, año y sede de la editorial.
+  const ficha = await fichaDeLibro(lengua as string, mejor.etiqueta, red);
+  if (ficha?.anio && !d.anioOriginal) d.anioOriginal = ficha.anio;
+  if (ficha?.editorial) {
+    // Sin pruebas de la edición que se tiene delante, se cita la primera: confianza moderada (un colofón la pisa).
+    d.editorial = ficha.editorial; porCampo.editorial = 0.7;
+    if (ficha.lugar) { d.lugar = ficha.lugar; porCampo.lugar = 0.65; }
+  }
+  return { fuente: 'wikipedia', confianza: 0.8, porCampo, datos: d, id: articulo };
+}
+
+/** Ficha de libro de Wikipedia (sección 0): editorial, año de publicación y la sede de la editorial (Wikidata P159). */
+export async function fichaDeLibro(lengua: string, titulo: string, red: Consultor): Promise<{ editorial?: string; anio?: number; lugar?: string } | null> {
+  const j = await red.json<{ parse?: { wikitext?: { '*'?: string } } }>(`https://${lengua}.wikipedia.org/w/api.php?action=parse&prop=wikitext&section=0&redirects=1&format=json&page=${encodeURIComponent(titulo.replace(/ /g, '_'))}`);
+  const w = j?.parse?.wikitext?.['*'];
+  if (!w) return null;
+  const campo = (...nombres: string[]) => {
+    for (const n of nombres) {
+      const m = new RegExp(String.raw`\|\s*${n}\s*=\s*([^\n|][^\n]*)`, 'i').exec(w);
+      if (m && (m[1] as string).trim()) return (m[1] as string).trim();
+    }
+    return undefined;
+  };
+  const enlace = (v?: string) => (v ? /\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/.exec(v) : null);
+  const crudoEd = campo('editorial', 'publisher', 'éditeur', 'editore');
+  const e = enlace(crudoEd);
+  const editorial = (e ? (e[2] ?? e[1]) : crudoEd)?.replace(/\{\{[^}]*\}\}|<[^>]+>|\[\[|\]\]/g, '').trim();
+  const anio = anioDeFecha((campo('fecha_publicacion', 'fecha de publicación', 'publicación', 'published', 'pub_date', 'release_date', 'first_published') ?? '').match(/\b(1[4-9]\d{2}|20\d{2})\b/)?.[1]);
+  let lugar: string | undefined;
+  if (e?.[1]) {
+    const ent = await red.json<{ entities?: Record<string, { claims?: { P159?: Array<{ mainsnak?: { datavalue?: { value?: { id?: string } } } }> } }> }>(`https://www.wikidata.org/w/api.php?action=wbgetentities&sites=${lengua}wiki&titles=${encodeURIComponent(e[1].replace(/ /g, '_'))}&props=claims&format=json`);
+    const sede = Object.values(ent?.entities ?? {})[0]?.claims?.P159?.[0]?.mainsnak?.datavalue?.value?.id;
+    if (sede) {
+      const l = await red.json<{ entities?: Record<string, { labels?: Record<string, { value?: string }> }> }>(`https://www.wikidata.org/w/api.php?action=wbgetentities&ids=${sede}&props=labels&languages=${lengua}|es|en&format=json`);
+      const labels = l?.entities?.[sede]?.labels ?? {};
+      lugar = labels[lengua]?.value ?? labels.es?.value ?? labels.en?.value;
+    }
+  }
+  if (!editorial && !anio) return null;
+  return { ...(editorial ? { editorial } : {}), ...(anio ? { anio } : {}), ...(lugar ? { lugar } : {}) };
 }
 
 /** Un programa de radio o televisión: cadena, presentador y años en antena. */
@@ -332,6 +372,7 @@ export async function arxivPorTitulo(titulo: string, red: Consultor): Promise<st
 interface AtributosDataCite {
   titles?: Array<{ title?: string }>; creators?: Array<{ name?: string; givenName?: string; familyName?: string; nameType?: string; nameIdentifiers?: Array<{ nameIdentifier?: string; nameIdentifierScheme?: string }> }>;
   publicationYear?: number; publisher?: string | { name?: string }; types?: { resourceTypeGeneral?: string; citeproc?: string }; url?: string; language?: string; doi?: string;
+  descriptions?: Array<{ description?: string; descriptionType?: string }>;
 }
 
 const TIPOS_DATACITE: Record<string, string> = { Preprint: 'article', JournalArticle: 'article-journal', Book: 'book', BookChapter: 'chapter', ConferencePaper: 'paper-conference', Dissertation: 'thesis', Report: 'report', Dataset: 'dataset', Software: 'software', Audiovisual: 'motion_picture', Text: 'document' };
@@ -356,7 +397,11 @@ export async function datacite(doi: string, red: Consultor): Promise<Hallazgo | 
   const tipo = a.types?.resourceTypeGeneral;
   if (tipo && TIPOS_DATACITE[tipo]) d.tipoCSL = TIPOS_DATACITE[tipo];
   if (a.url) d.url = a.url;
-  return { fuente: 'datacite', confianza: 0.85, porCampo: { tipoCSL: 0.6 }, datos: d, id: `https://doi.org/${doi}` };
+  // «Accepted at NeurIPS 2017», «ICML 2019»: el congreso donde salió el preprint.
+  const notas = (a.descriptions ?? []).map((x) => x.description ?? '').join(' ');
+  const congreso = /\b(NeurIPS|NIPS|ICML|ICLR|ACL|EMNLP|NAACL|EACL|COLING|CVPR|ICCV|ECCV|AAAI|IJCAI|KDD|SIGIR|WWW|CHI|INTERSPEECH|ICASSP)\s*'?(\d{4}|\d{2})\b/.exec(notas);
+  if (congreso) { d.contenedor = `${congreso[1]} ${congreso[2]!.length === 2 ? `20${congreso[2]}` : congreso[2]}`; d.tipoCSL = 'paper-conference'; }
+  return { fuente: 'datacite', confianza: 0.85, porCampo: { tipoCSL: 0.6, contenedor: 0.75 }, datos: d, id: `https://doi.org/${doi}` };
 }
 
 /** arXiv: identificador → hallazgo vía su DOI de DataCite (JSON, sin XML). */

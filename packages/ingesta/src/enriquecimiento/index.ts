@@ -20,7 +20,8 @@ import {
   titulosCasan, wikidataObra, wikidataPrograma, wikipediaContenedor, type Hallazgo,
 } from './fuentes.js';
 import { actividadImpresor } from './impresores.js';
-import { rtveEpisodio } from './rtve.js';
+import { presencia, rtveEpisodio, type EvidenciaGrabacion } from './rtve.js';
+import { normalizar } from '../texto.js';
 import type { CampoMeta } from './fuentes.js';
 import type { Consultor } from './red.js';
 
@@ -29,7 +30,7 @@ export { leerColofon, aniosDelColofon, nombreDeImprenta, tipoTitulo, type Colofo
 export { isbnsDelTexto, aIsbn13, isbn10Valido, isbn13Valido } from './isbn.js';
 export { crearConsultor, vaciarCacheConsultas, CONTACTO, type Consultor, type CacheConsultas, type OpcionesConsultor } from './red.js';
 export { actividadImpresor, type ActividadImpresor } from './impresores.js';
-export { rtveEpisodio, fechaRtve, slugRtve } from './rtve.js';
+export { rtveEpisodio, fechaRtve, slugRtve, presencia, personasDelTitulo, type EvidenciaGrabacion } from './rtve.js';
 export { titulosCasan, autoresCasan, wikidataBuscar, type EntidadWikidata } from './fuentes.js';
 
 export interface EntradaEnriquecimiento {
@@ -38,6 +39,8 @@ export interface EntradaEnriquecimiento {
   /** Texto de las primeras y las últimas páginas (créditos y colofón). */
   texto: string;
   tipo: string;
+  /** Audio y vídeo: la transcripción, los hablantes con nombre y la duración (pruebas para identificar el episodio). */
+  grabacion?: EvidenciaGrabacion;
 }
 
 export interface ResultadoEnriquecimiento {
@@ -162,6 +165,7 @@ export async function enriquecer(e: EntradaEnriquecimiento, red: Consultor | nul
       if (!titulosCasan(titulo, h.datos.titulo, 0.92) || autoresCasan(autores, h.datos.autores) === false) return;
       // El año de arXiv es el de la primera versión: en un artículo de congreso coincide; si no, es otra cosa.
       const d: Partial<MetadatosDocumento> = { url: h.datos.url as string };
+      if (h.datos.contenedor && !colofon?.congreso) { d.contenedor = h.datos.contenedor; d.tipoCSL = 'paper-conference'; }
       if (!base.doi) d.doi = h.datos.doi as string;
       if (h.datos.anio) d.anio = h.datos.anio;
       if (!base.tipoCSL && !colofon?.congreso) d.tipoCSL = 'article';
@@ -187,7 +191,7 @@ export async function enriquecer(e: EntradaEnriquecimiento, red: Consultor | nul
 
   if (medio && (titulo || base.contenedor)) {
     tareas.push((async () => {
-      const r = await fichaDeEmision(base, red, idioma);
+      const r = await fichaDeEmision(base, red, idioma, e.grabacion);
       hallazgos.push(...r.hallazgos);
       avisos.push(...r.avisos);
     })());
@@ -224,52 +228,84 @@ const nombreDe = (a: Autor) => [a.nombre, a.apellidos].filter(Boolean).join(' ')
  *   el nombre de los invitados, como hace RTVE;
  * - `autores`: los entrevistados; `entrevistadores`: quien pregunta (el presentador);
  * - `anio` y `fecha`: los de la emisión, si el catálogo los da.
+ *
+ * Nada de esto se acepta sin pruebas de la grabación: un invitado que la
+ * transcripción no nombra ni habla (el modelo lo sacó del nombre del archivo o
+ * de una canción) no es el invitado, y el episodio del catálogo se elige por
+ * menciones, hablantes y duración, o no se elige.
  */
-export async function fichaDeEmision(base: Partial<MetadatosDocumento>, red: Consultor, idioma?: string): Promise<{ hallazgos: Hallazgo[]; avisos: string[] }> {
+export async function fichaDeEmision(base: Partial<MetadatosDocumento>, red: Consultor, idioma?: string, ev?: EvidenciaGrabacion): Promise<{ hallazgos: Hallazgo[]; avisos: string[] }> {
   const hallazgos: Hallazgo[] = [];
   const avisos: string[] = [];
   const titulo = base.titulo;
   const autores = base.autores ?? [];
-  const programa = base.contenedor ?? (titulo as string);
-  const tituloEsPrograma = !base.contenedor || titulosCasan(titulo, base.contenedor, 0.9);
-  const wp = await wikidataPrograma(programa, autores, red, idioma ?? 'es');
+  // El programa: el contenedor leído, o el título o el subtítulo si alguno es un programa conocido.
+  let programa = base.contenedor ?? (titulo as string);
+  let wp: Hallazgo | null = null;
+  for (const candidato of [base.contenedor, titulo, base.subtitulo]) {
+    if (!candidato) continue;
+    wp = await wikidataPrograma(candidato, autores, red, idioma ?? 'es');
+    if (wp) { programa = (wp.datos.contenedor as string | undefined) ?? candidato; break; }
+  }
+  const tituloEsPrograma = titulosCasan(titulo, programa, 0.9);
   const presentadores = wp?.datos.autores ?? [];
   if (wp) delete wp.datos.autores;
+  let entrevistadores = base.entrevistadores?.length ? base.entrevistadores : presentadores;
+  const evidencia = ev ? { textoNormalizado: ` ${normalizar(ev.texto)} `, hablantes: ev.hablantes } : null;
+  // Con una transcripción corta no hay pruebas en ningún sentido: no se quita a nadie.
+  const concluyente = Boolean(evidencia && evidencia.textoNormalizado.length > 1500);
+  const respaldado = (a: Autor) => !concluyente || presencia(nombreDe(a), evidencia!) >= 5;
+  let invitados = autores.filter((a) => !entrevistadores.some((e) => mismaPersona(a, e)));
+  // Invitados que la grabación no respalda: fuera (y el título que los nombra, también).
+  const sinPruebas = invitados.filter((a) => !respaldado(a));
+  if (sinPruebas.length) {
+    avisos.push(`La grabación no nombra a ${sinPruebas.map(nombreDe).join(', ')}: no se da por invitado.`);
+    invitados = invitados.filter(respaldado);
+  }
+  // Hablantes con nombre que no están en la ficha: también son invitados.
+  for (const h of ev?.hablantes ?? []) {
+    const a = autorDe(h, idioma ?? 'es');
+    if (a.apellidos && respaldado(a) && ![...invitados, ...entrevistadores].some((x) => mismaPersona(x, a))) invitados.push(a);
+  }
+  const tituloSinPruebas = Boolean(titulo && sinPruebas.some((a) => normalizar(titulo).includes(normalizar(a.apellidos).split(' ').pop() ?? '\u0000')));
   if (wp) {
     const { desde, hasta } = wp.control ?? {};
     if (base.anio && desde && (base.anio < desde || base.anio > (hasta ?? actual()))) avisos.push(`El año ${base.anio} cae fuera de los años en antena de «${programa}» (${desde}-${hasta ?? 'hoy'}).`);
   }
-  let entrevistadores = base.entrevistadores?.length ? base.entrevistadores : presentadores;
-  let invitados = autores.filter((a) => !entrevistadores.some((e) => mismaPersona(a, e)));
-  // RTVE Play: el episodio concreto, con su fecha de emisión.
+  // RTVE Play: el episodio concreto, con su fecha de emisión, si la grabación lo respalda.
   const deRtve = /rtve|televisi[óo]n espa[ñn]ola|\btve\b|radio nacional/i.test(`${wp?.datos.editorial ?? ''} ${base.editorial ?? ''}`) || (!wp && (idioma ?? 'es').startsWith('es'));
-  const rt = deRtve && invitados.length ? await rtveEpisodio(wp?.datos.contenedor ?? programa, invitados, tituloEsPrograma ? undefined : titulo, red) : null;
-  if (rt?.datos.entrevistadores?.length) {
-    entrevistadores = rt.datos.entrevistadores;
-    invitados = autores.filter((a) => !entrevistadores.some((e) => mismaPersona(a, e)));
+  const eleccion = deRtve && ev ? await rtveEpisodio(programa, ev, red) : null;
+  const rt = eleccion?.hallazgo ?? null;
+  if (eleccion) avisos.push(`RTVE Play: ${eleccion.motivo}.`);
+  if (rt) {
+    if (rt.datos.entrevistadores?.length) entrevistadores = rt.datos.entrevistadores;
+    invitados = (rt.datos.autores ?? invitados).filter((a) => !entrevistadores.some((e) => mismaPersona(a, e)));
   }
-  if (!wp && !rt && !(base.contenedor && !tituloEsPrograma)) return { hallazgos, avisos };
+  if (!wp && !rt && !(base.contenedor && !tituloEsPrograma) && !sinPruebas.length) return { hallazgos, avisos };
   const reparto: Partial<MetadatosDocumento> = {};
   const porCampo: Hallazgo['porCampo'] = {};
   const anula: CampoMeta[] = [];
-  if (entrevistadores.length && invitados.length) {
+  if (invitados.length) {
     reparto.autores = invitados;
-    reparto.entrevistadores = entrevistadores;
-    porCampo.autores = 0.88; porCampo.entrevistadores = 0.88;
-  } else if (entrevistadores.length && !autores.length) {
-    reparto.entrevistadores = entrevistadores;
-  }
-  if (tituloEsPrograma && !rt && invitados.length) {
-    // Sin episodio en el catálogo: el nombre de los invitados, como en RTVE Play.
-    reparto.titulo = invitados.map(nombreDe).join(' y ');
-    porCampo.titulo = 0.86;
+    porCampo.autores = sinPruebas.length ? 0.95 : 0.88;
+  } else if (sinPruebas.length) anula.push('autores');
+  if (entrevistadores.length) { reparto.entrevistadores = entrevistadores; porCampo.entrevistadores = 0.88; }
+  if ((tituloEsPrograma || tituloSinPruebas) && !rt) {
+    if (invitados.length) {
+      // Sin episodio en el catálogo: el nombre de los invitados, como en RTVE Play.
+      reparto.titulo = invitados.map(nombreDe).join(' y ');
+      porCampo.titulo = tituloSinPruebas ? 0.95 : 0.86;
+    } else if (tituloSinPruebas && programa !== titulo) {
+      // Ni catálogo ni invitado con pruebas: mejor el nombre del programa que un nombre falso.
+      reparto.titulo = programa;
+      porCampo.titulo = 0.95;
+    }
     anula.push('subtitulo');
   }
   if (rt) anula.push('subtitulo');
-  if (!reparto.titulo && rt) porCampo.titulo = 0.92;
   if (wp) hallazgos.push(wp);
-  if (rt) hallazgos.push({ ...rt, ...(anula.length ? { anula } : {}) });
-  if (Object.keys(reparto).length) hallazgos.push({ fuente: rt ? 'rtve' : 'wikidata', confianza: 0.86, porCampo, datos: { ...reparto, ...(wp || rt ? {} : { contenedor: programa }) }, ...(anula.length ? { anula } : {}) });
+  if (rt) hallazgos.push({ ...rt, anula });
+  if (Object.keys(reparto).length || anula.length) hallazgos.push({ fuente: rt ? 'rtve' : 'wikidata', confianza: 0.86, porCampo, datos: { ...reparto, ...(wp || rt ? {} : { contenedor: programa }) }, ...(anula.length ? { anula } : {}) });
   return { hallazgos, avisos };
 }
 
