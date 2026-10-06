@@ -17,6 +17,8 @@ import { TarjetaIngesta } from '../componentes/biblioteca/ingesta';
 import { TECLA_MOD } from '../componentes/marco/navegacion';
 import { numero } from '../lib/numero';
 import { IconoTipo } from '../componentes/comunes/icono-tipo';
+import { limpiarSeleccion, ponerSeleccion, useSeleccion } from '../lib/seleccion';
+import { copiarBibliografia, descargarBibliografia } from '../lib/referencia';
 import { bytes } from '../lib/formato';
 
 const Compartir = lazy(() => import('../componentes/biblioteca/compartir'));
@@ -127,7 +129,7 @@ function PaginaBiblioteca() {
               <span><strong className="tnum text-[0.9375rem] font-semibold text-coffee-800">{numero(todos.length)}</strong> documentos</span>
               <span><strong className="tnum text-[0.9375rem] font-semibold text-coffee-800">{numero(bibliotecas.length)}</strong> colecciones</span>
               <span><strong className="tnum text-[0.9375rem] font-semibold text-coffee-800">{numero(paginas)}</strong> páginas</span>
-              {horas >= 0.1 ? <span><strong className="tnum text-[0.9375rem] font-semibold text-coffee-800">{numero(horas, { maximumFractionDigits: 1 })}</strong> horas de audio y vídeo</span> : null}
+              {horas >= 0.1 ? <span><strong className="tnum text-[0.9375rem] font-semibold text-coffee-800">{numero(horas, { maximumFractionDigits: 1 })}</strong> {numero(horas, { maximumFractionDigits: 1 }) === "1" ? "hora" : "horas"} de audio y vídeo</span> : null}
               <span className="ml-auto text-coffee-400">{bytes(ocupado)}</span>
             </div>
             <div className="flex flex-wrap items-center gap-2 border-b border-cream-300 pb-4">
@@ -232,7 +234,8 @@ function PaginaBiblioteca() {
                   ))}
                   {!bibliotecas.length ? <p className="px-3 py-2 text-[0.75rem] text-coffee-400">Aún no hay colecciones.</p> : null}
                 </div>
-                {coleccion && coleccion.permiso === 'propietario' ? <Boton variante="linea" tam="p" icono="enlace" className="mt-3 w-full" onClick={() => setCompartir(true)}>Compartir «{coleccion.nombre}»</Boton> : null}
+                {coleccion ? <Boton variante="linea" tam="p" icono="citar" className="mt-3 w-full" onClick={() => void copiarBibliografia({ biblioteca: coleccion.id })}>Copiar su bibliografía</Boton> : null}
+                {coleccion && coleccion.permiso === 'propietario' ? <Boton variante="linea" tam="p" icono="enlace" className="mt-2 w-full" onClick={() => setCompartir(true)}>Compartir «{coleccion.nombre}»</Boton> : null}
                 {coleccion && coleccion.permiso !== 'propietario' ? <p className="mt-3 px-3 text-[0.75rem] text-coffee-400">Compartida contigo · {coleccion.permiso === 'edicion' ? 'puedes editar' : 'solo lectura'}</p> : null}
               </div>
             </aside>
@@ -240,9 +243,36 @@ function PaginaBiblioteca() {
         </div>
       </div>
 
+      <BarraSeleccion visibles={visibles} />
       <NuevaColeccion abierta={nueva} alCambiar={setNueva} />
       {compartir && coleccion ? <Suspense fallback={null}><Compartir biblioteca={coleccion} alCerrar={() => setCompartir(false)} /></Suspense> : null}
     </>
+  );
+}
+
+/** La barra de la selección: copiar o descargar la bibliografía de lo marcado. */
+function BarraSeleccion({ visibles }: { visibles: ResumenDocumento[] }) {
+  const sel = useSeleccion();
+  useEffect(() => () => limpiarSeleccion(), []);
+  if (!sel.size) return null;
+  const ids = [...sel];
+  return (
+    <div className="fixed bottom-[calc(1.25rem+env(safe-area-inset-bottom))] left-1/2 z-40 flex max-w-[calc(100vw-1.5rem)] -translate-x-1/2 flex-wrap items-center gap-2 rounded-2xl border border-[#1a0f0a] bg-[#2c1810] px-3 py-2 text-[#faf7f0] shadow-[inset_0_1px_0_rgb(255_255_255/0.1),0_8px_30px_rgb(44_24_16/0.35)] anim-tostada lg:left-[calc(50%+7rem)]" role="toolbar" aria-label="Documentos seleccionados">
+      <span className="px-1 text-[0.875rem] font-semibold">{sel.size} {sel.size === 1 ? 'seleccionado' : 'seleccionados'}</span>
+      <button type="button" onClick={() => ponerSeleccion(visibles.map((d) => d.id))} className="rounded-lg px-2 py-1.5 text-[0.8125rem] text-[#d4c4b0] hover:bg-white/10 hover:text-[#faf7f0]">Todos</button>
+      <span className="h-5 w-px bg-white/15" />
+      <button type="button" onClick={() => void copiarBibliografia({ documentos: ids })} className="flex items-center gap-1.5 rounded-lg bg-[#faf7f0] px-3 py-1.5 text-[0.8125rem] font-semibold text-[#2c1810] shadow-[inset_0_1px_0_#fff]"><Icono nombre="citar" tam={14} />Copiar bibliografía</button>
+      <MenuRaiz>
+        <MenuDisparador asChild><button type="button" className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[0.8125rem] font-medium hover:bg-white/10"><Icono nombre="descargar" tam={14} />Descargar</button></MenuDisparador>
+        <MenuContenido alinear="center">
+          <MenuElemento icono="documento" alElegir={() => void descargarBibliografia({ documentos: ids }, 'docx')}>Word (.docx), en el estilo</MenuElemento>
+          <MenuElemento icono="documento" alElegir={() => void descargarBibliografia({ documentos: ids }, 'bibtex')}>BibTeX</MenuElemento>
+          <MenuElemento icono="documento" alElegir={() => void descargarBibliografia({ documentos: ids }, 'ris')}>RIS</MenuElemento>
+          <MenuElemento icono="documento" alElegir={() => void descargarBibliografia({ documentos: ids }, 'csl-json')}>CSL-JSON</MenuElemento>
+        </MenuContenido>
+      </MenuRaiz>
+      <button type="button" onClick={limpiarSeleccion} aria-label="Quitar la selección" className="grid h-8 w-8 place-items-center rounded-lg text-[#d4c4b0] hover:bg-white/10 hover:text-[#faf7f0]"><Icono nombre="cerrar" tam={15} /></button>
+    </div>
   );
 }
 

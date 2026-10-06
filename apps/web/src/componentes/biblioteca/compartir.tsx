@@ -8,7 +8,7 @@ import type { Biblioteca, Miembro } from '@scholaris/contrato';
 import { avisar, Boton, Campo, Dialogo, Rotulo, Selector } from '@scholaris/ui';
 import { api } from '../../datos/api';
 
-const PERMISO: Record<Miembro['permiso'], string> = { propietario: 'Propietario', edicion: 'Puede editar', lectura: 'Puede leer' };
+const PERMISO: Record<Miembro['permiso'], string> = { propietario: 'Propietario', administrador: 'Administra', edicion: 'Puede editar', lectura: 'Puede leer' };
 
 export default function Compartir({ biblioteca, alCerrar }: { biblioteca: Biblioteca; alCerrar: () => void }) {
   const qc = useQueryClient();

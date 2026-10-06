@@ -4,6 +4,9 @@ import { useQueryClient, type QueryClient } from '@tanstack/react-query';
 import type { Biblioteca, Pagina, ResumenDocumento } from '@scholaris/contrato';
 import { avisar, conDeshacer, cx, Icono, MenuContenido, MenuDisparador, MenuElemento, MenuRaiz, MenuRotulo, MenuSeparador, Rotulo } from '@scholaris/ui';
 import { api } from '../../datos/api';
+import { copiarReferencia } from '../../lib/referencia';
+import { alternarSeleccion, useSeleccion } from '../../lib/seleccion';
+import { AccesoReferencia } from '../comunes/boton-referencia';
 import { recuperarTareas } from '../../datos/ingesta';
 import { duracion, haceCuanto, ICONO_TIPO, NOMBRE_TIPO, nombreUnidad, esMedio } from '../../lib/formato';
 import { preferencia } from '../../lib/acciones';
@@ -22,14 +25,7 @@ export async function reintentarDocumento(qc: QueryClient, id: string) {
 export function MenuDocumento({ doc, bibliotecas, children }: { doc: ResumenDocumento; bibliotecas: Biblioteca[]; children: React.ReactNode }) {
   const qc = useQueryClient();
 
-  async function copiarCita() {
-    try {
-      const estilo = preferencia('estilo', 'apa');
-      const c = await api().documentos.cita(doc.id, { estilo });
-      await navigator.clipboard.writeText(c.texto);
-      avisar('Referencia copiada.', { tono: 'exito' });
-    } catch { avisar('No se pudo copiar la referencia.', { tono: 'error' }); }
-  }
+  const copiarCita = () => copiarReferencia(doc.id);
 
   async function alternarColeccion(b: Biblioteca) {
     const dentro = doc.bibliotecas.includes(b.id);
@@ -81,7 +77,7 @@ export function MenuDocumento({ doc, bibliotecas, children }: { doc: ResumenDocu
     <MenuRaiz>
       <MenuDisparador asChild>{children}</MenuDisparador>
       <MenuContenido className="w-64">
-        <MenuElemento icono="citar" alElegir={() => void copiarCita()}>Copiar la referencia</MenuElemento>
+        <MenuElemento icono="citar" atajo="⇧⌘C" alElegir={() => void copiarCita()}>Copiar referencia</MenuElemento>
         <MenuElemento icono="descargar" alElegir={() => void descargar()}>Descargar el original</MenuElemento>
         <MenuElemento icono="pila" alElegir={() => void exportarSpdf()}>Exportar como .spdf</MenuElemento>
         {doc.estado === 'error' || doc.estado === 'pendiente' ? <MenuElemento icono="rayo" alElegir={() => void reintentar()}>Reintentar</MenuElemento> : null}
@@ -108,9 +104,22 @@ function lineaMeta(d: ResumenDocumento) {
 }
 
 /** Ficha en rejilla: portada, título, autor. */
+/** La casilla para seleccionar: aparece al pasar o cuando ya hay selección. */
+function Casilla({ id, titulo, className }: { id: string; titulo: string; className?: string }) {
+  const sel = useSeleccion();
+  const marcada = sel.has(id);
+  return (
+    <button type="button" role="checkbox" aria-checked={marcada} aria-label={`Seleccionar «${titulo}»`} onClick={(e) => { e.preventDefault(); e.stopPropagation(); alternarSeleccion(id); }}
+      className={cx('z-10 grid h-6 w-6 place-items-center rounded-md border transition-opacity', marcada ? 'border-[#1a0f0a] bg-coffee-800 text-cream-50 opacity-100 shadow-[inset_0_1px_3px_rgb(0_0_0/0.35)]' : 'border-cream-500 bg-cream-50/95 text-transparent shadow-[var(--relieve)] hover:text-coffee-400', !marcada && !sel.size && 'md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100', className)}>
+      <Icono nombre="hecho" tam={14} grosor={2.4} />
+    </button>
+  );
+}
+
 export const FichaDocumento = memo(function FichaDocumento({ doc, bibliotecas, indice }: { doc: ResumenDocumento; bibliotecas: Biblioteca[]; indice: number }) {
   return (
     <article className="group relative flex flex-col anim-entra" style={{ animationDelay: `${Math.min(indice, 12) * 18}ms` }}>
+      <Casilla id={doc.id} titulo={doc.titulo} className="absolute right-2 top-2" />
       <Link
         to="/lector/$id"
         params={{ id: doc.id }}
@@ -131,8 +140,9 @@ export const FichaDocumento = memo(function FichaDocumento({ doc, bibliotecas, i
       {doc.estado === 'error' || doc.estado === 'pendiente' ? <ReintentarFicha id={doc.id} /> : null}
       <div className="mt-1 flex items-center gap-2">
         <span className="truncate text-[0.6875rem] font-medium uppercase tracking-[0.04em] text-coffee-400">{lineaMeta(doc)}</span>
+        <AccesoReferencia documento={doc.id} className="ml-auto h-7 px-1.5 md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100" />
         <MenuDocumento doc={doc} bibliotecas={bibliotecas}>
-          <button type="button" aria-label={`Acciones de «${doc.titulo}»`} className="ml-auto grid h-7 w-7 shrink-0 place-items-center rounded-lg text-apagado opacity-100 hover:bg-hondo hover:text-tinta md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100 md:data-[state=open]:opacity-100">
+          <button type="button" aria-label={`Acciones de «${doc.titulo}»`} className="grid h-7 w-7 shrink-0 place-items-center rounded-lg text-apagado opacity-100 hover:bg-hondo hover:text-tinta md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100 md:data-[state=open]:opacity-100">
             <Icono nombre="opciones" tam={16} />
           </button>
         </MenuDocumento>
@@ -149,7 +159,8 @@ function ReintentarFicha({ id }: { id: string }) {
 /** Fila en la vista de lista: densa, alineada en columnas. */
 export const FilaDocumento = memo(function FilaDocumento({ doc, bibliotecas }: { doc: ResumenDocumento; bibliotecas: Biblioteca[] }) {
   return (
-    <div className="group grid h-16 grid-cols-[2.5rem_1fr_auto] items-center gap-4 border-b border-cream-200 bg-cream-50 px-4 transition-colors hover:bg-[#fffdf8] sm:grid-cols-[2.5rem_minmax(0,3fr)_minmax(0,2fr)_4.5rem_11rem_8.5rem]">
+    <div className="group relative grid h-16 grid-cols-[2.5rem_1fr_auto] items-center gap-4 border-b border-cream-200 bg-cream-50 px-4 transition-colors hover:bg-[#fffdf8] sm:grid-cols-[2.5rem_minmax(0,3fr)_minmax(0,2fr)_4.5rem_11rem_8.5rem]">
+      <Casilla id={doc.id} titulo={doc.titulo} className="absolute left-1 top-1 h-5 w-5" />
       <div className="h-[3.25rem] w-10 overflow-hidden rounded-r-md rounded-l-sm border border-cream-400 shadow-[var(--shadow-soft)] [container-type:inline-size]">
         <Portada id={doc.id} titulo="" tipo={doc.tipo} url={doc.portadaUrl} />
       </div>
@@ -164,6 +175,7 @@ export const FilaDocumento = memo(function FilaDocumento({ doc, bibliotecas }: {
         {doc.estado === 'procesando' ? <span className="h-1.5 w-1.5 rounded-full bg-rojo anim-pulso" aria-label="Leyendo" /> : null}
         {doc.estado === 'pendiente' ? <span className="rotulo rounded-full bg-amarillo px-1.5 py-0.5 text-tinta">sin leer</span> : null}
         <span className="hidden text-[0.75rem] text-apagado lg:inline">{haceCuanto(doc.creado)}</span>
+        <AccesoReferencia documento={doc.id} className="px-1.5" />
         <MenuDocumento doc={doc} bibliotecas={bibliotecas}>
           <button type="button" aria-label={`Acciones de «${doc.titulo}»`} className="grid h-8 w-8 place-items-center rounded-lg text-coffee-400 hover:bg-cream-200 hover:text-coffee-800">
             <Icono nombre="opciones" tam={16} />

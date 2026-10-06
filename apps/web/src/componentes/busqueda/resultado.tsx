@@ -7,6 +7,7 @@ import { api } from '../../datos/api';
 import { q } from '../../datos/consultas';
 import { anclaABusqueda } from '../../lib/anclas';
 import { Resaltado } from '../../lib/resaltado';
+import { AccesoReferencia } from '../comunes/boton-referencia';
 import { autoresCorto, etiquetaCorta, ICONO_TIPO } from '../../lib/formato';
 
 const VIA: Record<string, string> = { lexica: 'léxica', densa: 'semántica', visual: 'visual' };
@@ -57,7 +58,8 @@ export const Resultado = memo(function Resultado({ r, consulta, indice, compacto
           <span className="min-w-0 truncate"><em>{m.titulo}</em> · {autoresCorto(m)}{m.anio ? `, ${m.anioOriginal && m.anioOriginal !== m.anio ? `${m.anioOriginal}/${m.anio}` : m.anio}` : ''}</span>
           {r.fragmento.seccion.length ? <span className="hidden truncate text-apagado lg:inline">{r.fragmento.seccion.at(-1)}</span> : null}
           <span className="ml-auto flex items-center gap-1 md:opacity-0 md:transition-opacity md:group-focus-within:opacity-100 md:group-hover:opacity-100">
-            <button type="button" onClick={() => void copiar()} className="flex h-8 items-center gap-1.5 rounded-lg px-2.5 font-medium hover:bg-cream-200 hover:text-coffee-800"><Icono nombre="citar" tam={14} />Citar</button>
+            <button type="button" onClick={() => void copiar()} className="flex h-8 items-center gap-1.5 rounded-lg px-2.5 font-medium hover:bg-cream-200 hover:text-coffee-800"><Icono nombre="citar" tam={14} />Cita</button>
+            <AccesoReferencia documento={r.documento.id} etiqueta />
             <button type="button" onClick={() => void verParecidos()} aria-expanded={!!parecidos} className="flex h-8 items-center gap-1.5 rounded-lg px-2.5 font-medium hover:bg-cream-200 hover:text-coffee-800"><Icono nombre="pila" tam={14} />{cargando ? 'Buscando…' : 'Parecidos'}</button>
             <MenuRaiz onOpenChange={setMenu}>
               <MenuDisparador asChild><button type="button" className="flex h-8 items-center gap-1.5 rounded-lg px-2.5 font-medium hover:bg-cream-200 hover:text-coffee-800"><Icono nombre="marcador" tam={13} />Guardar</button></MenuDisparador>

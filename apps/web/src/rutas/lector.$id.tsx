@@ -18,6 +18,8 @@ import { Ficha } from '../componentes/lector/ficha';
 import { ProveedorEntidades } from '../componentes/lector/entidades';
 import { BarraSeleccion, useSeleccion } from '../componentes/lector/seleccion';
 import { MenuDocumento, reintentarDocumento } from '../componentes/biblioteca/documento';
+import { BotonReferencia } from '../componentes/comunes/boton-referencia';
+import { copiarReferencia } from '../lib/referencia';
 
 export const Route = createFileRoute('/lector/$id')({
   validateSearch: (s: Record<string, unknown>): BusquedaLector => validarBusquedaLector(s),
@@ -77,6 +79,13 @@ function Lector() {
   // Primera unidad: la del enlace, o la que corresponde a sección y párrafo.
   const { data: secciones } = useQuery(q.secciones(id));
   const inicial = busqueda.u ?? (busqueda.sec && secciones ? (secciones.find((s) => s.titulo === busqueda.sec)?.unidadDesde ?? 1) + Math.max(0, (busqueda.par ?? 1) - 1) : 1);
+
+  // ⇧⌘C: copiar la referencia de este documento, desde cualquier parte del lector.
+  useEffect(() => {
+    const k = (e: KeyboardEvent) => { if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === 'c') { e.preventDefault(); void copiarReferencia(id); } };
+    window.addEventListener('keydown', k);
+    return () => window.removeEventListener('keydown', k);
+  }, [id]);
 
   useEffect(() => {
     anotarReciente(id);
@@ -143,7 +152,7 @@ function Lector() {
             </div>
           ) : null}
 
-          <EstiloCita />
+          <BotonReferencia documento={doc.id} className="hidden md:flex" />
           <div className="hidden items-center gap-1 sm:flex">
             <BotonPanel activo={panel === 'indice'} icono="indice" etiqueta="Índice" alPulsar={() => abrirPanel('indice')} />
             <BotonPanel activo={panel === 'ficha'} icono="editar" etiqueta="Ficha" alPulsar={() => abrirPanel('ficha')} />
@@ -246,23 +255,6 @@ function IrA({ etiqueta, total, alIr, medio }: { etiqueta: string; total: string
   );
 }
 
-function EstiloCita() {
-  const [estilo, setEstilo] = useState(() => preferencia('estilo', 'apa'));
-  const actual = ESTILOS_RAPIDOS.find((e) => e.id === estilo) ?? ESTILOS_RAPIDOS[0];
-  return (
-    <MenuRaiz>
-      <MenuDisparador asChild>
-        <button type="button" className="hidden h-9 shrink-0 items-center gap-1.5 rounded-xl px-2.5 text-[0.8125rem] font-medium text-coffee-500 hover:bg-cream-200 hover:text-coffee-800 lg:flex" aria-label={`Estilo de cita: ${actual.nombre}`}>
-          <Icono nombre="citar" tam={15} />{actual.nombre}
-        </button>
-      </MenuDisparador>
-      <MenuContenido>
-        <MenuRotulo>Al citar una selección</MenuRotulo>
-        {ESTILOS_RAPIDOS.map((e) => <MenuElemento key={e.id} icono={e.id === estilo ? 'hecho' : undefined} alElegir={() => { setEstilo(e.id); ponerPreferencia('estilo', e.id); avisar(`Las citas saldrán en ${e.nombre}.`); }}>{e.nombre}</MenuElemento>)}
-      </MenuContenido>
-    </MenuRaiz>
-  );
-}
 
 function PanelDocumento({ doc, panel, setPanel, irA, irT, actual }: { doc: DetalleDocumento; panel: Panel; setPanel: (p: Panel | null) => void; irA: (o: number) => void; irT: (t: number) => void; actual: number }) {
   const { data: secciones, isPending } = useQuery(q.secciones(doc.id));

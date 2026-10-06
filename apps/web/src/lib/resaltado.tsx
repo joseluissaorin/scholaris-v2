@@ -25,3 +25,14 @@ export function resaltarTerminos(texto: string, q?: string): string {
     return raices.some((r) => n.startsWith(r)) ? `<mark>${w}</mark>` : w;
   });
 }
+
+/** HTML de una referencia CSL: solo cursivas, negritas, versalitas y enlaces sin script. */
+export function htmlSeguroReferencia(html: string): string {
+  // Fuera los contenedores de citeproc (div.csl-entry, spans sin estilo) antes de escapar.
+  const limpio = html.replace(/<\/?div[^>]*>/g, '').replace(/<span(?![^>]*small-caps)[^>]*>([\s\S]*?)<\/span>/g, '$1');
+  const escapado = limpio.replace(/[&<>"']/g, (c) => ESC[c]!);
+  return escapado
+    .replace(/&lt;(\/?)(i|em|b|strong|sup|sub)&gt;/g, '<$1$2>')
+    .replace(/&lt;span style=&quot;font-variant:\s*small-caps;?&quot;&gt;/g, '<span style="font-variant:small-caps">')
+    .replace(/&lt;\/span&gt;/g, '</span>');
+}

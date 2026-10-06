@@ -11,6 +11,7 @@ import { Lienzo } from '../componentes/comunes/cabecera';
 import { anclaABusqueda } from '../lib/anclas';
 import { etiquetaCorta, haceCuanto } from '../lib/formato';
 import { useFlip } from '../lib/flip';
+import { AccesoReferencia } from '../componentes/comunes/boton-referencia';
 import { textoLimpio } from '../lib/texto';
 import { numero } from '../lib/numero';
 
@@ -323,6 +324,7 @@ function Respuesta({ pregunta, filtros }: { pregunta: string; filtros: Filtros }
                     {n ? <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-azul text-[0.6875rem] font-bold text-cream-50">{n}</span> : null}
                     <span className="min-w-0 flex-1 truncate text-[0.8125rem]">{f.documento.metadatos.titulo}</span>
                     <Folio className="shrink-0">{etiquetaCorta(f.fragmento.ancla, f.etiqueta)}</Folio>
+                    <AccesoReferencia documento={f.documento.id} className="-my-1 -mr-1.5 h-7 px-1.5" />
                   </div>
                   <p className="mt-2 line-clamp-3 text-[0.8125rem] text-tinta-2">{textoLimpio(f.fragmento.texto)}</p>
                 </Link>

@@ -12,6 +12,8 @@ import { avisar, Icono, MenuContenido, MenuDisparador, MenuElemento, MenuRaiz, M
 import { api } from '../../datos/api';
 import { q } from '../../datos/consultas';
 import { citaEnTexto } from '../../lib/formato';
+import { copiarReferencia, copiarRico, estiloActual, qReferencia } from '../../lib/referencia';
+import { clienteConsultas } from '../../datos/consultas';
 import { preferencia } from '../../lib/acciones';
 
 export interface Seleccion {
@@ -56,7 +58,7 @@ export function useSeleccion(contenedor: RefObject<HTMLElement | null>, unidad: 
 }
 
 export function citaCompleta(texto: string, meta: MetadatosDocumento, ancla: Ancla, fin?: Ancla) {
-  const estilo = preferencia('estilo', 'apa');
+  const estilo = estiloActual();
   const recorte = texto.length > 600 ? `${texto.slice(0, 600)}…` : texto;
   const cita = citaEnTexto(meta, ancla, estilo, fin);
   return { estilo, cita, completa: estilo === 'chicago-note-bibliography' ? `«${recorte}»\n\n${cita}` : `«${recorte}» ${cita}` };
@@ -67,10 +69,18 @@ export function BarraSeleccion({ sel, documento, meta, alCerrar, extra }: { sel:
   const qc = useQueryClient();
   const { data: cuadernos } = useQuery(q.cuadernos());
 
-  async function citar() {
+  async function citar(que: 'cita' | 'referencia' | 'ambas') {
     const { completa, cita } = citaCompleta(sel.texto, meta, sel.ancla, sel.fin);
-    try { await navigator.clipboard.writeText(completa); avisar(`Cita copiada: ${cita}`, { tono: 'exito' }); }
-    catch { avisar('El navegador no dejó copiar.', { tono: 'error' }); }
+    try {
+      if (que === 'cita') { await navigator.clipboard.writeText(completa); avisar(`Cita copiada: ${cita}`, { tono: 'exito' }); }
+      else if (que === 'referencia') await copiarReferencia(documento);
+      else {
+        const r = await clienteConsultas.fetchQuery(qReferencia(documento, estiloActual()));
+        const esc = (t: string) => t.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]!);
+        await copiarRico(`<p>${esc(completa)}</p><p>${r.html || esc(r.texto)}</p>`, `${completa}\n\n${r.texto}`);
+        avisar(`Cita y referencia copiadas: ${cita} · ${r.texto}`, { tono: 'exito', duracion: 6000 });
+      }
+    } catch { avisar('El navegador no dejó copiar.', { tono: 'error' }); }
     alCerrar();
   }
 
@@ -85,11 +95,13 @@ export function BarraSeleccion({ sel, documento, meta, alCerrar, extra }: { sel:
   }
 
   const arriba = sel.rect.y > 64;
-  const estilo = { left: Math.max(8, Math.min(window.innerWidth - (extra ? 420 : 330), sel.rect.x + sel.rect.w / 2 - 160)), top: arriba ? sel.rect.y - 52 : sel.rect.y + 28 };
+  const estilo = { left: Math.max(8, Math.min(window.innerWidth - (extra ? 660 : 570), sel.rect.x + sel.rect.w / 2 - 280)), top: arriba ? sel.rect.y - 52 : sel.rect.y + 28 };
   const boton = 'flex h-9 items-center gap-2 rounded-lg px-3 text-[0.8125rem] font-semibold hover:bg-white/10';
   return (
     <div role="toolbar" aria-label="Acciones con el texto seleccionado" style={estilo} className="fixed z-40 flex items-center gap-0.5 rounded-xl border border-[#1a0f0a] bg-[#2c1810] p-1 text-[#faf7f0] shadow-[inset_0_1px_0_rgb(255_255_255/0.1),0_8px_24px_rgb(44_24_16/0.3)] anim-dialogo" onMouseDown={(e) => e.preventDefault()}>
-      <button type="button" className={boton} onClick={() => void citar()}><Icono nombre="citar" tam={16} />Citar</button>
+      <button type="button" className={boton} onClick={() => void citar('cita')} title="La cita del texto, con su página o su minuto"><Icono nombre="citar" tam={16} />Copiar cita</button>
+      <button type="button" className={boton} onClick={() => void citar('referencia')} title="La entrada completa de la bibliografía"><Icono nombre="lector" tam={15} />Referencia</button>
+      <button type="button" className={boton} onClick={() => void citar('ambas')} title="La cita y la referencia, una tras otra">Las dos</button>
       <button type="button" className={boton} onClick={() => { void navegar({ to: '/buscar', search: { q: sel.texto.slice(0, 240) } }); alCerrar(); }}><Icono nombre="buscar" tam={16} />Parecidos</button>
       {extra?.(boton)}
       <MenuRaiz>

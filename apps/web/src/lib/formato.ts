@@ -79,19 +79,25 @@ export const ESTILOS_RAPIDOS = [
   { id: 'apa', nombre: 'APA 7' },
   { id: 'chicago-author-date', nombre: 'Chicago autor-fecha' },
   { id: 'chicago-note-bibliography', nombre: 'Chicago notas' },
-  { id: 'modern-language-association', nombre: 'MLA 9' },
-  { id: 'iso690-author-date-es', nombre: 'UNE-ISO 690' },
+  { id: 'mla', nombre: 'MLA 9' },
+  { id: 'harvard', nombre: 'Harvard' },
+  { id: 'iso690', nombre: 'UNE-ISO 690' },
 ] as const;
+
+/** Ids antiguos de estilo → los de la API. */
+export function estiloNormalizado(id: string): string {
+  return ({ 'modern-language-association': 'mla', 'iso690-author-date-es': 'iso690', 'harvard-cite-them-right': 'harvard', 'iso690-numeric-es': 'iso690-numerico' } as Record<string, string>)[id] ?? id;
+}
 
 /** Cita en el texto para un ancla, en el estilo elegido. */
 export function citaEnTexto(m: MetadatosDocumento, ancla: Ancla, estilo: string, fin?: Ancla): string {
   const loc = anclaACita(ancla, fin);
   const quien = autoresCorto(m);
-  switch (estilo) {
-    case 'modern-language-association': return `(${quien} ${loc.replace(/^pp?\. /, '')})`;
+  switch (estiloNormalizado(estilo)) {
+    case 'mla': return `(${quien} ${loc.replace(/^pp?\. /, '')})`;
     case 'chicago-author-date': return `(${quien} ${anioCita(m)}, ${loc.replace(/^pp?\. /, '')})`;
     case 'chicago-note-bibliography': return `${autores(m)}, ${m.titulo} (${[m.lugar, m.editorial].filter(Boolean).join(': ')}${m.anio ? `, ${m.anio}` : ''}), ${loc.replace(/^pp?\. /, '')}.`;
-    case 'iso690-author-date-es': return `(${quien.toUpperCase()}, ${anioCita(m)}, ${loc})`;
+    case 'iso690': return `(${quien.toUpperCase()}, ${anioCita(m)}, ${loc})`;
     default: return `(${quien}, ${anioCita(m)}, ${loc})`;
   }
 }

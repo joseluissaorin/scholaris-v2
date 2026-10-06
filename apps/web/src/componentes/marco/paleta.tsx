@@ -5,7 +5,7 @@
  */
 import { useDeferredValue, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Dialog } from 'radix-ui';
-import { useNavigate } from '@tanstack/react-router';
+import { useNavigate, useRouterState } from '@tanstack/react-router';
 import { useQuery } from '@tanstack/react-query';
 import { cx, Folio, Icono, Teclas, type NombreIcono } from '@scholaris/ui';
 import type { ResultadoVista } from '@scholaris/contrato';
@@ -15,6 +15,7 @@ import { etiquetaCorta, ICONO_TIPO, NOMBRE_TIPO } from '../../lib/formato';
 import { anclaABusqueda } from '../../lib/anclas';
 import { Resaltado } from '../../lib/resaltado';
 import { useFlip } from '../../lib/flip';
+import { copiarReferencia } from '../../lib/referencia';
 
 interface Opcion {
   id: string;
@@ -30,6 +31,7 @@ const normal = (s: string) => s.normalize('NFD').replace(/\p{Diacritic}/gu, '').
 
 export default function Paleta({ abierta, alCambiar }: { abierta: boolean; alCambiar: (v: boolean) => void }) {
   const navegar = useNavigate();
+  const ruta = useRouterState({ select: (x) => x.location.pathname });
   const [texto, setTexto] = useState('');
   const [activa, setActiva] = useState(0);
   const lista = useRef<HTMLDivElement>(null);
@@ -68,7 +70,9 @@ export default function Paleta({ abierta, alCambiar }: { abierta: boolean; alCam
       ['Ajustes', 'ajustes', () => void navegar({ to: '/ajustes' })],
       ['Claves de API y MCP', 'llave', () => void navegar({ to: '/ajustes/claves' })],
     ];
+    const enLector = /^\/lector\/([^/]+)/.exec(ruta)?.[1];
     const acciones: Array<[string, NombreIcono, () => void]> = [
+      ...(enLector ? [['Copiar referencia de este documento', 'citar', () => void copiarReferencia(decodeURIComponent(enLector))] as [string, NombreIcono, () => void]] : []),
       ['Añadir archivos', 'subir', () => disparar('archivos')],
       ['Añadir desde un enlace', 'enlace', () => disparar('enlace')],
       ['Fotografiar páginas', 'camara', () => disparar('camara')],
@@ -87,7 +91,7 @@ export default function Paleta({ abierta, alCambiar }: { abierta: boolean; alCam
     }
     return out;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [diferido, docs, pasajes.data]);
+  }, [diferido, docs, pasajes.data, ruta]);
 
   useEffect(() => setActiva(0), [diferido]);
   useFlip(lista, opciones.map((o) => o.id).join('|'));
