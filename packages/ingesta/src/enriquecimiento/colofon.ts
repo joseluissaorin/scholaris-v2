@@ -158,9 +158,14 @@ export function leerColofon(texto: string): Colofon {
     if (lugar && /^\p{Lu}\p{L}+$/u.test(lugar)) c.lugar = lugar;
   }
 
+  // Los pies de imprenta van partidos en varias líneas: se leen sobre el texto con las líneas unidas.
+  const plano = t.replace(/([^\n])\n(?!\n)/g, '$1 ');
   // Pie de imprenta antiguo: «Con licencia: En Sevilla, en la Imprenta de la Viuda de…», «Impresso en Madrid por…».
-  const pie = /\b(?:con\s+licencia\s*[:.,]?\s*)?(?:en|impress?o\s+en|impresso\s+en)\s+([\p{Lu}][\p{L}]+(?:\s+de\s+[\p{Lu}][\p{L}]+)?)\s*[,:]\s*(?:en\s+la\s+(?:imprenta|oficina)\s+de|en\s+casa\s+de|por)\s+(?:la\s+)?([^,\n.]{4,90})/iu.exec(t);
-  if (pie && /licencia|impress?o|imprenta|oficina|casa de/i.test(pie[0])) {
+  const pie = /\b(?:con\s+licencia\s*[:.,]?\s*)?(?:en|impress?o\s+en|impresso\s+en)\s+([\p{Lu}][\p{L}]+(?:\s+de\s+[\p{Lu}][\p{L}]+)?)\s*[,:]\s*(?:en\s+la\s+(?:imprenta|oficina)\s+de|en\s+casa\s+de|por)\s+(?:la\s+)?([^,\n.]{4,90})/giu;
+  // La primera aparición con señales de pie de imprenta («En Castilla, por…» en un verso no vale).
+  const pieBueno = [...plano.matchAll(pie)].find((m) => /licencia|impress?o|imprenta|oficina|casa de/i.test(m[0]));
+  if (pieBueno) {
+    const pie = pieBueno;
     c.lugar ??= nombreDeImprenta(pie[1] as string);
     c.impresor = nombreDeImprenta((pie[2] as string).replace(/^la\s+/i, ''));
   }

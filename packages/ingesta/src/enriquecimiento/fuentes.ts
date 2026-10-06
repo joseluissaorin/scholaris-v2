@@ -105,6 +105,8 @@ export async function openLibraryObra(titulo: string, autores: Autor[], red: Con
   const j = await red.json<{ docs?: DocOL[] }>(url);
   for (const doc of j?.docs ?? []) {
     if (!doc.first_publish_year || !titulosCasan(titulo, doc.title)) continue;
+    // Antes del XIX, Open Library cataloga ediciones concretas (una suelta de 1700), no la primera de la obra.
+    if (doc.first_publish_year < 1830) continue;
     const ext = (doc.author_name ?? []).map((n) => autorDe(n, idioma));
     if (autoresCasan(autores, ext) === false) continue;
     return { fuente: 'openlibrary', confianza: autores.length ? 0.72 : 0.55, datos: { anioOriginal: doc.first_publish_year }, id: `https://openlibrary.org${doc.key ?? ''}` };

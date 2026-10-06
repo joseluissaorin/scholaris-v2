@@ -207,3 +207,18 @@ describe('paso completo', () => {
     expect(metadatos).toMatchObject({ anio: 2002, tituloOriginal: 'Surveiller et punir' });
   });
 });
+
+describe('pie de imprenta partido en líneas', () => {
+  it('une las líneas antes de leer el impresor', () => {
+    const c = leerColofon('# F I N.\n\nCon licencia: En Sevilla, en la Imprenta de la VIVDA\nde FRANCISCO LEEFDAEL, en la\nCasa del Correo Viejo.');
+    expect(c).toMatchObject({ lugar: 'Sevilla', impresor: 'Viuda de Francisco Leefdael' });
+  });
+});
+
+describe('limpiezas de la fusión', () => {
+  it('sin ORCID antes de 1990 y sin lengua original si es la misma', () => {
+    const m = fusionarMetadatos([{ fuente: 'openalex', confianza: 0.95, datos: { titulo: 'The Discarded Image', autores: [{ nombre: 'C. S.', apellidos: 'Lewis', orcid: '0000-0001-5451-1672' }], anio: 1964, idioma: 'en', idiomaOriginal: 'en' } }], 'x.pdf');
+    expect(m.autores[0]?.orcid).toBeUndefined();
+    expect(m.idiomaOriginal).toBeUndefined();
+  });
+});

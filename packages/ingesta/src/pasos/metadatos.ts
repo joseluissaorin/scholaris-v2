@@ -440,7 +440,14 @@ export function fusionarMetadatos(candidatos: Candidato[], nombreArchivo: string
     const quitarOriginal = co?.fuente !== 'usuario' && (ca?.fuente === 'usuario' || (co?.confianza ?? 0) <= (ca?.confianza ?? 0));
     if (quitarOriginal) { delete salida.anioOriginal; delete procedencia.anioOriginal; } else { delete salida.anio; delete procedencia.anio; }
   }
-  // Con año, la horquilla de «s. f.» sobra.
+  // Lengua original igual a la del texto: no es una traducción.
+  if (salida.idiomaOriginal && salida.idioma && salida.idiomaOriginal.slice(0, 2) === salida.idioma.slice(0, 2) && procedencia.idiomaOriginal?.fuente !== 'usuario') { delete salida.idiomaOriginal; delete procedencia.idiomaOriginal; }
+  // ORCID existe desde 2012: en obras anteriores a 1990 es un error de desambiguación del catálogo (C. S. Lewis con ORCID).
+  const anioObra = salida.anioOriginal ?? salida.anio;
+  if (anioObra !== undefined && anioObra < 1990 && salida.autores?.some((a) => a.orcid) && procedencia.autores?.fuente !== 'usuario') {
+    salida.autores = salida.autores.map(({ orcid: _o, ...a }) => a);
+  }
+    // Con año, la horquilla de «s. f.» sobra.
   if (salida.anio !== undefined && salida.sinFecha && procedencia.sinFecha?.fuente !== 'usuario') { delete salida.sinFecha; delete procedencia.sinFecha; }
   if (salida.titulo) salida.titulo = limpiarTitulo(salida.titulo);
   return { titulo: salida.titulo, autores: salida.autores ?? [], ...salida, procedencia };
@@ -566,7 +573,7 @@ export async function pasoMetadatos(
 
   if (usuario) candidatos.push({ fuente: 'usuario', confianza: 1, datos: usuario });
   const metadatos = fusionarMetadatos(candidatos, entrada.nombreArchivo);
-  if (metadatos.procedencia?.autores?.fuente !== 'usuario') metadatos.autores = conOrcid(metadatos.autores, orcid);
+  if (metadatos.procedencia?.autores?.fuente !== 'usuario' && (metadatos.anioOriginal ?? metadatos.anio ?? 9999) >= 1990) metadatos.autores = conOrcid(metadatos.autores, orcid);
   return { metadatos, procedencia, colofon, ...(hablantes && Object.keys(hablantes).length ? { hablantes } : {}) };
 }
 
