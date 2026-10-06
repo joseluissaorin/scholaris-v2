@@ -64,7 +64,10 @@ CREATE TABLE IF NOT EXISTS unidades (
   -- folio impreso desnormalizado para «ir a la página 145»
   impresa     TEXT,
   t0          REAL,
-  t1          REAL
+  t1          REAL,
+  -- audio y vídeo: instante de cada palabra del texto, JSON {"v":1,"t0":…,"cs":[inicio,duración,…]}
+  -- en centésimas desde t0, alineado con las palabras de «texto» sin las marcas «**Nombre:**»
+  palabras    TEXT
 );
 CREATE INDEX IF NOT EXISTS unidades_doc ON unidades(documento, orden);
 CREATE INDEX IF NOT EXISTS unidades_impresa ON unidades(documento, impresa);

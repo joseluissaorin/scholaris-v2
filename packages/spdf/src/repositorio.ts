@@ -32,6 +32,30 @@ import { bytesAFloat32, float32ABytes } from './vectores.js';
 export interface UnidadSpdf extends Unidad {
   cabecera?: string;
   pie?: string;
+  /** Audio y vídeo: el instante exacto de cada palabra del texto. */
+  palabras?: PalabrasTiempo;
+}
+
+/**
+ * Instantes por palabra de una unidad de tiempo, en forma compacta. Las palabras
+ * son las de `texto` separadas por espacios, sin las marcas de turno
+ * «**Nombre:**»; `cs` alterna inicio y duración de cada una, en centésimas de
+ * segundo desde `t0`. Una hora de entrevista ocupa unos 60 KB.
+ */
+export interface PalabrasTiempo {
+  v: 1;
+  t0: number;
+  cs: number[];
+}
+
+/** Las palabras de una unidad con su [t0, t1] en segundos. */
+export function instantesDePalabras(p: PalabrasTiempo): Array<[number, number]> {
+  const salida: Array<[number, number]> = [];
+  for (let i = 0; i + 1 < p.cs.length; i += 2) {
+    const a = Math.round(p.t0 * 100) + (p.cs[i] as number);
+    salida.push([a / 100, (a + (p.cs[i + 1] as number)) / 100]);
+  }
+  return salida;
 }
 
 export interface Seccion {
@@ -176,13 +200,14 @@ export async function escribirUnidades(sql: SQL, unidades: readonly UnidadSpdf[]
     const a = u.ancla;
     await sql.ejecutar(
       `INSERT OR REPLACE INTO unidades (id, documento, orden, ancla, texto, notas, cabecera, pie, imagen, miniatura,
-         lector, confianza, impresa, t0, t1)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         lector, confianza, impresa, t0, t1, palabras)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       u.id, u.documento, u.orden, json(a), u.texto ?? '', u.notas && u.notas.length ? json(u.notas) : null,
       u.cabecera ?? null, u.pie ?? null, u.imagen ?? null, u.miniatura ?? null, u.lector, u.confianza,
       a.tipo === 'pagina' ? a.impresa : a.tipo === 'seccion' ? (a.impresa ?? null) : null,
       a.tipo === 'tiempo' ? a.t0 : null,
       a.tipo === 'tiempo' ? a.t1 : null,
+      u.palabras ? json(u.palabras) : null,
     );
   }
 }
@@ -203,6 +228,8 @@ function filaAUnidad(f: Fila): UnidadSpdf {
   if (f.miniatura) u.miniatura = texto(f.miniatura);
   if (f.cabecera) u.cabecera = texto(f.cabecera);
   if (f.pie) u.pie = texto(f.pie);
+  const palabras = deJson<PalabrasTiempo | null>(f.palabras, null);
+  if (palabras) u.palabras = palabras;
   return u;
 }
 

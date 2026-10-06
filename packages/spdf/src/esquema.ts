@@ -80,7 +80,10 @@ CREATE TABLE IF NOT EXISTS unidades (
   -- folio impreso desnormalizado para «ir a la página 145»
   impresa     TEXT,
   t0          REAL,
-  t1          REAL
+  t1          REAL,
+  -- audio y vídeo: instante de cada palabra del texto, JSON {"v":1,"t0":…,"cs":[inicio,duración,…]}
+  -- en centésimas desde t0, alineado con las palabras de «texto» sin las marcas «**Nombre:**»
+  palabras    TEXT
 );
 CREATE INDEX IF NOT EXISTS unidades_doc ON unidades(documento, orden);
 CREATE INDEX IF NOT EXISTS unidades_impresa ON unidades(documento, impresa);
@@ -369,7 +372,17 @@ export async function rellenarTextoBusqueda(sql: SQL, opciones: { lote?: number;
  * Al terminar, rellena la capa de búsqueda de los fragmentos que no la tengan
  * (`rellenar: false` lo evita; el índice parcial lo hace barato cuando no hay nada).
  */
+/**
+ * Columna `unidades.palabras` (instantes por palabra de audio y vídeo): se añade
+ * a las bases que no la tienen. Repetirlo no hace nada.
+ */
+async function migrarPalabras(sql: SQL): Promise<void> {
+  const [t] = await sql.ejecutar<{ sql: string | null }>("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'unidades'");
+  if (t && !/\bpalabras\b/.test(t.sql ?? '')) await sql.ejecutar('ALTER TABLE unidades ADD COLUMN palabras TEXT');
+}
+
 export async function aplicarEsquema(sql: SQL, opciones: { generador?: string; rellenar?: boolean } = {}): Promise<void> {
+  await migrarPalabras(sql);
   const reconstruir = await prepararMigracion41(sql);
   // Con los disparadores quitados, rellenar la columna no toca el índice: va rápido.
   if (reconstruir && opciones.rellenar !== false) await rellenarTextoBusqueda(sql);
