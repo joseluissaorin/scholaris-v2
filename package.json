@@ -1,0 +1,24 @@
+{
+  "name": "scholaris",
+  "version": "0.2.0",
+  "private": true,
+  "description": "Scholaris: tu biblioteca, leída y citable. Un SPDF de cualquier cosa, en Cloudflare o en casa.",
+  "license": "UNLICENSED",
+  "author": "José Luis Saorín Ferrer <jl@joseluissaorin.com> (https://joseluissaorin.com)",
+  "packageManager": "pnpm@10.5.2",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "build": "pnpm -r build",
+    "test": "pnpm -r test",
+    "typecheck": "pnpm -r typecheck",
+    "dev:api": "pnpm --filter @scholaris/api dev",
+    "dev:web": "pnpm --filter @scholaris/web dev",
+    "dev:local": "pnpm --filter @scholaris/local dev",
+    "bench": "pnpm --filter @scholaris/bench start"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.0",
+    "typescript": "^5.9.0",
+    "vitest": "^3.2.0"
+  }
+}
