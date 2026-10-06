@@ -44,7 +44,7 @@ export function sqlConLimite<S extends SQL>(sql: S, max = MAX_PARAMETROS_SQL): S
         const v = Reflect.get(objetivo, clave, objetivo) as unknown;
         if (typeof v !== 'function') return v;
         if (clave === 'ejecutar') {
-          return (consulta: string, ...p: ValorSQL[]) => { comprobarParametros(consulta, p, max); return objetivo.ejecutar(consulta, ...p); };
+          return async (consulta: string, ...p: ValorSQL[]) => { comprobarParametros(consulta, p, max); return objetivo.ejecutar(consulta, ...p); };
         }
         if (clave === 'ejecutarSync') {
           return (consulta: string, p: readonly ValorSQL[] = []) => { comprobarParametros(consulta, p, max); return (v as (c: string, p: readonly ValorSQL[]) => unknown).call(objetivo, consulta, p); };

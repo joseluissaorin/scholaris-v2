@@ -5,6 +5,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import {
   normalizarVector,
+  sqlConLimite,
   vectorABytes,
   type Ancla,
   type Embebedor,
@@ -55,7 +56,8 @@ export function sqlMemoria(db = new Database(':memory:')): SQL & { db: Database.
       }
     },
   };
-  return sql;
+  // Como D1 y los Durable Objects: más de 100 parámetros en una sentencia es un error.
+  return sqlConLimite(sql);
 }
 
 /** Estantería vacía con el esquema SPDF 4.1 y el de las funciones. */

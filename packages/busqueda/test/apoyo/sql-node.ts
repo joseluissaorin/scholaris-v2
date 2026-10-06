@@ -2,7 +2,7 @@
 import { readFileSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import { fileURLToPath } from 'node:url';
-import type { SQL, ValorSQL } from '@scholaris/nucleo';
+import { sqlConLimite, type SQL, type ValorSQL } from '@scholaris/nucleo';
 
 const ESQUEMA = fileURLToPath(new URL('../../../spdf/esquema/v4.1.sql', import.meta.url));
 
@@ -27,5 +27,6 @@ export function crearSQL(): SQLMedido {
       try { const r = await fn(sql); bd.exec('COMMIT'); return r; } catch (e) { bd.exec('ROLLBACK'); throw e; }
     },
   };
-  return sql;
+  // Como D1 y los Durable Objects: más de 100 parámetros en una sentencia es un error.
+  return sqlConLimite(sql);
 }

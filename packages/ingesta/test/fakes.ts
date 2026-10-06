@@ -1,5 +1,5 @@
 /** Fakes de los puertos y constructores de paquetes para las pruebas. */
-import type { Embebedor, Inteligencia, Lector, PaginaLeida, Redactor, SQL, Transcriptor, ValorSQL } from '@scholaris/nucleo';
+import { comprobarParametros, sqlConLimite, type Embebedor, type Inteligencia, type Lector, type PaginaLeida, type Redactor, type SQL, type Transcriptor, type ValorSQL } from '@scholaris/nucleo';
 import type { PaginaPdf, PaqueteConversion } from '@scholaris/imprenta';
 import type { FuentePaquete } from '../src/tipos.js';
 
@@ -83,6 +83,7 @@ export function inteligenciaFalsa(over: Partial<Inteligencia> = {}): Inteligenci
 export class SqlFalso implements SQL {
   filas: Record<string, ValorSQL[][]> = {};
   async ejecutar<T>(consulta: string, ...p: ValorSQL[]): Promise<T[]> {
+    comprobarParametros(consulta, p);
     if (/SELECT dims FROM espacios/.test(consulta)) return [{ dims: 4 } as T];
     const m = /INSERT (?:OR \w+ )?INTO (\w+)/.exec(consulta);
     if (m) (this.filas[m[1] as string] ??= []).push(p);
@@ -95,6 +96,8 @@ export class SqlFalso implements SQL {
 export async function baseReal() {
   const { crearSpdf } = await import('@scholaris/spdf');
   const archivo = await crearSpdf();
-  const filas = async <T = Record<string, unknown>>(q: string, ...p: Array<string | number | null>) => archivo.sql.ejecutar<T>(q, ...p);
-  return { archivo, sql: archivo.sql, filas };
+  // Como D1 y los Durable Objects: más de 100 parámetros en una sentencia es un error.
+  const sql = sqlConLimite(archivo.sql);
+  const filas = async <T = Record<string, unknown>>(q: string, ...p: Array<string | number | null>) => sql.ejecutar<T>(q, ...p);
+  return { archivo, sql, filas };
 }
