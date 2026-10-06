@@ -104,11 +104,10 @@ export function parametrosCurva(distanciaMinima: number, extension = 1): { a: nu
   return { a: mejor.a, b: mejor.b };
 }
 
-/** Grafo difuso de UMAP, simetrizado: aristas (i, j, peso). */
+/** Grafo difuso de UMAP, simetrizado: aristas (i, j, peso). Sin mapas: todo en arrays planos. */
 export function grafoDifuso(indices: Int32Array, distancias: Float32Array, n: number, K: number) {
   const objetivo = Math.log2(K);
-  const pesos = new Map<number, number>(); // clave i * n + j con i < j
-  const filas: Array<Map<number, number>> = Array.from({ length: n }, () => new Map());
+  const pesos = new Float32Array(n * K);
   for (let i = 0; i < n; i++) {
     const base = i * K;
     let rho = 0;
@@ -126,25 +125,30 @@ export function grafoDifuso(indices: Int32Array, distancias: Float32Array, n: nu
       else { lo = sigma; sigma = hi === Infinity ? sigma * 2 : (lo + hi) / 2; }
     }
     for (let t = 0; t < K; t++) {
+      if (indices[base + t]! < 0) continue;
+      const dd = distancias[base + t]! - rho;
+      pesos[base + t] = dd > 0 ? Math.exp(-dd / sigma) : 1;
+    }
+  }
+  const peso = (i: number, j: number) => {
+    const base = i * K;
+    for (let t = 0; t < K; t++) if (indices[base + t] === j) return pesos[base + t]!;
+    return 0;
+  };
+  const origen: number[] = [], destino: number[] = [], w: number[] = [];
+  for (let i = 0; i < n; i++) {
+    const base = i * K;
+    for (let t = 0; t < K; t++) {
       const j = indices[base + t]!;
       if (j < 0) continue;
-      const dd = distancias[base + t]! - rho;
-      filas[i]!.set(j, dd > 0 ? Math.exp(-dd / sigma) : 1);
+      const wji = peso(j, i);
+      // La arista i–j se añade una sola vez: desde el menor si son vecinos mutuos.
+      if (wji > 0 && j < i) continue;
+      const wij = pesos[base + t]!;
+      origen.push(i); destino.push(j); w.push(wij + wji - wij * wji);
     }
   }
-  for (let i = 0; i < n; i++) {
-    for (const [j, w] of filas[i]!) {
-      const a = Math.min(i, j), b = Math.max(i, j);
-      const clave = a * n + b;
-      if (pesos.has(clave)) continue;
-      const w2 = filas[j]!.get(i) ?? 0;
-      pesos.set(clave, w + w2 - w * w2);
-    }
-  }
-  const origen = new Int32Array(pesos.size), destino = new Int32Array(pesos.size), peso = new Float32Array(pesos.size);
-  let e = 0;
-  for (const [clave, w] of pesos) { origen[e] = Math.floor(clave / n); destino[e] = clave % n; peso[e] = w; e++; }
-  return { origen, destino, peso };
+  return { origen: Int32Array.from(origen), destino: Int32Array.from(destino), peso: Float32Array.from(w) };
 }
 
 /** Optimiza la disposición 2D (modifica `xy`, n × 2). */
@@ -155,7 +159,7 @@ export function optimizarDisposicion(
   o: OpcionesUMAP = {},
 ): void {
   const { a, b } = parametrosCurva(o.distanciaMinima ?? 0.1);
-  const epocas = o.epocas ?? (n > 10000 ? 120 : 200);
+  const epocas = o.epocas ?? (n > 5000 ? 150 : 200);
   const negativos = o.negativos ?? 5;
   const azar = aleatorio(o.semilla ?? 11);
   const E = grafo.peso.length;
