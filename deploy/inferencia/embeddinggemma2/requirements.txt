@@ -1,0 +1,9 @@
+# EmbeddingGemma 2 necesita sentence-transformers >= 6.1 (orden de las entradas multimodales)
+torch>=2.6
+sentence-transformers[image,audio,video]>=6.1.0
+transformers>=5.18
+torchcodec>=0.17
+soundfile
+pillow
+fastapi
+uvicorn

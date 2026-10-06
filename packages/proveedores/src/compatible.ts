@@ -60,6 +60,12 @@ export interface ConfigCompatible extends OpcionesComunes {
   urlTranscripcion?: string;
   /** Servidor de reordenación aparte (llama.cpp con --reranking, Infinity…). */
   urlReordenador?: string;
+  /**
+   * Servidor de vectores aparte con el contrato `/v1/embed` de InferBox
+   * (deploy/inferencia/embeddinggemma2): EmbeddingGemma 2 con texto, imagen,
+   * audio y vídeo en un solo espacio. Ollama solo lo sirve para texto.
+   */
+  urlEmbebedor?: string;
   /** PDF → imágenes de página (los modelos de visión no leen PDF). La versión local da uno con pdf.js. */
   rasterizar?: (pdf: Uint8Array) => Promise<Array<{ bytes: Uint8Array; mime: string }>>;
   /** Contexto máximo del estado del juez, en caracteres. */
@@ -96,7 +102,7 @@ const PREFIJOS: Array<{ re: RegExp; documento: string; consulta: string }> = [
 
 /** Modelos por defecto de cada sabor (los que se han probado; ver SIN-CONEXION.md). */
 export const MODELOS_POR_DEFECTO: Record<SaborServidor, Required<Omit<ModelosCompatibles, 'redactor' | 'juez'>>> = {
-  inferbox: { lector: 'qwen2.5-vl-7b', embebedor: 'qwen3-vl-embed', reordenador: 'bge-reranker', transcriptor: '' },
+  inferbox: { lector: 'qwen2.5-vl-7b', embebedor: 'embeddinggemma-2', reordenador: 'bge-reranker', transcriptor: '' },
   ollama: { lector: 'qwen2.5vl:7b', embebedor: 'embeddinggemma-2', reordenador: '', transcriptor: 'whisper-1' },
   llamacpp: { lector: '', embebedor: '', reordenador: '', transcriptor: 'whisper-1' },
   vllm: { lector: 'Qwen/Qwen2.5-VL-7B-Instruct', embebedor: 'BAAI/bge-m3', reordenador: 'BAAI/bge-reranker-v2-m3', transcriptor: 'openai/whisper-large-v3-turbo' },
@@ -275,8 +281,13 @@ export function crearOpenAICompatible(config: ConfigCompatible): ClienteCompatib
   // -------------------------------------------------------------------------
 
   function embebedor(o: { modelo?: string; dims?: number } = {}): Embebedor {
-    if (ib && !o.modelo) return ib.embebedor();
     const modelo = o.modelo ?? modelos.embebedor;
+    // Qwen3-VL de InferBox: el espacio de los SPDF v3 (2048, texto e imagen).
+    if (ib && /qwen3-vl/i.test(modelo)) return ib.embebedor(o.modelo ? { modelo: o.modelo } : {});
+    // EmbeddingGemma 2 multimodal por /v1/embed (InferBox o el servidor propio).
+    if (/(^|\/)embeddinggemma-2(:|$)/i.test(modelo) && (config.urlEmbebedor || sabor === 'inferbox')) {
+      return embebedorEG2((config.urlEmbebedor ?? config.url).replace(/\/v1\/?$/, '').replace(/\/+$/, ''), o.dims ?? config.dims ?? 768, sabor === 'inferbox' && !config.urlEmbebedor ? modelo : undefined);
+    }
     if (!modelo) throw new ErrorProveedor(prov, 'falta el modelo del embebedor (INFERENCIA_MODELO_EMBEBEDOR)');
     const dims = o.dims ?? config.dims ?? dimensionesDe(modelo);
     if (!dims) throw new ErrorProveedor(prov, `no sé cuántas dimensiones tiene «${modelo}»: pon INFERENCIA_DIMS`);
@@ -310,6 +321,53 @@ export function crearOpenAICompatible(config: ConfigCompatible): ClienteCompatib
             salida[idx[d.index ?? k] as number] = normalizarVector(v);
           });
           apuntar({ proveedor: prov, modelo, operacion: 'vectorizar', tokensEntrada: r.usage?.prompt_tokens ?? 0, tokensSalida: 0, usd: 0, ms: ahora() - t0 });
+        });
+        return salida;
+      },
+    };
+  }
+
+  /** EmbeddingGemma 2 con todas sus modalidades: un elemento por pieza, prefijo de tarea solo en el texto solo. */
+  function embebedorEG2(raiz: string, dims: number, modeloIB?: string): Embebedor {
+    if (![768, 512, 256, 128].includes(dims)) throw new ErrorProveedor(prov, `embeddinggemma-2 admite 768, 512, 256 o 128 dimensiones, no ${dims}`);
+    const espacio: EspacioVectorial = { id: `embeddinggemma-2@${dims}`, proveedor: prov, modelo: 'embeddinggemma-2', dims, normalizado: true, modalidades: ['texto', 'imagen', 'audio', 'video'] };
+    const lote = 8;
+    return {
+      espacio,
+      admite: (m) => m === 'texto' || m === 'imagen' || m === 'audio' || m === 'video',
+      async vectorizar(piezas, tarea) {
+        const salida = new Array<Float32Array>(piezas.length);
+        const grupos: number[][] = [];
+        for (let i = 0; i < piezas.length; i += lote) grupos.push(Array.from({ length: Math.min(lote, piezas.length - i) }, (_, k) => i + k));
+        await enParalelo(grupos, 2, async (idx) => {
+          const t0 = ahora();
+          const input: string[] = [], images: Array<string | null> = [], audio: Array<string | null> = [], video: Array<string | null> = [];
+          let medios = 0;
+          for (const i of idx) {
+            const p = piezas[i] as PiezaEmbebible;
+            if (p.modalidad === 'pdf') throw new ErrorProveedor(prov, 'embeddinggemma-2 no vectoriza PDF: pasa las páginas como imágenes');
+            const b64 = p.modalidad === 'texto' ? null : `data:${normalizarMime(p.mime)};base64,${aBase64(p.bytes)}`;
+            if (b64) medios++;
+            input.push(p.modalidad === 'texto' ? p.texto : '');
+            images.push(p.modalidad === 'imagen' ? b64 : null);
+            audio.push(p.modalidad === 'audio' ? b64 : null);
+            video.push(p.modalidad === 'video' ? b64 : null);
+          }
+          const cuerpo: Record<string, unknown> = { input, task: tarea === 'consulta' ? 'consulta' : 'documento', dimensions: dims };
+          if (images.some(Boolean)) cuerpo.images = images;
+          if (audio.some(Boolean)) cuerpo.audio = audio;
+          if (video.some(Boolean)) cuerpo.video = video;
+          if (modeloIB) cuerpo.model = modeloIB;
+          const r = await limitar(() => pedir<{ embeddings?: number[][] }>({ proveedor: prov, url: `${raiz}/v1/embed`, cabeceras, cuerpo }, op));
+          const emb = r.embeddings ?? [];
+          if (emb.length !== idx.length) throw new ErrorProveedor(prov, `/v1/embed devolvió ${emb.length} vectores para ${idx.length} piezas`);
+          idx.forEach((i, k) => {
+            let v = Float32Array.from(emb[k] as number[]);
+            if (v.length > dims) v = v.slice(0, dims);
+            if (v.length !== dims) throw new ErrorProveedor(prov, `embeddinggemma-2 devolvió ${v.length} dimensiones y se esperaban ${dims}`);
+            salida[i] = normalizarVector(v);
+          });
+          apuntar({ proveedor: prov, modelo: 'embeddinggemma-2', operacion: 'vectorizar', tokensEntrada: 0, tokensSalida: 0, imagenes: medios, usd: 0, ms: ahora() - t0 });
         });
         return salida;
       },

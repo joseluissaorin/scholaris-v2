@@ -191,11 +191,32 @@ describe('modo sin conexión', () => {
       if (ll.url.endsWith('/v1/rerank')) return { results: [{ index: 0, score: 0.7 }] };
       return {};
     });
-    const ia = crearInteligenciaSinConexion({ SCHOLARIS_SIN_CONEXION: '1', INFERBOX_URL: 'http://192.168.1.102:8811', INFERBOX_API_KEY: 'k' }, { fetch });
+    const ia = crearInteligenciaSinConexion({ SCHOLARIS_SIN_CONEXION: '1', INFERBOX_URL: 'http://192.168.1.102:8811', INFERBOX_API_KEY: 'k', INFERENCIA_MODELO_EMBEBEDOR: 'qwen3-vl-embed' }, { fetch });
     expect(ia.embebedor.espacio.id).toBe('qwen3-vl-embedding-2b@2048');
     await ia.embebedor.vectorizar([{ modalidad: 'texto', texto: 'x' }], 'consulta');
     expect(await ia.reordenador.reordenar('q', ['a'])).toEqual([0.7]);
     expect(llamadas.map((l) => l.url)).toEqual(['http://192.168.1.102:8811/v1/embed', 'http://192.168.1.102:8811/v1/rerank']);
     expect(llamadas[0]!.cabeceras['x-api-key']).toBe('k');
+  });
+
+  it('EmbeddingGemma 2 multimodal por /v1/embed: texto, imagen, audio y vídeo en un espacio, tarea solo en el texto', async () => {
+    const { fetch, llamadas } = fetchFalso((ll) => ({ embeddings: (ll.cuerpo as { input: string[] }).input.map(() => Array.from({ length: 768 }, () => 1)) }));
+    const ia = crearInteligenciaSinConexion({ SCHOLARIS_SIN_CONEXION: '1', INFERENCIA_URL: 'http://localhost:11434', INFERENCIA_EMBEBEDOR_URL: 'http://localhost:8812' }, { fetch });
+    expect(ia.embebedor.espacio).toMatchObject({ id: 'embeddinggemma-2@768', modalidades: ['texto', 'imagen', 'audio', 'video'] });
+    const v = await ia.embebedor.vectorizar([
+      { modalidad: 'texto', texto: 'golondrinas' },
+      { modalidad: 'imagen', bytes: new Uint8Array([0xff, 0xd8, 0xff]), mime: 'image/jpeg' },
+      { modalidad: 'audio', bytes: new Uint8Array([1]), mime: 'audio/mpeg' },
+      { modalidad: 'video', bytes: new Uint8Array([2]), mime: 'video/mp4' },
+    ], 'consulta');
+    expect(v).toHaveLength(4);
+    expect(llamadas[0]!.url).toBe('http://localhost:8812/v1/embed');
+    const c = llamadas[0]!.cuerpo as { input: string[]; images: Array<string | null>; audio: Array<string | null>; video: Array<string | null>; task: string };
+    expect(c.task).toBe('consulta');
+    expect(c.input).toEqual(['golondrinas', '', '', '']);
+    expect(c.images[1]).toMatch(/^data:image\/jpeg;base64,/);
+    expect(c.audio[2]).toMatch(/^data:audio\/mpeg;base64,/);
+    expect(c.video[3]).toMatch(/^data:video\/mp4;base64,/);
+    expect(() => configuracionSinConexion({ INFERENCIA_URL: 'http://localhost:11434', INFERENCIA_EMBEBEDOR_URL: 'https://embed.example.com' })).toThrow(/no es una dirección local/);
   });
 });

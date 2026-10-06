@@ -6,7 +6,8 @@
  * híbrida léxica + densa, con los mismos juicios. Gemini Embedding 2 usa los
  * vectores que ya traen los SPDF (y las consultas en caché).
  *
- *   --modelos ollama:embeddinggemma-2,ollama:embeddinggemma-2@256,ollama:bge-m3,inferbox:qwen3-vl-embed
+ *   --modelos ollama:embeddinggemma-2,ollama:embeddinggemma-2@256,ollama:bge-m3,inferbox:qwen3-vl-embed,servidor:embeddinggemma-2
+ *   --servidor http://localhost:8812     (INFERENCIA_EMBEBEDOR_URL: EmbeddingGemma 2 multimodal)
  *   --ollama http://localhost:11434     (OLLAMA_URL)
  *   --inferbox http://192.168.1.102:8811 (INFERBOX_URL, INFERBOX_API_KEY)
  *
@@ -40,6 +41,8 @@ export async function embebedores(args: string[]): Promise<void> {
   const lista = (arg(args, 'modelos') ?? 'gemini,ollama:embeddinggemma-2,ollama:embeddinggemma-2@256,ollama:bge-m3').split(',').map((x) => x.trim()).filter(Boolean);
   const urlOllama = arg(args, 'ollama') ?? process.env.OLLAMA_URL ?? 'http://localhost:11434';
   const urlInferbox = arg(args, 'inferbox') ?? process.env.INFERBOX_URL ?? 'http://192.168.1.102:8811';
+  // «servidor:embeddinggemma-2»: el servidor multimodal de deploy/inferencia/embeddinggemma2.
+  const urlServidor = arg(args, 'servidor') ?? process.env.INFERENCIA_EMBEBEDOR_URL ?? 'http://localhost:8812';
   const copia = join(DIR_DATOS_CALIDAD, 'estanteria-embebedores.sqlite');
   const sql = abrirEstanteria(copia);
   const consultas = cargarConsultas();
@@ -56,14 +59,16 @@ export async function embebedores(args: string[]): Promise<void> {
       const ia = crearInteligencia({ GEMINI_API_KEY: env.GEMINI_API_KEY ?? 'sin-clave' }, {});
       embebedor = embebedorConCache(ia.embebedor);
     } else {
-      const [sabor, resto] = nombre.split(':') as [SaborServidor, string];
+      const [saborDado, resto] = nombre.split(':') as [SaborServidor | 'servidor', string];
+      const sabor: SaborServidor = saborDado === 'servidor' ? 'generico' : saborDado;
       const [modelo, dimsTxt] = resto.split('@') as [string, string | undefined];
       const c = crearOpenAICompatible({
         url: sabor === 'inferbox' ? urlInferbox : urlOllama, sabor,
+        ...(saborDado === 'servidor' ? { urlEmbebedor: urlServidor } : {}),
         ...(sabor === 'inferbox' ? { clave: process.env.INFERBOX_API_KEY ?? cargarEntorno([]).INFERBOX_API_KEY ?? '' } : {}),
         modelos: { embebedor: modelo }, ...(dimsTxt ? { dims: Number(dimsTxt) } : {}), concurrencia: 4,
       });
-      embebedor = sabor === 'inferbox' ? c.embebedor() : c.embebedor({ modelo });
+      embebedor = c.embebedor({ modelo });
       propio = true;
       // Revectorizar los fragmentos en un espacio propio.
       await sql.ejecutar('DELETE FROM vectores WHERE espacio = ?', embebedor.espacio.id);

@@ -10,8 +10,9 @@
  *   INFERENCIA_MODELO_LECTOR=qwen2.5vl:7b
  *   INFERENCIA_MODELO_REDACTOR=…                 (por defecto, el del lector)
  *   INFERENCIA_MODELO_JUEZ=…                     (por defecto, el del redactor)
- *   INFERENCIA_MODELO_EMBEBEDOR=bge-m3
- *   INFERENCIA_DIMS=1024                         (si el embebedor no está en la tabla)
+ *   INFERENCIA_MODELO_EMBEBEDOR=embeddinggemma-2 (por defecto; o bge-m3, qwen3-vl-embed…)
+ *   INFERENCIA_EMBEBEDOR_URL=http://localhost:8812 (EmbeddingGemma 2 multimodal: deploy/inferencia/embeddinggemma2)
+ *   INFERENCIA_DIMS=768                          (Matryoshka 768/512/256/128; o las del embebedor si no está en la tabla)
  *   INFERENCIA_MODELO_REORDENADOR=…
  *   INFERENCIA_TRANSCRIPCION_URL=http://localhost:8000   (whisper aparte, opcional)
  *   INFERENCIA_MODELO_TRANSCRIPTOR=…
@@ -42,6 +43,7 @@ export interface EntornoSinConexion {
   INFERENCIA_DIMS?: string;
   INFERENCIA_TRANSCRIPCION_URL?: string;
   INFERENCIA_REORDENADOR_URL?: string;
+  INFERENCIA_EMBEBEDOR_URL?: string;
   INFERENCIA_CONCURRENCIA?: string;
   INFERBOX_URL?: string;
   INFERBOX_API_KEY?: string;
@@ -113,7 +115,8 @@ export function configuracionSinConexion(env: EntornoSinConexion): Configuracion
   const sabor = (s(env.INFERENCIA_SABOR) as SaborServidor | undefined) ?? (s(env.INFERENCIA_URL) ? deducirSabor(url) : 'inferbox');
   const urlTranscripcion = s(env.INFERENCIA_TRANSCRIPCION_URL);
   const urlReordenador = s(env.INFERENCIA_REORDENADOR_URL);
-  for (const [nombre, u] of [['INFERENCIA_URL', url], ['INFERENCIA_TRANSCRIPCION_URL', urlTranscripcion], ['INFERENCIA_REORDENADOR_URL', urlReordenador]] as const) {
+  const urlEmbebedor = s(env.INFERENCIA_EMBEBEDOR_URL);
+  for (const [nombre, u] of [['INFERENCIA_URL', url], ['INFERENCIA_TRANSCRIPCION_URL', urlTranscripcion], ['INFERENCIA_REORDENADOR_URL', urlReordenador], ['INFERENCIA_EMBEBEDOR_URL', urlEmbebedor]] as const) {
     if (u && !esUrlLocal(u, permitidos)) {
       throw new Error(`Modo sin conexión: ${nombre}=${u} no es una dirección local. Usa localhost, una IP privada o un nombre de la red de casa (o añádelo a SCHOLARIS_SIN_CONEXION_PERMITIR si sabes lo que haces).`);
     }
@@ -126,6 +129,7 @@ export function configuracionSinConexion(env: EntornoSinConexion): Configuracion
     ...(clave ? { clave } : {}),
     ...(urlTranscripcion ? { urlTranscripcion } : {}),
     ...(urlReordenador ? { urlReordenador } : {}),
+    ...(urlEmbebedor ? { urlEmbebedor } : {}),
     ...(Number.isFinite(dims) && dims > 0 ? { dims } : {}),
     ...(Number.isFinite(concurrencia) && concurrencia > 0 ? { concurrencia } : {}),
     modelos: {
