@@ -16,7 +16,7 @@ import type {
   CompletarSubida, IngestaIniciada, Ingestar, NuevaSubida, PedirRecursos, RecursosFirmados, SubidaCreada, SubidaUrl, UrlsPartes,
 } from './subidas.js';
 import type {
-  DetalleDocumento, FiguraVista, FiltrosDocumentos, FragmentoVista, ImportacionSpdf, MapaFolios, ParcheMetadatos,
+  DetalleDocumento, FiguraVista, FiltrosDocumentos, FoliosRehechos, FragmentoVista, ImportacionSpdf, MapaFolios, ParcheMetadatos, RehacerFolios,
   Reprocesar, ResumenDocumento, SeccionVista, UnidadVista, VolcadoDocumento,
 } from './documentos.js';
 import type { AnadirDocumentos, Biblioteca, Compartir, Miembro, NuevaBiblioteca } from './bibliotecas.js';
@@ -166,6 +166,8 @@ export function crearCliente(opciones: OpcionesCliente) {
       obtener: (id: string) => get<DetalleDocumento>(`/documentos/${e(id)}`),
       metadatos: (id: string, p: ParcheMetadatos) => patch<DetalleDocumento>(`/documentos/${e(id)}/metadatos`, p),
       rehacerMetadatos: (id: string) => post<DetalleDocumento>(`/documentos/${e(id)}/metadatos/rehacer`),
+      /** Recalcula los folios desde las unidades guardadas, sin volver a leer el documento. */
+      rehacerFolios: (id: string, p: RehacerFolios = {}) => post<FoliosRehechos>(`/documentos/${e(id)}/folios/rehacer`, p),
       borrar: (id: string) => del(`/documentos/${e(id)}`),
       reprocesar: (id: string, p: Reprocesar = {}) => post<IngestaIniciada>(`/documentos/${e(id)}/reprocesar`, p),
       reintentar: (id: string) => post<IngestaIniciada>(`/documentos/${e(id)}/reintentar`),

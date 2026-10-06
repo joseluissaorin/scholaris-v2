@@ -8,6 +8,7 @@ import { describe, expect, it } from 'vitest';
 import { importJWK, SignJWT } from 'jose';
 import type { PaqueteConversion } from '@scholaris/imprenta';
 import { JWK_PRIVADA } from './clave-prueba.js';
+import { SPDF_FOLIOS_B64 } from './spdf-folios.js';
 
 const BASE = 'https://scholaris.prueba/api/v2';
 
@@ -233,6 +234,43 @@ describe('subida → ingesta → búsqueda', () => {
     expect(c.estado).toBe(200);
     const cab = await env.BUCKET.head(s.cuerpo.original.clave);
     expect(cab?.size).toBe(tam + 1024);
+  });
+});
+
+describe('rehacer folios sin releer', () => {
+  it('quita los folios inventados de las guardas en blanco y reancla los fragmentos', async () => {
+    const t = await token('user_folios', { fea: 'u:scholaris' });
+    const bytes = Uint8Array.from(atob(SPDF_FOLIOS_B64), (ch) => ch.charCodeAt(0));
+    const imp = await api('/documentos/importar', { token: t, cuerpo: bytes, cabeceras: { 'content-type': 'application/x-spdf' } });
+    expect(imp.estado).toBe(201);
+    const id = imp.cuerpo.documento as string;
+    // La importación sin vectores del espacio actual lanza una tarea (vectores, indexado): mientras, no se rehace.
+    if (imp.cuerpo.tarea) {
+      expect((await api(`/documentos/${id}/folios/rehacer`, { token: t, cuerpo: {} })).estado).toBe(409);
+      expect((await esperarTarea(t, imp.cuerpo.tarea)).estado).toBe('listo');
+    }
+    const folio = async (fisica: number) => ((await api(`/documentos/${id}/folios`, { token: t })).cuerpo.folios as Array<{ fisica?: number; impresa: string | null }>).find((f) => f.fisica === fisica)?.impresa;
+    expect(await folio(10)).toBe('9');
+
+    const sim = await api(`/documentos/${id}/folios/rehacer`, { token: t, cuerpo: { juez: false, simular: true } });
+    expect(sim.estado).toBe(200);
+    expect(sim.cuerpo).toMatchObject({ simulado: true, unidades: 12, cambiadas: 3, fuente: 'secuencia' });
+    expect(await folio(10)).toBe('9');
+
+    const r = await api(`/documentos/${id}/folios/rehacer`, { token: t, cuerpo: { juez: false } });
+    expect(r.estado).toBe(200);
+    expect(r.cuerpo.cambios).toEqual(['10: 9 → —', '11: 10 → —', '12: 11 → —']);
+    expect(r.cuerpo.fragmentos).toBe(1);
+    expect(await folio(9)).toBe('8');
+    expect(await folio(10)).toBeNull();
+    const fr = await api(`/documentos/${id}/fragmentos`, { token: t });
+    expect(fr.cuerpo[0].anclaFin.impresa).toBeNull();
+
+    // Idempotente; y un documento ajeno o inexistente da 404.
+    expect((await api(`/documentos/${id}/folios/rehacer`, { token: t, cuerpo: { juez: false } })).cuerpo.actualizadas).toBe(0);
+    expect((await api('/documentos/no-existe/folios/rehacer', { token: t, cuerpo: {} })).estado).toBe(404);
+    const otro = await token('user_folios_otro', { fea: 'u:scholaris' });
+    expect((await api(`/documentos/${id}/folios/rehacer`, { token: otro, cuerpo: {} })).estado).toBe(404);
   });
 });
 

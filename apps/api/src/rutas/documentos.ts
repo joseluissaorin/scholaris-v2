@@ -3,12 +3,12 @@ import type { Hono } from 'hono';
 import type { Ancla, Documento, MetadatosDocumento, ValorSQL } from '@scholaris/nucleo';
 import { vectorABytes } from '@scholaris/nucleo';
 import type {
-  DetalleDocumento, FiguraVista, FragmentoVista, MapaFolios, Pagina, ParcheMetadatos, Reprocesar, ResumenDocumento, SeccionVista,
+  DetalleDocumento, FiguraVista, FoliosRehechos, FragmentoVista, MapaFolios, Pagina, ParcheMetadatos, RehacerFolios, Reprocesar, ResumenDocumento, SeccionVista,
   UnidadVista, VolcadoDocumento,
 } from '@scholaris/contrato';
 import {
   autoresPlanos, escribirDocumento, leerDocumento, leerEspacios, leerFiguras, leerProcedencia, leerSecciones, leerUnidades,
-  leerVectores, filaAFragmento, borrarDocumento,
+  leerVectores, filaAFragmento, borrarDocumento, rehacerFolios,
 } from '@scholaris/spdf';
 import type { Entorno } from '../entorno.js';
 import { cuerpoJson, exigir, fallo, noEncontrado } from '../compartido/errores.js';
@@ -174,6 +174,24 @@ export function rutasDocumentos(app: Hono<Entorno>): void {
     await escribirDocumento(p.sql, { ...d, metadatos: r.metadatos, actualizado: ahora() });
     const nuevo = (await leerDocumento(p.sql, d.id))!;
     return c.json({ ...nuevo, espacios: [], cuentas: { fragmentos: 0, secciones: 0, figuras: 0 } } satisfies DetalleDocumento);
+  });
+
+  // Rehace solo los folios (sin volver a leer): desde las unidades guardadas, con el juez para las páginas dudosas.
+  // Repara documentos ingeridos antes de una mejora de @scholaris/folios (guardas, cubiertas, etiquetas del PDF…).
+  app.post('/documentos/:id/folios/rehacer', async (c: Ctx) => {
+    exigirEscritura(c);
+    const p = puertos(c);
+    const d = await documentoOError(p, prm(c, 'id'));
+    if (await tareaDeDocumento(p.sql, d.id)) fallo('conflicto', 'El documento se está procesando: espera a que termine.');
+    const b = await cuerpoJson<RehacerFolios>(c);
+    exigir(b && typeof b === 'object' && !Array.isArray(b), 'Manda un objeto: { juez?, simular? }.');
+    const juez = b.juez === false ? undefined : (await p.inteligencia()).juez;
+    const r = await rehacerFolios(p.sql, d.id, { ...(juez ? { juez } : {}), ...(b.simular ? { simular: true } : {}) });
+    if (!b.simular && r.actualizadas) {
+      await escribirDocumento(p.sql, { ...d, actualizado: ahora() });
+      invalidarBuscador(p.sql);
+    }
+    return c.json({ ...r, simulado: !!b.simular } satisfies FoliosRehechos);
   });
 
   app.delete('/documentos/:id', async (c: Ctx) => {

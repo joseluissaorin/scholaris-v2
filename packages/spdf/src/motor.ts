@@ -152,7 +152,7 @@ function sustituirModulo(puentes: Record<string, WebAssembly.Module>): () => voi
   const Sustituto = function (this: unknown, fuente: BufferSource) {
     const clave = clavePuente(fuente);
     const m = clave ? puentes[clave] : undefined;
-    return m ?? new Original(fuente);
+    return m ?? new (Original as unknown as new (b: BufferSource) => WebAssembly.Module)(fuente);
   } as unknown as ConstructorModulo;
   Object.setPrototypeOf(Sustituto, Original);
   (Sustituto as unknown as { prototype: unknown }).prototype = Original.prototype;

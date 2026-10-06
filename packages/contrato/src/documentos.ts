@@ -5,6 +5,7 @@
  *   GET    /documentos/:id                        → DetalleDocumento
  *   PATCH  /documentos/:id/metadatos  Partial<MetadatosDocumento> → DetalleDocumento
  *   POST   /documentos/:id/metadatos/rehacer   → DetalleDocumento  (solo la ficha, sin releer; respeta lo que editó el usuario)
+ *   POST   /documentos/:id/folios/rehacer  { juez?, simular? } → FoliosRehechos  (solo los folios, sin releer: desde las unidades guardadas)
  *   DELETE /documentos/:id                        → Ok
  *   POST   /documentos/:id/reprocesar  { fases? } → IngestaIniciada
  *   POST   /documentos/:id/reintentar             → IngestaIniciada  (tras un error: reaprovecha original, paquete y lecturas ya hechas)
@@ -22,6 +23,15 @@
  *   GET    /documentos/:id/volcado                 → VolcadoDocumento  (para armar el .spdf en el navegador)
  *   GET    /documentos/:id/spdf                    → application/x-spdf (reserva: lo arma el servidor)
  *   POST   /documentos/importar   cuerpo binario .spdf (v3 o v4) → ImportacionSpdf
+ *
+ * Importación por el almacén (.spdf grandes, sin límite de memoria del servidor):
+ *   1. POST /documentos/importar/recursos  ImportarRecursos → RecursosFirmados
+ *      firma la subida de los binarios (original, páginas…) bajo el prefijo del
+ *      documento; los de más de 64 MB van por partes:
+ *        POST /documentos/importar/partes     PedirPartesImportacion → UrlsPartes
+ *        POST /documentos/importar/completar  CompletarPartesImportacion → { ok }
+ *   2. POST /documentos/importar con un .spdf ligero (sin blobs) cuyas
+ *      referencias son las claves completas ya subidas («u/<usuario>/d/<id>/…»).
  *
  *   GET    /binarios?clave=&exp=&sig=              → binario firmado (con Range). Lo generan las URLs `…Url`.
  *
@@ -114,6 +124,34 @@ export interface UnidadVista {
   confianza: number;
 }
 
+/** Cuerpo de `POST /documentos/:id/folios/rehacer`. */
+export interface RehacerFolios {
+  /** Preguntar al juez las páginas dudosas (por defecto, sí). */
+  juez?: boolean;
+  /** Calcular y contar los cambios sin escribirlos. */
+  simular?: boolean;
+}
+
+/** Resultado de rehacer los folios de un documento. */
+export interface FoliosRehechos {
+  documento: string;
+  /** Unidades de página (0 en audio, vídeo o documentos por secciones: no hay folios que rehacer). */
+  unidades: number;
+  /** Páginas cuyo folio impreso cambió. */
+  cambiadas: number;
+  /** Anclas reescritas (folio, origen o confianza). */
+  actualizadas: number;
+  fragmentos: number;
+  figuras: number;
+  /** De dónde salió la numeración: lecturas en secuencia o etiquetas del PDF. */
+  fuente: 'secuencia' | 'etiquetas' | null;
+  estrategia: 'leido' | 'deducido' | 'ninguno' | null;
+  /** «física: antes → después» (los 50 primeros). */
+  cambios: string[];
+  avisos: string[];
+  simulado: boolean;
+}
+
 export interface MapaFolios {
   /** Una entrada por unidad: física → impresa. */
   folios: Array<{ orden: number; fisica?: number; impresa: string | null; t0?: number; origen?: string; confianza?: number }>;
@@ -171,6 +209,25 @@ export interface VolcadoDocumento {
   procedencia: Array<{ fase: string; proveedor?: string; detalle?: unknown; ms?: number; cuando: string }>;
   /** Clave del almacén → URL firmada, para incrustar original e imágenes. */
   binarios: Record<string, { url: string; mime: string }>;
+}
+
+export interface ImportarRecursos {
+  /** Id del documento tal y como viene en el .spdf (no debe existir aún en la estantería). */
+  documento: string;
+  /** Rutas relativas al prefijo del documento: «original.pdf», «paginas/0001.jpg». */
+  recursos: Array<{ ruta: string; mime: string; bytes?: number }>;
+}
+
+export interface PedirPartesImportacion {
+  clave: string;
+  idSubida: string;
+  numeros: number[];
+}
+
+export interface CompletarPartesImportacion {
+  clave: string;
+  idSubida: string;
+  partes: Array<{ numero: number; etag: string }>;
 }
 
 export interface ImportacionSpdf {
