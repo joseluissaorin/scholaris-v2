@@ -1,8 +1,9 @@
 import { useMemo, useState } from 'react';
 import { createFileRoute, Link } from '@tanstack/react-router';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { api } from '../datos/api';
 import type { GrafoCitas, NodoGrafo } from '@scholaris/contrato';
-import { cx, Esqueleto, Rotulo, Vacio } from '@scholaris/ui';
+import { avisar, Boton, cx, Esqueleto, Rotulo, Vacio } from '@scholaris/ui';
 import { q } from '../datos/consultas';
 import { Lienzo } from '../componentes/comunes/cabecera';
 
@@ -45,6 +46,14 @@ function Grafo() {
   const { data, isPending } = useQuery(q.grafo());
   const { data: huerfanas } = useQuery(q.huerfanas());
   const [foco, setFoco] = useState<string | null>(null);
+  const qc = useQueryClient();
+  const [reconstruyendo, setReconstruyendo] = useState(false);
+  async function reconstruir() {
+    setReconstruyendo(true);
+    try { const r = await api().grafo.reconstruir(); await qc.invalidateQueries({ queryKey: ['grafo'] }); avisar(r.aristas ? `${r.aristas} citas entre ${r.nodos} documentos.` : 'Tus documentos no se citan entre sí (todavía).'); }
+    catch { avisar('No se pudo rehacer el grafo.', { tono: 'error' }); }
+    setReconstruyendo(false);
+  }
   const pos = useMemo(() => (data ? disponer(data) : null), [data]);
   const vecinos = useMemo(() => new Set(data?.aristas.filter((e) => e.desde === foco || e.hacia === foco).flatMap((e) => [e.desde, e.hacia]) ?? []), [data, foco]);
   const nodo = data?.nodos.find((x) => x.documento === foco);
@@ -54,7 +63,7 @@ function Grafo() {
       <h2 className="text-[1.625rem] tracking-[-0.015em]">Quién cita a quién dentro de tu biblioteca.</h2>
       <p className="mt-1 max-w-2xl text-tinta-2">El tamaño es cuántas veces lo citan tus documentos; el grosor de la línea, cuántas veces aparece la cita.</p>
       <div className="mt-6 grid gap-8 xl:grid-cols-[minmax(0,1fr)_22rem]">
-        {isPending ? <Esqueleto className="aspect-[16/10]" /> : !data?.nodos.length ? <Vacio forma="triangulo" titulo="Sin citas que enlazar todavía.">El grafo aparece cuando tus documentos se citan entre sí.</Vacio> : (
+        {isPending ? <Esqueleto className="aspect-[16/10]" /> : !data?.nodos.length ? <Vacio forma="triangulo" titulo="Sin citas que enlazar todavía." accion={<Boton variante="linea" icono="rayo" cargando={reconstruyendo} onClick={() => void reconstruir()}>Buscar citas entre mis documentos</Boton>}>El grafo aparece cuando tus documentos se citan entre sí. Se rehace solo al añadir documentos; también puedes pedirlo ahora.</Vacio> : (
           <svg viewBox="0 0 1000 620" className="w-full rounded-m border border-filete bg-hoja" role="img" aria-label="Grafo de citas">
             <defs><marker id="punta" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="11" markerHeight="11" markerUnits="userSpaceOnUse" orient="auto"><path d="M0 0L10 5L0 10z" fill="var(--s-tinta-2)" /></marker></defs>
             {data.aristas.map((e, i) => {
@@ -82,7 +91,7 @@ function Grafo() {
           </svg>
         )}
         <aside className="flex flex-col gap-8">
-          {nodo ? <FichaNodo nodo={nodo} data={data!} /> : <p className="text-[0.9375rem] text-tinta-2">Pulsa un documento para ver qué cita y quién lo cita.</p>}
+          {nodo ? <FichaNodo nodo={nodo} data={data!} /> : data?.nodos.length ? <p className="text-[0.9375rem] text-tinta-2">Pulsa un documento para ver qué cita y quién lo cita.</p> : null}
           {huerfanas?.length ? (
             <div>
               <Rotulo>Citadas, pero no las tienes</Rotulo>

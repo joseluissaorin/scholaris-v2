@@ -25,7 +25,17 @@ function normalizar(m: MapaConceptos): MapaConceptos {
   if (!xs.length) return m;
   const [x0, x1, y0, y1] = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)];
   const fx = (x: number) => 0.06 + 0.88 * ((x - x0) / (x1 - x0 || 1)), fy = (y: number) => 0.08 + 0.84 * ((y - y0) / (y1 - y0 || 1));
-  return { ...m, puntos: m.puntos.map((p) => ({ ...p, x: fx(p.x), y: fy(p.y) })), grupos: m.grupos.map((g) => ({ ...g, x: fx(g.x), y: fy(g.y) })) };
+  const grupos = m.grupos.map((g) => ({ ...g, x: fx(g.x), y: fy(g.y) }));
+  // Los rótulos no se pisan: si dos chocan, el segundo baja una línea.
+  const ordenados = [...grupos].sort((a, b) => a.y - b.y);
+  for (let i = 0; i < ordenados.length; i++) {
+    for (let j = 0; j < i; j++) {
+      const a = ordenados[j]!, b = ordenados[i]!;
+      const ancho = ((a.etiqueta?.length ?? 8) + (b.etiqueta?.length ?? 8)) * 0.0045;
+      if (Math.abs(a.x - b.x) < ancho && Math.abs(a.y - b.y) < 0.065) b.y = Math.min(0.96, a.y + 0.07);
+    }
+  }
+  return { ...m, puntos: m.puntos.map((p) => ({ ...p, x: fx(p.x), y: fy(p.y) })), grupos };
 }
 
 function Mapa() {

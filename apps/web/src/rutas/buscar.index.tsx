@@ -278,7 +278,7 @@ function Respuesta({ pregunta, filtros }: { pregunta: string; filtros: Filtros }
           ) : estado === 'error' ? (
             <p className="text-rojo">{error}</p>
           ) : (
-            <p className="lectura text-[1.1875rem] leading-[1.65]">
+            <p className="lectura whitespace-pre-line text-[1.1875rem] leading-[1.65]">
               {partes.map((p, i) => {
                 const m = /^\[\^?(\d+)\]$/.exec(p);
                 if (!m) return <span key={i}>{p}</span>;
