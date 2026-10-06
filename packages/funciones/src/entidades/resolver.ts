@@ -6,8 +6,8 @@
  * que el redactor dejó separado:
  *   1. el mismo identificador de Wikidata;
  *   2. una forma de una entidad que es el nombre de otra («Bird» → «Charlie Parker»);
- *   3. un apellido o un nombre de pila suelto que solo encaja con una persona
- *      del mismo documento («Parker» → «Charlie Parker»);
+ *   3. un apellido suelto que solo encaja con una persona del mismo documento
+ *      («Parker» → «Charlie Parker»);
  *   4. un nombre que es el de otra persona sin los intermedios («Julio Cortázar»
  *      → «Julio Florencio Cortázar»).
  * La entidad que pierde se queda con `fusionada_en`: sus enlaces siguen vivos.
@@ -224,19 +224,22 @@ export function decidirFusiones(cs: readonly Candidata[]): Array<[string, string
         const k = claveEntidad(a, tipo);
         const otra = porClave.get(k);
         if (!otra || otra.id === c.id) continue;
-        if (k.split(' ').length >= 2 || compartenDocumento(c, otra)) unir(c.id, otra.id);
+        // Una forma de varias palabras es una prueba fuerte. Una de una sola
+        // («Dédée» dicha de Johnny en un lote) solo arrastra a una entidad
+        // residual (tres menciones o menos) del mismo documento.
+        if (k.split(' ').length >= 2 || (compartenDocumento(c, otra) && otra.menciones <= 3)) unir(c.id, otra.id);
       }
     }
     if (tipo !== 'persona') continue;
-    // 3. Apellido o nombre de pila suelto, solo si encaja con una persona del mismo documento.
+    // 3. Apellido suelto, solo si encaja con una sola persona del mismo documento
+    //    que aparezca al menos tanto como él. (El nombre de pila suelto no: «Horace»
+    //    no es Horace Walpole ni «Héctor» es Hector Boece.)
     const completas = lista.filter((c) => c.palabras.length >= 2);
     for (const c of lista) {
       if (c.palabras.length !== 1 || c.palabras[0]!.length < 3) continue;
       const p = c.palabras[0]!;
       const porApellido = completas.filter((o) => o.palabras.at(-1) === p && compartenDocumento(c, o));
-      const porNombre = completas.filter((o) => o.palabras[0] === p && compartenDocumento(c, o));
-      if (porApellido.length === 1) unir(c.id, porApellido[0]!.id);
-      else if (!porApellido.length && porNombre.length === 1) unir(c.id, porNombre[0]!.id);
+      if (porApellido.length === 1 && porApellido[0]!.menciones >= c.menciones) unir(c.id, porApellido[0]!.id);
     }
     // 4. Mismo nombre y mismo apellido final, sin los intermedios.
     for (const c of completas) {

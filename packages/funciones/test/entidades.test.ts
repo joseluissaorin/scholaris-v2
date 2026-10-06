@@ -80,11 +80,14 @@ describe('normalizar y localizar', () => {
   });
 
   it('fusiones: apellido suelto solo si comparte documento; alias; Wikidata', () => {
-    const c = (id: string, clave: string, docs: string[], extra: Partial<{ alias: string[]; wikidata: string; tipo: any }> = {}) => ({
-      id, tipo: extra.tipo ?? 'persona', clave, palabras: clave.split(' '), alias: extra.alias ?? [], wikidata: extra.wikidata ?? null, menciones: 3, docs: new Set(docs),
+    const c = (id: string, clave: string, docs: string[], extra: Partial<{ alias: string[]; wikidata: string; tipo: any; menciones: number }> = {}) => ({
+      id, tipo: extra.tipo ?? 'persona', clave, palabras: clave.split(' '), alias: extra.alias ?? [], wikidata: extra.wikidata ?? null, menciones: extra.menciones ?? 3, docs: new Set(docs),
     });
     const f = decidirFusiones([
-      c('cp', 'charlie parker', ['entrevista'], { alias: ['Bird'] }),
+      c('cp', 'charlie parker', ['entrevista'], { alias: ['Bird', 'Dedee'] }),
+      c('dedee', 'dedee', ['entrevista'], { menciones: 60 }),
+      c('horace', 'horace', ['discarded']),
+      c('hw', 'horace walpole', ['discarded']),
       c('p1', 'parker', ['entrevista']),
       c('p2', 'parker', ['discarded']),
       c('bird', 'bird', ['perseguidor']),
@@ -100,6 +103,9 @@ describe('normalizar y localizar', () => {
     expect(m.x2 ?? m.x1).toBeDefined();
     // «Bird» es alias de Charlie Parker pero de una sola palabra y sin documento común: no se fusiona a ciegas.
     expect(m.bird).toBeUndefined();
+    // Una forma suelta no arrastra a una entidad con vida propia, ni un nombre de pila a quien lo comparte.
+    expect(m.dedee).toBeUndefined();
+    expect(m.horace).toBeUndefined();
   });
 
   it('Wikidata: solo coincidencia exacta con descripción compatible', () => {
