@@ -9,6 +9,7 @@ import { anclaABusqueda } from '../../lib/anclas';
 import { Resaltado } from '../../lib/resaltado';
 import { AccesoReferencia } from '../comunes/boton-referencia';
 import { autoresCorto, etiquetaCorta, ICONO_TIPO } from '../../lib/formato';
+import { FiguraEnResultado } from '../inspector/busqueda-figuras';
 import { prepararViaje } from '../../movimiento/transiciones';
 
 const VIA: Record<string, string> = { lexica: 'léxica', densa: 'semántica', visual: 'visual' };
@@ -56,6 +57,7 @@ export const Resultado = memo(function Resultado({ r, consulta, indice, compacto
             <Resaltado html={r.resaltado ?? r.fragmento.texto} />
           </p>
         </Link>
+        {r.figura ? <FiguraEnResultado r={r} /> : null}
         <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-cream-200 pt-2.5 text-[0.8125rem] text-coffee-500">
           <Icono nombre={ICONO_TIPO[r.documento.tipo]} tam={14} className="text-coffee-400" />
           <span className="min-w-0 truncate"><em>{m.titulo}</em> · {autoresCorto(m)}{m.anio ? `, ${m.anioOriginal && m.anioOriginal !== m.anio ? `${m.anioOriginal}/${m.anio}` : m.anio}` : ''}</span>

@@ -7,6 +7,7 @@ import { avisar, Boton, Campo, Chip, Composicion, cx, EsqueletoTexto, Folio, Ico
 import { api } from '../datos/api';
 import { q } from '../datos/consultas';
 import { Resultado } from '../componentes/busqueda/resultado';
+import { ResultadosFiguras } from '../componentes/inspector/busqueda-figuras';
 import { Lienzo } from '../componentes/comunes/cabecera';
 import { anclaABusqueda } from '../lib/anclas';
 import { etiquetaCorta, haceCuanto } from '../lib/formato';
@@ -19,7 +20,7 @@ import { Cifra } from '../movimiento/cifra';
 import { NotaMargen } from '../bocetos/nota-margen';
 
 type Modo = 'buscar' | 'preguntar';
-interface BusquedaBuscar { q?: string; modo?: Modo; grupo?: string; col?: string; doc?: string; cruzada?: boolean; desde?: number; hasta?: number }
+interface BusquedaBuscar { q?: string; modo?: Modo; grupo?: string; col?: string; doc?: string; cruzada?: boolean; desde?: number; hasta?: number; figuras?: boolean }
 
 const GRUPOS: Array<{ id: string; nombre: string; tipos: TipoEntrada[] }> = [
   { id: 'libros', nombre: 'Libros y artículos', tipos: ['pdf', 'epub', 'pdf_escaneado', 'fotos'] },
@@ -38,6 +39,7 @@ export const Route = createFileRoute('/buscar/')({
     cruzada: s.cruzada === true || s.cruzada === 'true' ? true : undefined,
     desde: Number.isFinite(Number(s.desde)) && s.desde ? Number(s.desde) : undefined,
     hasta: Number.isFinite(Number(s.hasta)) && s.hasta ? Number(s.hasta) : undefined,
+    figuras: s.figuras === true || s.figuras === 'true' ? true : undefined,
   }),
   component: PaginaBuscar,
 });
@@ -67,11 +69,11 @@ function PaginaBuscar() {
   }, [texto, modo]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const consulta = (b.q ?? '').trim();
-  const normal = useQuery({ ...q.busqueda(consulta, filtros), enabled: modo === 'buscar' && !b.cruzada && consulta.length > 1 });
+  const normal = useQuery({ ...q.busqueda(consulta, filtros), enabled: modo === 'buscar' && !b.cruzada && !b.figuras && consulta.length > 1 });
   const cruzada = useQuery({
     queryKey: ['multilingue', consulta, filtros],
     queryFn: () => api().busqueda.multilingue({ consulta, filtros, k: 30 }),
-    enabled: modo === 'buscar' && !!b.cruzada && consulta.length > 1,
+    enabled: modo === 'buscar' && !!b.cruzada && !b.figuras && consulta.length > 1,
     placeholderData: keepPreviousData,
     staleTime: 120_000,
   });
@@ -135,12 +137,15 @@ function PaginaBuscar() {
           </MenuRaiz>
           <Anios desde={b.desde} hasta={b.hasta} alCambiar={(d, h) => fijar({ desde: d, hasta: h })} />
           <Chip icono="idiomas" activo={!!b.cruzada} onClick={() => fijar({ cruzada: b.cruzada ? undefined : true })}>En todas las lenguas</Chip>
+          <Chip icono="imagen" activo={!!b.figuras} onClick={() => fijar({ figuras: b.figuras ? undefined : true })}>Figuras e imágenes</Chip>
         </div>
       </div>
 
       <div className="mt-8 max-w-5xl">
         {modo === 'preguntar' ? (
           pregunta ? <Respuesta key={`${pregunta}|${JSON.stringify(filtros)}`} pregunta={pregunta} filtros={filtros} /> : <Inicio modo="preguntar" alElegir={(t) => { setTexto(t); setPregunta(t); fijar({ q: t }); }} />
+        ) : b.figuras ? (
+          <ResultadosFiguras consulta={consulta} {...(b.doc ? { documento: b.doc } : {})} {...(b.grupo === 'medios' ? { tipo: 'fotogramas' as const } : b.grupo === 'libros' ? { tipo: 'figuras' as const } : {})} />
         ) : !consulta ? (
           <Inicio modo="buscar" alElegir={(t) => { setTexto(t); fijar({ q: t }); }} />
         ) : datos.isPending ? (
