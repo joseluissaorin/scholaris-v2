@@ -206,6 +206,9 @@ export function crearGemini(config: ConfigGemini): ClienteGemini {
       // Un pliego de 16 páginas densas puede tardar; el tiempo límite crece con las páginas.
       const { texto, fin } = await generar(modelo, cuerpo, 'leer', { paginas: n, imagenes: e.imagenes?.length ?? 0 }, Math.max(config.timeoutMs ?? 0, 60_000 + n * 20_000));
       if (fin === 'MAX_TOKENS') throw new ErrorPliego('gemini', `salida cortada (${n} páginas)`);
+      // Gemini corta la salida que reproduce texto protegido (pasa con libros con derechos):
+      // la cascada pasa la página al siguiente lector.
+      if (fin === 'RECITATION') throw new ErrorPliego('gemini', `bloqueo por recitación (texto con derechos) en ${n} página(s)`);
       let json: unknown;
       try { json = extraerJSON(texto); } catch (err) { throw new ErrorPliego('gemini', `JSON ilegible (${fin ?? '¿?'})`, err); }
       const paginas = normalizarPaginas(json, n, e.primeraFisica, o);

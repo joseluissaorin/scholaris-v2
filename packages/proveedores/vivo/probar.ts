@@ -4,7 +4,7 @@
  *
  *   npx tsx packages/proveedores/vivo/probar.ts [seccion…]
  *
- * Secciones: lector, imagenes, embebedor, redactor, transcriptor, workers,
+ * Secciones: lector, rendimiento, imagenes, embebedor, redactor, transcriptor, workers,
  * openrouter, jev, cascada, inteligencia (sin argumentos: todas). Las claves
  * se leen de ~/.claude/.secrets/{gemini,openrouter,typesafe}.env y el token
  * de Workers AI del login OAuth de wrangler (o CLOUDFLARE_API_TOKEN).
@@ -60,10 +60,7 @@ interface DocBanco {
 }
 
 function documentos(): DocBanco[] {
-  const ref = (n: string) => {
-    const r = join(TRABAJO, 'ref', `${n}.json`);
-    return existsSync(r) ? (JSON.parse(readFileSync(r, 'utf8')) as Record<string, string>) : capaDeTexto(join(ORIGINALES, n));
-  };
+  const ref = (n: string) => capaDeTexto(join(ORIGINALES, n));
   return [
     {
       id: 'casamiento', fichero: 'el-casamiento-en-la-muerte-y-hechos-de-b.pdf', desde: 9, hasta: 24,
@@ -172,7 +169,7 @@ async function seccionLector(): Promise<void> {
     for (const modelo of modelos) {
       for (const tam of tams) {
         if (tam > doc.hasta - doc.desde + 1 && tam !== tams[0]) continue;
-        const { medida, paginas } = await medirLector(modelo, g.lector({ modelo }), doc, tam, contador);
+        const { medida, paginas } = await medirLector(modelo, g.lector({ modelo, maxPaginas: tam }), doc, tam, contador);
         medidas.push(medida);
         muestras[`${doc.id}|${modelo}|${tam}`] = paginas;
         console.log(tabla(CABECERA_LECTOR, [filaLector(medida)]).split('\n')[2]);
@@ -204,9 +201,9 @@ async function seccionImagenes(): Promise<void> {
   const g = crearGemini({ clave: claves.gemini, contador });
   const filas: Array<Array<string | number>> = [];
   for (const modelo of (process.env.MODELOS ?? 'gemini-3.5-flash-lite,gemini-3.8-flash').split(',')) {
-    for (const tam of [4, 8]) {
+    for (const tam of [1, 4]) {
       contador.reiniciar();
-      const lector = g.lector({ modelo });
+      const lector = g.lector({ modelo, maxPaginas: tam });
       const grupos: Array<{ imagenes: typeof imagenes; primeraFisica: number }> = [];
       for (let i = 0; i < imagenes.length; i += tam) grupos.push({ imagenes: imagenes.slice(i, i + tam), primeraFisica: doc.desde + i });
       const lat: number[] = [];
@@ -469,7 +466,7 @@ async function seccionRendimiento(): Promise<void> {
     const base = documentos().find((x) => x.id === id) as DocBanco;
     const doc = { ...base, desde: Number(d), hasta: Number(h) };
     const modelo = process.env.MODELO_RENDIMIENTO ?? 'gemini-3.5-flash-lite';
-    const { medida } = await medirLector(modelo, g.lector({ modelo }), doc, Number(tam), contador, Number(conc));
+    const { medida } = await medirLector(modelo, g.lector({ modelo, maxPaginas: Number(tam) }), doc, Number(tam), contador, Number(conc));
     const n = doc.hasta - doc.desde + 1;
     filas.push([id as string, modelo, n, Number(tam), Number(conc), medida.muroS, medida.muroS / n, medida.latMediaS, medida.latMaxS, medida.usdPor1000, medida.cerOro ?? (medida.f1 !== undefined ? `F1 ${medida.f1.toFixed(3)}` : '—'), medida.folios ?? '', medida.errores]);
     console.log(filas.at(-1)?.join(' | '));
