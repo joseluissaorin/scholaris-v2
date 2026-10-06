@@ -236,7 +236,7 @@ describe('tiempo real y MCP', () => {
     const r = await SELF.fetch(b.cuerpo.url.replace('wss:', 'https:'), { headers: { upgrade: 'websocket' } });
     expect(r.status).toBe(101);
     const ws = r.webSocket!;
-    const llegado = new Promise<string>((res) => ws.addEventListener('message', (e) => res(String(e.data))));
+    const llegado = new Promise<string>((res) => ws.addEventListener('message', (e: MessageEvent) => res(String(e.data))));
     ws.accept();
     expect(JSON.parse(await llegado)).toMatchObject({ tipo: 'hola', usuario: 'user_ws' });
     ws.close();
