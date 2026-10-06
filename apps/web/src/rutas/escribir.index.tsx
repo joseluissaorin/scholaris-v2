@@ -32,11 +32,11 @@ const RELACION: Record<RelacionCita, { texto: string; tono: 'bien' | 'medio' | '
   AFIRMACION_NEGATIVA: { texto: 'Lo niega', tono: 'mal' },
 };
 
-const EJEMPLO = `El castigo moderno ya no castiga el cuerpo que sufre, sino que corrige la conducta del que obedece. La disciplina reparte a las personas en el espacio y las ordena en el tiempo.
+const EJEMPLO = `Cervantes presenta su libro como un hijo engendrado en una cárcel, lejos del sosiego que necesitan las musas. Calderón encierra a Segismundo en una torre y le hace preguntar qué delito cometió al nacer.
 
-La torre de Bentham hace que el preso que se sabe visible a todas horas acabe vigilándose a sí mismo, de modo que el poder funciona solo. Hoy las plataformas reproducen ese efecto sin necesidad de torre.
+En el plan de Bentham, el inspector ocupa el centro de un edificio circular y los presos de las celdas no pueden saber si los miran. Clotaldo, el alcaide de la torre, pide a los guardas que acudan vigilantes.
 
-Lo abyecto no es lo sucio, sino aquello que perturba una identidad y no respeta los límites. En las cartas de Elvira Montesdeoca el duelo se inscribe en la forma más que en el tema.`;
+En el artículo de Larra, monsieur Sans-délai llega a Madrid con la idea de resolver sus asuntos en quince días, y el narrador le advierte que dentro de quince meses seguirá allí. Todo se aplaza con un «vuelva usted mañana».`;
 
 function Autocita() {
   const { a } = Route.useSearch();

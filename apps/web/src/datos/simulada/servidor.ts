@@ -11,7 +11,7 @@ import type {
   SeccionVista, Tarea, Tarjeta, UnidadVista, Vigilante, Concepto, Yo, EstiloCsl, MiembrosGrupo, Responder,
   Entidad, MencionEntidad, TipoEntidad,
 } from '@scholaris/contrato';
-import { anclaDe, BIBLIOTECAS, DOCUMENTOS, textoDe, type DocDemo } from './corpus';
+import { anclaDe, BIBLIOTECAS, DOCUMENTOS, LIBRO_EN_CURSO, textoDe, type DocDemo } from './corpus';
 
 export const configSimulada: ConfigPublica = {
   modo: 'local', version: '2.0.0-demo', requiereAutenticacion: false,
@@ -31,40 +31,45 @@ const ahora = () => new Date().toISOString();
 const hace = (min: number) => new Date(Date.now() - min * 60_000).toISOString();
 
 const cuadernos: Cuaderno[] = [
-  { id: 'c-panoptico', titulo: 'Panóptico y plataformas', cuerpo: '', tarjetas: 4, creado: hace(60 * 24 * 9), actualizado: hace(60 * 5) },
-  { id: 'c-duelo', titulo: 'Escritura abyecta del duelo', cuerpo: '', tarjetas: 3, creado: hace(60 * 24 * 30), actualizado: hace(60 * 26) },
+  { id: 'c-panoptico', titulo: 'El inspector invisible', cuerpo: '', tarjetas: 4, creado: hace(60 * 24 * 9), actualizado: hace(60 * 5) },
+  { id: 'c-carcel', titulo: 'Escribir desde la cárcel', cuerpo: '', tarjetas: 3, creado: hace(60 * 24 * 30), actualizado: hace(60 * 26) },
 ];
 const tarjetas = new Map<string, Tarjeta[]>();
-const tarjeta = (cuaderno: string, i: number, doc: string, orden: number, extra: Partial<Tarjeta> = {}): Tarjeta => {
+/** El párrafo de la unidad que contiene `contiene` (o el primero que no sea un título). */
+function parrafoDe(d: DocDemo, orden: number, contiene?: string): string {
+  const ps = textoDe(d, orden).split('\n\n').filter((p) => !p.startsWith('#'));
+  return (contiene ? ps.find((p) => p.includes(contiene)) : undefined) ?? ps.find((p) => p.length > 40) ?? ps[0] ?? '';
+}
+const tarjeta = (cuaderno: string, i: number, doc: string, orden: number, contiene?: string, extra: Partial<Tarjeta> = {}): Tarjeta => {
   const d = docs.get(doc)!;
   const ancla = anclaDe(d, orden);
-  const texto = d.fijos[orden] ?? textoDe(d, orden).split('\n\n')[0]!;
+  const texto = parrafoDe(d, orden, contiene);
   return { id: `t-${cuaderno}-${i}`, tipo: 'fragmento', documento: doc, objetivo: `f-${doc}-${orden}-0`, contenido: {}, cita: { texto, etiqueta: anclaACita(ancla), citaCorta: citaCorta(d.meta, ancla) }, posicion: i, huerfana: false, creada: hace(60 * (40 - i)), ...extra };
 };
 tarjetas.set('c-panoptico', [
-  tarjeta('c-panoptico', 0, 'd-mirada', 207), tarjeta('c-panoptico', 1, 'd-mirada', 208),
-  { id: 't-c-panoptico-n', tipo: 'nota', contenido: { texto: 'Contrastar con la «vigilancia de plataforma»: ¿se interioriza igual la mirada cuando nadie mira?' }, posicion: 2, huerfana: false, creada: hace(300) },
-  tarjeta('c-panoptico', 3, 'd-web', 10),
+  tarjeta('c-panoptico', 0, 'd-panoptico', 4), tarjeta('c-panoptico', 1, 'd-panoptico', 12),
+  { id: 't-c-panoptico-n', tipo: 'nota', contenido: { texto: 'Comparar la «apparent omnipresence of the inspector» de Bentham con los guardas de la torre de Segismundo: ¿quién vigila a quién?' }, posicion: 2, huerfana: false, creada: hace(300) },
+  tarjeta('c-panoptico', 3, 'd-vida-sueno', 13, 'Este es Clotaldo'),
 ]);
-tarjetas.set('c-duelo', [tarjeta('c-duelo', 0, 'd-asco', 9), tarjeta('c-duelo', 1, 'd-montesdeoca', 13), tarjeta('c-duelo', 2, 'd-clase', 13)]);
+tarjetas.set('c-carcel', [tarjeta('c-carcel', 0, 'd-consolatio', 1), tarjeta('c-carcel', 1, 'd-quijote', 5, 'carcel'), tarjeta('c-carcel', 2, 'd-vida-sueno', 6, 'mísero')]);
 
 const vigilantes: Vigilante[] = [
-  { id: 'v-1', nombre: 'Abyección y archivo', consulta: 'abyección en cartas y archivos personales', modo: 'al_ingerir', alertas: true, pendientes: 2, ultimaEjecucion: hace(90), ultimaConfianza: 'alta', creado: hace(60 * 24 * 20), actualizado: hace(90) },
-  { id: 'v-2', nombre: 'Vigilancia sin torre', consulta: 'panóptico y plataformas digitales', modo: 'semanal', alertas: true, pendientes: 0, ultimaEjecucion: hace(60 * 24 * 3), ultimaConfianza: 'media', creado: hace(60 * 24 * 40), actualizado: hace(60 * 24 * 3) },
-  { id: 'v-3', nombre: 'Bécquer cantado', consulta: 'poesía de Bécquer musicada', modo: 'manual', alertas: false, pendientes: 0, creado: hace(60 * 24 * 2), actualizado: hace(60 * 24 * 2) },
+  { id: 'v-1', nombre: 'La cárcel como lugar de escritura', consulta: 'cárcel, prisión y torre', modo: 'al_ingerir', alertas: true, pendientes: 2, ultimaEjecucion: hace(90), ultimaConfianza: 'alta', creado: hace(60 * 24 * 20), actualizado: hace(90) },
+  { id: 'v-2', nombre: 'Ver sin ser visto', consulta: 'inspection, inspector, seeing without being seen', modo: 'semanal', alertas: true, pendientes: 0, ultimaEjecucion: hace(60 * 24 * 3), ultimaConfianza: 'media', creado: hace(60 * 24 * 40), actualizado: hace(60 * 24 * 3) },
+  { id: 'v-3', nombre: 'Golondrinas y olvido', consulta: 'Bécquer: memoria y olvido', modo: 'manual', alertas: false, pendientes: 0, creado: hace(60 * 24 * 2), actualizado: hace(60 * 24 * 2) },
 ];
 const alertas: Alerta[] = [
-  { id: 'a-1', vigilante: 'v-1', nombreVigilante: 'Abyección y archivo', documentosNuevos: ['d-clase'], cambio: 'La sesión 7 de Teoría de la Literatura define lo abyecto como crisis del límite entre dentro y fuera (12:00).', disparadaPor: 'ingesta', creada: hace(90) },
-  { id: 'a-2', vigilante: 'v-1', nombreVigilante: 'Abyección y archivo', documentosNuevos: ['d-cartas'], cambio: 'El inventario de cartas añade dos cartas sin enviar de 1936.', disparadaPor: 'ingesta', creada: hace(60 * 30) },
+  { id: 'a-1', vigilante: 'v-1', nombreVigilante: 'La cárcel como lugar de escritura', documentosNuevos: ['d-vida-sueno'], cambio: 'La grabación de «La vida es sueño» trae a Segismundo encadenado en la torre: «¡Ay mísero de mí! ¡Ay infelice!» (escena II).', disparadaPor: 'ingesta', creada: hace(90) },
+  { id: 'a-2', vigilante: 'v-1', nombreVigilante: 'La cárcel como lugar de escritura', documentosNuevos: ['d-quijote'], cambio: 'En el prólogo del Quijote de 1608, Cervantes compara su libro con un hijo engendrado «en vna carcel».', disparadaPor: 'ingesta', creada: hace(60 * 30) },
 ];
 
 const historial: EventoBusqueda[] = [
-  ['¿qué efecto produce el panóptico en el detenido?', 'respuesta', 'conceptual', 6, 'alta', 1200, true],
-  ['abyección cadáver', 'busqueda', 'literal', 14, undefined, 140, false],
-  ['Bécquer música Almeida', 'busqueda', 'conceptual', 9, undefined, 180, false],
-  ['rizoma frente a árbol', 'respuesta', 'conceptual', 7, 'media', 1900, false],
-  ['cartas sin enviar 1936', 'busqueda', 'factual', 4, undefined, 95, true],
-  ['oscuras golondrinas', 'busqueda', 'literal', 2, undefined, 70, false],
+  ['¿qué delito cometió Segismundo al nacer?', 'respuesta', 'conceptual', 6, 'alta', 1200, true],
+  ['carcel', 'busqueda', 'literal', 5, undefined, 140, false],
+  ['inspector lodge', 'busqueda', 'conceptual', 9, undefined, 180, false],
+  ['¿cómo presenta Cervantes su libro en el prólogo?', 'respuesta', 'conceptual', 7, 'media', 1900, false],
+  ['vuelva usted mañana', 'busqueda', 'literal', 4, undefined, 95, true],
+  ['oscuras golondrinas', 'busqueda', 'literal', 1, undefined, 70, false],
 ].map(([consulta, tipo, intencion, resultados, confianza, ms, fijado], i) => ({
   id: `h-${i}`, consulta: consulta as string, tipo: tipo as EventoBusqueda['tipo'], intencion: intencion as EventoBusqueda['intencion'], resultados: resultados as number,
   ...(confianza ? { confianza: confianza as 'alta' } : {}), estado: 'ok', ms: ms as number, fijado: fijado as boolean, oculto: false, cuando: hace(60 * (i * 7 + 2)),
@@ -80,8 +85,8 @@ const ajustes: Ajustes = {
 };
 let grabacion = { activa: true, desde: hace(60 * 24 * 200) };
 const conceptos: Concepto[] = [
-  { id: 'k-abyeccion', nombre: 'Abyección', descripcion: 'Usos del concepto de lo abyecto en el corpus.', terminos: ['abyecto', 'abyección', 'abject'], ultimoInforme: 'i-1', creado: hace(60 * 24 * 14), actualizado: hace(60 * 24) },
-  { id: 'k-vigilancia', nombre: 'Vigilancia', terminos: ['vigilar', 'panóptico', 'mirada'], creado: hace(60 * 24 * 40), actualizado: hace(60 * 24 * 6) },
+  { id: 'k-carcel', nombre: 'Cárcel', descripcion: 'La prisión y la torre en el corpus, en castellano y en inglés.', terminos: ['cárcel', 'carcel', 'prisión', 'prison'], ultimoInforme: 'i-1', creado: hace(60 * 24 * 14), actualizado: hace(60 * 24) },
+  { id: 'k-vigilancia', nombre: 'Vigilancia', terminos: ['inspection', 'inspector', 'vigilantes', 'guardas'], creado: hace(60 * 24 * 40), actualizado: hace(60 * 24 * 6) },
 ];
 
 const autocitas = new Map<string, DetalleAutocita>();
@@ -130,6 +135,7 @@ function simularIngesta(documento: string, tarea: string, unidades: number, rapi
       emitir({ tipo: 'fase', tarea, documento, fase });
       if (fase === 'listo') {
         if (d) { d.estado = 'listo'; delete d.leidas; delete d.tarea; }
+        indice = null;
         t.estado = 'listo'; t.terminada = ahora();
         emitir({ tipo: 'fin', tarea, documento, estado: 'listo' });
       }
@@ -138,18 +144,9 @@ function simularIngesta(documento: string, tarea: string, unidades: number, rapi
   setTimeout(tick, 300);
 }
 
-// Un libro ya procesándose al abrir la demo: así se ve la ingesta en vivo.
-{
-  const id = 'd-confesion';
-  docs.set(id, {
-    id, tipo: 'pdf_escaneado', unidades: 212, romanas: 0, sinFolio: 4, estado: 'procesando', leidas: 0, tarea: 'tarea-confesion',
-    meta: { titulo: 'El confesionario y el archivo', subtitulo: 'Una historia de la intimidad vigilada', autores: [{ nombre: 'Inés', apellidos: 'Valcárcel Ruiz' }], anio: 2015, editorial: 'Ediciones del Faro Viejo', lugar: 'Madrid', idioma: 'es', tipoCSL: 'book' },
-    secciones: [{ titulo: 'I. Decirlo todo', nivel: 1, unidad: 5 }, { titulo: 'II. El silencio que no era', nivel: 1, unidad: 15 }, { titulo: 'IV. Del confesionario a la ficha', nivel: 1, unidad: 79 }],
-    banco: ['Lejos de callar la intimidad, la época moderna la obligó a hablar sin descanso.', 'La confesión no reprime lo que escucha: lo ordena, lo multiplica y lo clasifica.', 'Allí donde alguien vigila hay alguien que resiste, y esa resistencia nunca está del todo fuera.'],
-    fijos: {}, bibliotecas: [], creado: ahora(), bytes: 72_000_000, mime: 'application/pdf',
-  });
-  simularIngesta(id, 'tarea-confesion', 212, 0.5);
-}
+// Un libro ya procesándose al abrir la demo («On the Origin of Species», 1859): así se ve la ingesta en vivo.
+docs.set(LIBRO_EN_CURSO.id, { ...LIBRO_EN_CURSO, creado: ahora(), estado: 'procesando', leidas: 0, tarea: 'tarea-origen' });
+simularIngesta(LIBRO_EN_CURSO.id, 'tarea-origen', LIBRO_EN_CURSO.unidades, 0.5);
 
 // ---------------------------------------------------------------------------
 // Utilidades
@@ -180,9 +177,16 @@ function detalle(d: DocDemo & { estado: string; tarea?: string }): DetalleDocume
     id: d.id, tipo: d.tipo, metadatos: d.meta, estado: d.estado as DetalleDocumento['estado'], huella: 'demo', original: `demo/${d.id}`, mime: d.mime, bytes: d.bytes,
     unidades: d.unidades, ...(d.duracion ? { duracion: d.duracion } : {}), creado: d.creado, actualizado: d.creado, bibliotecas: d.bibliotecas,
     espacios: [{ id: 'gemini-embedding-2@1536', proveedor: 'google', modelo: 'gemini-embedding-2', dims: 1536, normalizado: true, modalidades: ['texto', 'imagen'] }],
-    cuentas: { fragmentos: d.unidades * 3, secciones: d.secciones.length, figuras: Math.floor(d.unidades / 40) },
+    cuentas: { fragmentos: fragmentosDe(d), secciones: d.secciones.length, figuras: d.figuras?.length ?? 0 },
     ...(d.tarea ? { tarea: d.tarea } : {}),
   };
+}
+
+/** Párrafos de un documento (lo que la búsqueda indexa como fragmentos). */
+function fragmentosDe(d: DocDemo): number {
+  let n = 0;
+  for (let o = 1; o <= d.unidades; o++) n += textoDe(d, o).split('\n\n').filter((p) => p.trim() && !p.startsWith('#')).length;
+  return n;
 }
 
 function unidad(d: DocDemo, orden: number): UnidadVista {
@@ -199,7 +203,7 @@ function piezas(): Pieza[] {
   if (indice) return indice;
   indice = [];
   for (const d of docs.values()) {
-    if (d.id === 'd-confesion') continue;
+    if (d.estado !== 'listo' || d.borrado) continue;
     for (let o = 1; o <= d.unidades; o++) {
       textoDe(d, o).split('\n\n').filter((p) => !p.startsWith('#')).forEach((p, i) => indice!.push({ d, orden: o, parrafo: i, texto: p, norm: normalizar(p) }));
     }
@@ -223,7 +227,6 @@ function buscarEn(q: string, filtros: Buscar['filtros'] = {}, k = 20): Resultado
     raices.forEach((r, i) => { const n = p.norm.split(r).length - 1; if (n) s += (1 + Math.log(1 + n)) * idf[i]!; });
     if (!s) continue;
     s *= 0.5 + (0.5 * raices.filter((r) => p.norm.includes(r)).length) / raices.length;
-    if (p.d.fijos[p.orden] === p.texto) s *= 1.6;
     const clave = `${p.d.id}-${p.orden}`;
     const prev = vistos.get(clave);
     if (!prev || prev.s < s) vistos.set(clave, { p, s });
@@ -274,15 +277,12 @@ async function* responder(p: Responder): AsyncGenerator<EventoRespuesta> {
     return;
   }
   const usados = res.slice(0, Math.min(3, res.length));
+  // Cada frase es una cita literal del pasaje, con su autor (o su personaje) y su obra.
   const frases = usados.map((r, i) => {
     const doc = r.documento.metadatos;
-    const quien = autoresCorto(doc);
-    const plantillas = [
-      `Según ${quien}, ${minus(r.fragmento.texto)} [${i + 1}]`,
-      `Para ${quien}, ${minus(r.fragmento.texto)} [${i + 1}]`,
-      `En la misma línea, ${minus(r.fragmento.texto)} [${i + 1}]`,
-    ];
-    return plantillas[i % plantillas.length]!;
+    const { quien, texto } = extracto(r.fragmento.texto, p.consulta);
+    const voz = quien ? `${quien}, en «${doc.titulo}»` : `${autoresCorto(doc)}, en «${doc.titulo}»`;
+    return `${i === 0 ? '' : i === 1 ? 'Además, ' : 'Y '}${voz}: «${texto}» [${i + 1}]`;
   });
   for (const [i, r] of usados.entries()) {
     yield { tipo: 'cita', n: i + 1, fragmento: r.fragmento.id, documento: r.documento.id, etiqueta: r.etiqueta, citaCorta: r.citaCorta, respaldo: 0.92 - i * 0.07 };
@@ -295,7 +295,22 @@ async function* responder(p: Responder): AsyncGenerator<EventoRespuesta> {
   yield { tipo: 'fin', ms: Date.now() - t0, confianza: usados.length > 2 ? 'alta' : 'media', evento: `h-${Date.now()}` };
 }
 
-function minus(t: string) { return t.charAt(0).toLowerCase() + t.slice(1); }
+/**
+ * Un trozo literal del pasaje: la frase que contiene algún término de la consulta (o la
+ * primera), sin tocar una letra; «[…]» marca lo que se omite. En las transcripciones de
+ * teatro devuelve también el personaje que habla.
+ */
+function extracto(pasaje: string, consulta = ''): { quien?: string; texto: string } {
+  const turno = /^\*\*([^*\n]+):\*\*\s*/.exec(pasaje);
+  const limpio = (turno ? pasaje.slice(turno[0].length) : pasaje).replace(/\s*\n\s*/g, ' ');
+  const frases = limpio.match(/[^.!?;:]+[.!?;:]+[»”)]?|[^.!?;:]+$/g) ?? [limpio];
+  const raices = normalizar(consulta).split(/[^\p{L}\p{N}]+/u).filter((t) => t.length > 2 && !VACIAS.has(t)).map((t) => t.slice(0, Math.max(4, t.length - 2)));
+  const k = Math.max(0, frases.findIndex((f) => raices.some((r) => normalizar(f).includes(r))));
+  let texto = frases[k]!.trim();
+  if (texto.length > 320) texto = `${texto.slice(0, 300).replace(/\s+\S*$/, '')} […]`;
+  if (k > 0) texto = `[…] ${texto}`;
+  return { ...(turno ? { quien: turno[1] } : {}), texto };
+}
 
 function autocitar(texto: string, estilo: string): DetalleAutocita {
   const parrafos = texto.split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean);
@@ -339,10 +354,10 @@ const ESTILOS: EstiloCsl[] = [
 
 function mapa(): MapaConceptos {
   const grupos = [
-    ['Vigilancia y disciplina', 0.28, 0.32, ['d-mirada', 'd-web']], ['Abyección y cuerpo', 0.7, 0.3, ['d-asco', 'd-clase']],
-    ['Archivo y duelo', 0.62, 0.68, ['d-montesdeoca', 'd-cartas']], ['Rizoma y devenir', 0.22, 0.72, ['d-mapas']],
-    ['Rimas y pérdida', 0.46, 0.86, ['d-becquer']], ['Canción y poema', 0.86, 0.56, ['d-almeida']],
-    ['Archivo infinito', 0.44, 0.12, ['d-voces']], ['Heterotopías', 0.4, 0.5, ['d-heterotopias', 'd-mirada']],
+    ['El inspector y la casa de inspección', 0.28, 0.32, ['d-panoptico']], ['La torre y la cárcel', 0.7, 0.3, ['d-vida-sueno', 'd-consolatio']],
+    ['Libros de caballerías', 0.62, 0.68, ['d-quijote']], ['El viajero perdido', 0.22, 0.72, ['d-marianela']],
+    ['Golondrinas y olvido', 0.46, 0.86, ['d-rimas']], ['La carrera espacial', 0.86, 0.56, ['d-rice']],
+    ['Vuelva usted mañana', 0.44, 0.12, ['d-larra']],
   ] as const;
   const r = (() => { let s = 7; return () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 2 ** 32; }; })();
   const puntos: MapaConceptos['puntos'] = [];
@@ -360,34 +375,27 @@ function mapa(): MapaConceptos {
   };
 }
 
+/**
+ * Ninguna obra de la demo cita a otra (Cervantes no cita a Boecio ni Kennedy a Bentham),
+ * así que el grafo de citas está vacío y lo que sí citan va en «Referencias sin documento».
+ */
 function grafo(): GrafoCitas {
-  const nodo = (id: string, citas: number, citadoPor: number) => {
-    const d = docs.get(id)!;
-    return { documento: id, titulo: d.meta.titulo, autores: autoresCorto(d.meta), anio: d.meta.anioOriginal ?? d.meta.anio, tipo: d.tipo, citas, citadoPor };
-  };
-  return {
-    nodos: [nodo('d-mirada', 0, 3), nodo('d-asco', 1, 3), nodo('d-montesdeoca', 2, 1), nodo('d-mapas', 1, 1), nodo('d-web', 1, 0), nodo('d-clase', 2, 0), nodo('d-heterotopias', 2, 0), nodo('d-voces', 0, 1), nodo('d-becquer', 0, 0)],
-    aristas: [
-      { desde: 'd-web', hacia: 'd-mirada', peso: 6, unidades: [2, 9, 10] }, { desde: 'd-heterotopias', hacia: 'd-mirada', peso: 4 }, { desde: 'd-montesdeoca', hacia: 'd-asco', peso: 5 },
-      { desde: 'd-clase', hacia: 'd-asco', peso: 8 }, { desde: 'd-clase', hacia: 'd-montesdeoca', peso: 3 }, { desde: 'd-mapas', hacia: 'd-mirada', peso: 2 },
-      { desde: 'd-asco', hacia: 'd-voces', peso: 1 }, { desde: 'd-heterotopias', hacia: 'd-mapas', peso: 2 }, { desde: 'd-montesdeoca', hacia: 'd-voces', peso: 1 },
-    ],
-    construido: hace(60 * 30),
-  };
+  return { nodos: [], aristas: [], construido: hace(60 * 30) };
 }
 
 function corpus(): InstantaneaCorpus {
   const lista = [...docs.values()].filter((d) => !d.borrado);
-  const porTipo: Record<string, number> = {}, porDecada: Record<string, number> = {};
+  const porTipo: Record<string, number> = {}, porDecada: Record<string, number> = {}, porIdioma: Record<string, number> = {};
   for (const d of lista) {
     porTipo[d.tipo] = (porTipo[d.tipo] ?? 0) + 1;
+    if (d.meta.idioma) porIdioma[d.meta.idioma] = (porIdioma[d.meta.idioma] ?? 0) + 1;
     const anio = d.meta.anioOriginal ?? d.meta.anio;
     if (anio) { const k = String(Math.floor(anio / 10) * 10); porDecada[k] = (porDecada[k] ?? 0) + 1; }
   }
   return {
-    documentos: lista.length, unidades: lista.reduce((s, d) => s + d.unidades, 0), fragmentos: lista.reduce((s, d) => s + d.unidades * 3, 0), figuras: 41,
+    documentos: lista.length, unidades: lista.reduce((s, d) => s + d.unidades, 0), fragmentos: lista.reduce((s, d) => s + fragmentosDe(d), 0), figuras: lista.reduce((s, d) => s + (d.figuras?.length ?? 0), 0),
     segundosDeMedio: lista.reduce((s, d) => s + (d.duracion ?? 0), 0), bytes: lista.reduce((s, d) => s + d.bytes, 0), refrescado: hace(20),
-    porIdioma: { es: lista.length - 2, fr: 1, la: 1 }, porTipo, porAnio: {}, porDecada,
+    porIdioma, porTipo, porAnio: {}, porDecada,
   };
 }
 
@@ -442,9 +450,9 @@ ruta('GET', '/documentos/:id/secciones', (m) => {
   return json(d.secciones.map((s, i): SeccionVista => ({ id: `s-${i}`, nivel: s.nivel, titulo: s.titulo, unidadDesde: s.unidad - 1 })));
 });
 ruta('GET', '/documentos/:id/figuras', (m) => {
-  const d = docs.get(m[1]!); if (!d || !['pdf', 'pdf_escaneado'].includes(d.tipo)) return json([]);
-  const n = Math.floor(d.unidades / 40);
-  return json(Array.from({ length: n }, (_, i) => { const u = 20 + i * 40; const a = anclaDe(d, u); return { id: `fig-${i}`, unidad: u - 1, imagenUrl: '', pie: `Figura ${i + 1}. ${['Plano del panóptico de Bentham', 'Grabado de un suplicio', 'Horario de una escuela mutua', 'Celda individual', 'Esquema de la casa de corrección', 'Patio de la prisión', 'Tabla de clasificación'][i % 7]}`, ancla: a, etiqueta: anclaACita(a) }; }));
+  const d = docs.get(m[1]!); if (!d?.figuras) return json([]);
+  // Solo ilustraciones que existen en la obra (el diagrama de Darwin).
+  return json(d.figuras.map((f, i) => { const a = anclaDe(d, f.unidad); return { id: `fig-${i}`, unidad: f.unidad - 1, imagenUrl: '', pie: `Figura ${i + 1}. ${f.pie}`, ancla: a, etiqueta: anclaACita(a) }; }));
 });
 ruta('GET', '/documentos/:id/original', () => json({ url: '' }));
 ruta('GET', '/documentos/:id/cita', (m, _c, q) => {
@@ -455,7 +463,7 @@ ruta('GET', '/documentos/:id/cita', (m, _c, q) => {
   return json({ texto, html: texto });
 });
 
-ruta('POST', '/documentos/importar', () => json({ documento: 'd-mirada', versionOrigen: 300, avisos: [] }));
+ruta('POST', '/documentos/importar', () => json({ documento: 'd-panoptico', versionOrigen: 300, avisos: [] }));
 
 ruta('GET', '/bibliotecas', () => json(bibliotecas.map((b) => ({ ...b, documentos: [...docs.values()].filter((d) => !d.borrado && d.bibliotecas.includes(b.id)).length }))));
 ruta('POST', '/bibliotecas', (_m, c) => { const b: Biblioteca = { id: `b-${Date.now()}`, nombre: c.nombre, color: c.color, documentos: 0, creada: ahora(), actualizada: ahora(), propietario: 'yo', permiso: 'propietario', compartida: false }; bibliotecas.push(b); return json(b); });
@@ -505,7 +513,7 @@ ruta('GET', '/citas/estilos', (_m, _c, q) => { const n = normalizar(q.get('q') ?
 ruta('POST', '/citas/extraer-texto', () => json({ texto: '', parrafos: [] }));
 ruta('POST', '/citas/subir', (_m, _c, q) => json({ clave: `u/yo/citas/${Date.now()}`, nombre: q.get('nombre') ?? 'texto.docx', caduca: hace(-60 * 24 * 7), texto: 'En la demostración no se lee el DOCX: pega el texto.', parrafos: ['En la demostración no se lee el DOCX: pega el texto.'] }));
 ruta('POST', '/documentos/:id/reintentar', (m) => { const d = docs.get(m[1]!); if (d) { d.estado = 'procesando'; d.tarea = `tarea-${d.id}`; simularIngesta(d.id, d.tarea, d.unidades || 10, 1.4); } return json({ documento: m[1], tarea: `tarea-${m[1]}` }); });
-ruta('GET', '/bibliotecas/:id/miembros', (m) => json([{ usuario: 'yo', correo: 'jl@joseluissaorin.com', permiso: 'propietario', pendiente: false, desde: hace(60 * 24 * 30) }, ...(m[1] === 'b-clases' ? [{ usuario: 'u-isabel', correo: 'isabel@example.org', permiso: 'edicion', pendiente: false, desde: hace(60 * 24 * 5) }] : [])]));
+ruta('GET', '/bibliotecas/:id/miembros', (m) => json([{ usuario: 'yo', correo: 'jl@joseluissaorin.com', permiso: 'propietario', pendiente: false, desde: hace(60 * 24 * 30) }, ...(m[1] === 'b-clases' ? [{ usuario: 'u-lectura', correo: 'grupo-de-lectura@example.org', permiso: 'edicion', pendiente: false, desde: hace(60 * 24 * 5) }] : [])]));
 ruta('POST', '/bibliotecas/:id/compartir', (_m, c) => json({ correo: c.correo, permiso: c.permiso, pendiente: true, desde: ahora() }));
 
 ruta('GET', '/historial', () => json({ elementos: historial.filter((h) => !h.oculto), total: historial.length }));
@@ -533,7 +541,7 @@ ruta('POST', '/cuadernos/:id/sintesis', async (m, c) => {
   const lista = (tarjetas.get(m[1]!) ?? []).filter((t) => t.cita);
   await espera(900);
   const texto = lista.length
-    ? `${lista.map((t, i) => `${i === 0 ? 'Los pasajes reunidos coinciden en algo' : 'Además'}: ${minus(t.cita!.texto)} [${i + 1}]`).join(' ')}`
+    ? `${lista.length === 1 ? 'Este cuaderno reúne un pasaje' : `Este cuaderno reúne ${lista.length} pasajes`}: ${lista.map((t, i) => { const e = extracto(t.cita!.texto); return `${e.quien ? `${e.quien}: ` : ''}«${e.texto}» [${i + 1}]`; }).join('; ')}.`
     : 'Este cuaderno aún no tiene pasajes que sintetizar.';
   return json({ id: `s-${Date.now()}`, cuaderno: m[1], instrucciones: c.instrucciones, texto, citas: lista.map((t, i) => ({ n: i + 1, tarjeta: t.id, etiqueta: t.cita!.etiqueta })), creada: ahora() }, 0);
 });
@@ -552,7 +560,11 @@ ruta('GET', '/mapa', () => json(mapa()));
 ruta('GET', '/mapa/grupos/:i', (m) => {
   const g = mapa().grupos[Number(m[1])]!;
   const res = buscarEn(g.etiqueta ?? '', { documentos: g.documentosPrincipales }, 6);
-  return json({ indice: g.indice, miembros: res.map((r) => ({ documento: r.documento.id, titulo: r.documento.metadatos.titulo, objetivo: 'fragmento', id: r.fragmento.id, texto: r.fragmento.texto, etiqueta: r.etiqueta })) } satisfies MiembrosGrupo);
+  // Si la etiqueta no está en la lengua del texto (Bentham, Boecio), van los primeros pasajes.
+  const miembros = res.length
+    ? res.map((r) => ({ documento: r.documento.id, titulo: r.documento.metadatos.titulo, objetivo: 'fragmento', id: r.fragmento.id, texto: r.fragmento.texto, etiqueta: r.etiqueta }))
+    : (g.documentosPrincipales ?? []).flatMap((id) => { const d = docs.get(id)!; return [1, 2, 3].map((o) => ({ documento: id, titulo: d.meta.titulo, objetivo: 'fragmento', id: `f-${id}-${o}-0`, texto: parrafoDe(d, o), etiqueta: anclaACita(anclaDe(d, o)) })); }).slice(0, 6);
+  return json({ indice: g.indice, miembros } satisfies MiembrosGrupo);
 });
 ruta('POST', '/mapa/construir', () => sse((async function* () {
   const fases = ['Reuniendo pasajes', 'Reduciendo dimensiones', 'Agrupando', 'Poniendo nombre a los temas'];
@@ -564,26 +576,53 @@ ruta('POST', '/busqueda/multilingue', async (_m, c: Buscar) => { await espera(30
 ruta('POST', '/privacidad/purgar', () => json({ borrados: { documentos: docs.size, historial: historial.length } }));
 ruta('POST', '/auth/borrar', () => ok());
 ruta('GET', '/grafo', () => json(grafo()));
+ruta('POST', '/grafo/reconstruir', async () => { await espera(600); return json({ nodos: 0, aristas: 0, ms: 600 }, 0); });
 
-// --- Entidades (personas y obras): un grafo pequeño escrito a mano --------
+// --- Entidades (personas, lugares y obras): un grafo pequeño escrito a mano --
+// Cada contexto es un trozo literal del pasaje de esa unidad, con la mención entre ⟦⟧.
+// Los identificadores de Wikidata se han comprobado uno a uno.
 type EntDemo = { id: string; nombre: string; tipo: TipoEntidad; descripcion?: string; wikidata?: string; alias?: string[]; en: Array<[string, number, string]> };
 const ENTIDADES_DEMO: EntDemo[] = [
-  { id: 'e-valcarcel', nombre: 'Inés Valcárcel Ruiz', tipo: 'persona', descripcion: 'historiadora (personaje de la demostración)', alias: ['Valcárcel'], en: [['d-mirada', 12, 'la tesis de ⟦Valcárcel⟧ sobre la mirada que disciplina'], ['d-web', 3, 'releer a ⟦Valcárcel⟧ desde la vigilancia digital'], ['d-heterotopias', 2, '⟦Valcárcel⟧ y la cárcel como «espacio otro»'], ['d-mapas', 40, 'el diagrama, que ⟦Valcárcel⟧ llama dispositivo']] },
-  { id: 'e-bentham', nombre: 'Jeremy Bentham', tipo: 'persona', descripcion: 'filósofo británico (1748-1832)', alias: ['Bentham'], en: [['d-mirada', 200, 'el proyecto de ⟦Bentham⟧ para una casa de inspección'], ['d-web', 4, 'de la torre de ⟦Bentham⟧ a la cámara del teléfono']] },
-  { id: 'e-panoptico', nombre: 'Panóptico', tipo: 'obra', descripcion: 'proyecto arquitectónico de Jeremy Bentham (1791)', alias: ['panóptico'], en: [['d-mirada', 201, 'el ⟦panóptico⟧ como máquina de ver sin ser visto'], ['d-web', 4, 'el ⟦panóptico⟧ se ha vuelto portátil']] },
-  { id: 'e-etxeberria', nombre: 'Clara Etxeberria Goñi', tipo: 'persona', descripcion: 'ensayista (personaje de la demostración)', alias: ['Etxeberria'], en: [['d-asco', 9, 'para ⟦Etxeberria⟧, lo abyecto no es ni sujeto ni objeto'], ['d-montesdeoca', 5, 'leídas con ⟦Etxeberria⟧, las cartas guardan lo que se expulsa'], ['d-clase', 12, 'en la clase de hoy, ⟦Etxeberria⟧ y el duelo']] },
-  { id: 'e-bermejo', nombre: 'Aurelio Bermejo', tipo: 'persona', descripcion: 'cuentista (personaje de la demostración)', alias: ['Bermejo'], en: [['d-voces', 3, 'un archivo total imaginado por ⟦Bermejo⟧'], ['d-asco', 40, 'el catálogo imposible que inventa ⟦Bermejo⟧']] },
-  { id: 'e-catalogos', nombre: 'La sala de los catálogos', tipo: 'obra', descripcion: 'cuento de Aurelio Bermejo (personaje de la demostración)', en: [['d-voces', 40, 'en ⟦La sala de los catálogos⟧ todos los libros están ya descritos']] },
-  { id: 'e-becquer', nombre: 'Gustavo Adolfo Bécquer', tipo: 'persona', descripcion: 'poeta español (1836-1870)', alias: ['Bécquer'], en: [['d-becquer', 1, 'Rimas, de Gustavo Adolfo ⟦Bécquer⟧'], ['d-almeida', 15, 'las golondrinas de ⟦Bécquer⟧ ya traían la música dentro']] },
-  { id: 'e-paris', nombre: 'París', tipo: 'lugar', wikidata: 'Q90', en: [['d-mirada', 150, 'la peste en ⟦París⟧ y el reglamento de la ciudad'], ['d-asco', 2, 'el seminario de ⟦París⟧ en los setenta']] },
+  { id: 'e-cervantes', nombre: 'Miguel de Cervantes', tipo: 'persona', descripcion: 'novelista español (1547-1616)', wikidata: 'Q5682', alias: ['Miguel de Ceruantes', 'Ceruantes'], en: [['d-quijote', 1, 'Compueſto por ⟦Miguel de Ceruantes⟧'], ['d-quijote', 2, 'compueſto por ⟦Miguel de Ceruantes⟧ Saauedra: taſſarõ cada pliego del dicho libro']] },
+  { id: 'e-cuesta', nombre: 'Juan de la Cuesta', tipo: 'persona', descripcion: 'impresor madrileño del Siglo de Oro', wikidata: 'Q3187850', alias: ['Iuan de la Cueſta'], en: [['d-quijote', 1, 'EN MADRID, Por ⟦Iuan de la Cueſta⟧.']] },
+  { id: 'e-bejar', nombre: 'Duque de Béjar', tipo: 'persona', descripcion: 'destinatario de la dedicatoria de la primera parte del Quijote', alias: ['DVQVE DE BEIAR'], en: [['d-quijote', 1, 'DIRIGIDO AL ⟦DVQVE DE BEIAR⟧']] },
+  { id: 'e-dulcinea', nombre: 'Dulcinea del Toboso', tipo: 'persona', descripcion: 'personaje del Quijote', alias: ['Dulcinea del Toboſo', 'Dulcinea'], en: [['d-quijote', 18, 'vino a llamarla ⟦Dulcinea del Toboſo⟧'], ['d-quijote', 20, 'O Princeſa ⟦Dulcinea⟧, ſeñora deſte cautiuo cora']] },
+  { id: 'e-rocinante', nombre: 'Rocinante', tipo: 'persona', descripcion: 'el caballo de don Quijote', alias: ['Rozinante'], en: [['d-quijote', 17, 'al fin le vino a llamar ⟦Rozinante⟧'], ['d-quijote', 19, 'ſobio ſobre ⟦Rozinante⟧']] },
+  { id: 'e-amadis', nombre: 'Amadís de Gaula', tipo: 'persona', descripcion: 'caballero protagonista del libro de caballerías del mismo nombre', alias: ['Amadis de Gaula', 'Amadis'], en: [['d-quijote', 15, 'Palmerin de Ingalaterra, ò ⟦Amadis de Gaula⟧'], ['d-quijote', 17, 'el valeroſo ⟦Amadis⟧, no ſolo ſe auia contentado']] },
+  { id: 'e-montiel', nombre: 'Campo de Montiel', tipo: 'lugar', descripcion: 'comarca de La Mancha', alias: ['campo de Montiel'], en: [['d-quijote', 12, 'del diſtrito del ⟦campo de Montiel⟧'], ['d-quijote', 20, 'el antiguo, y conocido ⟦campo de Montiel⟧']] },
+  { id: 'e-horacio', nombre: 'Horacio', tipo: 'persona', descripcion: 'poeta latino (65-8 a. C.)', en: [['d-quijote', 9, 'citar à ⟦Horacio⟧, o a quien lo dixo']] },
+  { id: 'e-madrid', nombre: 'Madrid', tipo: 'lugar', wikidata: 'Q2807', alias: ['MADRID'], en: [['d-quijote', 1, 'EN ⟦MADRID⟧, Por Iuan de la Cueſta.'], ['d-larra', 6, 'veo lo que hay que ver en ⟦Madrid⟧'], ['d-larra', 7, 'quince meses de estancia en ⟦Madrid⟧']] },
+  { id: 'e-valladolid', nombre: 'Valladolid', tipo: 'lugar', wikidata: 'Q8356', en: [['d-quijote', 2, 'di la preſente en ⟦Valladolid⟧, a veynte dias del mes de']] },
+  { id: 'e-paris', nombre: 'París', tipo: 'lugar', wikidata: 'Q90', alias: ['Paris'], en: [['d-larra', 4, 'proyectos vastos concebidos en ⟦Paris⟧ de invertir aquí sus cuantiosos caudales']] },
+  { id: 'e-sans-delai', nombre: 'Monsieur Sans-délai', tipo: 'persona', descripcion: 'personaje de «Vuelva usted mañana»', alias: ['Sans-délai'], en: [['d-larra', 7, 'Al llegar aquí monsieur ⟦Sans-délai⟧, traté de reprimir una carcajada']] },
+  { id: 'e-polonia', nombre: 'Polonia', tipo: 'lugar', wikidata: 'Q36', en: [['d-vida-sueno', 1, 'Mal, ⟦Polonia⟧, recibes']] },
+  { id: 'e-clotaldo', nombre: 'Clotaldo', tipo: 'persona', descripcion: 'personaje de «La vida es sueño», alcaide de la torre', en: [['d-vida-sueno', 8, '¿Es ⟦Clotaldo⟧?'], ['d-vida-sueno', 13, 'Este es ⟦Clotaldo⟧, mi alcaide.']] },
+  { id: 'e-carcel', nombre: 'Cárcel', tipo: 'concepto', descripcion: 'la prisión, en castellano y en inglés', alias: ['carcel', 'cárcel', 'prision', 'prisons'], en: [['d-quijote', 5, 'bien como quien ſe engendrô en vna ⟦carcel⟧'], ['d-vida-sueno', 5, 'Una ⟦prision⟧ oscura,'], ['d-vida-sueno', 13, 'Que han quebrantado la ⟦cárcel⟧...'], ['d-panoptico', 3, 'the purposes of perpetual ⟦prisons⟧ in the room of death']] },
+  { id: 'e-lazaro', nombre: 'Lázaro', tipo: 'persona', descripcion: 'personaje del Evangelio de Juan, resucitado por Jesús', en: [['d-rimas', 3, 'Y una voz, como ⟦Lázaro⟧, espera']] },
+  { id: 'e-socrates', nombre: 'Sócrates', tipo: 'persona', descripcion: 'filósofo griego (c. 470-399 a. C.)', alias: ['Socrates', 'Socratis'], en: [['d-consolatio', 7, 'praeceptor eius ⟦Socrates⟧ iniustae uictoriam mortis'], ['d-consolatio', 8, 'nec ⟦Socratis⟧ uenenum']] },
+  { id: 'e-platon', nombre: 'Platón', tipo: 'persona', descripcion: 'filósofo griego (c. 427-347 a. C.)', alias: ['Platonis'], en: [['d-consolatio', 7, 'ante nostri ⟦Platonis⟧ aetatem'], ['d-consolatio', 10, 'hanc sententiam ⟦Platonis⟧ ore sanxisti']] },
+  { id: 'e-golfin', nombre: 'Teodoro Golfín', tipo: 'persona', descripcion: 'personaje de «Marianela»', alias: ['Golfín'], en: [['d-marianela', 4, 'Aquí tienes, ⟦Teodoro Golfín⟧, el resultado de tu']] },
+  { id: 'e-socartes', nombre: 'Socartes', tipo: 'lugar', descripcion: 'las minas imaginarias de «Marianela»', en: [['d-marianela', 3, 'he de llegar a las famosas minas de ⟦Socartes⟧']] },
+  { id: 'e-houston', nombre: 'Houston', tipo: 'lugar', wikidata: 'Q16555', en: [['d-rice', 4, 'this city of ⟦Houston⟧, this state of Texas']] },
+  { id: 'e-rice', nombre: 'Universidad Rice', tipo: 'organizacion', wikidata: 'Q842909', alias: ['Rice'], en: [['d-rice', 9, 'Why does ⟦Rice⟧ play Texas?'], ['d-rice', 12, 'Technical institutions, such as ⟦Rice⟧, will reap the harvest of these gains.']] },
+  { id: 'e-bradford', nombre: 'William Bradford', tipo: 'persona', descripcion: 'gobernador de la colonia de Plymouth (1590-1657)', en: [['d-rice', 4, '⟦William Bradford⟧, speaking in 1630 of the founding of the']] },
+  { id: 'e-mallory', nombre: 'George Mallory', tipo: 'persona', descripcion: 'alpinista británico (1886-1924), murió en el Everest', en: [['d-rice', 16, 'the great British explorer ⟦George Mallory⟧, who was to die on Mount Everest']] },
+  { id: 'e-wallace', nombre: 'Alfred Russel Wallace', tipo: 'persona', descripcion: 'naturalista británico (1823-1913)', alias: ['Mr. Wallace'], en: [['d-origen', 3, 'as ⟦Mr. Wallace⟧, who is now studying the natural history of the Malay archipelago']] },
+  { id: 'e-lyell', nombre: 'Charles Lyell', tipo: 'persona', descripcion: 'geólogo británico (1797-1875)', alias: ['Sir Charles Lyell'], en: [['d-origen', 3, 'forward it to ⟦Sir Charles Lyell⟧, who sent it to the Linnean Society']] },
 ];
 const CO_DEMO: Array<[string, string, number, string?]> = [
-  ['e-valcarcel', 'e-bentham', 4.2, 'Inés Valcárcel analiza el panóptico de Jeremy Bentham'], ['e-bentham', 'e-panoptico', 5.1, 'Jeremy Bentham diseñó el Panóptico'],
-  ['e-valcarcel', 'e-panoptico', 3.4], ['e-valcarcel', 'e-paris', 1.2], ['e-etxeberria', 'e-paris', 0.9], ['e-bermejo', 'e-catalogos', 3.8, 'La sala de los catálogos es un cuento de Aurelio Bermejo'],
-  ['e-etxeberria', 'e-bermejo', 0.7], ['e-valcarcel', 'e-bermejo', 0.6], ['e-becquer', 'e-etxeberria', 0.5],
+  ['e-cervantes', 'e-cuesta', 4.6, 'Juan de la Cuesta imprimió la edición de 1608'], ['e-cervantes', 'e-bejar', 3.8, 'Cervantes dedica el libro al duque de Béjar'],
+  ['e-cuesta', 'e-madrid', 2.4, 'La edición de 1608 se imprimió en Madrid'], ['e-cervantes', 'e-valladolid', 1.6, 'La tasa del libro se firmó en Valladolid'],
+  ['e-dulcinea', 'e-rocinante', 2.2], ['e-rocinante', 'e-montiel', 1.4], ['e-amadis', 'e-rocinante', 1.2], ['e-cervantes', 'e-horacio', 0.8],
+  ['e-cervantes', 'e-carcel', 1.1, 'El prólogo compara el libro con un hijo engendrado en una cárcel'],
+  ['e-madrid', 'e-paris', 1.3], ['e-madrid', 'e-sans-delai', 2.6], ['e-paris', 'e-sans-delai', 1.9],
+  ['e-clotaldo', 'e-polonia', 1.2], ['e-clotaldo', 'e-carcel', 2.8, 'Clotaldo es el alcaide de la torre que sirve de cárcel'],
+  ['e-socrates', 'e-platon', 3.1, 'Sócrates fue maestro de Platón'], ['e-golfin', 'e-socartes', 3.3, 'Teodoro Golfín busca las minas de Socartes'],
+  ['e-houston', 'e-rice', 2.7], ['e-bradford', 'e-houston', 0.9], ['e-mallory', 'e-rice', 0.7],
+  ['e-wallace', 'e-lyell', 2.9, 'La memoria de Wallace llegó a la Sociedad Linneana a través de Lyell'],
 ];
 function entidadDemo(e: EntDemo): Entidad {
-  return { id: e.id, nombre: e.nombre, tipo: e.tipo, alias: e.alias ?? [], ...(e.descripcion ? { descripcion: e.descripcion } : {}), ...(e.wikidata ? { wikidata: e.wikidata } : {}), menciones: e.en.length * 3, documentos: new Set(e.en.map((x) => x[0])).size };
+  return { id: e.id, nombre: e.nombre, tipo: e.tipo, alias: e.alias ?? [], ...(e.descripcion ? { descripcion: e.descripcion } : {}), ...(e.wikidata ? { wikidata: e.wikidata } : {}), menciones: e.en.length, documentos: new Set(e.en.map((x) => x[0])).size };
 }
 function mencionDemo(e: EntDemo, [doc, orden, contexto]: [string, number, string], i: number): MencionEntidad {
   const d = docs.get(doc)!;
@@ -597,7 +636,7 @@ ruta('GET', '/entidades', (_m, _c, q) => {
   const lista = ENTIDADES_DEMO.filter((e) => (!tipo || e.tipo === tipo) && (!n || normalizar([e.nombre, ...(e.alias ?? [])].join(' ')).includes(n))).map(entidadDemo).sort((a, b) => b.documentos - a.documentos);
   return json({ elementos: lista, total: lista.length });
 });
-ruta('GET', '/entidades/estado', () => json({ documentos: [], entidades: ENTIDADES_DEMO.length, menciones: 60, aristas: CO_DEMO.length }));
+ruta('GET', '/entidades/estado', () => json({ documentos: [], entidades: ENTIDADES_DEMO.length, menciones: ENTIDADES_DEMO.reduce((s, e) => s + e.en.length, 0), aristas: CO_DEMO.length }));
 ruta('POST', '/entidades/reanudar', () => json({ reanudados: [] }));
 ruta('GET', '/entidades/camino', (_m, _c, q) => {
   const desde = q.get('desde') ?? '', hasta = q.get('hasta') ?? '';
@@ -616,7 +655,7 @@ ruta('GET', '/entidades/documentos/:documento/lector', (m) => {
   return json({ documento: m[1], entidades: Object.fromEntries(es.map((e) => { const x = entidadDemo(e); return [e.id, { nombre: x.nombre, tipo: x.tipo, documentos: x.documentos, menciones: x.menciones, ...(x.descripcion ? { descripcion: x.descripcion } : {}) }]; })),
     formas: es.flatMap((e) => [e.nombre, ...(e.alias ?? [])].map((texto) => ({ texto, entidad: e.id, unidades: e.en.filter((x) => x[0] === m[1]).map((x) => x[1] - 1) }))) });
 });
-ruta('GET', '/entidades/documentos/:documento', (m) => json({ documento: m[1], entidades: ENTIDADES_DEMO.filter((e) => e.en.some((x) => x[0] === m[1])).map((e) => ({ ...entidadDemo(e), aqui: 3 })) }));
+ruta('GET', '/entidades/documentos/:documento', (m) => json({ documento: m[1], entidades: ENTIDADES_DEMO.filter((e) => e.en.some((x) => x[0] === m[1])).map((e) => ({ ...entidadDemo(e), aqui: e.en.filter((x) => x[0] === m[1]).length })) }));
 ruta('GET', '/entidades/:id', (m) => {
   const e = entPorId(m[1]!); if (!e) return error(404, 'no_encontrado', 'No existe esa entidad.');
   const porDoc = [...new Set(e.en.map((x) => x[0]))].map((doc) => { const d = docs.get(doc)!; const ms = e.en.filter((x) => x[0] === doc).map((x, i) => mencionDemo(e, x, i));
@@ -633,22 +672,24 @@ ruta('GET', '/entidades/:id/linea', (m) => {
     return { ...(anio ? { anio } : {}), documento: mm.documento, titulo: d.meta.titulo, fragmento: mm.fragmento, ancla: mm.ancla, etiqueta: mm.etiqueta, contexto: mm.contexto }; }).sort((a, b) => (a.anio ?? 1e9) - (b.anio ?? 1e9)) });
 });
 
+// Lo que las obras de la demo citan o mencionan de verdad y no está en la biblioteca.
 ruta('GET', '/grafo/huerfanas', () => json([
-  { referencia: 'Bentham, J. (1791). Panopticon; or, the Inspection-House.', anio: 1791, citadaPor: ['d-mirada', 'd-web'] },
-  { referencia: 'Lacan, J. (1966). Écrits.', anio: 1966, citadaPor: ['d-asco', 'd-clase'] },
-  { referencia: 'Douglas, M. (1966). Purity and Danger.', anio: 1966, citadaPor: ['d-asco'] },
+  { referencia: 'Horacio. Odas, I, 4.', citadaPor: ['d-quijote'] },
+  { referencia: 'Wallace, A. R. (1858). On the Tendency of Varieties to Depart Indefinitely from the Original Type. Journal of the Proceedings of the Linnean Society, 3.', anio: 1858, citadaPor: ['d-origen'] },
+  { referencia: 'Bradford, W. Of Plymouth Plantation.', citadaPor: ['d-rice'] },
 ]));
 ruta('GET', '/perspectivas/arqueologia', () => json({ olvidados: [
-  { documento: 'd-mapas', titulo: 'Mapas sin centro', ultimaApertura: hace(60 * 24 * 96), motivo: 'Lo subrayaste mucho en mayo y no lo has vuelto a abrir; tres búsquedas recientes sobre «devenir» lo tocan.' },
-  { documento: 'd-voces', titulo: 'El archivo de las voces y otros cuentos', ultimaApertura: hace(60 * 24 * 64), motivo: '«La sala de los catálogos» responde a tu consulta sobre el archivo total.' },
+  { documento: 'd-consolatio', titulo: 'De philosophiae consolatione', ultimaApertura: hace(60 * 24 * 96), motivo: 'No lo abres desde junio, y tus búsquedas sobre la cárcel lo rozan: Boecio lo escribió preso, a la espera de su ejecución.' },
+  { documento: 'd-marianela', titulo: 'Marianela', ultimaApertura: hace(60 * 24 * 64), motivo: 'Lo subiste en agosto y no has pasado del primer capítulo.' },
 ] }));
 ruta('GET', '/perspectivas/huecos', () => json([
-  { tema: 'Didi-Huberman y la imagen-superviviente', consultas: 5, resultadosMedios: 0.4, sugerencia: 'Ninguno de tus documentos trata el tema; quizá falte «Ante el tiempo».' },
-  { tema: 'Archivo queer', consultas: 3, resultadosMedios: 1.2, sugerencia: 'Solo una diapositiva lo menciona.' },
+  { tema: 'Foucault y el panoptismo', consultas: 5, resultadosMedios: 0.4, sugerencia: 'Ninguno de tus documentos lo trata: «Vigilar y castigar» (1975) no es de dominio público, tendrías que subir tu ejemplar.' },
+  { tema: 'Segismundo fuera de la torre', consultas: 3, resultadosMedios: 1.2, sugerencia: 'Solo tienes la transcripción de la primera jornada de «La vida es sueño».' },
 ]));
 ruta('GET', '/perspectivas/recomendaciones', () => json([
-  { titulo: 'Arlette Farge, «La atracción del archivo»', motivo: 'Lo citan dos de tus documentos y encaja con «Archivo y duelo».' },
-  { titulo: 'Mary Douglas, «Pureza y peligro»', motivo: 'Etxeberria la cita en el capítulo III y la buscas como «impureza».' },
+  { titulo: 'Boecio, «De philosophiae consolatione», libros II a V', motivo: 'Tienes solo el libro I; en el II, Filosofía habla por boca de la Fortuna.' },
+  { titulo: 'Pedro Calderón de la Barca, «La vida es sueño», jornadas segunda y tercera', motivo: 'Están en la misma grabación de LibriVox y completarían tu transcripción.' },
+  { titulo: 'Miguel de Cervantes, «Segunda parte del ingenioso caballero don Quijote de la Mancha» (1615)', motivo: 'De la primera parte tienes los preliminares y los dos primeros capítulos.' },
 ]));
 ruta('POST', '/perspectivas/abierto', () => ok());
 ruta('GET', '/corpus/kpis', () => json(corpus()));
@@ -687,7 +728,7 @@ ruta('POST', '/subidas/:id/ingestar', (m, c) => {
   const titulo = s.nombre.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ');
   docs.set(s.documento, {
     id: s.documento, tipo: s.tipo, unidades, estado: 'procesando', leidas: 0, tarea, ...(s.tipo === 'audio' || s.tipo === 'video' ? { duracion: unidades * 60 } : {}),
-    meta: { titulo: titulo.charAt(0).toUpperCase() + titulo.slice(1), autores: [], idioma: 'es' }, secciones: [], banco: ['Texto leído de la página en la demostración.', 'Cada fragmento conserva su ancla: página impresa o segundo exacto.'], fijos: {},
+    meta: { titulo: titulo.charAt(0).toUpperCase() + titulo.slice(1), autores: [], idioma: 'es' }, secciones: [], pasajes: ['Texto leído de la página en la demostración.', 'Cada fragmento conserva su ancla: página impresa o segundo exacto.'],
     bibliotecas: [], creado: ahora(), bytes: s.bytes, mime: s.mime,
   });
   simularIngesta(s.documento, tarea, unidades, 1.4);
@@ -696,7 +737,7 @@ ruta('POST', '/subidas/:id/ingestar', (m, c) => {
 ruta('POST', '/subidas/url', (_m, c) => {
   const documento = `d-${Date.now().toString(36)}`, tarea = `tarea-${documento}`;
   const tipo: TipoEntrada = /youtu/.test(c.url) ? 'video' : 'web';
-  docs.set(documento, { id: documento, tipo, unidades: tipo === 'web' ? 14 : 30, ...(tipo === 'video' ? { duracion: 1800 } : {}), estado: 'procesando', leidas: 0, tarea, meta: { titulo: c.url.replace(/^https?:\/\/(www\.)?/, '').slice(0, 60), autores: [], url: c.url }, secciones: [], banco: ['Párrafo extraído de la página web.'], fijos: {}, bibliotecas: [], creado: ahora(), bytes: 0, mime: 'text/html' });
+  docs.set(documento, { id: documento, tipo, unidades: tipo === 'web' ? 14 : 30, ...(tipo === 'video' ? { duracion: 1800 } : {}), estado: 'procesando', leidas: 0, tarea, meta: { titulo: c.url.replace(/^https?:\/\/(www\.)?/, '').slice(0, 60), autores: [], url: c.url }, secciones: [], pasajes: ['Párrafo extraído de la página web.'], bibliotecas: [], creado: ahora(), bytes: 0, mime: 'text/html' });
   simularIngesta(documento, tarea, tipo === 'web' ? 14 : 30, 1.2);
   return json({ documento, tarea });
 });
