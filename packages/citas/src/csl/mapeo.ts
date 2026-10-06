@@ -52,20 +52,51 @@ export function tipoCSLPorDefecto(tipo: Documento['tipo'], m: MetadatosDocumento
   }
 }
 
-/** MetadatosDocumento → ítem CSL-JSON. */
-export function aItemCSL(doc: DocumentoCitable): ItemCSL {
+/** «Sin fecha» según la lengua de la cita. */
+const SIN_FECHA: Record<string, string> = { es: 's. f.', en: 'n.d.', fr: 's. d.', it: 's.d.', de: 'o. J.', pt: 's.d.', ca: 's. d.' };
+
+/** Fecha ISO («1977-03-20», «1977-03») → partes CSL; null si no se entiende. */
+function partesFecha(iso: string): number[] | null {
+  const m = /^(-?\d{1,4})(?:-(\d{1,2})(?:-(\d{1,2}))?)?/.exec(iso.trim());
+  if (!m) return null;
+  return [Number(m[1]), ...(m[2] ? [Number(m[2])] : []), ...(m[3] ? [Number(m[3])] : [])];
+}
+
+/**
+ * MetadatosDocumento → ítem CSL-JSON. `idioma` (el de la cita) solo afecta a
+ * lo que CSL no traduce solo: el «s. f.» con horquilla de los impresos sin año.
+ */
+export function aItemCSL(doc: DocumentoCitable, idioma = 'es'): ItemCSL {
   const m = doc.metadatos;
   const item: ItemCSL = { id: doc.id, type: tipoCSLPorDefecto(doc.tipo, m) };
   item.title = m.subtitulo ? `${m.titulo}: ${m.subtitulo}` : m.titulo;
   if (m.subtitulo) item['title-short'] = m.titulo;
+  if (m.tituloOriginal && m.tituloOriginal !== m.titulo) item['original-title'] = m.tituloOriginal;
   if (m.autores.length) item.author = m.autores.map(nombre);
   if (m.editores?.length) item.editor = m.editores.map(nombre);
-  if (m.anio !== undefined) item.issued = { 'date-parts': [[m.anio]] };
+  if (m.traductores?.length) item.translator = m.traductores.map(nombre);
+  const fecha = m.fecha ? partesFecha(m.fecha) : null;
+  if (fecha && (m.anio === undefined || fecha[0] === m.anio)) item.issued = { 'date-parts': [fecha] };
+  else if (m.anio !== undefined) item.issued = { 'date-parts': [[m.anio]] };
   else if (m.anioOriginal !== undefined) item.issued = { 'date-parts': [[m.anioOriginal]] };
+  else if (m.sinFecha && (m.sinFecha.desde !== undefined || m.sinFecha.hasta !== undefined)) {
+    // Sin año impreso pero con horquilla documentada: «s. f. [1700-1760]», entre corchetes por ser inferida.
+    const corto = idioma.slice(0, 2).toLowerCase();
+    const sf = SIN_FECHA[corto] ?? SIN_FECHA.es!;
+    const guion = corto === 'es' ? '-' : '–';
+    const { desde, hasta } = m.sinFecha;
+    const rango = desde !== undefined && hasta !== undefined ? (desde === hasta ? `${desde}` : `${desde}${guion}${hasta}`)
+      : desde !== undefined ? `${corto === 'es' ? 'después de' : corto === 'en' ? 'after' : '>'} ${desde}` : `${corto === 'es' ? 'antes de' : corto === 'en' ? 'before' : '<'} ${hasta}`;
+    item.issued = { literal: `${sf} [${rango}]` } as unknown as FechaCSL;
+  }
   if (m.anioOriginal !== undefined && m.anio !== undefined && m.anioOriginal !== m.anio) item['original-date'] = { 'date-parts': [[m.anioOriginal]] };
   if (m.editorial) item.publisher = m.editorial;
   if (m.lugar) item['publisher-place'] = m.lugar;
+  // Contenedor: la revista de un artículo, el libro de un capítulo o cuento, el programa de una emisión.
   if (m.revista) item['container-title'] = m.revista;
+  else if (m.contenedor && m.contenedor !== m.titulo) item['container-title'] = m.contenedor;
+  if (m.edicion) item.edition = m.edicion;
+  if (m.coleccion) item['collection-title'] = m.coleccion;
   if (m.volumen) item.volume = m.volumen;
   if (m.numero) item.issue = m.numero;
   if (m.paginas) item.page = m.paginas;

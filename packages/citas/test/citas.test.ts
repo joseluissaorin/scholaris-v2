@@ -2,9 +2,9 @@ import { strFromU8, unzipSync } from 'fflate';
 import { beforeAll, describe, expect, it } from 'vitest';
 import type { AnclaPagina } from '@scholaris/nucleo';
 import {
-  aBibtex, aCSLJSON, aRIS, analizarTemporal, autocitar, bibliografia, citaDocumento, combinarRPr, detectarAfirmacionNegativa, dividirAfirmaciones, dividirParrafos,
+  aBibtex, aCSLJSON, aItemCSL, aRIS, analizarTemporal, autocitar, bibliografia, citaDocumento, combinarRPr, detectarAfirmacionNegativa, dividirAfirmaciones, dividirParrafos,
   extraerAnios, extraerTexto, importarBibtex, insertarCitasDocx, insertarCitasTexto, latexAUnicode, leerDocx, listarEstilos, MotorCitas, nombreBibtex,
-  puntoDeInsercion, terminosClaveAusentes, verificarAfirmacion, type ResultadoAutocita,
+  puntoDeInsercion, terminosClaveAusentes, verificarAfirmacion, type DocumentoCitable, type ResultadoAutocita,
 } from '../src/index.js';
 import { bienFormado, DOCS, doc, docxDePrueba, montar } from './apoyo.js';
 
@@ -234,6 +234,37 @@ describe('CSL', () => {
     expect(b.entradas.length).toBe(4);
     expect(b.entradas.some((e) => e.includes('*The Discarded Image'))).toBe(true);
     expect(b.html).toMatch(/^<div class="csl-bib-body">/);
+  });
+
+  it('usa contenedor, traductores, título original, fecha completa y «s. f.» con horquilla', async () => {
+    const entrevista: DocumentoCitable = { id: 'doc-afondo', tipo: 'video', metadatos: {
+      titulo: 'Entrevista a Julio Cortázar', autores: [{ nombre: 'Joaquín', apellidos: 'Soler Serrano' }], anio: 1977,
+      fecha: '1977-03-20', contenedor: 'A fondo', tipoCSL: 'broadcast', editorial: 'RTVE', idioma: 'es' } };
+    const comedia: DocumentoCitable = { id: 'doc-casamiento', tipo: 'pdf_escaneado', metadatos: {
+      titulo: 'El casamiento en la muerte', autores: [{ nombre: 'Lope', apellidos: 'de Vega' }], lugar: 'Valencia',
+      sinFecha: { desde: 1760, hasta: 1780, fundamento: 'años de actividad del impresor' }, idioma: 'es' } };
+    const traducido: DocumentoCitable = { id: 'doc-trad', tipo: 'pdf', metadatos: {
+      titulo: 'La imagen descartada', tituloOriginal: 'The Discarded Image', autores: [{ nombre: 'C. S.', apellidos: 'Lewis' }],
+      traductores: [{ nombre: 'Carlos', apellidos: 'Manzano' }], anio: 1997, anioOriginal: 1964, editorial: 'Península', lugar: 'Barcelona',
+      contenedor: 'Ignorado en un libro', tipoCSL: 'book', coleccion: 'Historia, Ciencia, Sociedad', idioma: 'es' } };
+    const i1 = aItemCSL(entrevista), i2 = aItemCSL(comedia), i3 = aItemCSL(traducido), i2en = aItemCSL(comedia, 'en-US');
+    expect(i1['container-title']).toBe('A fondo');
+    expect(i1.issued).toEqual({ 'date-parts': [[1977, 3, 20]] });
+    expect(i2.issued).toEqual({ literal: 's. f. [1760-1780]' });
+    expect(i2en.issued).toEqual({ literal: 'n.d. [1760–1780]' });
+    expect(i3['original-title']).toBe('The Discarded Image');
+    expect(i3['original-date']).toEqual({ 'date-parts': [[1964]] });
+    expect(i3.translator).toEqual([{ family: 'Manzano', given: 'Carlos' }]);
+    expect(i3['collection-title']).toBe('Historia, Ciencia, Sociedad');
+    const chicago = await MotorCitas.crear({ estilo: 'chicago-author-date', documentos: [entrevista, comedia, traducido] });
+    const { bibliografia: b } = chicago.citar([[{ documento: 'doc-afondo' }], [{ documento: 'doc-casamiento' }], [{ documento: 'doc-trad' }]]);
+    const todo = b.join('\n');
+    expect(todo).toContain('A fondo');
+    expect(todo).toContain('s. f. [1760-1780]');
+    expect(todo).toMatch(/Manzano/);
+    const apa = await MotorCitas.crear({ estilo: 'apa', documentos: [comedia, traducido] });
+    expect(apa.citarUno([{ documento: 'doc-casamiento' }])).toContain('s. f. [1760-1780]');
+    expect(apa.citarUno([{ documento: 'doc-trad' }])).toBe('(Lewis, 1964/1997)');
   });
 
   it('el motor se reutiliza: la segunda creación es inmediata', async () => {

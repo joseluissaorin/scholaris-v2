@@ -124,7 +124,7 @@ export class MotorCitas {
   }
 
   agregar(documentos: DocumentoCitable[]): void {
-    for (const d of documentos) this.items.set(d.id, aItemCSL(d));
+    for (const d of documentos) this.items.set(d.id, aItemCSL(d, this.idioma));
   }
 
   item(id: string): ItemCSL | undefined { return this.items.get(id); }

@@ -106,7 +106,7 @@ export function aRIS(documentos: DocumentoCitable[]): string {
 }
 
 export function aCSLJSON(documentos: DocumentoCitable[]): ItemCSL[] {
-  return documentos.map(aItemCSL);
+  return documentos.map((d) => aItemCSL(d));
 }
 
 export function exportarReferencias(documentos: DocumentoCitable[], formato: FormatoReferencias): string {
