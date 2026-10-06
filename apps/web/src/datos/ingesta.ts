@@ -368,7 +368,13 @@ function manejar(e: EventoTiempoReal) {
 }
 
 /** Al abrir la app: las tareas que ya estaban en marcha (otra pestaña, otro día) vuelven a la mesa. */
-export async function recuperarTareas() {
+let recuperacion: Promise<void> | null = null;
+export function recuperarTareas(): Promise<void> {
+  recuperacion ??= recuperarTareasAhora();
+  return recuperacion;
+}
+
+async function recuperarTareasAhora() {
   asegurarEscucha();
   try {
     const [tareas, docs] = await Promise.all([api().tareas.listar(true), clienteConsultas.fetchQuery({ queryKey: ['documentos', {}], queryFn: () => api().documentos.listar({ limite: 500 }) })]);

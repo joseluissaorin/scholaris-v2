@@ -2,12 +2,13 @@ import { memo } from 'react';
 import type { TipoEntrada } from '@scholaris/nucleo';
 import { cx } from '@scholaris/ui';
 
+/** Tintas fijas: una cubierta impresa no cambia con el tema de la pantalla. */
 const PALETAS = [
-  { fondo: 'var(--s-rojo)', tinta: '#fbf5ec', forma: '#22160f' },
-  { fondo: 'var(--s-azul)', tinta: '#f6f1e6', forma: 'var(--s-amarillo)' },
-  { fondo: 'var(--s-amarillo)', tinta: '#22160f', forma: 'var(--s-rojo)' },
-  { fondo: '#22160f', tinta: '#f6f1e6', forma: 'var(--s-rojo)' },
-  { fondo: '#faf7f0', tinta: '#22160f', forma: 'var(--s-azul)' },
+  { fondo: '#b8321c', tinta: '#fbf5ec', forma: '#22160f' },
+  { fondo: '#23457a', tinta: '#f6f1e6', forma: '#e2a52a' },
+  { fondo: '#e2a52a', tinta: '#22160f', forma: '#b8321c' },
+  { fondo: '#22160f', tinta: '#f6f1e6', forma: '#b8321c' },
+  { fondo: '#faf7f0', tinta: '#22160f', forma: '#23457a' },
 ];
 
 function hash(t: string) {

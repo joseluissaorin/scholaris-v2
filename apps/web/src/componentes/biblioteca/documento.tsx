@@ -92,7 +92,6 @@ export const FichaDocumento = memo(function FichaDocumento({ doc, bibliotecas, i
         to="/lector/$id"
         params={{ id: doc.id }}
         className="block rounded-s outline-offset-4"
-        aria-label={`${doc.titulo}, ${doc.autores || 'sin autor'}`}
       >
         <div className={cx('relative aspect-[3/4] overflow-hidden rounded-s border border-filete shadow-hoja transition-transform duration-200 [container-type:inline-size] group-hover:-translate-y-1 group-hover:rotate-[-0.6deg]')}>
           <Portada id={doc.id} titulo={doc.titulo} autores={doc.autores} tipo={doc.tipo} url={doc.portadaUrl} />

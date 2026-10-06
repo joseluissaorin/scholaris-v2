@@ -9,7 +9,7 @@ import {
 } from '@scholaris/ui';
 import { q } from '../datos/consultas';
 import { api } from '../datos/api';
-import { useIngestas } from '../datos/ingesta';
+import { recuperarTareas, useIngestas } from '../datos/ingesta';
 import { disparar, ponerBibliotecaActiva } from '../lib/acciones';
 import { Cabecera } from '../componentes/comunes/cabecera';
 import { FichaDocumento, FilaDocumento, puntoColeccion } from '../componentes/biblioteca/documento';
@@ -37,9 +37,10 @@ export const Route = createFileRoute('/')({
     orden: (['recientes', 'titulo', 'autor', 'anio'] as const).includes(s.orden as Orden) ? (s.orden as Orden) : undefined,
     vista: s.vista === 'lista' ? 'lista' : undefined,
   }),
-  loader: ({ context }) => {
+  // La mesa de entrada se conoce antes del primer pintado: nada empuja la rejilla después.
+  loader: async ({ context }) => {
     void context.consultas.prefetchQuery(q.bibliotecas());
-    return context.consultas.ensureQueryData(q.documentos());
+    await Promise.all([context.consultas.ensureQueryData(q.documentos()), recuperarTareas()]);
   },
   component: PaginaBiblioteca,
 });

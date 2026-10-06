@@ -24,7 +24,9 @@
     </script>
   </head>
   <body>
-    <div id="raiz"></div>
+    <!-- Primer pintado sin JavaScript: el papel y el riel con el monograma, en su sitio definitivo. React lo sustituye. -->
+    <div id="raiz"><div style="display:flex;min-height:100dvh;font-family:Georgia,serif"><div class="pre-riel" style="width:5.5rem;border-right:1px solid var(--s-filete);display:flex;justify-content:center;padding-top:1.25rem"><svg viewBox="0 0 40 40" width="40" height="40" aria-hidden="true"><rect width="40" height="40" fill="var(--s-tinta)"/><path d="M40 22v18H22A18 18 0 0140 22z" fill="var(--s-rojo)"/><text x="17" y="29" text-anchor="middle" font-family="Georgia,serif" font-style="italic" font-size="27" fill="var(--s-papel)">S</text></svg></div></div></div>
+    <style>@media (max-width:767px){.pre-riel{display:none!important}}</style>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

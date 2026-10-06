@@ -212,7 +212,7 @@ function IrA({ etiqueta, total, alIr, medio }: { etiqueta: string; total: string
   }
   return (
     <Consejo texto={medio ? 'Ir a un instante' : 'Ir a una página impresa (145, xiv) o física ([153])'}>
-      <button type="button" onClick={() => setEditando(true)} className="flex h-10 shrink-0 items-baseline gap-1.5 rounded-s px-2 hover:bg-hondo" aria-label={`Estás en ${etiqueta}. Ir a otra ${medio ? 'posición' : 'página'}`}>
+      <button type="button" onClick={() => setEditando(true)} className="flex h-10 shrink-0 items-baseline gap-1.5 rounded-s px-2 hover:bg-hondo" aria-label={`${etiqueta} / ${total}: ir a otra ${medio ? 'posición' : 'página'}`}>
         <Folio grande>{etiqueta}</Folio>
         <span className="hidden font-mono text-[0.75rem] text-apagado sm:inline">/ {total}</span>
       </button>
