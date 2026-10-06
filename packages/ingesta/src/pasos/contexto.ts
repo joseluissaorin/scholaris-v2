@@ -111,7 +111,7 @@ export async function pasoContexto(
       // contexto; la consolidación lo completa después.
       let temporizador: ReturnType<typeof setTimeout> | undefined;
       const tope = new Promise<Record<string, string>>((_, mal) => { temporizador = setTimeout(() => mal(new Error('tope')), opciones.limiteMs); });
-      try { return await Promise.race([llamada, tope]); } finally { clearTimeout(temporizador); }
+      try { return await Promise.race([llamada, tope]); } finally { if (temporizador !== undefined) clearTimeout(temporizador); }
     }
     catch { fallidos++; return {}; }
     finally { opciones.alGrupo?.(++hechos, grupos.length); }

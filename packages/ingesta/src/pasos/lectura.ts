@@ -50,7 +50,7 @@ export interface ResultadoPliego {
 function conLimite<T>(p: Promise<T>, ms: number, que: string): Promise<T> {
   let t: ReturnType<typeof setTimeout> | undefined;
   return Promise.race([
-    p.finally(() => clearTimeout(t)),
+    p.finally(() => { if (t !== undefined) clearTimeout(t); }),
     new Promise<T>((_, rechazar) => { t = setTimeout(() => rechazar(new Error(`${que}: sin respuesta en ${ms} ms`)), ms); }),
   ]);
 }

@@ -92,7 +92,7 @@ export function crearWorkersAI(config: ConfigWorkersAI): ClienteWorkersAI {
           // El binding lanza errores sin estado: se reintentan los de capacidad y los internos.
           const reintentable = /capacity|overloaded|rate|429|5\d\d|internal|timeout|network/i.test(m);
           throw new ErrorProveedor('workers-ai', m, { reintentable, causa: e });
-        } finally { clearTimeout(reloj); }
+        } finally { if (reloj !== undefined) clearTimeout(reloj); }
       }, { intentos: config.intentos ?? 4, base: config.esperaBase ?? 800, esReintentable: (e) => e instanceof ErrorProveedor && e.reintentable && !config.signal?.aborted }));
     }
     const r = await limitar(() => pedir<{ success?: boolean; result?: T; errors?: Array<{ code?: number; message?: string }> }>({
