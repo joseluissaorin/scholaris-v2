@@ -110,7 +110,7 @@ export function Entrada() {
     try {
       const r = await api().documentos.importar(f, { biblioteca: obtenerBibliotecaActiva() });
       void clienteConsultas.invalidateQueries({ queryKey: ['documentos'] });
-      avisar(r.avisos.length ? `Importado, con ${r.avisos.length} avisos.` : 'SPDF importado. Ya se puede buscar.', { tono: 'exito', accion: { etiqueta: 'Abrir', alPulsar: () => void navegar({ to: '/lector/$id', params: { id: r.documento } }) } });
+      avisar(r.avisos.length ? `Importado, con ${r.avisos.length === 1 ? 'un aviso' : `${r.avisos.length} avisos`}: ${r.avisos[0]}` : 'SPDF importado. Ya se puede buscar.', { tono: 'exito', accion: { etiqueta: 'Abrir', alPulsar: () => void navegar({ to: '/lector/$id', params: { id: r.documento } }) } });
     } catch (e) {
       avisar(e instanceof Error ? e.message : 'No se pudo importar el SPDF.', { tono: 'error' });
     }

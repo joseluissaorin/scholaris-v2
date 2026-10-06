@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { RelacionCita } from '@scholaris/nucleo';
-import type { DetalleAutocita, PropuestaCita } from '@scholaris/contrato';
+import { ErrorApi, type DetalleAutocita, type PropuestaCita } from '@scholaris/contrato';
 import {
   AreaTexto, avisar, Boton, cx, EsqueletoTexto, Folio, Icono, MenuContenido, MenuDisparador, MenuElemento, MenuRaiz, MenuRotulo, Rotulo, Selector, Tarjeta, Teclas,
 } from '@scholaris/ui';
@@ -68,7 +68,7 @@ function Editor({ alListo }: { alListo: (id: string) => void }) {
     try {
       const r = await api().citas.autocita({ texto, estilo, umbral, titulo: texto.trim().slice(0, 60) });
       ponerPreferencia('estilo', estilo);
-      alListo(r.tarea);
+      alListo(r.autocita);
     } catch (e) { avisar(e instanceof Error ? e.message : 'No se pudo empezar.', { tono: 'error' }); setEnviando(false); }
   }
 
@@ -148,15 +148,22 @@ function Revision({ id, alNuevo }: { id: string; alNuevo: () => void }) {
 
   async function exportar(formato: 'docx' | 'md' | 'txt' | 'latex') {
     try {
-      const blob = await api().citas.exportarAutocita(id, formato);
+      let blob: Blob;
+      try {
+        blob = await api().citas.exportarAutocita(id, formato);
+      } catch (e) {
+        // Sin DOCX original (texto pegado), el DOCX se arma aquí con el Markdown ya citado.
+        if (formato !== 'docx' || !(e instanceof ErrorApi) || e.codigo !== 'peticion_invalida') throw e;
+        const md = await (await api().citas.exportarAutocita(id, 'md')).text();
+        blob = (await import('../lib/docx')).markdownADocx(md);
+      }
+      if (formato === 'docx' && blob.type.startsWith('text/')) blob = (await import('../lib/docx')).markdownADocx(await blob.text());
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
-      // Sin servidor de DOCX (demostración) llega texto: se guarda como Markdown.
-      const ext = formato === 'docx' && blob.type.startsWith('text/') ? 'md' : formato === 'latex' ? 'tex' : formato;
-      a.download = `texto-citado.${ext}`;
+      a.download = `${(data?.titulo ?? 'texto citado').replace(/[\\/:*?"<>|]+/g, ' ').trim().slice(0, 60) || 'texto citado'}.${formato === 'latex' ? 'tex' : formato}`;
       a.click();
       setTimeout(() => URL.revokeObjectURL(a.href), 2000);
-    } catch { avisar('No se pudo exportar.', { tono: 'error' }); }
+    } catch (e) { avisar(e instanceof Error ? e.message : 'No se pudo exportar.', { tono: 'error' }); }
   }
 
   if (!data || data.estado === 'en_cola' || data.estado === 'procesando') {
@@ -215,7 +222,14 @@ function ParrafoCitado({ texto, propuestas, activa, alElegir }: { texto: string;
     const orden = [...propuestas].sort((a, b) => a.hasta - b.hasta);
     const out: Array<{ t: string; p?: PropuestaCita }> = [];
     let i = 0;
-    for (const p of orden) { out.push({ t: texto.slice(i, p.hasta) }, { t: '', p }); i = p.hasta; }
+    // La cita va antes del punto que cierra la afirmación, como se imprime.
+    for (const p of orden) {
+      let corte = Math.min(p.hasta, texto.length);
+      while (corte > i && /[\s]/.test(texto[corte - 1]!)) corte--;
+      if (corte > i && /[.;:]/.test(texto[corte - 1]!)) corte--;
+      out.push({ t: texto.slice(i, corte) }, { t: '', p });
+      i = corte;
+    }
     out.push({ t: texto.slice(i) });
     return out;
   }, [texto, propuestas]);
@@ -230,6 +244,17 @@ function ParrafoCitado({ texto, propuestas, activa, alElegir }: { texto: string;
         </button>
       ) : <span key={k}>{x.t}</span>)}
     </p>
+  );
+}
+
+function Pasaje({ texto }: { texto: string }) {
+  const [entero, setEntero] = useState(false);
+  const largo = texto.length > 420;
+  return (
+    <div className="mt-4">
+      <blockquote className={cx('border-l-[3px] border-rojo pl-3 text-[0.9375rem] leading-relaxed', largo && !entero && 'line-clamp-[8]')}>{texto}</blockquote>
+      {largo ? <button type="button" onClick={() => setEntero(!entero)} className="mt-1 pl-3 text-[0.8125rem] text-tinta-2 underline underline-offset-4">{entero ? 'Ver menos' : 'Ver el pasaje entero'}</button> : null}
+    </div>
   );
 }
 
@@ -248,7 +273,7 @@ function Propuesta({ p, alDecidir }: { p: PropuestaCita; alDecidir: (d: 'aceptad
           <span className="tnum ml-auto font-mono text-[0.8125rem]">{Math.round(p.cita.respaldo * 100)} %</span>
         </div>
         <div className="mt-2 h-[3px] bg-hondo"><div className="h-full bg-tinta" style={{ width: `${p.cita.respaldo * 100}%` }} /></div>
-        <blockquote className="mt-4 border-l-[3px] border-rojo pl-3 text-[0.9375rem] leading-relaxed">{textoLimpio(p.cita.pasaje)}</blockquote>
+        <Pasaje texto={textoLimpio(p.cita.pasaje)} />
         <div className="mt-3 flex items-center gap-2 text-[0.8125rem] text-tinta-2">
           <Folio className="shrink-0">{etiquetaCorta(p.cita.ancla, anclaACita(p.cita.ancla, p.cita.anclaFin))}</Folio>
           <span className="min-w-0 flex-1 truncate italic">{doc?.metadatos.titulo ?? '…'}</span>

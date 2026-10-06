@@ -152,6 +152,7 @@ export const FilaDocumento = memo(function FilaDocumento({ doc, bibliotecas }: {
       <p className="hidden truncate sm:block"><Rotulo>{lineaMeta(doc)}</Rotulo></p>
       <div className="flex items-center justify-end gap-2">
         {doc.estado === 'procesando' ? <span className="h-1.5 w-1.5 rounded-full bg-rojo anim-pulso" aria-label="Leyendo" /> : null}
+        {doc.estado === 'pendiente' ? <span className="rotulo rounded-full bg-amarillo px-1.5 py-0.5 text-tinta">sin leer</span> : null}
         <span className="hidden text-[0.75rem] text-apagado lg:inline">{haceCuanto(doc.creado)}</span>
         <MenuDocumento doc={doc} bibliotecas={bibliotecas}>
           <button type="button" aria-label={`Acciones de «${doc.titulo}»`} className="grid h-8 w-8 place-items-center rounded-s text-apagado hover:bg-hondo hover:text-tinta">

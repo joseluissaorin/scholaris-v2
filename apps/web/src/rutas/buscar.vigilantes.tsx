@@ -129,7 +129,9 @@ function EditorVigilante({ inicial, alCerrar }: { inicial: Partial<Vigilante>; a
   const valido = consulta.trim().length > 2;
   async function guardar() {
     alCerrar();
-    const datos = { nombre: nombre.trim() || consulta.trim().slice(0, 40), consulta: consulta.trim(), modo, alertas: inicial.alertas ?? true };
+    // Sin nombre, la propia pregunta (cortada en palabra entera).
+    const corto = consulta.trim().length > 60 ? `${consulta.trim().slice(0, 60).replace(/\s+\S*$/, '')}…` : consulta.trim();
+    const datos = { nombre: nombre.trim() || corto.charAt(0).toUpperCase() + corto.slice(1), consulta: consulta.trim(), modo, alertas: inicial.alertas ?? true };
     try {
       if (inicial.id) await api().vigilantes.editar(inicial.id, datos);
       else await api().vigilantes.crear(datos);

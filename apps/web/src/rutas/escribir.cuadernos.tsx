@@ -96,7 +96,7 @@ function DetalleCuaderno({ cuaderno }: { cuaderno: Cuaderno }) {
                 </div>
               ) : (
                 <div className={cx('rounded-s border bg-hoja px-4 py-3', t.huerfana ? 'border-rojo' : 'border-filete')}>
-                  <p className="lectura text-[1rem]">«{textoLimpio(t.cita?.texto ?? String(t.contenido.texto ?? ''))}»</p>
+                  <TextoPlegable texto={textoLimpio(t.cita?.texto ?? String(t.contenido.texto ?? ''))} />
                   <div className="mt-2 flex flex-wrap items-center gap-2 text-[0.8125rem] text-tinta-2">
                     {t.cita ? <Folio className="shrink-0">{t.cita.etiqueta.replace(/^.*,\s*(párr\.\s*\d+)$/, '$1')}</Folio> : null}
                     <span className="font-mono">{t.cita?.citaCorta}</span>
@@ -127,7 +127,7 @@ function DetalleCuaderno({ cuaderno }: { cuaderno: Cuaderno }) {
                 {sintesis.texto.split(/(\[\^?\d+\])/g).map((p, i) => {
                   const m = /^\[\^?(\d+)\]$/.exec(p);
                   const c = m ? sintesis.citas.find((x) => x.n === Number(m[1])) : undefined;
-                  return c ? <span key={i} className="mx-0.5 rounded-[3px] border border-filete-fuerte px-1 font-mono text-[0.72em]"><span className="text-rojo">{c.n}</span> {c.etiqueta}</span> : <span key={i}>{p}</span>;
+                  return c ? <span key={i} className="mx-0.5 whitespace-nowrap rounded-[3px] border border-filete-fuerte px-1 font-mono text-[0.72em]"><span className="text-rojo">{c.n}</span> {c.etiqueta}</span> : <span key={i}>{textoLimpio(p)}</span>;
                 })}
               </p>
             </div>
@@ -135,6 +135,18 @@ function DetalleCuaderno({ cuaderno }: { cuaderno: Cuaderno }) {
         </aside>
       </div>
     </section>
+  );
+}
+
+/** Un pasaje largo se pliega a seis líneas; se despliega si se quiere leer entero. */
+function TextoPlegable({ texto }: { texto: string }) {
+  const [abierto, setAbierto] = useState(false);
+  const largo = texto.length > 480;
+  return (
+    <>
+      <p className={cx('lectura text-[1rem]', largo && !abierto && 'line-clamp-6')}>«{texto}»</p>
+      {largo ? <button type="button" onClick={() => setAbierto(!abierto)} className="mt-1 text-[0.8125rem] text-tinta-2 underline underline-offset-4">{abierto ? 'Plegar' : 'Leer el pasaje entero'}</button> : null}
+    </>
   );
 }
 

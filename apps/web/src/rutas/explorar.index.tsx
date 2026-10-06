@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { createFileRoute, Link } from '@tanstack/react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { GrupoMapa, MapaConceptos } from '@scholaris/contrato';
@@ -18,9 +18,19 @@ export const Route = createFileRoute('/explorar/')({
 const TINTAS = ['#b8321c', '#23457a', '#e2a52a', '#22160f', '#8a4a32', '#5f7aa8', '#b88a2e', '#6b5a4c'];
 const TINTAS_OSCURO = ['#e7644a', '#8fa9dc', '#ecbb52', '#efe6d6', '#c98a6e', '#a9bde4', '#d8b46a', '#b9a993'];
 
+/** Lleva las coordenadas a 0-1 con margen: la API puede darlas en cualquier escala. */
+function normalizar(m: MapaConceptos): MapaConceptos {
+  const xs = [...m.puntos.map((p) => p.x), ...m.grupos.map((g) => g.x)], ys = [...m.puntos.map((p) => p.y), ...m.grupos.map((g) => g.y)];
+  if (!xs.length) return m;
+  const [x0, x1, y0, y1] = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)];
+  const fx = (x: number) => 0.06 + 0.88 * ((x - x0) / (x1 - x0 || 1)), fy = (y: number) => 0.08 + 0.84 * ((y - y0) / (y1 - y0 || 1));
+  return { ...m, puntos: m.puntos.map((p) => ({ ...p, x: fx(p.x), y: fy(p.y) })), grupos: m.grupos.map((g) => ({ ...g, x: fx(g.x), y: fy(g.y) })) };
+}
+
 function Mapa() {
   const qc = useQueryClient();
-  const { data, isPending } = useQuery(q.mapa());
+  const { data: crudo, isPending } = useQuery(q.mapa());
+  const data = useMemo(() => (crudo ? normalizar(crudo) : undefined), [crudo]);
   const [elegido, setElegido] = useState<number | null>(null);
   const [construyendo, setConstruyendo] = useState<{ avance?: number; mensaje?: string } | null>(null);
 

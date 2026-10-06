@@ -471,7 +471,7 @@ ruta('POST', '/busqueda/similares', (_m, c) => {
 });
 ruta('POST', '/busqueda/responder', (_m, c) => sse(responder(c)));
 
-ruta('POST', '/citas/autocita', async (_m, c) => { const det = autocitar(c.texto ?? '', c.estilo ?? 'apa'); autocitas.set(det.id, det); await espera(500); return json({ tarea: det.id }, 0); });
+ruta('POST', '/citas/autocita', async (_m, c) => { const det = autocitar(c.texto ?? '', c.estilo ?? 'apa'); autocitas.set(det.id, det); await espera(500); return json({ tarea: `t-${det.id}`, autocita: det.id }, 0); });
 ruta('GET', '/citas/autocita/:id', (m) => json(autocitas.get(m[1]!)));
 ruta('PATCH', '/citas/autocita/:id', (m, c) => { const det = autocitas.get(m[1]!)!; for (const x of c.decisiones) { const p = det.propuestas.find((y) => y.id === x.propuesta); if (p) p.decision = x.decision; } return json(det); });
 ruta('GET', '/citas/autocita/:id/exportar', async (m, _c, q) => {
