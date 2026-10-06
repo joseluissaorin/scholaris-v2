@@ -32,8 +32,13 @@ export interface ItemCSL {
   [campo: string]: unknown;
 }
 
-function nombre(a: Autor): NombreCSL {
+/** Partículas que, a la española, van detrás del nombre («Vega, Lope de»). */
+const PARTICULA = /^(de la|de los|de las|del|de|da|do|dos|das|di|du|van der|van den|van|von)\s+(?=\S)/;
+
+function nombre(a: Autor): NombreCSL & { 'dropping-particle'?: string } {
   if (!a.nombre && a.apellidos) return /\s/.test(a.apellidos) && !/,/.test(a.apellidos) ? { literal: a.apellidos } : { family: a.apellidos };
+  const p = PARTICULA.exec(a.apellidos);
+  if (p && a.nombre) return { family: a.apellidos.slice(p[0].length), given: a.nombre, 'dropping-particle': p[1] };
   return { family: a.apellidos, given: a.nombre };
 }
 
@@ -96,7 +101,8 @@ export function aItemCSL(doc: DocumentoCitable, idioma = 'es'): ItemCSL {
   // Contenedor: la revista de un artículo, el libro de un capítulo o cuento, el programa de una emisión.
   if (m.revista) item['container-title'] = m.revista;
   else if (m.contenedor && m.contenedor !== m.titulo) item['container-title'] = m.contenedor;
-  if (m.edicion) item.edition = m.edicion;
+  // «reimpr. 1964» cuando 1964 ya es el año de la referencia no aporta nada (y MLA lo repetiría).
+  if (m.edicion && !(/^reimpr(?:esión|\.)?\s*(\d{4})$/i.exec(m.edicion.trim())?.[1] === String(m.anio))) item.edition = m.edicion;
   if (m.coleccion) item['collection-title'] = m.coleccion;
   if (m.volumen) item.volume = m.volumen;
   if (m.numero) item.issue = m.numero;

@@ -63,6 +63,34 @@ export function resolverIdioma(idioma?: string): string {
 const cacheEstilos = new Map<string, Promise<string>>();
 const cacheLocales = new Map<string, string>();
 
+/**
+ * El locale es-ES de CSL deja sin traducir algunos términos («broadcast»,
+ * «on», «video»…) y salen en inglés en las referencias en español. Se corrigen
+ * aquí, sin tocar el fichero vendorizado.
+ */
+const TERMINOS_ES: Record<string, string> = {
+  broadcast: 'emisión',
+  on: 'en',
+  video: 'vídeo',
+  podcast: 'pódcast',
+  'podcast-episode': 'episodio de pódcast',
+  'television-series': 'serie de televisión',
+  'television-series-episode': 'episodio de serie de televisión',
+  'radio-series': 'serie de radio',
+  'radio-series-episode': 'episodio de serie de radio',
+  'online': 'en línea',
+};
+
+export function parchearLocale(id: string, xml: string): string {
+  if (!id.startsWith('es')) return xml;
+  let out = xml;
+  for (const [nombre, valor] of Object.entries(TERMINOS_ES)) {
+    // Solo la forma larga sin traducir (el contenido coincide con el nombre en inglés o falta).
+    out = out.replace(new RegExp(`(<term name="${nombre}">)([^<]*)(</term>)`, 'g'), (m, a, contenido: string, c) => (/^[a-z -]*$/.test(contenido) && /[a-z]/.test(contenido) && !/[áéíóúñ]/.test(contenido) && (contenido === nombre || contenido === nombre.replace(/-/g, ' ') || contenido === 'on') ? `${a}${valor}${c}` : m));
+  }
+  return out;
+}
+
 async function xmlEstilo(estilo: string): Promise<string> {
   if (estilo.trimStart().startsWith('<')) return estilo; // CSL propio, en crudo
   const id = resolverEstilo(estilo);
@@ -73,7 +101,7 @@ async function xmlEstilo(estilo: string): Promise<string> {
 
 async function cargarLocales(): Promise<void> {
   if (cacheLocales.size === Object.keys(LOCALES).length) return;
-  await Promise.all(Object.entries(LOCALES).map(async ([id, cargar]) => { cacheLocales.set(id, (await cargar()).default); }));
+  await Promise.all(Object.entries(LOCALES).map(async ([id, cargar]) => { cacheLocales.set(id, parchearLocale(id, (await cargar()).default)); }));
 }
 
 /** Un elemento de una cita: qué documento y en qué punto. */
@@ -220,6 +248,18 @@ export class MotorCitas {
   private bibliografiaDe(e: MotorCiteproc, formato: FormatoSalida): string[] {
     const b = e.makeBibliography();
     if (!b) return [];
-    return b[1].map((h) => (formato === 'html' ? h.trim() : convertir(h, formato)));
+    const es = this.idioma.startsWith('es');
+    return b[1].map((h) => { const r = formato === 'html' ? h.trim() : convertir(h, formato); return es ? fechasEnEspanol(r) : r; });
   }
+}
+
+const MESES = 'enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre';
+/**
+ * Algunos estilos (APA, Chicago) componen la fecha mes-día a la inglesa
+ * («marzo 20»). En español es «20 de marzo».
+ */
+export function fechasEnEspanol(s: string): string {
+  // «Vega, L. de. (s. f.)»: el punto tras la partícula sobra delante del año.
+  s = s.replace(/\b(de la|de los|del|de|van|von)\. \(/g, '$1 (');
+  return s.replace(new RegExp(`\\b(${MESES}) (\\d{1,2})\\b(?!\\d)`, 'g'), '$2 de $1');
 }
