@@ -11,6 +11,7 @@ import { recuperarTareas } from '../../datos/ingesta';
 import { duracion, haceCuanto, ICONO_TIPO, NOMBRE_TIPO, nombreUnidad, esMedio } from '../../lib/formato';
 import { preferencia } from '../../lib/acciones';
 import { Portada } from '../comunes/portada';
+import { prepararViaje } from '../../movimiento/transiciones';
 
 const COLOR_COL: Record<string, string> = { rojo: 'bg-rojo', azul: 'bg-azul', amarillo: 'bg-amarillo', tinta: 'bg-tinta' };
 export const puntoColeccion = (c?: string) => COLOR_COL[c ?? 'tinta'] ?? 'bg-tinta';
@@ -118,14 +119,16 @@ function Casilla({ id, titulo, className }: { id: string; titulo: string; classN
 
 export const FichaDocumento = memo(function FichaDocumento({ doc, bibliotecas, indice }: { doc: ResumenDocumento; bibliotecas: Biblioteca[]; indice: number }) {
   return (
-    <article className="group relative flex flex-col anim-entra" style={{ animationDelay: `${Math.min(indice, 12) * 18}ms` }}>
+    <article className="group relative flex flex-col anim-sube" style={indice < 16 ? { animationDelay: `calc(${indice} * var(--escalon))` } : undefined}>
       <Casilla id={doc.id} titulo={doc.titulo} className="absolute right-2 top-2" />
       <Link
         to="/lector/$id"
         params={{ id: doc.id }}
-        className="block rounded-s outline-offset-4"
+        className="con-deriva block rounded-s outline-offset-4"
+        // La portada viaja hasta la barra del lector (View Transitions).
+        onClick={(e) => prepararViaje(e.currentTarget.querySelector<HTMLElement>('[data-portada]'))}
       >
-        <div className={cx('relative aspect-[3/4] overflow-hidden rounded-r-xl rounded-l-md border border-cream-400 shadow-[var(--levantado)] transition-[transform,box-shadow] duration-200 ease-out [container-type:inline-size] group-hover:-translate-y-1 group-hover:shadow-[var(--levantado-alto)]')}>
+        <div data-portada className={cx('relative aspect-[3/4] overflow-hidden rounded-r-xl rounded-l-md border border-cream-400 shadow-[var(--levantado)] transition-[translate,scale,box-shadow] duration-[var(--dur-levantar)] ease-[var(--muelle-levantar)] [container-type:inline-size] group-hover:-translate-y-1 group-hover:shadow-[var(--levantado-alto)] group-active:translate-y-0 group-active:scale-[0.985] group-active:duration-[var(--dur-instante)]')}>
           <Portada id={doc.id} titulo={doc.titulo} autores={doc.autores} tipo={doc.tipo} url={doc.portadaUrl} />
           {doc.estado === 'procesando' ? (
             <span className="absolute left-2 top-2 flex items-center gap-1.5 rounded-lg bg-cream-50/95 px-2 py-1 text-[0.6875rem] font-semibold text-coffee-800 shadow-[var(--relieve)]"><span className="h-1.5 w-1.5 rounded-full bg-rojo anim-pulso" />Leyendo</span>

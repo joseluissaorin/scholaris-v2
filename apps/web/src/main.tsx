@@ -7,6 +7,7 @@ import { arrancar } from './datos/api';
 import { clienteConsultas } from './datos/consultas';
 import { claveClerk, ProveedorSesion } from './sesion';
 import { EsperaContenido, EsperaMarco, FalloArranque } from './componentes/marco/espera';
+import { instalarTransiciones } from './movimiento/transiciones';
 import './estilos.css';
 
 export const enrutador = createRouter({
@@ -23,6 +24,9 @@ export const enrutador = createRouter({
   defaultPendingComponent: EsperaContenido,
   scrollRestoration: true,
 });
+
+// Entre pantallas: el contenido sube del papel y las portadas viajan al lector.
+instalarTransiciones(enrutador as never);
 
 declare module '@tanstack/react-router' {
   interface Register { router: typeof enrutador }

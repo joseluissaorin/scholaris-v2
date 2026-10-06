@@ -20,6 +20,8 @@ import { BarraSeleccion, useSeleccion } from '../componentes/lector/seleccion';
 import { MenuDocumento, reintentarDocumento } from '../componentes/biblioteca/documento';
 import { BotonReferencia } from '../componentes/comunes/boton-referencia';
 import { copiarReferencia } from '../lib/referencia';
+import { hojear } from '../movimiento/hojear';
+import { Portada } from '../componentes/comunes/portada';
 
 export const Route = createFileRoute('/lector/$id')({
   validateSearch: (s: Record<string, unknown>): BusquedaLector => validarBusquedaLector(s),
@@ -116,11 +118,13 @@ function Lector() {
       reproductor.current?.irA(s);
       return true;
     }
+    // Cada salto pasa la hoja, hacia delante o hacia atrás.
+    const saltar = (o: number) => { flujo.current?.irA(o, true); hojear(zona.current, o >= actual); return true; };
     const fisica = /^\[(\d+)\]$/.exec(t);
-    if (fisica) { flujo.current?.irA(Number(fisica[1]), true); return true; }
+    if (fisica) return saltar(Number(fisica[1]));
     const f = folios?.folios.find((x) => x.impresa?.toLowerCase() === t);
-    if (f) { flujo.current?.irA(f.orden, true); return true; }
-    if (/^\d+$/.test(t) && Number(t) <= doc.unidades && !folios?.folios.some((x) => x.impresa)) { flujo.current?.irA(Number(t), true); return true; }
+    if (f) return saltar(f.orden);
+    if (/^\d+$/.test(t) && Number(t) <= doc.unidades && !folios?.folios.some((x) => x.impresa)) return saltar(Number(t));
     return false;
   }
 
@@ -135,6 +139,10 @@ function Lector() {
           <Consejo texto="Volver a la biblioteca">
             <Link to="/" aria-label="Volver a la biblioteca" className="grid h-9 w-9 shrink-0 place-items-center rounded-xl text-coffee-500 hover:bg-cream-200 hover:text-coffee-800"><Icono nombre="izquierda" tam={18} /></Link>
           </Consejo>
+          {/* La portada en pequeño: aquí aterriza la de la Biblioteca al abrir el documento. */}
+          <span data-compartido="portada" aria-hidden className="hidden h-11 w-8 shrink-0 overflow-hidden rounded-r-md rounded-l-sm border border-cream-400 shadow-[var(--shadow-soft)] [container-type:inline-size] sm:block">
+            <Portada id={doc.id} titulo="" tipo={doc.tipo} url={doc.portadaUrl} />
+          </span>
           <div className="min-w-0 flex-1">
             <h1 className="truncate text-[0.9375rem] font-semibold leading-tight text-coffee-800">{doc.metadatos.titulo}</h1>
             <p className="truncate text-[0.75rem] text-coffee-500">{autores(doc.metadatos) || 'Sin autor'} · {anioVisible(doc.metadatos)}{contenedorVisible(doc.metadatos) ? <> · <em>{contenedorVisible(doc.metadatos)}</em></> : null} · <span className="text-apagado">{NOMBRE_TIPO[doc.tipo]}</span></p>
@@ -183,7 +191,7 @@ function Lector() {
       </div>
 
       <div className="flex">
-        <div ref={medio ? undefined : zona} className={cx('min-w-0 flex-1 px-5 md:px-12', !medio && 'pb-24')}>
+        <div ref={medio ? undefined : zona} data-compartido="lectura" className={cx('min-w-0 flex-1 px-5 md:px-12', !medio && 'pb-24')}>
           {medio ? (
             <Reproductor ref={reproductor} doc={doc} inicial={busqueda.t} resaltar={busqueda.q} alVer={alVerMedio} {...(ingesta?.unidades ? { pendientes: Math.max(0, ingesta.unidades - (ingesta.leidas ?? 0)) } : {})} />
           ) : (
@@ -194,7 +202,7 @@ function Lector() {
         </div>
         {panel ? (
           <aside aria-label="Panel del documento" className="sticky top-[4.25rem] hidden h-[calc(100dvh-4.25rem)] w-[23rem] shrink-0 flex-col border-l border-cream-300 bg-cream-50/95 shadow-[-4px_0_16px_rgb(44_24_16/0.05)] xl:flex">
-            <PanelDocumento doc={doc} panel={panel} setPanel={setPanel} irA={(o) => flujo.current?.irA(o, true)} irT={(t) => reproductor.current?.irA(t)} actual={actual} />
+            <PanelDocumento doc={doc} panel={panel} setPanel={setPanel} irA={(o) => { flujo.current?.irA(o, true); hojear(zona.current, o >= actual); }} irT={(t) => reproductor.current?.irA(t)} actual={actual} />
           </aside>
         ) : null}
       </div>
@@ -205,7 +213,7 @@ function Lector() {
           <Dialog.Overlay className="fixed inset-0 z-50 bg-[rgb(26_21_17/0.38)] xl:hidden anim-aparece" />
           <Dialog.Content aria-describedby={undefined} className="fixed inset-x-0 bottom-0 z-50 flex max-h-[82dvh] flex-col rounded-t-2xl border-t border-cream-400 bg-cream-50 shadow-[var(--levantado-alto)] xl:hidden anim-tostada">
             <Dialog.Title className="sr-only">Panel del documento</Dialog.Title>
-            {panel ? <PanelDocumento doc={doc} panel={panel} setPanel={setPanel} irA={(o) => { setPanel(null); flujo.current?.irA(o, true); }} irT={(t) => { setPanel(null); reproductor.current?.irA(t); }} actual={actual} /> : null}
+            {panel ? <PanelDocumento doc={doc} panel={panel} setPanel={setPanel} irA={(o) => { setPanel(null); flujo.current?.irA(o, true); hojear(zona.current, o >= actual); }} irT={(t) => { setPanel(null); reproductor.current?.irA(t); }} actual={actual} /> : null}
           </Dialog.Content>
         </Dialog.Portal>
       </Dialog.Root>
@@ -248,7 +256,8 @@ function IrA({ etiqueta, total, alIr, medio }: { etiqueta: string; total: string
   return (
     <Consejo texto={medio ? 'Ir a un instante' : 'Ir a una página impresa (145, xiv) o física ([153])'}>
       <button type="button" onClick={() => setEditando(true)} className="flex h-9 shrink-0 items-center gap-1.5 rounded-xl px-2 hover:bg-cream-200" aria-label={`${etiqueta} / ${total}: ir a otra ${medio ? 'posición' : 'página'}`}>
-        <Folio grande>{etiqueta}</Folio>
+        {/* El folio cambia como un contador: el nuevo sube y el viejo se va (key). */}
+        <Folio grande className="overflow-hidden"><span key={etiqueta} className="anim-folio inline-block">{etiqueta}</span></Folio>
         <span className="hidden font-mono text-[0.75rem] text-apagado sm:inline">/ {total}</span>
       </button>
     </Consejo>

@@ -122,7 +122,8 @@ export const Portada = memo(function Portada({ id, titulo, autores, tipo, url, c
   const p = FONDOS[h % FONDOS.length]!;
   return (
     <div className={cx('relative h-full w-full overflow-hidden', className)} style={{ background: p.fondo, color: p.tinta }} aria-hidden>
-      <svg viewBox="0 0 120 160" preserveAspectRatio="xMidYMid slice" className="absolute inset-0 h-full w-full">
+      {/* Las formas derivan un poco al pasar (`.con-deriva` en quien la contiene). */}
+      <svg viewBox="0 0 120 160" preserveAspectRatio="xMidYMid slice" className="deriva absolute inset-0 h-full w-full">
         <Motivo tipo={tipo} h={h} fondo={p.fondo} />
       </svg>
       {/* Lomo: una sombra a la izquierda, el libro tiene cuerpo. */}

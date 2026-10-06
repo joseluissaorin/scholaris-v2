@@ -101,3 +101,88 @@ input.volumen::-moz-range-thumb { height: 12px; width: 12px; border-radius: 9999
   .tactil-grande { min-height: 44px; min-width: 44px; }
 }
 .escena[data-actual] { border-color: var(--s-coffee-800); box-shadow: 0 0 0 2px var(--s-amarillo), var(--relieve); }
+
+/* ------------------------------------------------------------------ */
+/* Los bocetos a mano (src/bocetos): las tintas del cuaderno, en los dos papeles. */
+/* ------------------------------------------------------------------ */
+@font-face {
+  font-family: 'Mano';
+  font-display: swap;
+  src: url('/portada/mano.woff2') format('woff2');
+}
+.boceto {
+  display: block;
+  --d-papel: var(--s-cream-100);
+  --d-tinta: var(--s-coffee-800);
+  --d-lapiz: #9a8e80;
+  --d-rojo: var(--s-rojo);
+  --d-azul: var(--s-azul);
+  --d-amarillo: var(--s-amarillo);
+  --d-oro: #d6a03a;
+  --d-negro: var(--s-coffee-900);
+}
+.oscuro .boceto { --d-lapiz: #8f7a6a; --d-oro: #d9a53a; }
+.boceto > svg { display: block; width: 100%; height: auto; overflow: visible; }
+.boceto .c-pl, .boceto .c-co, .boceto .c-en { mix-blend-mode: multiply; }
+.oscuro .boceto .c-pl, .oscuro .boceto .c-co, .oscuro .boceto .c-en { mix-blend-mode: normal; opacity: 0.9; }
+.boceto .nt { font-family: 'Mano', 'Segoe Print', 'Bradley Hand', cursive; }
+/* Sobre fondo rojo o café (la zona de soltar): tinta clara. */
+.boceto.sobre-color { --d-tinta: #fbf5ec; --d-lapiz: rgb(251 245 236 / 0.55); --d-papel: transparent; }
+.boceto.sobre-color .c-pl, .boceto.sobre-color .c-co, .boceto.sobre-color .c-en { mix-blend-mode: normal; }
+
+/* La pluma: primero el lápiz, luego la tinta y el color; las notas al final. */
+@media (prefers-reduced-motion: no-preference) {
+  .boceto .tl, .boceto .mt { stroke-dasharray: 1 1; }
+  .boceto .tl { transition: stroke-dashoffset calc(var(--t, 0.4s) * var(--ritmo, 1)) linear calc(var(--d, 0s) * var(--ritmo, 1)); }
+  .boceto .mt { transition: stroke-dashoffset calc(var(--t, 0.4s) * var(--ritmo, 1)) var(--ease-tinta) calc(var(--d, 0s) * var(--ritmo, 1)); }
+  .boceto .pl { transition: opacity 0.7s ease calc(var(--d, 0s) * var(--ritmo, 1)); }
+  .boceto .nt { transition: opacity 0.9s ease calc(var(--d, 0s) * var(--ritmo, 1)); }
+  .boceto:not(.visto) .tl, .boceto:not(.visto) .mt { stroke-dashoffset: 1; }
+  .boceto:not(.visto) .pl, .boceto:not(.visto) .nt { opacity: 0; }
+}
+
+/* ------------------------------------------------------------------ */
+/* Transiciones entre pantallas (View Transitions, src/movimiento/transiciones.ts) */
+/* ------------------------------------------------------------------ */
+/* Solo se mueve el contenido: la barra lateral, la cabecera del móvil y el reproductor pequeño se quedan quietos. */
+/* El nombre solo durante la transición: siempre puesto, haría de #contenido un contexto de apilamiento. */
+html[data-transicion] #contenido { view-transition-name: contenido; }
+::view-transition-old(root), ::view-transition-new(root) { animation: none; }
+::view-transition-old(contenido) { animation: vt-sale 150ms var(--ease-salida) both; }
+::view-transition-new(contenido) { animation: vt-entra 420ms var(--muelle-asentar) both; }
+/* Hacia el lector la hoja sube; al volver, baja a la mesa. */
+html[data-transicion='lector'] ::view-transition-new(contenido) { animation: vt-sube 460ms var(--muelle-levantar) both; }
+html[data-transicion='mesa'] ::view-transition-new(contenido) { animation: vt-baja 420ms var(--muelle-asentar) both; }
+/* La portada o la tarjeta que se abre viaja (y crece) hasta su sitio en el lector. */
+::view-transition-group(compartido) { animation-duration: 480ms; animation-timing-function: var(--muelle-levantar); z-index: 2; }
+::view-transition-old(compartido), ::view-transition-new(compartido) { height: 100%; object-fit: cover; }
+::view-transition-old(compartido) { animation: vt-funde 200ms ease-out both; }
+::view-transition-new(compartido) { animation: vt-aparece 260ms ease-out both; }
+@keyframes vt-sale { to { opacity: 0; transform: translateY(-4px); } }
+@keyframes vt-entra { from { opacity: 0; transform: translateY(10px); } }
+@keyframes vt-sube { from { opacity: 0; transform: translateY(26px) scale(0.985); } }
+@keyframes vt-baja { from { opacity: 0; transform: translateY(-10px) scale(1.01); } }
+@keyframes vt-funde { to { opacity: 0; } }
+@keyframes vt-aparece { from { opacity: 0; } }
+/* Sin View Transitions: el contenido nuevo sube igual (lo lanza transiciones.ts con la Web Animations API). */
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(*), ::view-transition-old(*), ::view-transition-new(*) { animation: none !important; }
+}
+
+/* El folio del lector cambia como un contador: el nuevo sube desde abajo. */
+@keyframes s-folio { from { opacity: 0; transform: translateY(70%); } to { opacity: 1; transform: none; } }
+.anim-folio { animation: s-folio 0.26s var(--muelle-soltar) both; }
+/* El desenfoque de fondo no se captura bien en la instantánea de la transición: durante ella, fuera (las barras son casi opacas). */
+html[data-transicion] .backdrop-blur, html[data-transicion] .backdrop-blur-sm { backdrop-filter: none; }
+
+/* ------------------------------------------------------------------ */
+/* El marco                                                           */
+/* ------------------------------------------------------------------ */
+/* El logo: la cabeza se inclina un poco al pasar (asiente) y, mientras se carga una pantalla, lee: cabecea despacio. */
+.logo-vivo { transform-origin: 50% 85%; transition: rotate var(--dur-levantar) var(--muelle-soltar), scale var(--dur-levantar) var(--muelle-soltar); }
+@media (hover: hover) { .con-logo:hover .logo-vivo { rotate: -7deg; scale: 1.06; } }
+.con-logo:active .logo-vivo { scale: 0.94; transition-duration: var(--dur-instante); }
+@keyframes s-lee { 0%, 100% { transform: rotate(0); } 30% { transform: rotate(-5deg); } 60% { transform: rotate(2deg); } }
+[data-cargando='true'] .logo-vivo { animation: s-lee 1.1s ease-in-out infinite; }
+/* La marca amarilla del lugar activo: una sola, que se desliza de un lugar a otro. */
+.marca-activa { transition: transform var(--dur-levantar) var(--muelle-soltar), height var(--dur-media) var(--muelle-asentar), opacity var(--dur-breve) ease-out; }

@@ -4,7 +4,7 @@
  * En el móvil, la cabecera oscura con el menú que se despliega, y un botón
  * redondo para añadir.
  */
-import { cloneElement, lazy, Suspense, useEffect, useState, type ReactElement } from 'react';
+import { cloneElement, lazy, Suspense, useEffect, useLayoutEffect, useRef, useState, type ReactElement, type RefObject } from 'react';
 import { Link, useRouterState } from '@tanstack/react-router';
 import { useQuery } from '@tanstack/react-query';
 import { cx, Icono, type NombreIcono } from '@scholaris/ui';
@@ -73,11 +73,13 @@ function ContenidoBarra({ alNavegar }: { alNavegar?: () => void }) {
   const correo = useCorreo();
   const sesion = useSesion();
   const activa = (a: Destino) => (a === '/' ? ruta === '/' || ruta.startsWith('/lector') : ruta.startsWith(a));
+  const cargando = useRouterState({ select: (s) => s.status === 'pending' });
+  const nav = useRef<HTMLElement>(null);
 
   return (
     <>
-      <div className="flex h-14 shrink-0 items-center gap-2.5 border-b border-barra-2 px-5">
-        <Logo tam={32} sobreOscuro />
+      <div className="con-logo flex h-14 shrink-0 items-center gap-2.5 border-b border-barra-2 px-5" data-cargando={cargando}>
+        <Logo tam={32} sobreOscuro className="logo-vivo" />
         <span className="text-[1.125rem] font-semibold tracking-wide text-sobre-barra">Scholaris</span>
       </div>
 
@@ -95,7 +97,8 @@ function ContenidoBarra({ alNavegar }: { alNavegar?: () => void }) {
         </button>
       </div>
 
-      <nav aria-label="Principal" className="sin-barra flex-1 overflow-y-auto px-3 py-3">
+      <nav ref={nav} aria-label="Principal" className="sin-barra relative flex-1 overflow-y-auto px-3 py-3">
+        <MarcaActiva nav={nav} ruta={ruta} />
         {SECCIONES.map((s, i) => (
           <div key={s.a} className={cx(i > 0 && 'mt-0.5')}>
             <Link
@@ -104,15 +107,14 @@ function ContenidoBarra({ alNavegar }: { alNavegar?: () => void }) {
               className={cx('relative flex items-center rounded-xl px-3 py-2 text-[0.875rem] font-medium transition-colors duration-150', activa(s.a) ? 'bg-barra-2 text-sobre-barra shadow-[inset_0_1px_0_rgb(255_255_255/0.06)]' : 'text-sobre-barra-2 hover:bg-barra-2 hover:text-sobre-barra')}
               aria-current={activa(s.a) ? 'page' : undefined}
             >
-              {activa(s.a) ? <span aria-hidden className="absolute left-0 top-1/2 h-5 w-1 -translate-y-1/2 rounded-full bg-amarillo" /> : null}
               <Icono nombre={s.icono} tam={16} className="mr-3" />
               <span className="flex-1">{s.etiqueta}</span>
               {s.a === '/buscar' && pendientes ? <span className="grid h-5 min-w-5 place-items-center rounded-full bg-amarillo px-1 text-[0.625rem] font-bold text-coffee-800" aria-label={`${pendientes} alertas sin ver`}>{pendientes}</span> : null}
             </Link>
             {s.sub && activa(s.a) ? (
-              <ul className="mb-1 ml-[1.375rem] mt-0.5 border-l border-barra-2 pl-3">
-                {s.sub.map((x) => (
-                  <li key={x.a}>
+              <ul className="cascada mb-1 ml-[1.375rem] mt-0.5 border-l border-barra-2 pl-3">
+                {s.sub.map((x, i) => (
+                  <li key={x.a} style={{ ['--i' as string]: i }}>
                     <Link to={x.a} onClick={alNavegar} activeOptions={{ exact: true, includeSearch: false }} className="block rounded-lg px-2.5 py-1.5 text-[0.8125rem] text-sobre-barra-2 hover:text-sobre-barra data-[status=active]:font-semibold data-[status=active]:text-sobre-barra">
                       {x.etiqueta}
                     </Link>
@@ -123,8 +125,7 @@ function ContenidoBarra({ alNavegar }: { alNavegar?: () => void }) {
           </div>
         ))}
         <div className="mt-3 border-t border-barra-2/70 pt-3">
-          <Link to="/ajustes" onClick={alNavegar} className={cx('relative flex items-center rounded-xl px-3 py-2 text-[0.875rem] font-medium transition-colors', activa('/ajustes') ? 'bg-barra-2 text-sobre-barra' : 'text-sobre-barra-2 hover:bg-barra-2 hover:text-sobre-barra')}>
-            {activa('/ajustes') ? <span aria-hidden className="absolute left-0 top-1/2 h-5 w-1 -translate-y-1/2 rounded-full bg-amarillo" /> : null}
+          <Link to="/ajustes" onClick={alNavegar} aria-current={activa('/ajustes') ? 'page' : undefined} className={cx('relative flex items-center rounded-xl px-3 py-2 text-[0.875rem] font-medium transition-colors', activa('/ajustes') ? 'bg-barra-2 text-sobre-barra' : 'text-sobre-barra-2 hover:bg-barra-2 hover:text-sobre-barra')}>
             <Icono nombre="ajustes" tam={16} className="mr-3" />Ajustes
           </Link>
         </div>
@@ -153,6 +154,32 @@ function ContenidoBarra({ alNavegar }: { alNavegar?: () => void }) {
       </div>
     </>
   );
+}
+
+/**
+ * La marca amarilla del lugar activo: una sola para toda la barra, que se
+ * desliza (con el muelle de soltar) al cambiar de lugar en vez de saltar.
+ */
+function MarcaActiva({ nav, ruta }: { nav: RefObject<HTMLElement | null>; ruta: string }) {
+  const marca = useRef<HTMLSpanElement>(null);
+  useLayoutEffect(() => {
+    const colocar = () => {
+      const n = nav.current, m = marca.current;
+      const activo = n?.querySelector<HTMLElement>('a[aria-current="page"]');
+      if (!n || !m) return;
+      if (!activo) { m.style.opacity = '0'; return; }
+      const y = activo.offsetTop + activo.offsetHeight / 2 - 10;
+      // La primera vez se coloca sin viajar.
+      if (!m.dataset.puesta) { m.style.transition = 'none'; requestAnimationFrame(() => { m.style.transition = ''; }); m.dataset.puesta = '1'; }
+      m.style.transform = `translateY(${y}px)`;
+      m.style.opacity = '1';
+    };
+    colocar();
+    const ro = new ResizeObserver(colocar);
+    if (nav.current) ro.observe(nav.current);
+    return () => ro.disconnect();
+  }, [nav, ruta]);
+  return <span ref={marca} aria-hidden className="marca-activa pointer-events-none absolute left-3 top-0 z-10 h-5 w-1 rounded-full bg-amarillo opacity-0" />;
 }
 
 /** Escritorio: la barra lateral fija. */
