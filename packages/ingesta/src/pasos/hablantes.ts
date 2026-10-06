@@ -71,7 +71,8 @@ const reloj = (t: number) => { const s = Math.round(t); return `${Math.floor(s /
 const linea = (f: FraseIndexada) => `${f.n} [${reloj(f.t0)}]${f.etiqueta ? ` (${f.etiqueta})` : ''} ${f.texto}`;
 
 function fichaDe(m: MetadatosDocumento): string {
-  return [m.titulo && `«${m.titulo}»`, m.autores.length ? `con ${m.autores.map(nombreCompleto).join(', ')}` : '', m.anio ? `(${m.anio})` : '', m.resumen ?? ''].filter(Boolean).join(' ');
+  const personas = [...(m.entrevistadores ?? []), ...m.autores];
+  return [m.titulo && `«${m.titulo}»`, m.contenedor && m.contenedor !== m.titulo ? `(${m.contenedor})` : '', personas.length ? `con ${personas.map(nombreCompleto).join(', ')}` : '', m.anio ? `(${m.anio})` : '', m.resumen ?? ''].filter(Boolean).join(' ');
 }
 
 /** 1. El reparto: quién habla, con qué papel y qué etiquetas suelen ser suyas. */

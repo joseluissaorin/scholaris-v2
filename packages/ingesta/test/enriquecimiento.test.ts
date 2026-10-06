@@ -4,6 +4,7 @@ import {
   nombreDeImprenta, pasoMetadatos, refinarMetadatos, textoColofon, vaciarCacheConsultas,
 } from '../src/pasos/metadatos.js';
 import type { Http, UnidadLeida } from '../src/tipos.js';
+import type { MetadatosDocumento } from '@scholaris/nucleo';
 import { redactorFalso } from './fakes.js';
 
 /** HTTP falso: la primera regla cuyo trozo aparece en la URL responde. */
@@ -146,21 +147,52 @@ describe('enriquecer', () => {
     expect(m).toMatchObject({ anio: 1994, anioOriginal: 1964, isbn: '9780521477352', editorial: 'Cambridge University Press' });
   });
 
-  it('programa de televisión: cadena, contenedor y presentador; el invitado se queda', async () => {
-    const http = httpFalso([
-      ['wbsearchentities', { search: [{ id: 'Q8183492', label: 'A fondo', description: 'Spanish television show' }] }],
-      ['query.wikidata.org', { results: { bindings: [
-        { item: { value: 'http://www.wikidata.org/entity/Q8183492' }, itemLabel: { value: 'A fondo' }, inicio: { value: '1976-01-01T00:00:00Z' }, claseLabel: { value: 'programa de televisión' }, redLabel: { value: 'La 1' }, duenoLabel: { value: 'Televisión Española' }, presLabel: { value: 'Joaquín Soler Serrano' } },
-        { item: { value: 'http://www.wikidata.org/entity/Q8183492' }, itemLabel: { value: 'A fondo' }, duenoLabel: { value: 'RTVE' } },
-      ] } }],
-    ]);
-    const base = { titulo: 'A fondo', autores: [{ nombre: 'Julio', apellidos: 'Cortázar' }], anio: 1977, tipoCSL: 'interview' };
+  const wikidataAFondo: Array<[string, unknown]> = [
+    ['wbsearchentities', { search: [{ id: 'Q8183492', label: 'A fondo', description: 'Spanish television show' }] }],
+    ['query.wikidata.org', { results: { bindings: [
+      { item: { value: 'http://www.wikidata.org/entity/Q8183492' }, itemLabel: { value: 'A fondo' }, inicio: { value: '1976-01-01T00:00:00Z' }, claseLabel: { value: 'programa de televisión' }, redLabel: { value: 'La 1' }, duenoLabel: { value: 'Televisión Española' }, presLabel: { value: 'Joaquín Soler Serrano' } },
+      { item: { value: 'http://www.wikidata.org/entity/Q8183492' }, itemLabel: { value: 'A fondo' }, duenoLabel: { value: 'RTVE' } },
+    ] } }],
+  ];
+  const fusionar = (base: Partial<MetadatosDocumento>, hs: Awaited<ReturnType<typeof enriquecer>>['hallazgos']) => fusionarMetadatos([{ fuente: 'lectura', confianza: 0.8, datos: base },
+    ...hs.map((h) => ({ fuente: h.fuente, confianza: h.confianza, ...(h.porCampo ? { porCampo: h.porCampo } : {}), ...(h.anula ? { anula: h.anula } : {}), datos: h.datos }))], 'x.mp4');
+
+  it('programa de televisión sin episodio en catálogo: el programa al contenedor, el invitado de título y de autor', async () => {
+    const http = httpFalso(wikidataAFondo);
+    const base = { titulo: 'A fondo', subtitulo: 'Entrevista a Julio Cortázar', autores: [{ nombre: 'Joaquín', apellidos: 'Soler Serrano' }, { nombre: 'Julio', apellidos: 'Cortázar' }], anio: 1977, tipoCSL: 'interview' };
     const r = await enriquecer({ base, texto: '', tipo: 'video' }, crearConsultor({ http }));
-    const m = fusionarMetadatos([{ fuente: 'lectura', confianza: 0.8, datos: base }, ...r.hallazgos.map((h) => ({ fuente: h.fuente, confianza: h.confianza, ...(h.porCampo ? { porCampo: h.porCampo } : {}), datos: h.datos }))], 'x.mp4');
-    expect(r.hallazgos.length, JSON.stringify(r)).toBe(1);
-    expect(m).toMatchObject({ editorial: 'RTVE', contenedor: 'A fondo', tipoCSL: 'broadcast', anio: 1977 });
-    expect(m.autores.map((a) => a.apellidos)).toEqual(['Soler Serrano', 'Cortázar']);
+    const m = fusionar(base, r.hallazgos);
+    expect(m).toMatchObject({ titulo: 'Julio Cortázar', editorial: 'RTVE', contenedor: 'A fondo', tipoCSL: 'broadcast', anio: 1977 });
+    expect(m.subtitulo).toBeUndefined();
+    expect(m.autores).toEqual([{ nombre: 'Julio', apellidos: 'Cortázar' }]);
+    expect(m.entrevistadores).toEqual([{ nombre: 'Joaquín', apellidos: 'Soler Serrano' }]);
     expect(r.avisos).toEqual([]);
+  });
+
+  it('RTVE Play: título del episodio y fecha de emisión del catálogo (Cabral es de 1978)', async () => {
+    const http = httpFalso([
+      ['rtve.es/play/videos/a-fondo/', '<html>… https://www.rtve.es/api/programas/73250 …</html>'],
+      ['api/programas/73250/videos.json', { page: { totalPages: 1, items: [
+        { id: '1051583', title: 'Julio Cortázar', dateOfEmission: '20-03-1977 00:00:00', htmlUrl: 'https://www.rtve.es/play/videos/a-fondo/julio-cortazar/1051583/', description: '<p>Joaqu&iacute;n Soler Serrano entrevista al escritor argentino Julio Cort&aacute;zar.</p>' },
+        { id: '3127003', title: 'Facundo Cabral', dateOfEmission: '02-07-1978 00:00:00', htmlUrl: 'https://www.rtve.es/play/videos/a-fondo/facundo-cabral/3127003/', description: '<p>Joaqu&iacute;n Soler Serrano entrevista al cantautor y escritor argentino.</p>' },
+      ] } }],
+      ...wikidataAFondo,
+    ]);
+    // La lectura se equivoca de año (lo saca del nombre del archivo, «serrano1977fondo»).
+    const base = { titulo: 'A fondo', autores: [{ nombre: 'Joaquín', apellidos: 'Soler Serrano' }, { nombre: 'Facundo', apellidos: 'Cabral' }], anio: 1977, tipoCSL: 'broadcast' };
+    const r = await enriquecer({ base, texto: '', tipo: 'video' }, crearConsultor({ http }));
+    const m = fusionar(base, r.hallazgos);
+    expect(m).toMatchObject({ titulo: 'Facundo Cabral', contenedor: 'A fondo', editorial: 'RTVE', anio: 1978, fecha: '1978-07-02', url: 'https://www.rtve.es/play/videos/a-fondo/facundo-cabral/3127003/' });
+    expect(m.procedencia?.anio?.fuente).toBe('rtve');
+    expect(m.autores.map((a) => a.apellidos)).toEqual(['Cabral']);
+    expect(m.entrevistadores?.map((a) => a.apellidos)).toEqual(['Soler Serrano']);
+  });
+
+  it('un pódcast con título de episodio leído no se toca el título', async () => {
+    const base = { titulo: 'La invención de la imprenta', contenedor: 'Documentos RNE', autores: [{ nombre: 'Ana', apellidos: 'Pérez' }], tipoCSL: 'broadcast' };
+    const r = await enriquecer({ base, texto: '', tipo: 'audio' }, crearConsultor({ http: httpFalso([]) }));
+    const m = fusionar(base, r.hallazgos);
+    expect(m).toMatchObject({ titulo: 'La invención de la imprenta', contenedor: 'Documentos RNE' });
   });
 });
 

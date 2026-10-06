@@ -25,6 +25,8 @@ export interface Hallazgo {
   datos: Partial<MetadatosDocumento>;
   /** Registro de origen (URL o identificador), para la procedencia. */
   id?: string;
+  /** Campos que este hallazgo deja sin valor (p. ej., el subtítulo «Entrevista a…» al poner el título del episodio). */
+  anula?: CampoMeta[];
   /** Datos de control que no van a la ficha. */
   control?: { nacimientoAutor?: number; muerteAutor?: number; desde?: number; hasta?: number; autorQid?: string; articulo?: string; articuloEn?: string; forma?: string };
 }

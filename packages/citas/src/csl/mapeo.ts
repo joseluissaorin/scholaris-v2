@@ -75,6 +75,7 @@ export function aItemCSL(doc: DocumentoCitable, idioma = 'es'): ItemCSL {
   if (m.autores.length) item.author = m.autores.map(nombre);
   if (m.editores?.length) item.editor = m.editores.map(nombre);
   if (m.traductores?.length) item.translator = m.traductores.map(nombre);
+  if (m.entrevistadores?.length) item.interviewer = m.entrevistadores.map(nombre);
   const fecha = m.fecha ? partesFecha(m.fecha) : null;
   if (fecha && (m.anio === undefined || fecha[0] === m.anio)) item.issued = { 'date-parts': [fecha] };
   else if (m.anio !== undefined) item.issued = { 'date-parts': [[m.anio]] };

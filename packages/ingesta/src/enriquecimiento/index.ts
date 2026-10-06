@@ -20,6 +20,8 @@ import {
   titulosCasan, wikidataObra, wikidataPrograma, wikipediaContenedor, type Hallazgo,
 } from './fuentes.js';
 import { actividadImpresor } from './impresores.js';
+import { rtveEpisodio } from './rtve.js';
+import type { CampoMeta } from './fuentes.js';
 import type { Consultor } from './red.js';
 
 export type { Hallazgo, CampoMeta } from './fuentes.js';
@@ -27,6 +29,7 @@ export { leerColofon, aniosDelColofon, nombreDeImprenta, tipoTitulo, type Colofo
 export { isbnsDelTexto, aIsbn13, isbn10Valido, isbn13Valido } from './isbn.js';
 export { crearConsultor, vaciarCacheConsultas, CONTACTO, type Consultor, type CacheConsultas, type OpcionesConsultor } from './red.js';
 export { actividadImpresor, type ActividadImpresor } from './impresores.js';
+export { rtveEpisodio, fechaRtve, slugRtve } from './rtve.js';
 export { titulosCasan, autoresCasan, wikidataBuscar, type EntidadWikidata } from './fuentes.js';
 
 export interface EntradaEnriquecimiento {
@@ -184,20 +187,9 @@ export async function enriquecer(e: EntradaEnriquecimiento, red: Consultor | nul
 
   if (medio && (titulo || base.contenedor)) {
     tareas.push((async () => {
-      const programa = base.contenedor ?? titulo as string;
-      const wp = await wikidataPrograma(programa, autores, red, idioma ?? 'es');
-      if (!wp) return;
-      // El presentador se añade si falta; nunca se quita al invitado.
-      const presentadores = wp.datos.autores ?? [];
-      delete wp.datos.autores;
-      const faltan = presentadores.filter((p) => !autores.some((a) => claveAutor(a).split('|')[0] === claveAutor(p).split('|')[0]));
-      // Lista ampliada (presentador + los de la lectura): gana a la lectura sola.
-      if (faltan.length && autores.length) { wp.datos.autores = [...faltan, ...autores]; wp.porCampo = { ...wp.porCampo, autores: 0.85 }; }
-      const { desde, hasta } = wp.control ?? {};
-      if (base.anio && desde && (base.anio < desde || base.anio > (hasta ?? actual()))) {
-        avisos.push(`El año ${base.anio} cae fuera de los años en antena de «${programa}» (${desde}-${hasta ?? 'hoy'}).`);
-      }
-      hallazgos.push(wp);
+      const r = await fichaDeEmision(base, red, idioma);
+      hallazgos.push(...r.hallazgos);
+      avisos.push(...r.avisos);
     })());
   }
 
@@ -220,6 +212,65 @@ export async function enriquecer(e: EntradaEnriquecimiento, red: Consultor | nul
   }
   if (anioEdicion === undefined && !hallazgos.some((h) => h.datos.anio) && !medio) avisos.push('Sin año de edición impreso.');
   return { hallazgos, colofon, orcid, avisos };
+}
+
+const mismaPersona = (a: Autor, b: Autor) => claveAutor(a).split('|')[0] === claveAutor(b).split('|')[0];
+const nombreDe = (a: Autor) => [a.nombre, a.apellidos].filter(Boolean).join(' ');
+
+/**
+ * Audio y vídeo de un programa (radio, televisión, pódcast). La ficha correcta es la del EPISODIO:
+ * - `contenedor`: el programa («A fondo»), con su cadena en `editorial` («RTVE»);
+ * - `titulo`: el del episodio en el catálogo («Julio Cortázar» en RTVE Play) o, si no lo hay,
+ *   el nombre de los invitados, como hace RTVE;
+ * - `autores`: los entrevistados; `entrevistadores`: quien pregunta (el presentador);
+ * - `anio` y `fecha`: los de la emisión, si el catálogo los da.
+ */
+export async function fichaDeEmision(base: Partial<MetadatosDocumento>, red: Consultor, idioma?: string): Promise<{ hallazgos: Hallazgo[]; avisos: string[] }> {
+  const hallazgos: Hallazgo[] = [];
+  const avisos: string[] = [];
+  const titulo = base.titulo;
+  const autores = base.autores ?? [];
+  const programa = base.contenedor ?? (titulo as string);
+  const tituloEsPrograma = !base.contenedor || titulosCasan(titulo, base.contenedor, 0.9);
+  const wp = await wikidataPrograma(programa, autores, red, idioma ?? 'es');
+  const presentadores = wp?.datos.autores ?? [];
+  if (wp) delete wp.datos.autores;
+  if (wp) {
+    const { desde, hasta } = wp.control ?? {};
+    if (base.anio && desde && (base.anio < desde || base.anio > (hasta ?? actual()))) avisos.push(`El año ${base.anio} cae fuera de los años en antena de «${programa}» (${desde}-${hasta ?? 'hoy'}).`);
+  }
+  let entrevistadores = base.entrevistadores?.length ? base.entrevistadores : presentadores;
+  let invitados = autores.filter((a) => !entrevistadores.some((e) => mismaPersona(a, e)));
+  // RTVE Play: el episodio concreto, con su fecha de emisión.
+  const deRtve = /rtve|televisi[óo]n espa[ñn]ola|\btve\b|radio nacional/i.test(`${wp?.datos.editorial ?? ''} ${base.editorial ?? ''}`) || (!wp && (idioma ?? 'es').startsWith('es'));
+  const rt = deRtve && invitados.length ? await rtveEpisodio(wp?.datos.contenedor ?? programa, invitados, tituloEsPrograma ? undefined : titulo, red) : null;
+  if (rt?.datos.entrevistadores?.length) {
+    entrevistadores = rt.datos.entrevistadores;
+    invitados = autores.filter((a) => !entrevistadores.some((e) => mismaPersona(a, e)));
+  }
+  if (!wp && !rt && !(base.contenedor && !tituloEsPrograma)) return { hallazgos, avisos };
+  const reparto: Partial<MetadatosDocumento> = {};
+  const porCampo: Hallazgo['porCampo'] = {};
+  const anula: CampoMeta[] = [];
+  if (entrevistadores.length && invitados.length) {
+    reparto.autores = invitados;
+    reparto.entrevistadores = entrevistadores;
+    porCampo.autores = 0.88; porCampo.entrevistadores = 0.88;
+  } else if (entrevistadores.length && !autores.length) {
+    reparto.entrevistadores = entrevistadores;
+  }
+  if (tituloEsPrograma && !rt && invitados.length) {
+    // Sin episodio en el catálogo: el nombre de los invitados, como en RTVE Play.
+    reparto.titulo = invitados.map(nombreDe).join(' y ');
+    porCampo.titulo = 0.86;
+    anula.push('subtitulo');
+  }
+  if (rt) anula.push('subtitulo');
+  if (!reparto.titulo && rt) porCampo.titulo = 0.92;
+  if (wp) hallazgos.push(wp);
+  if (rt) hallazgos.push({ ...rt, ...(anula.length ? { anula } : {}) });
+  if (Object.keys(reparto).length) hallazgos.push({ fuente: rt ? 'rtve' : 'wikidata', confianza: 0.86, porCampo, datos: { ...reparto, ...(wp || rt ? {} : { contenedor: programa }) }, ...(anula.length ? { anula } : {}) });
+  return { hallazgos, avisos };
 }
 
 /** Añade ORCID a los autores que casan (sin tocar sus nombres). */

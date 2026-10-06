@@ -35,6 +35,8 @@ export interface Candidato {
   confianza: number;
   /** Confianza por campo, si difiere de la base. */
   porCampo?: Partial<Record<Campo, number>>;
+  /** Campos que este candidato deja vacíos si tiene más confianza que el que los trae. */
+  anula?: Campo[];
   datos: Partial<MetadatosDocumento>;
 }
 
@@ -129,6 +131,7 @@ const ESQUEMA_METADATOS = {
     anioOriginal: { type: 'integer', description: 'Año de la primera publicación de la OBRA (primera edición, © del original en una traducción), si consta.' },
     tituloOriginal: { type: 'string', description: 'En una traducción, el título original tal como figura («Título original: …»).' },
     traductores: { type: 'array', items: { type: 'object', properties: { nombre: { type: 'string' }, apellidos: { type: 'string' } }, required: ['nombre', 'apellidos'] } },
+    entrevistadores: { type: 'array', description: 'En entrevistas y programas: quien pregunta o presenta.', items: { type: 'object', properties: { nombre: { type: 'string' }, apellidos: { type: 'string' } }, required: ['nombre', 'apellidos'] } },
     edicion: { type: 'string', description: 'Mención de edición si consta: «2.ª ed.», «edición crítica», «Canto edition».' },
     coleccion: { type: 'string', description: 'Colección o serie editorial, si consta.' },
     contenedor: { type: 'string', description: 'Obra que contiene a esta: libro de un cuento o capítulo, actas de un congreso, programa de una emisión.' },
@@ -211,14 +214,16 @@ export async function leerMetadatos(
       'Eres un bibliotecario experto en catalogación. Extraes la ficha bibliográfica de un documento a partir de su principio. ' +
       'Reglas: no inventes nada que no esté en el texto o la ficha; deja fuera los campos que no consten. ' +
       'El nombre del archivo y la ficha del PDF suelen ser basura (nombres de archivo, «Microsoft Word - …», programas): úsalos solo si el texto los confirma. ' +
-      'Autores: separa nombre y apellidos («C. S.» / «Lewis»; «Lope» / «de Vega Carpio»; «Joaquín» / «Soler Serrano»). En entrevistas y programas, el entrevistador y el entrevistado son autores. ' +
+      'Autores: separa nombre y apellidos («C. S.» / «Lewis»; «Lope» / «de Vega Carpio»; «Joaquín» / «Soler Serrano»). En entrevistas, los autores son los entrevistados y quien pregunta va en entrevistadores. ' +
       'En un libro, el año es el de la edición que se tiene delante (página de créditos: «Esta edición», «© 2002», «Reprinted»); el de la primera publicación de la obra va en anioOriginal («Primera edición: 1975», «© 1975 Éditions Gallimard» en una traducción). ' +
       'Lee la página de créditos y el colofón: ISBN, «Título original», «Traducción de…» (traductores), mención de edición, colección, lugar y editorial; en impresos antiguos, el pie de imprenta («En Sevilla, en la Imprenta de…»): lugar e impresor (en editorial). Si no hay año impreso, deja el año vacío. ' +
       'Un cuento, poema o ensayo suelto de un libro es «chapter» y el libro va en contenedor; una comedia suelta impresa es «book». ' +
       'Autores corporativos (una institución, una cadena) van enteros en apellidos con el nombre vacío. ' +
       'En un artículo, revista, volumen, número y páginas si constan. ' +
       'El nombre del archivo puede ser una clave de cita «apellidoAñoPalabra» (serrano1977fondo = Soler Serrano, 1977, «A fondo»): úsala como pista, no como título. ' +
-      'En audio y vídeo: el título es el del programa, la conferencia o la entrevista (no el de una canción que suene); los autores son quien la dirige y quien interviene; ' +
+      'En audio y vídeo de un programa (radio, televisión, pódcast): el programa va en contenedor («A fondo») y el título es el del episodio o la entrevista («Entrevista a Julio Cortázar»), nunca el de una canción que suene; ' +
+      'autores = quien interviene o es entrevistado; entrevistadores = quien presenta o pregunta. En una conferencia, el título es el de la conferencia y el autor quien la da; ' +
+      'En un vídeo de una serie o de un canal (YouTube, cursos): el título es el del capítulo («Vectors»), la serie va en contenedor («Essence of linear algebra») y el canal en editorial («3Blue1Brown»); no pongas el capítulo en subtítulo. ' +
       'di quién es cada etiqueta de hablante (H0, H1…) si se deduce del texto.',
     mensajes: [{
       rol: 'usuario',
@@ -397,7 +402,7 @@ export async function verificar(
 // ---------------------------------------------------------------------------
 
 const CAMPOS: Campo[] = [
-  'titulo', 'subtitulo', 'tituloOriginal', 'autores', 'editores', 'traductores', 'anio', 'anioOriginal', 'fecha', 'sinFecha',
+  'titulo', 'subtitulo', 'tituloOriginal', 'autores', 'editores', 'traductores', 'entrevistadores', 'anio', 'anioOriginal', 'fecha', 'sinFecha',
   'editorial', 'lugar', 'edicion', 'coleccion', 'contenedor', 'revista', 'volumen', 'numero', 'paginas', 'doi', 'isbn', 'url',
   'idioma', 'idiomaOriginal', 'tipoCSL', 'resumen',
 ];
@@ -425,7 +430,9 @@ export function fusionarMetadatos(candidatos: Candidato[], nombreArchivo: string
       if (cand.fuente === 'usuario') c = 2;
       if (!mejor || c > mejor.c) mejor = { v, fuente: cand.fuente, c };
     }
-    if (mejor) {
+    // Un candidato más fiable puede pedir que el campo quede vacío (nunca si lo puso el usuario).
+    const anulado = mejor && mejor.fuente !== 'usuario' && candidatos.some((c) => c.anula?.includes(campo) && Math.max(c.confianza, ...Object.values(c.porCampo ?? {})) > mejor!.c);
+    if (mejor && !anulado) {
       (salida as Record<string, unknown>)[campo] = mejor.v;
       procedencia[campo] = { fuente: mejor.fuente, confianza: Math.round(Math.max(0, Math.min(1, mejor.c)) * 100) / 100 };
     }
@@ -562,7 +569,7 @@ export async function pasoMetadatos(
     const r = await enriquecer({ base: intermedia, texto: medio ? '' : textoColofon(entrada.unidades, entrada.ultimas), tipo: entrada.tipo }, consultor);
     colofon = r.colofon;
     orcid = r.orcid;
-    for (const h of r.hallazgos) candidatos.push({ fuente: h.fuente, confianza: h.confianza, ...(h.porCampo ? { porCampo: h.porCampo } : {}), datos: h.datos });
+    for (const h of r.hallazgos) candidatos.push({ fuente: h.fuente, confianza: h.confianza, ...(h.porCampo ? { porCampo: h.porCampo } : {}), ...(h.anula ? { anula: h.anula } : {}), datos: h.datos });
     procedencia.push({
       fase: 'metadatos', proveedor: 'enriquecimiento', ms: reloj() - t,
       detalle: { hallazgos: r.hallazgos.map((h) => ({ fuente: h.fuente, campos: Object.keys(h.datos), ...(h.id ? { id: h.id } : {}) })), consultas: consultor?.consultas.length ?? 0, avisos: r.avisos },
@@ -628,6 +635,7 @@ export function normalizarLectura(l: Partial<MetadatosDocumento>): Partial<Metad
   if (r.autores) r.autores = personas(r.autores);
   if (r.traductores) r.traductores = personas(r.traductores);
   if (r.editores) r.editores = personas(r.editores);
+  if (r.entrevistadores) r.entrevistadores = personas(r.entrevistadores);
   if (r.anio !== undefined) { const a = anioDe(r.anio); if (a) r.anio = a; else delete r.anio; }
   if (r.anioOriginal !== undefined) { const a = anioDe(r.anioOriginal); if (a) r.anioOriginal = a; else delete r.anioOriginal; }
   if (r.doi) { const d = limpiarDoi(r.doi); if (d) r.doi = d; else delete r.doi; }

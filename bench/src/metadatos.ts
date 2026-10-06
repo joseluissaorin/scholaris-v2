@@ -71,15 +71,31 @@ const ORO: Record<string, Oro> = {
       sinFecha: (m) => m.sinFecha?.desde === 1729 && m.sinFecha?.hasta === 1753 && Boolean(m.sinFecha.fundamento),
     },
   },
+  // RTVE Play (api/programas/73250): «Facundo Cabral», emitido el 2-7-1978; «Julio Cortázar», el 20-3-1977.
+  // El entrevistado es el autor; Soler Serrano, el entrevistador; «A fondo», el contenedor.
   serrano: {
     archivo: 'serrano1977fondo.mp4', tipo: 'video', duracion: 3219,
-    autores: ['soler', 'cabral'],
-    campos: { anio: 1977, tipoCSL: 'broadcast', editorial: contiene('editorial', 'rtve', 'tve', 'televisión española'), contenedor: contiene('contenedor', 'a fondo'), entrevistador: (m) => m.autores.some((a) => a.nombre === 'Joaquín' && a.apellidos === 'Soler Serrano') },
+    autores: ['cabral'],
+    campos: {
+      titulo: (m) => /cabral/i.test(m.titulo) && !/^a fondo$/i.test(m.titulo), anio: 1978, tipoCSL: (m) => m.tipoCSL === 'broadcast' || m.tipoCSL === 'interview',
+      editorial: contiene('editorial', 'rtve', 'tve', 'televisión española'), contenedor: contiene('contenedor', 'a fondo'),
+      entrevistador: (m) => Boolean(m.entrevistadores?.some((a) => a.nombre === 'Joaquín' && a.apellidos === 'Soler Serrano')),
+    },
   },
   'cortazar-afondo': {
     archivo: 'cortazar1977afondo.mp4', tipo: 'video', duracion: 7328,
-    autores: ['soler', 'cortazar'],
-    campos: { anio: 1977, tipoCSL: 'broadcast', editorial: contiene('editorial', 'rtve', 'tve', 'televisión española'), contenedor: contiene('contenedor', 'a fondo'), entrevistador: (m) => m.autores.some((a) => a.nombre === 'Joaquín' && a.apellidos === 'Soler Serrano') },
+    autores: ['cortazar'],
+    campos: {
+      titulo: (m) => /cort[áa]zar/i.test(m.titulo) && !/^a fondo$/i.test(m.titulo), anio: 1977, tipoCSL: (m) => m.tipoCSL === 'broadcast' || m.tipoCSL === 'interview',
+      editorial: contiene('editorial', 'rtve', 'tve', 'televisión española'), contenedor: contiene('contenedor', 'a fondo'),
+      entrevistador: (m) => Boolean(m.entrevistadores?.some((a) => a.nombre === 'Joaquín' && a.apellidos === 'Soler Serrano')),
+    },
+  },
+  // «Vectors | Chapter 1, Essence of linear algebra», 3Blue1Brown (Grant Sanderson): el capítulo dentro de la serie.
+  '3b1b_1min_real': {
+    archivo: '3b1b_1min_real.mp4', tipo: 'video', duracion: 60,
+    autores: ['sanderson'],
+    campos: { titulo: (m) => /^vectors\b/i.test(m.titulo), contenedor: contiene('contenedor', 'essence of linear algebra') },
   },
 };
 
