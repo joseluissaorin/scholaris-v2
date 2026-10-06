@@ -210,7 +210,11 @@ describe('grafo de entidades de la biblioteca', () => {
     await extraerEntidadesDocumento(p, 'd', { caracteresLote: 30, wikidata: false });
     const filas = await sql.ejecutar<{ orden: number }>('SELECT orden FROM menciones ORDER BY orden, ini');
     expect(filas.map((f) => f.orden)).toEqual([0, 1, 1]);
-    const { completarMenciones } = await import('../src/entidades/resolver.js');
+    const { completarMenciones, obtenerEntidad } = await import('../src/entidades/resolver.js');
+    // Enlazado antes con un cantante homónimo: al saberse que es un personaje, se desenlaza.
+    await sql.ejecutar("UPDATE entidades SET wikidata = 'Q4330560', descripcion = 'cantante estadounidense'");
+    await obtenerEntidad(sql, 'persona', 'Johnny Carter', [], true);
+    expect(await sql.ejecutar('SELECT wikidata, descripcion FROM entidades')).toEqual([{ wikidata: null, descripcion: 'personaje de ficción' }]);
     const frs = (await sql.ejecutar<{ id: string; orden: number; texto: string; ancla: string }>('SELECT id, orden, texto, ancla FROM fragmentos')).map((f) => ({ ...f, ancla: JSON.parse(f.ancla) }));
     expect(await completarMenciones(sql, 'd', frs)).toBe(0);
   });

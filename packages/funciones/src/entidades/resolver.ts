@@ -82,8 +82,10 @@ export async function obtenerEntidad(sql: SQL, tipo: TipoEntidad, nombre: string
   if (!activa) return f.id;
   const actuales = deJSON<string[]>(activa.alias, []);
   const alias = unirAlias(activa.nombre, actuales, [...formas, ...(activa.id !== f.id ? [nombre] : [])]);
-  if (ficticia && !activa.descripcion && !activa.wikidata) {
-    await sql.ejecutar('UPDATE entidades SET descripcion = ? WHERE id = ?', DESCRIPCION_FICCION, activa.id);
+  // Si un documento dice que es un personaje y estaba enlazado con una persona
+  // real homónima («Johnny Carter, cantante»), se deshace el enlace.
+  if (ficticia && activa.descripcion !== DESCRIPCION_FICCION && !/personaje|character|ficti|ficción|fiction/i.test(activa.descripcion ?? '')) {
+    await sql.ejecutar('UPDATE entidades SET descripcion = ?, wikidata = NULL, wikidata_visto = 1 WHERE id = ?', DESCRIPCION_FICCION, activa.id);
   }
   if (alias.length !== actuales.length) {
     await sql.ejecutar('UPDATE entidades SET alias = ?, busqueda = ?, actualizada = ? WHERE id = ?', JSON.stringify(alias), textoBusqueda(activa.clave, alias), t, activa.id);
