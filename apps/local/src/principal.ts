@@ -8,6 +8,7 @@
  *   GEMINI_API_KEY, OPENROUTER_API_KEY, TYPESAFE_API_KEY   inteligencia por API
  *   INFERBOX_URL, INFERBOX_API_KEY                         opcional, sin conexión
  *   SCHOLARIS_TOKEN   token fijo para un solo usuario (opcional)
+ *   SCHOLARIS_USUARIOS varias personas sin Clerk: "token:id:correo:Nombre;…"
  *   CLERK_PUBLISHABLE_KEY                                  multiusuario con Clerk
  */
 import { createServer } from 'node:http';

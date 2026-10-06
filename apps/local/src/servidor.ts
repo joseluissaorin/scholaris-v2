@@ -95,7 +95,7 @@ export async function crearServidorLocal(o: OpcionesServidor): Promise<ServidorL
   const config: ConfigInstancia = {
     modo: 'local', version: VERSION, origen,
     ...(conClerk ? { clerkPublishableKey: env.CLERK_PUBLISHABLE_KEY } : {}),
-    requiereAutenticacion: conClerk || !!env.SCHOLARIS_TOKEN,
+    requiereAutenticacion: conClerk || !!env.SCHOLARIS_TOKEN || !!env.SCHOLARIS_USUARIOS,
     conversionServidor: true, youtube: !!env.GEMINI_API_KEY, mcp: true, inferbox: !!env.INFERBOX_URL,
     bytesMaximos: 16 * 1024 * 1024 * 1024, tamParte: TAM_PARTE,
     espacioNombres: (u) => u,
@@ -190,7 +190,16 @@ export async function crearServidorLocal(o: OpcionesServidor): Promise<ServidorL
     },
   });
 
-  const usuarioLocal: UsuarioSesion | undefined = conClerk ? undefined : {
+  // Varias personas sin Clerk (una casa, un seminario): SCHOLARIS_USUARIOS="token:id:correo:Nombre;…".
+  const usuariosLocales = new Map<string, UsuarioSesion>();
+  for (const trozo of (env.SCHOLARIS_USUARIOS ?? '').split(';').map((x) => x.trim()).filter(Boolean)) {
+    const [tok, id, correo, ...nombre] = trozo.split(':');
+    if (!tok || tok.length < 8 || !id || !/^[\w-]{2,60}$/.test(id)) { console.warn(`[usuarios] entrada no válida en SCHOLARIS_USUARIOS: «${trozo.slice(0, 20)}…»`); continue; }
+    const u: UsuarioSesion = { id, correo: (correo ?? '').toLowerCase(), nombre: nombre.join(':') || id, plan: 'pro', funciones: ['scholaris'], via: 'local' };
+    usuariosLocales.set(tok, u);
+    await cuentas.asegurarUsuario(u);
+  }
+  const usuarioLocal: UsuarioSesion | undefined = conClerk || usuariosLocales.size ? undefined : {
     id: 'local', correo: env.SCHOLARIS_CORREO ?? 'local@scholaris', nombre: env.SCHOLARIS_NOMBRE ?? 'Scholaris', plan: 'pro', funciones: ['scholaris'], via: 'local',
   };
   if (usuarioLocal) await cuentas.asegurarUsuario(usuarioLocal);
@@ -201,6 +210,7 @@ export async function crearServidorLocal(o: OpcionesServidor): Promise<ServidorL
   const plataforma: Plataforma = {
     config, secreto, cuentas, almacen,
     ...(usuarioLocal ? { usuarioLocal } : {}),
+    ...(usuariosLocales.size ? { usuariosLocales } : {}),
     ...(env.SCHOLARIS_TOKEN ? { tokenLocal: env.SCHOLARIS_TOKEN } : {}),
     ...(conClerk ? { clerk: crearVerificadorClerk({ publishableKey: env.CLERK_PUBLISHABLE_KEY!, ...(env.CLERK_EMISOR ? { emisor: env.CLERK_EMISOR } : {}), ...(env.CLERK_JWKS ? { jwks: env.CLERK_JWKS } : {}) }) } : {}),
     atender: async (usuario, p) => appUsuario.fetch(p, { puertos: await puertosDe(usuario) }),
