@@ -34,7 +34,7 @@ y abrir «/» en una ventana privada: sin sesión de Clerk debe ir a `/acerca`
   (manícula, inicial E, biblioteca en perspectiva con el cuadrado de Malévich al
   fondo, las máquinas que contestan, la constelación de una biblioteca, la
   tríada de Kandinski, el caracol con su libro y la manecilla del margen). El
-  código solo pone la mano (`dibujo/pluma.ts`): temblor, presión, charco de
+  código solo pone la mano (el motor vive ahora en `apps/web/src/dibujo/`, compartido con la aplicación; `portada/dibujo/` lo reexporta): temblor, presión, charco de
   tinta, pasadas que no coinciden, lápiz de construcción, sombreados a medias.
   Deterministas (semilla por nombre), con pruebas en `dibujo/dibujo.test.ts`.
 - Se dibujan solos al bajar (primero el lápiz, luego la tinta, al ritmo de una
