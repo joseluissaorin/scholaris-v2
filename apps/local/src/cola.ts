@@ -144,6 +144,7 @@ export class ColaLocal implements Orquestador {
         await cerrarIngesta(puertos, {
           tarea: p.tarea, documento: p.documento, ok: true, original: info.original ?? p.original, bibliotecas: p.bibliotecas ?? [], unidades: r.unidades,
           ...(info.mime ? { mime: info.mime } : {}), ...(info.bytes ? { bytes: info.bytes } : {}),
+          ...(r.vectoresPendientes ? { avisos: [{ codigo: 'vectores_pendientes', mensaje: 'Los vectores aún no están en el índice: ya se puede leer y buscar por texto, y la búsqueda semántica llegará en unos minutos.' }] } : {}),
           ...(metadatosUsuario ? { metadatosUsuario } : {}),
         });
         await limpiarTrabajo(puertos.almacen, p);

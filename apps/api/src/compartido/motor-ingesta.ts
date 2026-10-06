@@ -20,7 +20,7 @@ import { cuerpoDominante, leerCapaPagina, ejecutarIngesta, leerPliego, planifica
 import type { PaqueteConversion } from '@scholaris/imprenta';
 import { abrirCortador, type CortadorPdf } from '@scholaris/imprenta';
 import type { Documento, IndiceVectorial, Inteligencia, Lector, PaginaLeida, Progreso, SQL, Transcripcion, Transcriptor, Vector } from '@scholaris/nucleo';
-import { sha256 } from '@scholaris/nucleo';
+import { bytesAVector, sha256 } from '@scholaris/nucleo';
 import { leerDocumento } from '@scholaris/spdf';
 import type { AlmacenAmpliado, ParamsIngesta } from '../puertos.js';
 import { convertirEnServidor, ErrorReserva } from './reserva.js';
@@ -374,6 +374,23 @@ export interface ResumenComposicion {
   vectores: Record<string, number>;
   tiempos: Record<string, number>;
   avisos: string[];
+  /** El índice vectorial falló: el documento sirve (texto y FTS) y los vectores se reintentan después. */
+  vectoresPendientes?: boolean;
+}
+
+/** El índice del motor: nunca tira la ingesta; si falla, lo apunta para reintentarlo. */
+function indiceSeguro(ctx: ContextoMotor, base: string, estado: { pendientes: boolean }) {
+  return {
+    insertar: async (espacio: { id: string }, entradas: Parameters<IndiceVectorial['insertar']>[1]) => {
+      if (espacio.id !== base || !ctx.indice || estado.pendientes) return;
+      try {
+        await ctx.indice.insertar(ctx.espacioNombres, entradas);
+      } catch (e) {
+        estado.pendientes = true;
+        console.error(JSON.stringify({ nivel: 'aviso', que: 'indice_vectorial', error: (e as Error).message }));
+      }
+    },
+  };
 }
 
 export async function componer(ctx: ContextoMotor, params: ParamsIngesta, info: InfoPlan, metadatosUsuario?: Record<string, unknown> | null): Promise<ResumenComposicion> {
@@ -382,17 +399,12 @@ export async function componer(ctx: ContextoMotor, params: ParamsIngesta, info: 
   const base = ia.embebedor.espacio.id;
   let ultimo = 0;
   let faseAnterior = '';
+  const estadoIndice = { pendientes: false };
   const r: ResultadoIngesta = await ejecutarIngesta(paquete, {
     inteligencia: ia,
     fuente: fuenteDesdeAlmacen(ctx.almacen, params, paquete),
     sql: ctx.sql,
-    ...(ctx.indice ? {
-      indice: {
-        insertar: async (espacio, entradas) => {
-          if (espacio.id === base) await ctx.indice!.insertar(ctx.espacioNombres, entradas);
-        },
-      },
-    } : {}),
+    ...(ctx.indice ? { indice: indiceSeguro(ctx, base, estadoIndice) } : {}),
     guardarBlob: async (clave, datos) => { await ctx.almacen.poner(`${params.prefijo}${clave}`, datos.bytes, datos.mime); },
     ...(ctx.correoContacto ? { correoContacto: ctx.correoContacto } : {}),
   }, {
@@ -420,6 +432,7 @@ export async function componer(ctx: ContextoMotor, params: ParamsIngesta, info: 
   return {
     documento: r.documento.id, unidades: r.unidades.length, fragmentos: r.fragmentos.length, secciones: r.secciones.length,
     figuras: r.figuras.length, vectores: r.vectores, tiempos: r.tiempos, avisos: r.avisos,
+    ...(estadoIndice.pendientes ? { vectoresPendientes: true } : {}),
   };
 }
 
@@ -438,13 +451,36 @@ export async function revectorizar(ctx: ContextoMotor, params: ParamsIngesta): P
   );
   const { escribirEspacio } = await import('@scholaris/ingesta');
   await escribirEspacio(ctx.sql, emb.espacio);
+  const estadoIndice = { pendientes: false };
+  const indice = indiceSeguro(ctx, emb.espacio.id, estadoIndice);
   for (let i = 0; i < vectores.length; i += 200) {
     const lote = vectores.slice(i, i + 200);
     await escribirVectoresIngesta(ctx.sql, d.id, lote);
-    if (ctx.indice) await ctx.indice.insertar(ctx.espacioNombres, entradasIndice(d, lote));
+    await indice.insertar(emb.espacio, entradasIndice(d, lote));
   }
   await (ctx.sql as { vaciarPendientes?: () => Promise<void> }).vaciarPendientes?.();
-  return { documento: d.id, unidades: d.unidades, fragmentos: filas.length, secciones: 0, figuras: 0, vectores: { [emb.espacio.id]: vectores.length }, tiempos: {}, avisos: [] };
+  return { documento: d.id, unidades: d.unidades, fragmentos: filas.length, secciones: 0, figuras: 0, vectores: { [emb.espacio.id]: vectores.length }, tiempos: {}, avisos: [], ...(estadoIndice.pendientes ? { vectoresPendientes: true } : {}) };
+}
+
+/**
+ * Vuelve a mandar al índice los vectores del espacio base de un documento,
+ * desde la estantería (donde siempre se guardan). Lo usa la cola cuando una
+ * ingesta terminó con «vectores pendientes».
+ */
+export async function reindexar(sql: SQL, indice: IndiceVectorial, espacioNombres: string, documento: string): Promise<number> {
+  const d = (await leerDocumento(sql, documento)) as Documento | null;
+  if (!d) return 0;
+  const base = indice.espacio.id;
+  let n = 0;
+  for (let desde = 0; ; desde += 1000) {
+    const filas = await sql.ejecutar<{ objetivo: string; id: string; valores: Uint8Array }>(
+      'SELECT objetivo, id, valores FROM vectores WHERE documento = ? AND espacio = ? ORDER BY objetivo, id LIMIT 1000 OFFSET ?', documento, base, desde);
+    if (!filas.length) break;
+    const vs: Vector[] = filas.map((f) => ({ objetivo: f.objetivo as Vector['objetivo'], id: f.id, espacio: base, valores: bytesAVector(f.valores) }));
+    await indice.insertar(espacioNombres, entradasIndice(d, vs));
+    n += vs.length;
+  }
+  return n;
 }
 
 /** Borra la grabación de lecturas de una tarea (al terminar bien). */

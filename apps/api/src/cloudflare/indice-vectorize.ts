@@ -9,7 +9,32 @@
  */
 import type { CoincidenciaIndice, EntradaIndice, EspacioVectorial, IndiceVectorial } from '@scholaris/nucleo';
 
-const LOTE = 500;
+const LOTE = 1000;
+
+export interface CupoVectorial {
+  /** Espera hasta que haya cupo para escribir `n` vectores (reparte el cupo de la cuenta). */
+  turno(n: number): Promise<void>;
+  /** Vectorize ha dicho «demasiadas peticiones»: frenar a todos un rato. */
+  frenar(): Promise<void>;
+}
+
+const esLimite = (e: unknown) => /40041|429|Too Many Requests|rate.?limit/i.test(String((e as Error)?.message ?? e));
+const dormir = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/** Escribe con reintentos y espera exponencial ante los límites de Vectorize. */
+async function conReintentos<T>(fn: () => Promise<T>, cupo?: CupoVectorial, intentos = 9): Promise<T> {
+  let espera = 1000;
+  for (let i = 0; ; i++) {
+    try {
+      return await fn();
+    } catch (e) {
+      if (!esLimite(e) || i >= intentos - 1) throw e;
+      await cupo?.frenar().catch(() => undefined);
+      await dormir(espera + Math.random() * espera);
+      espera = Math.min(espera * 2, 60_000);
+    }
+  }
+}
 const CAMPOS = new Set(['documento', 'tipo', 'anio', 'idioma', 'objetivo', 't0']);
 
 function filtroVectorize(f: Record<string, unknown> | undefined): VectorizeVectorMetadataFilter | undefined {
@@ -28,7 +53,7 @@ function filtroVectorize(f: Record<string, unknown> | undefined): VectorizeVecto
   return Object.keys(salida).length ? (salida as VectorizeVectorMetadataFilter) : undefined;
 }
 
-export function crearIndiceVectorize(indice: VectorizeIndex, espacio: EspacioVectorial): IndiceVectorial {
+export function crearIndiceVectorize(indice: VectorizeIndex, espacio: EspacioVectorial, cupo?: CupoVectorial): IndiceVectorial {
   const recortar = (v: Float32Array | number[]) => {
     const a = Array.from(v.length > espacio.dims ? v.slice(0, espacio.dims) : v);
     return a;
@@ -37,12 +62,14 @@ export function crearIndiceVectorize(indice: VectorizeIndex, espacio: EspacioVec
     espacio,
     async insertar(ns, entradas: EntradaIndice[]) {
       for (let i = 0; i < entradas.length; i += LOTE) {
-        await indice.upsert(entradas.slice(i, i + LOTE).map((e) => ({
+        const lote = entradas.slice(i, i + LOTE);
+        await cupo?.turno(lote.length);
+        await conReintentos(() => indice.upsert(lote.map((e) => ({
           id: `${ns}.${e.id}`,
           values: recortar(e.valores),
           namespace: ns,
           metadata: Object.fromEntries(Object.entries(e.metadatos).filter(([k]) => CAMPOS.has(k))) as Record<string, VectorizeVectorMetadata>,
-        })));
+        }))), cupo);
       }
     },
     async consultar(ns, vector, op): Promise<CoincidenciaIndice[]> {
@@ -62,7 +89,10 @@ export function crearIndiceVectorize(indice: VectorizeIndex, espacio: EspacioVec
       }));
     },
     async borrar(ns, ids) {
-      for (let i = 0; i < ids.length; i += LOTE) await indice.deleteByIds(ids.slice(i, i + LOTE).map((id) => `${ns}.${id}`));
+      for (let i = 0; i < ids.length; i += LOTE) {
+        const lote = ids.slice(i, i + LOTE).map((id) => `${ns}.${id}`);
+        await conReintentos(() => indice.deleteByIds(lote), cupo);
+      }
     },
   };
 }

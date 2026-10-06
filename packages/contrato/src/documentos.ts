@@ -6,6 +6,7 @@
  *   PATCH  /documentos/:id/metadatos  Partial<MetadatosDocumento> → DetalleDocumento
  *   DELETE /documentos/:id                        → Ok
  *   POST   /documentos/:id/reprocesar  { fases? } → IngestaIniciada
+ *   POST   /documentos/:id/reintentar             → IngestaIniciada  (tras un error: reaprovecha original, paquete y lecturas ya hechas)
  *
  *   GET    /documentos/:id/unidades?desde=&hasta=  → UnidadVista[]   (orden, ambos incluidos; máx. 100)
  *   GET    /documentos/:id/unidades/:orden          → UnidadVista
@@ -87,6 +88,8 @@ export interface DetalleDocumento extends Documento {
   tarea?: string;
   /** Último error de ingesta, si lo hubo. */
   error?: string;
+  /** Avisos de un documento listo; p. ej. «vectores_pendientes» (busca por texto; la semántica llega después). */
+  avisos?: Array<{ codigo: string; mensaje: string }>;
 }
 
 export type ParcheMetadatos = Partial<MetadatosDocumento>;

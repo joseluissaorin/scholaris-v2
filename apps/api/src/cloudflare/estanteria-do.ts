@@ -14,6 +14,8 @@ import { apuntarProgreso, leerTarea, limpiarTemporales } from '../compartido/est
 import { cerrarIngesta, type DatosCierre } from '../compartido/cierre.js';
 import { puertosFunciones } from '../compartido/servicios.js';
 import type { Env } from './env.js';
+import { reindexar as reindexarMotor } from '../compartido/motor-ingesta.js';
+import { espacioNombresDe } from './indice-vectorize.js';
 import { SqlDO } from './sql.js';
 import { almacenDesdeEnv, configDesdeEnv, cuentasDesdeEnv, emisorDesdeEnv, indiceDesdeEnv, inteligenciaPara, origenDe } from './puertos-cf.js';
 
@@ -104,6 +106,16 @@ export class Estanteria extends DurableObject<Env> {
   async cerrar(usuario: Pick<UsuarioSesion, 'id' | 'plan'>, datos: DatosCierre): Promise<void> {
     const u: UsuarioSesion = { id: usuario.id, plan: usuario.plan, correo: '', nombre: '', funciones: [], via: 'clerk' };
     await cerrarIngesta(this.puertos(u, origenDe(this.env)), datos);
+  }
+
+  /** Cola: reenvía al índice los vectores pendientes de un documento. */
+  async reindexar(usuario: string, documento: string): Promise<number> {
+    const ia = await inteligenciaPara(this.env, cuentasDesdeEnv(this.env), usuario);
+    const indice = indiceDesdeEnv(this.env, ia, this.base);
+    if (!indice) return 0;
+    const n = await reindexarMotor(this.base, indice, espacioNombresDe(usuario), documento);
+    this.base.ejecutarSync("DELETE FROM pl_avisos WHERE documento = ? AND codigo = 'vectores_pendientes'", [documento]);
+    return n;
   }
 
   /** Cron: vigilantes diarios o semanales del usuario. */

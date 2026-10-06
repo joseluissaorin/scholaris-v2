@@ -63,7 +63,8 @@ export class FlujoIngesta extends WorkflowEntrypoint<Env, ParamsIngesta> {
           return revectorizar(ctx, p);
         });
         await step.do('cerrar', { retries: REINTENTOS }, async () => {
-          await estanteria.cerrar({ id: p.usuario, plan: p.plan }, { tarea: p.tarea, documento: p.documento, ok: true });
+          await estanteria.cerrar({ id: p.usuario, plan: p.plan }, { tarea: p.tarea, documento: p.documento, ok: true, ...(r.vectoresPendientes ? { avisos: [{ codigo: 'vectores_pendientes', mensaje: 'Los vectores aún no están en el índice: ya se puede leer y buscar por texto, y la búsqueda semántica llegará en unos minutos.' }] } : {}) });
+          if (r.vectoresPendientes) await this.env.COLA.send({ tipo: 'reindexar', usuario: p.usuario, documento: p.documento }, { delaySeconds: 120 });
         });
         return r;
       }
@@ -122,9 +123,11 @@ export class FlujoIngesta extends WorkflowEntrypoint<Env, ParamsIngesta> {
         await estanteria.cerrar({ id: p.usuario, plan: p.plan }, {
           tarea: p.tarea, documento: p.documento, ok: true, original: info.original ?? p.original, bibliotecas: p.bibliotecas ?? [], unidades: resumen.unidades,
           ...(info.mime ? { mime: info.mime } : {}), ...(info.bytes ? { bytes: info.bytes } : {}),
+          ...(resumen.vectoresPendientes ? { avisos: [{ codigo: 'vectores_pendientes', mensaje: 'Los vectores aún no están en el índice: ya se puede leer y buscar por texto, y la búsqueda semántica llegará en unos minutos.' }] } : {}),
           ...(metadatosUsuario ? { metadatosUsuario: metadatosUsuario as Record<string, unknown> } : {}),
         });
         await limpiarTrabajo(almacenDesdeEnv(this.env, origenDe(this.env)), p);
+        if (resumen.vectoresPendientes) await this.env.COLA.send({ tipo: 'reindexar', usuario: p.usuario, documento: p.documento }, { delaySeconds: 120 });
       });
       return resumen;
     } catch (e) {

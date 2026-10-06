@@ -21,6 +21,9 @@ export const ESQUEMA_PLATAFORMA = [
     huella TEXT, tipo TEXT NOT NULL, clave TEXT NOT NULL, id_partes TEXT, prefijo TEXT NOT NULL,
     bibliotecas TEXT NOT NULL DEFAULT '[]', metadatos TEXT, estado TEXT NOT NULL, creada TEXT NOT NULL
   )`,
+  `CREATE TABLE IF NOT EXISTS pl_avisos (
+    documento TEXT NOT NULL, codigo TEXT NOT NULL, mensaje TEXT NOT NULL, creado TEXT NOT NULL, PRIMARY KEY (documento, codigo)
+  )`,
   `CREATE TABLE IF NOT EXISTS pl_temporales (
     clave TEXT PRIMARY KEY, nombre TEXT NOT NULL, mime TEXT NOT NULL, bytes INTEGER NOT NULL, creado TEXT NOT NULL, caduca TEXT NOT NULL
   )`,

@@ -8,6 +8,26 @@ import type { Env } from './env.js';
 
 export class Limitador extends DurableObject<Env> {
   private marcas: number[] = [];
+  // Cupo de escritura vectorial de la cuenta (cubo de fichas, en memoria del objeto «cupo:vectorize»).
+  private fichas = 4000;
+  private ultimaRecarga = Date.now();
+  private frenadoHasta = 0;
+
+  /** Milisegundos que hay que esperar antes de escribir `n` vectores (ya descontados). */
+  async turnoVectorial(n: number): Promise<number> {
+    const ahora = Date.now();
+    const ritmo = ahora < this.frenadoHasta ? 250 : 2000; // vectores por segundo
+    this.fichas = Math.min(4000, this.fichas + ((ahora - this.ultimaRecarga) / 1000) * ritmo);
+    this.ultimaRecarga = ahora;
+    this.fichas -= n;
+    return this.fichas >= 0 ? 0 : Math.ceil((-this.fichas / ritmo) * 1000);
+  }
+
+  /** Vectorize ha devuelto un límite: todos más despacio durante un minuto. */
+  async frenarVectorial(): Promise<void> {
+    this.frenadoHasta = Date.now() + 60_000;
+    this.fichas = Math.min(this.fichas, 0);
+  }
 
   async admitir(porMinuto: number): Promise<{ ok: boolean; reintentar?: number }> {
     const ahora = Date.now();

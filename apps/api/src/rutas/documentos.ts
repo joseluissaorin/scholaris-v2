@@ -131,6 +131,8 @@ export function rutasDocumentos(app: Hono<Entorno>): void {
       tarea: await tareaDeDocumento(p.sql, d.id),
     };
     if (d.estado === 'error') detalle.error = await ultimoError(p.sql, d.id);
+    const avisos = await p.sql.ejecutar<{ codigo: string; mensaje: string }>('SELECT codigo, mensaje FROM pl_avisos WHERE documento = ?', d.id);
+    if (avisos.length) detalle.avisos = avisos;
     return c.json(detalle);
   });
 
@@ -174,6 +176,24 @@ export function rutasDocumentos(app: Hono<Entorno>): void {
       documento: d.id, prefijo, original: d.original, paquete, tipo: d.tipo, mime: d.mime, nombre: d.metadatos.titulo,
       fases: b.fases, url: d.metadatos.url && !d.original ? d.metadatos.url : undefined,
     }, 'reproceso');
+    return c.json(r, 202);
+  });
+
+  // Relanza la ingesta reaprovechando lo que ya está en el almacén (original, paquete y lecturas grabadas).
+  app.post('/documentos/:id/reintentar', async (c: Ctx) => {
+    exigirEscritura(c);
+    const p = puertos(c);
+    const d = await documentoOError(p, prm(c, 'id'));
+    if (await tareaDeDocumento(p.sql, d.id)) fallo('conflicto', 'El documento ya se está procesando.');
+    const prefijo = prefijoDocumento(p.usuario.id, d.id);
+    const paquete = (await p.almacen.existe(`${prefijo}paquete.json`)) ? `${prefijo}paquete.json` : undefined;
+    if (!paquete && !d.original && !d.metadatos.url) fallo('conflicto', 'No queda nada del documento en el almacén: hay que volver a subirlo.');
+    const [sub] = await p.sql.ejecutar<{ bibliotecas: string }>('SELECT bibliotecas FROM pl_subidas WHERE documento = ? ORDER BY creada DESC LIMIT 1', d.id);
+    const r = await lanzarIngesta(p, {
+      documento: d.id, prefijo, original: d.original, paquete, tipo: d.tipo, mime: d.mime, nombre: d.metadatos.titulo,
+      ...(!paquete && !d.original && d.metadatos.url ? { url: d.metadatos.url } : {}),
+      bibliotecas: sub ? (JSON.parse(sub.bibliotecas) as string[]) : d.bibliotecas,
+    });
     return c.json(r, 202);
   });
 

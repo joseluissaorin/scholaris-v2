@@ -20,6 +20,8 @@ export interface DatosCierre {
   bibliotecas?: string[];
   /** Unidades leídas (para la cuota de páginas). */
   unidades?: number;
+  /** Avisos que quedan en el documento («vectores_pendientes»…). */
+  avisos?: Array<{ codigo: string; mensaje: string }>;
   /** Metadatos que dio el usuario: mandan sobre los leídos. */
   metadatosUsuario?: Record<string, unknown>;
 }
@@ -44,6 +46,10 @@ export async function cerrarIngesta(p: PuertosUsuario, d: DatosCierre): Promise<
     );
   }
   await p.sql.ejecutar("UPDATE pl_subidas SET estado = 'hecha' WHERE documento = ?", d.documento);
+  await p.sql.ejecutar('DELETE FROM pl_avisos WHERE documento = ?', d.documento);
+  for (const a of d.avisos ?? []) {
+    await p.sql.ejecutar('INSERT OR REPLACE INTO pl_avisos (documento, codigo, mensaje, creado) VALUES (?, ?, ?, ?)', d.documento, a.codigo, a.mensaje, ahora());
+  }
   await terminarTarea(p.sql, d.tarea, 'listo');
   invalidarBuscador(p.sql);
   const t = await totalesEstanteria(p.sql);

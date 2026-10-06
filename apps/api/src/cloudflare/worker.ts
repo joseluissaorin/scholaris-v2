@@ -94,10 +94,11 @@ export default {
       try {
         const b = m.body;
         if (b.tipo === 'vigilantes') await env.ESTANTERIA.getByName(b.usuario).vigilantes({ id: b.usuario, plan: b.plan }, b.modo);
+        else if (b.tipo === 'reindexar') await env.ESTANTERIA.getByName(b.usuario).reindexar(b.usuario, b.documento);
         m.ack();
       } catch (e) {
         console.error(JSON.stringify({ nivel: 'error', cola: m.body, error: (e as Error).message }));
-        m.retry({ delaySeconds: 60 });
+        m.retry({ delaySeconds: Math.min(900, 60 * 2 ** Math.min(4, m.attempts)) });
       }
     }
   },

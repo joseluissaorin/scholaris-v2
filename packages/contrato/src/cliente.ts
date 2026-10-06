@@ -165,6 +165,7 @@ export function crearCliente(opciones: OpcionesCliente) {
       metadatos: (id: string, p: ParcheMetadatos) => patch<DetalleDocumento>(`/documentos/${e(id)}/metadatos`, p),
       borrar: (id: string) => del(`/documentos/${e(id)}`),
       reprocesar: (id: string, p: Reprocesar = {}) => post<IngestaIniciada>(`/documentos/${e(id)}/reprocesar`, p),
+      reintentar: (id: string) => post<IngestaIniciada>(`/documentos/${e(id)}/reintentar`),
       unidades: (id: string, desde: number, hasta: number) => get<UnidadVista[]>(`/documentos/${e(id)}/unidades`, { desde, hasta }),
       unidad: (id: string, orden: number) => get<UnidadVista>(`/documentos/${e(id)}/unidades/${orden}`),
       /** URL de la imagen (redirige a la firmada). Para <img>, mejor `imagenUrl` de la unidad. */

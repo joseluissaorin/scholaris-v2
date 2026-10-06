@@ -100,7 +100,11 @@ export function indiceDesdeEnv(env: Env, ia: Inteligencia, sql?: SQL): IndiceVec
   if (!env.VECTORES) return sql ? new IndiceVectorialSQL(sql, ia.embebedor.espacio) : null;
   const e = ia.embebedor.espacio;
   // Vectorize tiene un índice de dimensiones fijas: solo el espacio base va allí.
-  return crearIndiceVectorize(env.VECTORES, e);
+  const cupo = env.LIMITADOR.getByName('cupo:vectorize');
+  return crearIndiceVectorize(env.VECTORES, e, {
+    turno: async (n) => { const ms = await cupo.turnoVectorial(n); if (ms > 0) await new Promise((r) => setTimeout(r, Math.min(ms, 120_000))); },
+    frenar: () => cupo.frenarVectorial(),
+  });
 }
 
 /** Emisor: cada evento va al canal del usuario y, si es de una tarea, al de la tarea. */
