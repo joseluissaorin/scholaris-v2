@@ -12,14 +12,14 @@
 import type {
   Embebedor, EspacioVectorial, Lector, Modalidad, PaginaLeida, PiezaEmbebible, Redactor, Transcripcion, Transcriptor,
 } from '@scholaris/nucleo';
-import { enParalelo, normalizarVector, sha256 } from '@scholaris/nucleo';
+import { enParalelo, normalizarVector, reintentar, sha256 } from '@scholaris/nucleo';
 import {
-  aBase64, ahora, apuntador, ErrorProveedor, estimarTokens, extraerJSON, limitador, pedir,
+  aBase64, ahora, apuntador, ErrorProveedor, estadoReintentable, estimarTokens, extraerJSON, limitador, pedir,
   type ContadorUso, type OpcionesComunes, type UsoProveedor,
 } from './comun.js';
 import { costeTokens, precioDe } from './precios.js';
 import { ESQUEMA_PAGINAS, hayBucle, instruccionesLector, normalizarPaginas, type OpcionesTranscripcion } from './lectura.js';
-import { ErrorPliego, leerPartiendo, type EntradaPliego } from './pliego.js';
+import { ErrorPliego, leerPartiendo, paginasDe, type EntradaPliego } from './pliego.js';
 
 /** La petición o la respuesta se bloqueó por seguridad. No se reintenta con el mismo modelo. */
 export class ErrorBloqueo extends ErrorProveedor {
@@ -94,6 +94,10 @@ export interface ClienteGemini {
   embebedor(o?: OpcionesEmbebedorGemini): Embebedor;
   redactor(o?: OpcionesRedactorGemini): Redactor;
   transcriptor(o?: OpcionesTranscriptorGemini): Transcriptor;
+  /** Modo económico: lectura por la Batch API (50 % del precio, hasta 24 h). */
+  lotes(o?: OpcionesLotesGemini): LotesLectura;
+  /** Sube un fichero a la Files API (subida reanudable) y devuelve `{ nombre, uri }`. */
+  subirArchivo(bytes: Uint8Array, mime: string, nombreVisible?: string): Promise<{ nombre: string; uri: string }>;
   /** Llamada cruda a generateContent (para el banco y para usos especiales). */
   generar(modelo: string, cuerpo: Record<string, unknown>, operacion: UsoProveedor['operacion'], extra?: Partial<UsoProveedor>): Promise<{ texto: string; fin?: string; uso: UsoProveedor }>;
 }
@@ -131,6 +135,18 @@ export interface OpcionesRedactorGemini {
   umbralCache?: number;
   /** Vida de la caché explícita en segundos. */
   ttlCache?: number;
+}
+
+/** Puerto de lectura por lotes (estructuralmente igual a `LotesLectura` de @scholaris/ingesta). */
+export interface LotesLectura {
+  readonly nombre: string;
+  enviar(peticiones: Array<{ clave: string; entrada: EntradaPliego }>): Promise<string>;
+  consultar(id: string): Promise<{ estado: 'pendiente' | 'listo' | 'error'; resultados?: Record<string, PaginaLeida[]>; error?: string; usd?: number; fallidas?: Record<string, string> }>;
+}
+
+export interface OpcionesLotesGemini extends OpcionesLectorGemini {
+  /** Por encima de este tamaño (bytes de JSON) el lote va como JSONL por la Files API. Por defecto 15 MB. */
+  maxEnLinea?: number;
 }
 
 export interface OpcionesTranscriptorGemini {
@@ -203,28 +219,33 @@ export function crearGemini(config: ConfigGemini): ClienteGemini {
   // Lector
   // -------------------------------------------------------------------------
 
+  /** Cuerpo de generateContent para leer un pliego: lo comparten el lector y los lotes. */
+  function cuerpoLectura(e: EntradaPliego, n: number, modelo: string, o: OpcionesLectorGemini) {
+    const partes: Array<Record<string, unknown>> = [];
+    if (e.pdf) partes.push({ inline_data: { mime_type: 'application/pdf', data: aBase64(e.pdf) } });
+    else for (const [i, img] of (e.imagenes ?? []).entries()) {
+      partes.push({ text: `[Página física ${e.primeraFisica + i}]` });
+      partes.push({ inline_data: { mime_type: normalizarMime(img.mime), data: aBase64(img.bytes) } });
+    }
+    partes.push({ text: instruccionesLector(n, e.primeraFisica, e.pista, o, e.pdf ? 'pdf' : 'imagenes') });
+    return {
+      contents: [{ role: 'user', parts: partes }],
+      safetySettings: SEGURIDAD_ACADEMICA,
+      generationConfig: {
+        responseMimeType: 'application/json',
+        responseJsonSchema: ESQUEMA_PAGINAS,
+        mediaResolution: RESOLUCION[o.resolucion ?? 'media'],
+        maxOutputTokens: Math.min(65_536, (o.maxTokensSalida ?? 3_000) * n + 500),
+        thinkingConfig: configPensamiento(o.pensamiento ?? nivelPorDefecto(modelo)),
+      },
+    };
+  }
+
   function lector(o: OpcionesLectorGemini = {}): Lector & { readonly modelo: string } {
     const modelo = o.modelo ?? MODELOS_GEMINI.lector;
     const nombre = `gemini:${modelo}`;
     const leerUno = async (e: EntradaPliego, n: number): Promise<PaginaLeida[]> => {
-      const partes: Array<Record<string, unknown>> = [];
-      if (e.pdf) partes.push({ inline_data: { mime_type: 'application/pdf', data: aBase64(e.pdf) } });
-      else for (const [i, img] of (e.imagenes ?? []).entries()) {
-        partes.push({ text: `[Página física ${e.primeraFisica + i}]` });
-        partes.push({ inline_data: { mime_type: img.mime, data: aBase64(img.bytes) } });
-      }
-      partes.push({ text: instruccionesLector(n, e.primeraFisica, e.pista, o, e.pdf ? 'pdf' : 'imagenes') });
-      const cuerpo = {
-        contents: [{ role: 'user', parts: partes }],
-        safetySettings: SEGURIDAD_ACADEMICA,
-        generationConfig: {
-          responseMimeType: 'application/json',
-          responseJsonSchema: ESQUEMA_PAGINAS,
-          mediaResolution: RESOLUCION[o.resolucion ?? 'media'],
-          maxOutputTokens: Math.min(65_536, (o.maxTokensSalida ?? 3_000) * n + 500),
-          thinkingConfig: configPensamiento(o.pensamiento ?? nivelPorDefecto(modelo)),
-        },
-      };
+      const cuerpo = cuerpoLectura(e, n, modelo, o);
       // Un pliego de 16 páginas densas puede tardar; el tiempo límite crece con las páginas.
       const plazo = Math.max(config.timeoutMs ?? 0, 60_000 + n * 20_000);
       let { texto, fin } = await generar(modelo, cuerpo, 'leer', { paginas: n, imagenes: e.imagenes?.length ?? 0 }, plazo);
@@ -383,16 +404,107 @@ export function crearGemini(config: ConfigGemini): ClienteGemini {
   // Transcriptor
   // -------------------------------------------------------------------------
 
-  async function subirArchivo(bytes: Uint8Array, mime: string): Promise<string> {
-    // Subida simple («raw») a la Files API: devuelve la URI del archivo (48 h de vida).
-    const r = await pedir<{ file?: { uri?: string } }>({
-      proveedor: 'gemini', url: `${base}/upload/v1beta/files`,
-      cabeceras: { ...cabeceras, 'X-Goog-Upload-Protocol': 'raw', 'content-type': mime },
-      cuerpo: bytes,
-    }, { ...config, timeoutMs: Math.max(config.timeoutMs ?? 0, 300_000) });
-    const uri = r.file?.uri;
-    if (!uri) throw new ErrorProveedor('gemini', 'la Files API no devolvió URI');
-    return uri;
+  /** Subida reanudable a la Files API (dos pasos: abrir sesión y subir con «finalize»). Vive 48 h. */
+  async function subirArchivo(bytes: Uint8Array, mime: string, nombreVisible = 'scholaris'): Promise<{ nombre: string; uri: string }> {
+    const f = config.fetch ?? globalThis.fetch.bind(globalThis);
+    return reintentar(async () => {
+      const inicio = await f(`${base}/upload/v1beta/files`, {
+        method: 'POST',
+        headers: {
+          ...cabeceras, 'content-type': 'application/json', 'X-Goog-Upload-Protocol': 'resumable', 'X-Goog-Upload-Command': 'start',
+          'X-Goog-Upload-Header-Content-Length': String(bytes.length), 'X-Goog-Upload-Header-Content-Type': mime,
+        },
+        body: JSON.stringify({ file: { display_name: nombreVisible } }),
+        ...(config.signal ? { signal: config.signal } : {}),
+      });
+      const url = inicio.headers.get('x-goog-upload-url');
+      if (!inicio.ok || !url) throw new ErrorProveedor('gemini', `Files API: no se pudo abrir la subida (HTTP ${inicio.status}) ${(await inicio.text()).slice(0, 200)}`, { estado: inicio.status, reintentable: estadoReintentable(inicio.status) });
+      const r = await pedir<{ file?: { name?: string; uri?: string } }>({
+        proveedor: 'gemini', url, cabeceras: { 'X-Goog-Upload-Offset': '0', 'X-Goog-Upload-Command': 'upload, finalize', 'content-type': mime }, cuerpo: bytes,
+      }, { ...config, intentos: 1, timeoutMs: Math.max(config.timeoutMs ?? 0, 600_000) });
+      if (!r.file?.uri || !r.file.name) throw new ErrorProveedor('gemini', 'la Files API no devolvió el fichero');
+      return { nombre: r.file.name, uri: r.file.uri };
+    }, { intentos: 3, base: 1000, esReintentable: (e) => e instanceof ErrorProveedor && e.reintentable });
+  }
+
+  // -------------------------------------------------------------------------
+  // Lotes (Batch API)
+  // -------------------------------------------------------------------------
+
+  function lotes(o: OpcionesLotesGemini = {}): LotesLectura {
+    const modelo = o.modelo ?? MODELOS_GEMINI.lector;
+    const maxEnLinea = o.maxEnLinea ?? 15_000_000;
+    const contados = new Set<string>();
+    // La clave de cada petición lleva la primera página física y el número de páginas,
+    // para poder interpretar la respuesta sin guardar estado (un Workflow puede consultar desde otro proceso).
+    const SEP = '\u241f';
+    const codificar = (clave: string, primera: number, n: number) => `${clave}${SEP}${primera}${SEP}${n}`;
+    const decodificar = (k: string) => {
+      const partes = k.split(SEP);
+      const n = Number(partes.pop()); const primera = Number(partes.pop());
+      return { clave: partes.join(SEP), primera, n };
+    };
+    return {
+      nombre: `gemini-lotes:${modelo}`,
+      async enviar(peticiones) {
+        if (!peticiones.length) throw new Error('lotes.enviar: no hay peticiones');
+        const lineas: Array<{ key: string; request: Record<string, unknown> }> = [];
+        for (const p of peticiones) {
+          const n = await paginasDe(p.entrada);
+          lineas.push({ key: codificar(p.clave, p.entrada.primeraFisica, n), request: cuerpoLectura(p.entrada, n, modelo, o) });
+        }
+        const tam = lineas.reduce((t, l) => t + JSON.stringify(l.request).length, 0);
+        let input_config: Record<string, unknown>;
+        if (tam <= maxEnLinea) {
+          input_config = { requests: { requests: lineas.map((l) => ({ request: l.request, metadata: { key: l.key } })) } };
+        } else {
+          const jsonl = new TextEncoder().encode(lineas.map((l) => JSON.stringify(l)).join('\n'));
+          const fichero = await subirArchivo(jsonl, 'application/jsonl', `scholaris-lote-${Date.now()}`);
+          input_config = { file_name: fichero.nombre };
+        }
+        const r = await pedir<{ name?: string }>({
+          proveedor: 'gemini', url: `${base}/v1beta/models/${modelo}:batchGenerateContent`, cabeceras,
+          cuerpo: { batch: { display_name: `scholaris-${Date.now()}`, input_config } },
+        }, { ...config, timeoutMs: Math.max(config.timeoutMs ?? 0, 300_000) });
+        if (!r.name) throw new ErrorProveedor('gemini', 'batchGenerateContent no devolvió nombre de lote');
+        return r.name;
+      },
+      async consultar(id) {
+        const r = await pedir<Record<string, unknown>>({ proveedor: 'gemini', url: `${base}/v1beta/${id}`, cabeceras }, config);
+        const lote = interpretarLote(r);
+        if (lote.estado === 'pendiente') return { estado: 'pendiente' };
+        if (lote.estado === 'error') return { estado: 'error', error: lote.error ?? 'el lote falló' };
+        let respuestas = lote.respuestas;
+        if (!respuestas && lote.fichero) {
+          const texto = await pedir<string>({ proveedor: 'gemini', url: `${base}/download/v1beta/${lote.fichero}:download?alt=media`, cabeceras, respuesta: 'texto' }, { ...config, timeoutMs: Math.max(config.timeoutMs ?? 0, 300_000) });
+          respuestas = texto.split('\n').filter((l) => l.trim()).map((l) => {
+            const j = JSON.parse(l) as { key?: string; response?: RespuestaGenerar; error?: { message?: string } };
+            return { key: j.key ?? '', ...(j.response ? { response: j.response } : {}), ...(j.error ? { error: j.error.message ?? 'error' } : {}) };
+          });
+        }
+        const resultados: Record<string, PaginaLeida[]> = {};
+        const fallidas: Record<string, string> = {};
+        let usd = 0;
+        for (const x of respuestas ?? []) {
+          const { clave, primera, n } = decodificar(x.key);
+          if (!x.response) { fallidas[clave] = x.error ?? 'sin respuesta'; continue; }
+          const um = x.response.usageMetadata ?? {};
+          const salida = (um.candidatesTokenCount ?? 0) + (um.thoughtsTokenCount ?? 0);
+          usd += (costeTokens(modelo, um.promptTokenCount ?? 0, salida, um.cachedContentTokenCount ?? 0) ?? 0) / 2; // lotes: 50 %
+          const cand = x.response.candidates?.[0];
+          const texto = (cand?.content?.parts ?? []).filter((p) => !p.thought && typeof p.text === 'string').map((p) => p.text).join('');
+          if (cand?.finishReason && cand.finishReason !== 'STOP') { fallidas[clave] = `finishReason ${cand.finishReason}`; if (!texto) continue; }
+          try { resultados[clave] = normalizarPaginas(extraerJSON(texto), n, primera, o); } catch { fallidas[clave] = 'JSON ilegible'; }
+        }
+        if (!contados.has(id)) {
+          contados.add(id);
+          const tokens = (respuestas ?? []).reduce((t, x) => t + (x.response?.usageMetadata?.promptTokenCount ?? 0), 0);
+          const salida = (respuestas ?? []).reduce((t, x) => t + (x.response?.usageMetadata?.candidatesTokenCount ?? 0) + (x.response?.usageMetadata?.thoughtsTokenCount ?? 0), 0);
+          apuntar({ proveedor: 'gemini', modelo: `${modelo}:lote`, operacion: 'leer', tokensEntrada: tokens, tokensSalida: salida, paginas: Object.values(resultados).reduce((t, p) => t + p.length, 0), usd, ms: 0 });
+        }
+        return { estado: 'listo', resultados, usd, ...(Object.keys(fallidas).length ? { fallidas } : {}) };
+      },
+    };
   }
 
   function transcriptor(o: OpcionesTranscriptorGemini = {}): Transcriptor {
@@ -404,7 +516,7 @@ export function crearGemini(config: ConfigGemini): ClienteGemini {
         const t0 = ahora();
         const mime = normalizarMime(audio.mime);
         const fuente = audio.bytes.length > maxEnLinea
-          ? { type: 'audio', uri: await subirArchivo(audio.bytes, mime), mime_type: mime }
+          ? { type: 'audio', uri: (await subirArchivo(audio.bytes, mime, 'scholaris-audio')).uri, mime_type: mime }
           : { type: 'audio', data: aBase64(audio.bytes), mime_type: mime };
         const modo: Record<string, unknown> = { type: 'verbatim', timestamp_granularities: ['word'] };
         if (opciones.hablantes !== false) modo.diarization_mode = 'speaker';
@@ -430,7 +542,7 @@ export function crearGemini(config: ConfigGemini): ClienteGemini {
   }
 
   return {
-    contador, lector, embebedor, redactor, transcriptor,
+    contador, lector, embebedor, redactor, transcriptor, lotes, subirArchivo,
     generar: (modelo, cuerpo, operacion, extra) => generar(modelo, cuerpo, operacion, extra),
   };
 }
@@ -483,4 +595,22 @@ export function normalizarMime(mime: string): string {
   if (m === 'audio/x-wav' || m === 'audio/wave') return 'audio/wav';
   if (m === 'video/quicktime') return 'video/mov';
   return m;
+}
+
+/** Estado de un lote: el REST devuelve una operación con `metadata` (y `response` al terminar); se aceptan también las formas del SDK. */
+export function interpretarLote(r: Record<string, unknown>): { estado: 'pendiente' | 'listo' | 'error'; error?: string; respuestas?: Array<{ key: string; response?: RespuestaGenerar; error?: string }>; fichero?: string } {
+  const meta = (r.metadata ?? r.batch ?? r) as Record<string, unknown>;
+  const estadoCrudo = String(meta.state ?? r.state ?? '');
+  const error = (r.error as { message?: string } | undefined)?.message;
+  if (/FAILED|CANCELLED|EXPIRED/.test(estadoCrudo) || (r.done === true && error)) return { estado: 'error', error: error ?? estadoCrudo };
+  if (!/SUCCEEDED/.test(estadoCrudo) && r.done !== true) return { estado: 'pendiente' };
+  const salida = ((r.response as Record<string, unknown> | undefined) ?? (meta.output as Record<string, unknown> | undefined) ?? (r.dest as Record<string, unknown> | undefined) ?? {}) as Record<string, unknown>;
+  const enLinea = (salida.inlinedResponses as { inlinedResponses?: unknown[] } | unknown[] | undefined);
+  const lista = (Array.isArray(enLinea) ? enLinea : enLinea?.inlinedResponses) as Array<{ response?: RespuestaGenerar; error?: { message?: string }; metadata?: { key?: string } }> | undefined;
+  const fichero = (salida.responsesFile ?? salida.fileName ?? salida.file_name) as string | undefined;
+  return {
+    estado: 'listo',
+    ...(lista ? { respuestas: lista.map((x) => ({ key: x.metadata?.key ?? '', ...(x.response ? { response: x.response } : {}), ...(x.error ? { error: x.error.message ?? 'error' } : {}) })) } : {}),
+    ...(fichero ? { fichero } : {}),
+  };
 }

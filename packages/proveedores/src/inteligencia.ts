@@ -14,7 +14,7 @@
 
 import type { Inteligencia, Juez, Lector, Redactor, Reordenador, Transcriptor } from '@scholaris/nucleo';
 import { ContadorUso, type UsoProveedor } from './comun.js';
-import { crearGemini, MODELOS_GEMINI } from './gemini.js';
+import { crearGemini, MODELOS_GEMINI, type LotesLectura } from './gemini.js';
 import { crearWorkersAI, type BindingAI } from './workersai.js';
 import { crearOpenRouter } from './openrouter.js';
 import { crearJev } from './jev.js';
@@ -57,11 +57,13 @@ export interface OpcionesInteligencia {
    * (casi 3 veces más rápido, mismo resultado en PDF digitales). La otra queda de reserva.
    */
   calidadLector?: 'alta' | 'rapida';
+  /** Modo económico: añade `lotes` (Batch API de Gemini, 50 %) y `lectorEconomico` (Workers AI). */
+  lotes?: boolean;
   /** Usar InferBox para el embebedor extra (por defecto, sí si hay URL). */
   inferboxExtra?: boolean;
 }
 
-export type InteligenciaConUso = Inteligencia & { contador: ContadorUso };
+export type InteligenciaConUso = Inteligencia & { contador: ContadorUso; lotes?: LotesLectura; lectorEconomico?: Lector };
 
 export function crearInteligencia(env: EntornoInteligencia, opciones: OpcionesInteligencia = {}): InteligenciaConUso {
   const contador = opciones.contador ?? new ContadorUso();
@@ -117,6 +119,8 @@ export function crearInteligencia(env: EntornoInteligencia, opciones: OpcionesIn
 
   return {
     lector, embebedor, transcriptor, reordenador, juez, redactor, contador,
+    ...(opciones.lotes && gemini ? { lotes: gemini.lotes() } : {}),
+    ...(opciones.lotes && workers ? { lectorEconomico: workers.lector() } : {}),
     ...(embebedoresExtra ? { embebedoresExtra } : {}),
   };
 }

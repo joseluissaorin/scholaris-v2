@@ -475,7 +475,37 @@ async function seccionRendimiento(): Promise<void> {
   decir(tabla(['doc', 'modelo', 'páginas', 'pliego', 'simultáneas', 'muro s', 's/página (muro)', 'lat. media s', 'lat. máx s', '$/1000 p', 'calidad', 'folios', 'errores'], filas));
 }
 
+
+/** Modo económico: Batch API. Manda dos lotes pequeños (en línea y por fichero JSONL) y espera. */
+async function seccionLotes(): Promise<void> {
+  if (!claves.gemini) return;
+  const g = crearGemini({ clave: claves.gemini });
+  const doc = documentos()[0] as DocBanco;
+  const pdf = leerBytes(join(ORIGINALES, doc.fichero));
+  const peticiones = await Promise.all([9, 10, 11].map(async (f) => ({ clave: `p${f}`, entrada: { pdf: await cortarPdf(pdf, f - 1, f), primeraFisica: f, pista: doc.pista } })));
+  const filas: Array<Array<string | number>> = [];
+  for (const [modo, opciones] of [['en línea', {}], ['fichero JSONL', { maxEnLinea: 1 }]] as const) {
+    const l = g.lotes({ modelo: process.env.MODELO_LOTES ?? 'gemini-3.8-flash', ...opciones });
+    const t0 = performance.now();
+    try {
+      const id = await l.enviar(peticiones);
+      console.log(`  lote ${modo}: ${id}`);
+      let r = await l.consultar(id);
+      while (r.estado === 'pendiente' && performance.now() - t0 < Number(process.env.ESPERA_LOTES_MS ?? 1_800_000)) {
+        await new Promise((res) => setTimeout(res, 20_000));
+        r = await l.consultar(id);
+      }
+      const p10 = r.resultados?.p10?.[0];
+      filas.push([modo, id, r.estado, (performance.now() - t0) / 1000, Object.keys(r.resultados ?? {}).length, p10 && doc.oro ? cer(p10.texto, doc.oro.texto) : '—', r.usd ?? 0, r.error ?? JSON.stringify(r.fallidas ?? {})]);
+    } catch (e) { filas.push([modo, '', 'excepción', (performance.now() - t0) / 1000, 0, '—', 0, (e as Error).message.slice(0, 200)]); }
+    console.log(filas.at(-1)?.join(' | '));
+  }
+  decir('\n### Lotes (Batch API, 3 páginas del Casamiento)\n');
+  decir(tabla(['modo', 'lote', 'estado', 's hasta el resultado', 'claves', 'CER oro p.10', 'usd (50 %)', 'notas'], filas));
+}
+
 const SECCIONES: Record<string, () => Promise<void>> = {
+  lotes: seccionLotes,
   rendimiento: seccionRendimiento,
   lector: seccionLector, imagenes: seccionImagenes, embebedor: seccionEmbebedor, redactor: seccionRedactor,
   transcriptor: seccionTranscriptor, workers: seccionWorkers, openrouter: seccionOpenRouter, jev: seccionJev,

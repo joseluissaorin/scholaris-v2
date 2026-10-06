@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { crearGemini, interpretarInteraccion } from '../src/gemini.js';
+import { crearGemini, interpretarInteraccion, interpretarLote } from '../src/gemini.js';
 import { fetchFalso, IMG, paginasJSON, pdfDePaginas, respuestaGemini } from './falso.js';
 
 type Cuerpo = { contents: Array<{ parts: Array<Record<string, unknown>> }>; generationConfig: Record<string, unknown>; cachedContent?: string; systemInstruction?: unknown };
@@ -204,5 +204,61 @@ describe('Gemini · transcriptor', () => {
 
   it('interpreta también el formato `outputs`', () => {
     expect(interpretarInteraccion({ outputs: [{ type: 'text', text: 'x', annotations: [{ type: 'word_info', text: 'x', start_offset: '1s', end_offset: '2s' }] }] }, 0).palabras).toHaveLength(1);
+  });
+});
+
+describe('Gemini · lotes (Batch API)', () => {
+  it('envía en línea con la clave codificada y lee las respuestas en línea, al 50 % del precio', async () => {
+    const { fetch, llamadas } = fetchFalso((ll, n) => {
+      if (ll.url.endsWith(':batchGenerateContent')) return { name: 'batches/abc' };
+      if (n === 2) return { name: 'batches/abc', metadata: { state: 'BATCH_STATE_RUNNING' } };
+      const reqs = (llamadas[0]?.cuerpo as { batch: { input_config: { requests: { requests: Array<{ metadata: { key: string } }> } } } }).batch.input_config.requests.requests;
+      return {
+        name: 'batches/abc', done: true, metadata: { state: 'BATCH_STATE_SUCCEEDED' },
+        response: { inlinedResponses: { inlinedResponses: [
+          { metadata: { key: reqs[0]?.metadata.key }, response: respuestaGemini(paginasJSON(9, 1), { entrada: 1000, salida: 1000 }) },
+          { metadata: { key: reqs[1]?.metadata.key }, error: { message: 'interno' } },
+        ] } },
+      };
+    });
+    const usos: number[] = [];
+    const l = crearGemini({ clave: 'K', fetch, onUso: (u) => usos.push(u.usd ?? 0) }).lotes({ modelo: 'gemini-3.8-flash' });
+    const id = await l.enviar([{ clave: 'a|b', entrada: { imagenes: IMG(1), primeraFisica: 9 } }, { clave: 'c', entrada: { imagenes: IMG(1), primeraFisica: 10 } }]);
+    expect(id).toBe('batches/abc');
+    expect(llamadas[0]?.url).toBe('https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:batchGenerateContent');
+    expect((await l.consultar(id)).estado).toBe('pendiente');
+    const r = await l.consultar(id);
+    expect(llamadas[2]?.url).toBe('https://generativelanguage.googleapis.com/v1beta/batches/abc');
+    expect(r.estado).toBe('listo');
+    expect(r.resultados?.['a|b']?.[0]?.fisica).toBe(9);
+    expect(r.fallidas).toEqual({ c: 'interno' });
+    expect(r.usd).toBeCloseTo((1000 * 0.75 + 1000 * 3.75) / 1e6 / 2);
+    await l.consultar(id);
+    expect(usos).toHaveLength(1);
+  });
+
+  it('por encima del umbral sube un JSONL con la subida reanudable y descarga el fichero de respuestas', async () => {
+    const { fetch, llamadas } = fetchFalso((ll) => {
+      if (ll.url.endsWith('/upload/v1beta/files')) return new Response('{}', { headers: { 'x-goog-upload-url': 'https://subida/sesion' } });
+      if (ll.url === 'https://subida/sesion') return { file: { name: 'files/entrada', uri: 'https://x/files/entrada' } };
+      if (ll.url.endsWith(':batchGenerateContent')) return { name: 'batches/f' };
+      if (ll.url.includes('/download/')) {
+        const key = (new TextDecoder().decode(llamadas[1]?.crudo as Uint8Array).split('\n')[0] as string);
+        return new Response(JSON.stringify({ key: JSON.parse(key).key, response: respuestaGemini(paginasJSON(5, 1)) }) + '\n');
+      }
+      return { name: 'batches/f', metadata: { state: 'JOB_STATE_SUCCEEDED' }, response: { responsesFile: 'files/salida' } };
+    });
+    const l = crearGemini({ clave: 'K', fetch }).lotes({ maxEnLinea: 1 });
+    const id = await l.enviar([{ clave: 'x', entrada: { imagenes: IMG(1), primeraFisica: 5 } }]);
+    expect(llamadas[0]?.cabeceras['x-goog-upload-protocol']).toBe('resumable');
+    expect((llamadas[2]?.cuerpo as { batch: { input_config: unknown } }).batch.input_config).toEqual({ file_name: 'files/entrada' });
+    const r = await l.consultar(id);
+    expect(llamadas.at(-1)?.url).toBe('https://generativelanguage.googleapis.com/download/v1beta/files/salida:download?alt=media');
+    expect(r.resultados?.x?.[0]?.fisica).toBe(5);
+  });
+
+  it('un lote fallido o caducado es «error»', () => {
+    expect(interpretarLote({ metadata: { state: 'BATCH_STATE_EXPIRED' } }).estado).toBe('error');
+    expect(interpretarLote({ state: 'JOB_STATE_PENDING' }).estado).toBe('pendiente');
   });
 });

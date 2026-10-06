@@ -266,5 +266,8 @@ describe('crearInteligencia', () => {
     expect(intel.embebedoresExtra?.[0]?.espacio.id).toBe('qwen3-vl-embedding-2b@2048');
     expect(() => intel.juez.juzgar({}, {})).toThrow(/falta TYPESAFE_API_KEY/);
     expect(() => crearInteligencia({})).toThrow(/ningún lector/);
+    const eco = crearInteligencia({ GEMINI_API_KEY: 'G', CLOUDFLARE_ACCOUNT_ID: 'C', CLOUDFLARE_API_TOKEN: 'X' }, { lotes: true });
+    expect(eco.lotes?.nombre).toBe('gemini-lotes:gemini-3.8-flash');
+    expect(eco.lectorEconomico?.nombre).toBe('workers-ai:@cf/meta/llama-4-scout-17b-16e-instruct');
   });
 });
