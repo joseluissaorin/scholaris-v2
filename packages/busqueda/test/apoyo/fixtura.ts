@@ -57,7 +57,8 @@ export const DOCUMENTOS: DocFixtura[] = [
   },
   {
     // Darwin, «On the Origin of Species» (1859, 1.ª ed., John Murray). Texto: Project Gutenberg n.º 1228,
-    // https://www.gutenberg.org/ebooks/1228. Folios de la primera edición (pp. 1, 81, 116, 490; el diagrama es una lámina plegada sin folio).
+    // https://www.gutenberg.org/ebooks/1228. Folios de la primera edición, cotejados con darwin-online.org.uk (F373): pp. 1, 80-81,
+    // 116 y 490; el diagrama es una lámina plegada sin folio que mira a la p. 117.
     id: 'doc-darwin',
     tipo: 'pdf',
     metadatos: {
@@ -70,8 +71,10 @@ export const DOCUMENTOS: DocFixtura[] = [
         { id: 'fr-dar-01', texto: "When on board H.M.S. ‘Beagle,’ as naturalist, I was much struck with certain facts in the distribution of the inhabitants of South America, and in the geological relations of the present to the past inhabitants of that continent.", seccion: ["Introduction"] },
         { id: 'fr-dar-02', texto: "These facts seemed to me to throw some light on the origin of species—that mystery of mysteries, as it has been called by one of our greatest philosophers.", seccion: ["Introduction"] },
       ] },
+      { id: 'un-dar-080', ancla: pag(94, '80'), impresa: '80', fragmentos: [
+        { id: 'fr-dar-03', texto: "If such do occur, can we doubt (remembering that many more individuals are born than can possibly survive) that individuals having any advantage, however slight, over others, would have the best chance of surviving and of procreating their kind?", seccion: ["Chapter IV", "Natural Selection"], anclaFin: pag(95, '81') },
+      ] },
       { id: 'un-dar-081', ancla: pag(95, '81'), impresa: '81', fragmentos: [
-        { id: 'fr-dar-03', texto: "If such do occur, can we doubt (remembering that many more individuals are born than can possibly survive) that individuals having any advantage, however slight, over others, would have the best chance of surviving and of procreating their kind?", seccion: ["Chapter IV", "Natural Selection"] },
         { id: 'fr-dar-04', texto: "On the other hand, we may feel sure that any variation in the least degree injurious would be rigidly destroyed. This preservation of favourable variations and the rejection of injurious variations, I call Natural Selection.", seccion: ["Chapter IV", "Natural Selection"] },
       ] },
       { id: 'un-dar-116', ancla: pag(130, '116'), impresa: '116', fragmentos: [
