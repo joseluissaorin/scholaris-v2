@@ -18,9 +18,9 @@ import { bytesAVector } from '@scholaris/nucleo';
 import { CacheLRU, conPlazo } from './cache.js';
 import { comprenderConModelo, comprenderSinModelo, unirFiltros } from './comprension.js';
 import { Estanteria, type DocumentoBreve } from './estanteria.js';
-import { fusionar, limpiar, normalizar, type Candidato, type ListaVia } from './fusion.js';
+import { fusionar, limpiar, normalizar, PESOS_POR_INTENCION, sinDuplicados, type Candidato, type ListaVia } from './fusion.js';
 import { consultaFts, normalizarConsulta, plegar, resaltar, terminos } from './texto.js';
-import type { Comprension, DestinoPagina, OpcionesBusqueda, RespuestaBusqueda, Via } from './tipos.js';
+import type { Comprension, DestinoPagina, Expansion, Intencion, OpcionesBusqueda, RespuestaBusqueda, Via } from './tipos.js';
 
 export interface PuertosBuscador {
   sql: SQL;
@@ -33,7 +33,21 @@ export interface PuertosBuscador {
   juez?: Juez;
 }
 
+/** Perillas medidas con el banco de calidad (bench/calidad). Los valores por defecto son los ganadores. */
+export interface AjustesBusqueda {
+  /** Pesos de cada vía por intención (sustituyen a los de PESOS_POR_INTENCION). */
+  pesos?: Partial<Record<Intencion, Partial<Record<Via, number>>>>;
+  /** Constante k de la fusión por rangos recíprocos. */
+  kRrf?: number;
+  /** Peso del reordenador frente a la fusión (0-1). */
+  pesoReordenador?: number;
+  /** Tipos de expansión de la comprensión que se usan para buscar. */
+  expansiones?: Array<Expansion['tipo']>;
+}
+
 export interface ConfiguracionBuscador {
+  /** Ajustes de la fusión, el reordenador y las expansiones. */
+  ajustes?: AjustesBusqueda;
   /** Plazo de la comprensión con modelo antes de seguir sin ella (350 ms). */
   plazoComprensionMs?: number;
   /** Entradas de la caché de comprensiones (500) y de vectores de consulta (2000). */
@@ -59,6 +73,14 @@ export class Buscador {
     this.estanteria = new Estanteria(puertos.sql, { ...(config.documentosDeBibliotecas ? { documentosDeBibliotecas: config.documentosDeBibliotecas } : {}) });
     this.comprensiones = new CacheLRU(config.cacheComprension ?? 500, 24 * 3600_000);
     this.vectores = new CacheLRU(config.cacheVectores ?? 2000, 24 * 3600_000);
+  }
+
+  private get ajustes(): AjustesBusqueda { return this.config.ajustes ?? {}; }
+
+  private fusionar(listas: ListaVia[], intencion: Intencion): Candidato[] {
+    const a = this.ajustes;
+    const pesos = a.pesos?.[intencion] ? { ...PESOS_POR_INTENCION[intencion], ...a.pesos[intencion] } : undefined;
+    return fusionar(listas, intencion, a.kRrf ?? 60, pesos);
   }
 
   private get ns(): string { return this.puertos.espacioNombres ?? 'estanteria'; }
@@ -208,7 +230,7 @@ export class Buscador {
       const listas = await this.viaLexica([{ texto: consulta, peso: 1 }], k, permitidos);
       marca('lexica', tl);
       if (listas.length) {
-        const r = await this.terminar(fusionar(listas, 'cita'), heur, filtros, opciones, new Map(), tiempos, avisos, { reordenar: false });
+        const r = await this.terminar(this.fusionar(listas, 'cita'), heur, filtros, opciones, new Map(), tiempos, avisos, { reordenar: false });
         tiempos.total = Math.round(ahora() - t0);
         return { ...r, comprension: heur, tiempos, avisos };
       }
@@ -230,7 +252,7 @@ export class Buscador {
     const quiereVectores = (vias.has('densa') || vias.has('visual')) && !!this.puertos.embebedor && !!this.puertos.indice;
 
     // Textos de la primera ronda: con caché de comprensión, ya van todas las expansiones.
-    const expansionesA = enCache ? enCache.expansiones : [{ texto: consulta, tipo: 'original' as const, peso: 1 }];
+    const expansionesA = enCache ? enCache.expansiones.filter((e) => e.tipo === 'original' || (this.ajustes.expansiones ?? ['parafrasis', 'enunciado', 'hyde', 'traduccion']).includes(e.tipo)) : [{ texto: consulta, tipo: 'original' as const, peso: 1 }];
     const ronda = async (exps: Array<{ texto: string; peso: number; tipo: string }>, permitidos: Set<string> | null, fase: string) => {
       const tr = ahora();
       const lexicas = exps.filter((e) => e.tipo !== 'hyde'); // el HyDE es largo: solo para vectores
@@ -266,12 +288,13 @@ export class Buscador {
     const filtros = unirFiltros(explicitos, comprension.filtros);
     let permitidos = permitidosA;
     if (!igualesFiltros(filtros, filtrosA)) permitidos = await this.estanteria.documentosPermitidos(filtros);
-    const extra = enCache ? [] : comprension.expansiones.filter((e) => e.tipo !== 'original');
+    const usar = new Set(this.ajustes.expansiones ?? ['parafrasis', 'enunciado', 'hyde', 'traduccion']);
+    const extra = enCache ? [] : comprension.expansiones.filter((e) => e.tipo !== 'original' && usar.has(e.tipo));
     await Promise.all([primera, extra.length ? ronda(extra, permitidos, 'B') : Promise.resolve()]);
 
     // Fusión: los aciertos visuales «u:unidad» se traducen al mejor fragmento de esa unidad.
     const tf = ahora();
-    const previos = fusionar(listas.filter((l) => l.via !== 'visual'), comprension.intencion);
+    const previos = this.fusionar(listas.filter((l) => l.via !== 'visual'), comprension.intencion);
     const rango = new Map(previos.map((c, i) => [c.id, i]));
     for (const l of listas) {
       if (l.via !== 'visual') continue;
@@ -281,7 +304,7 @@ export class Buscador {
         return [...enUnidad].sort((a, b) => (rango.get(a) ?? 1e9) - (rango.get(b) ?? 1e9))[0] ?? id;
       }).filter((id) => !id.startsWith('u:'));
     }
-    const fusionados = fusionar(listas, comprension.intencion);
+    const fusionados = this.fusionar(listas, comprension.intencion);
     marca('fusion', tf);
     const r = await this.terminar(fusionados, comprension, filtros, opciones, sinteticos, tiempos, avisos, {}, permitidos);
     tiempos.total = Math.round(ahora() - t0);
@@ -306,7 +329,7 @@ export class Buscador {
       const f = frags.get(c.id);
       return f && docs.has(f.documento) && (!permitidos || permitidos.has(f.documento));
     });
-    candidatos = limpiar(candidatos, frags, opciones.fundirContiguos !== false).slice(0, top);
+    candidatos = limpiar(sinDuplicados(candidatos, frags), frags, opciones.fundirContiguos !== false).slice(0, top);
     tiempos.hidratacion = Math.round((ahora() - th) * 10) / 10;
 
     // Reordenación sobre el texto (no sobre la imagen).
@@ -322,7 +345,8 @@ export class Buscador {
         const r = await this.puertos.reordenador!.reordenar(comprension.consulta, textos);
         const nr = normalizar(r);
         // Fusión ponderada 0,3 / 0,7 como en reranker_service.py.
-        puntuaciones = puntuaciones.map((p, i) => 0.3 * p + 0.7 * (nr[i] ?? 0));
+        const w = this.ajustes.pesoReordenador ?? 0.7;
+        puntuaciones = puntuaciones.map((p, i) => (1 - w) * p + w * (nr[i] ?? 0));
       } catch (e) {
         avisos.push(`Reordenador no disponible: ${(e as Error).message}`);
       }
@@ -464,7 +488,7 @@ export class Buscador {
     const distintivos = [...new Set(terminos(base.texto))].sort((a, b) => b.length - a.length).slice(0, 12);
     if (distintivos.length) tareas.push(this.viaLexica([{ texto: distintivos.join(' '), peso: 0.7 }], limite * 4, permitidos).then((l) => { listas.push(...l); }));
     await Promise.all(tareas);
-    const fusionados = fusionar(listas, 'conceptual');
+    const fusionados = this.fusionar(listas, 'conceptual');
     const frags = await this.estanteria.fragmentos(fusionados.slice(0, limite * 4).map((c) => c.id));
     const { porId } = await this.estanteria.documentos();
     const candidatos = limpiar(fusionados.filter((c) => {

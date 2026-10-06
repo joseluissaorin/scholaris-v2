@@ -23,8 +23,8 @@ export interface Candidato {
   vias: Set<Via>;
 }
 
-export function fusionar(listas: ListaVia[], intencion: Intencion, k = 60): Candidato[] {
-  const pesos = PESOS_POR_INTENCION[intencion];
+export function fusionar(listas: ListaVia[], intencion: Intencion, k = 60, pesosPropios?: Record<Via, number>): Candidato[] {
+  const pesos = pesosPropios ?? PESOS_POR_INTENCION[intencion];
   const puntos = fusionarRangos(listas.map((l) => ({ ids: l.ids, peso: l.peso * pesos[l.via] })), k);
   const vias = new Map<string, Set<Via>>();
   for (const l of listas) for (const id of l.ids) {
@@ -67,6 +67,35 @@ export function limpiar(candidatos: Candidato[], fragmentos: Map<string, Fragmen
     if (n > 1) c.puntos *= 0.85 ** (n - 1);
   }
   return guardados.sort((a, b) => b.puntos - a.puntos);
+}
+
+/** Clave de texto para reconocer el mismo pasaje en dos fragmentos (copias de un documento, reintentos de ingesta). */
+function claveTexto(texto: string): string {
+  return texto.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim().slice(0, 200);
+}
+
+/**
+ * Quita repetidos conservando el primero (el mejor puntuado) y pasándole las
+ * vías del repetido: mismo fragmento, mismo documento + ancla + texto, o el
+ * mismo texto en otro documento (el mismo libro subido dos veces).
+ */
+export function sinDuplicados(candidatos: Candidato[], fragmentos: Map<string, Fragmento>): Candidato[] {
+  const vistos = new Map<string, Candidato>();
+  const salida: Candidato[] = [];
+  for (const c of candidatos) {
+    const f = fragmentos.get(c.id);
+    const claves = [`i:${c.id}`];
+    if (f) {
+      const t = claveTexto(f.texto);
+      claves.push(`a:${f.documento}|${JSON.stringify(f.ancla)}|${t.slice(0, 120)}`);
+      if (t.length >= 40) claves.push(`t:${t}`);
+    }
+    const previo = claves.map((k) => vistos.get(k)).find(Boolean);
+    if (previo) { for (const v of c.vias) previo.vias.add(v); continue; }
+    for (const k of claves) vistos.set(k, c);
+    salida.push(c);
+  }
+  return salida;
 }
 
 /** Normaliza a 0-1 por mín-máx. */

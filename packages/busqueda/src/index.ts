@@ -7,3 +7,4 @@ export * from './fusion.js';
 export * from './indice-sql.js';
 export * from './buscador.js';
 export * from './responder.js';
+export * from './reordenadores.js';
