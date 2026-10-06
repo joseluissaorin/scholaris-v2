@@ -82,6 +82,18 @@ describe('pasoMetadatos', () => {
     const { metadatos } = await pasoMetadatos({ ficha: {}, nombreArchivo: 'el-casamiento.pdf', tipo: 'pdf_escaneado', epub: false, unidades: [] }, { redactor, http });
     expect(metadatos.titulo).toBe('El casamiento en la muerte');
     expect(metadatos.procedencia?.titulo?.fuente).toBe('lectura');
+  });  it('el idioma lo dice el texto, no el modelo (el modelo tiende a contestar «es»)', async () => {
+    // Darwin, «On the Origin of Species» (1859), texto literal de Project Gutenberg n.º 1228.
+    const paginas = ["When on board H.M.S. ‘Beagle,’ as naturalist, I was much struck with certain facts in the distribution of the inhabitants of South America, and in the geological relations of the present to the past inhabitants of that continent.", "These facts seemed to me to throw some light on the origin of species—that mystery of mysteries, as it has been called by one of our greatest philosophers.", "If such do occur, can we doubt (remembering that many more individuals are born than can possibly survive) that individuals having any advantage, however slight, over others, would have the best chance of surviving and of procreating their kind?", "On the other hand, we may feel sure that any variation in the least degree injurious would be rigidly destroyed. This preservation of favourable variations and the rejection of injurious variations, I call Natural Selection.", "Thus, from the war of nature, from famine and death, the most exalted object which we are capable of conceiving, namely, the production of the higher animals, directly follows."];
+    const unidades = paginas.map((texto, i) => ({ orden: i, fisica: i + 1, texto, vacia: false })) as never;
+    const redactor = redactorFalso(() => ({ titulo: 'On the Origin of Species', autores: [{ nombre: 'Charles', apellidos: 'Darwin' }], idioma: 'es', tipoCSL: 'book', anio: 1859 }));
+    const http: Http = async () => ({ ok: true, status: 200, json: async () => ({ message: { items: [] }, results: [] }) });
+    const { metadatos } = await pasoMetadatos({ ficha: {}, nombreArchivo: 'origin.pdf', tipo: 'pdf_escaneado', epub: false, unidades }, { redactor, http });
+    expect(metadatos.idioma).toBe('en');
+    expect(metadatos.procedencia?.idioma).toMatchObject({ fuente: 'lectura', confianza: 0.85 });
+    // Con poco texto no se arriesga: manda la lectura del modelo.
+    const corto = await pasoMetadatos({ ficha: {}, nombreArchivo: 'origin.pdf', tipo: 'pdf_escaneado', epub: false, unidades: [] }, { redactor, http });
+    expect(corto.metadatos.idioma).toBe('es');
   });
 });
 

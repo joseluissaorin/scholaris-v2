@@ -22,6 +22,7 @@ import { normalizar, similitud } from '../texto.js';
 import { nombreCompleto, partirAutores, separarNombre } from './autores.js';
 import { conOrcid, crearConsultor, enriquecer, leerColofon, presencia, pruebasNuevas, type CacheConsultas, type Colofon, type Consultor } from '../enriquecimiento/index.js';
 import { autorDe } from './metadatos/nombres.js';
+import { detectarIdioma } from '@scholaris/spdf';
 
 export * from '../enriquecimiento/index.js';
 export { autorDe, esEntidad, claveAutor, esCanal, limpiarAutores, mismaPersonaNombre } from './metadatos/nombres.js';
@@ -537,6 +538,17 @@ export interface ResultadoMetadatos {
   colofon?: Colofon | null;
 }
 
+/**
+ * Idioma del texto por proporción de palabras vacías (solo el texto de las
+ * unidades, sin las etiquetas «[página física N]» de la muestra para el modelo).
+ * Devuelve algo solo si la diferencia con el segundo idioma es clara.
+ */
+export function idiomaDelTexto(unidades: UnidadLeida[], maxCaracteres = 30000): string | undefined {
+  const texto = unidades.filter((u) => !u.vacia && u.texto).map((u) => u.texto).join('\n').slice(0, maxCaracteres);
+  const r = detectarIdioma(texto);
+  return r && r.confianza >= 0.5 ? r.idioma : undefined;
+}
+
 export async function pasoMetadatos(
   entrada: EntradaMetadatos,
   puertos: PuertosMetadatos,
@@ -561,7 +573,10 @@ export async function pasoMetadatos(
     }
     candidatos.push({ fuente: 'lectura', confianza: 0.8, datos: lectura });
   }
-  if (entrada.idiomaLectura) candidatos.push({ fuente: 'lectura', confianza: 0.85, datos: { idioma: entrada.idiomaLectura } });
+  // El idioma lo dice el texto, no el modelo: la lectura del modelo tiende a contestar en el idioma de
+  // la instrucción («es») aunque el libro sea inglés (Iconologia, 1709). Las palabras vacías mandan si son claras.
+  const idiomaTexto = entrada.idiomaLectura ?? idiomaDelTexto(entrada.unidades);
+  if (idiomaTexto) candidatos.push({ fuente: 'lectura', confianza: 0.85, datos: { idioma: idiomaTexto } });
   const usuario = entrada.usuario && Object.keys(entrada.usuario).length ? entrada.usuario : null;
   // El usuario entra ya en la provisional: las búsquedas parten de su título y sus autores.
   const provisional = fusionarMetadatos(usuario ? [...candidatos, { fuente: 'usuario', confianza: 1, datos: usuario }] : candidatos, entrada.nombreArchivo);
