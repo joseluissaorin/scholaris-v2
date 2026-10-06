@@ -41,8 +41,8 @@ export async function leerDocumentos(sql: SQL, ids?: readonly string[]): Promise
     return salida;
   }
   const unicos = [...new Set(ids)];
-  for (let i = 0; i < unicos.length; i += 200) {
-    const lote = unicos.slice(i, i + 200);
+  for (let i = 0; i < unicos.length; i += 90) {
+    const lote = unicos.slice(i, i + 90);
     for (const f of await sql.ejecutar(`SELECT ${columnas} FROM documentos WHERE id IN (${marcas(lote.length)})`, ...lote)) {
       const d = filaADocumento(f);
       salida.set(d.id, d);
@@ -103,8 +103,8 @@ export const COLUMNAS_FRAGMENTO = 'id, documento, unidad, orden, texto, contexto
 export async function leerFragmentos(sql: SQL, ids: readonly string[]): Promise<Map<string, FragmentoLeido>> {
   const salida = new Map<string, FragmentoLeido>();
   const unicos = [...new Set(ids)];
-  for (let i = 0; i < unicos.length; i += 200) {
-    const lote = unicos.slice(i, i + 200);
+  for (let i = 0; i < unicos.length; i += 90) {
+    const lote = unicos.slice(i, i + 90);
     for (const f of await sql.ejecutar(`SELECT ${COLUMNAS_FRAGMENTO} FROM fragmentos WHERE id IN (${marcas(lote.length)})`, ...lote)) {
       const fr = filaAFragmento(f);
       salida.set(fr.id, fr);
