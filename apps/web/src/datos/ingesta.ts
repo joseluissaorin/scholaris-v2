@@ -412,7 +412,7 @@ function manejar(e: EventoTiempoReal) {
       etapa: p.fase === 'listo' ? 'listo' : 'procesando', fase: p.fase, tarea: p.tarea,
       avance: Math.max(x.avance, 0.32 + 0.68 * p.total), leidas: Math.max(x.leidas, p.unidadesListas ?? 0),
       // Unidades buscables mientras se lee (campo de la ingesta progresiva; opcional en el contrato).
-      buscables: Math.max(x.buscables, (p as { unidadesBuscables?: number }).unidadesBuscables ?? 0),
+      buscables: Math.max(x.buscables, p.unidadesBuscables ?? 0),
       mensaje: p.mensaje ?? x.mensaje, ...(p.error ? { etapa: 'error' as const, error: p.error } : {}),
     }));
   } else if (e.tipo === 'unidades') {

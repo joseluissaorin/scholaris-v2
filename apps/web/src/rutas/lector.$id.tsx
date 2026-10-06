@@ -11,7 +11,7 @@ import { api } from '../datos/api';
 import { useIngestas } from '../datos/ingesta';
 import { validarBusquedaLector, type BusquedaLector } from '../lib/anclas';
 import { anotarReciente, ponerPreferencia, preferencia } from '../lib/acciones';
-import { anioCita, autores, ESTILOS_RAPIDOS, esMedio, tiempoACadena, NOMBRE_TIPO } from '../lib/formato';
+import { anioVisible, contenedorVisible, autores, ESTILOS_RAPIDOS, esMedio, tiempoACadena, NOMBRE_TIPO } from '../lib/formato';
 import { Flujo, useUnidadEnCache, type ManejadorFlujo, type ModoLectura } from '../componentes/lector/flujo';
 import { Medio, type ManejadorMedio } from '../componentes/lector/medio';
 import { Ficha } from '../componentes/lector/ficha';
@@ -119,7 +119,7 @@ function Lector() {
           </Consejo>
           <div className="min-w-0 flex-1">
             <h1 className="truncate text-[1.0625rem] leading-tight tracking-[-0.01em]"><em className="not-italic md:italic">{doc.metadatos.titulo}</em></h1>
-            <p className="truncate text-[0.8125rem] text-tinta-2">{autores(doc.metadatos) || 'Sin autor'} · {anioCita(doc.metadatos)} · <span className="text-apagado">{NOMBRE_TIPO[doc.tipo]}</span></p>
+            <p className="truncate text-[0.8125rem] text-tinta-2">{autores(doc.metadatos) || 'Sin autor'} · {anioVisible(doc.metadatos)}{contenedorVisible(doc.metadatos) ? <> · <em>{contenedorVisible(doc.metadatos)}</em></> : null} · <span className="text-apagado">{NOMBRE_TIPO[doc.tipo]}</span></p>
           </div>
 
           <IrA etiqueta={etiquetaActual} total={medio ? tiempoACadena(doc.duracion ?? 0) : String(Math.max(doc.unidades, ingesta?.unidades ?? 0))} alIr={irA} medio={medio} />

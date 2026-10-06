@@ -12,23 +12,23 @@ import { api } from '../../datos/api';
 import { bytes, fecha, NOMBRE_TIPO, nombreUnidad, duracion, esMedio } from '../../lib/formato';
 import { numero } from '../../lib/numero';
 
-/**
- * Metadatos de edición más ricos que llegan de la ingesta: título original,
- * traductores. Se leen si vienen; el contrato los irá incorporando.
- */
-type Metadatos = MetadatosDocumento & { tituloOriginal?: string; traductores?: Autor[] };
-type Campo = keyof Metadatos;
+type Metadatos = MetadatosDocumento;
+type Campo = Exclude<keyof Metadatos, 'procedencia' | 'sinFecha' | 'editores'>;
 
 const CAMPOS: Array<{ k: Campo; nombre: string; ancho?: 'medio'; numerico?: boolean; solo?: (m: Metadatos) => boolean }> = [
   { k: 'titulo', nombre: 'Título' },
   { k: 'subtitulo', nombre: 'Subtítulo' },
   { k: 'autores', nombre: 'Autoría' },
+  { k: 'contenedor', nombre: 'Dentro de', solo: (m) => !!m.contenedor || ['chapter', 'broadcast', 'interview', 'speech', 'entry-encyclopedia'].includes(m.tipoCSL ?? '') },
   { k: 'tituloOriginal', nombre: 'Título original' },
   { k: 'traductores', nombre: 'Traducción' },
   { k: 'anioOriginal', nombre: 'Año de la obra', ancho: 'medio', numerico: true },
   { k: 'anio', nombre: 'Año de esta edición', ancho: 'medio', numerico: true },
+  { k: 'fecha', nombre: 'Fecha', ancho: 'medio', solo: (m) => !!m.fecha },
+  { k: 'edicion', nombre: 'Edición', ancho: 'medio' },
   { k: 'editorial', nombre: 'Editorial', ancho: 'medio' },
   { k: 'lugar', nombre: 'Lugar', ancho: 'medio' },
+  { k: 'coleccion', nombre: 'Colección', solo: (m) => !!m.coleccion || m.tipoCSL === 'book' },
   { k: 'revista', nombre: 'Revista', solo: (m) => !!m.revista || m.tipoCSL === 'article-journal' },
   { k: 'volumen', nombre: 'Volumen', ancho: 'medio', solo: (m) => !!m.revista },
   { k: 'numero', nombre: 'Número', ancho: 'medio', solo: (m) => !!m.revista },
@@ -37,13 +37,17 @@ const CAMPOS: Array<{ k: Campo; nombre: string; ancho?: 'medio'; numerico?: bool
   { k: 'isbn', nombre: 'ISBN', ancho: 'medio' },
   { k: 'url', nombre: 'URL', solo: (m) => !!m.url },
   { k: 'idioma', nombre: 'Idioma', ancho: 'medio' },
+  { k: 'idiomaOriginal', nombre: 'Idioma original', ancho: 'medio', solo: (m) => !!m.idiomaOriginal || !!m.tituloOriginal || !!m.traductores?.length },
 ];
 
-const FUENTE: Record<string, string> = { lectura: 'leído', crossref: 'Crossref', openalex: 'OpenAlex', usuario: 'tú', epub: 'EPUB', pdf: 'ficha del PDF' };
+const FUENTE: Record<string, string> = {
+  lectura: 'leído', crossref: 'Crossref', openalex: 'OpenAlex', usuario: 'tú', epub: 'EPUB', pdf: 'ficha del PDF', colofon: 'colofón',
+  openlibrary: 'Open Library', wikidata: 'Wikidata', wikipedia: 'Wikipedia', googlebooks: 'Google Books', arxiv: 'arXiv', datacite: 'DataCite', impresores: 'impresor',
+};
 
 function aTexto(m: Metadatos, k: Campo): string {
   const v = m[k];
-  if (k === 'autores' || k === 'editores' || k === 'traductores') return (v as Autor[] | undefined)?.map((a) => `${a.apellidos}, ${a.nombre}`).join('; ') ?? '';
+  if (k === 'autores' || k === 'traductores') return (v as Autor[] | undefined)?.map((a) => `${a.apellidos}, ${a.nombre}`).join('; ') ?? '';
   return v == null ? '' : String(v);
 }
 
@@ -71,6 +75,7 @@ export function Ficha({ doc }: { doc: DetalleDocumento }) {
     }
   }
 
+  const sf = m.sinFecha;
   const dudosos = CAMPOS.filter((c) => (m.procedencia?.[c.k]?.confianza ?? 1) < 0.75 && aTexto(m, c.k)).length;
 
   return (
@@ -79,6 +84,12 @@ export function Ficha({ doc }: { doc: DetalleDocumento }) {
         <p className="flex items-start gap-2 rounded-s border border-amarillo bg-amarillo-suave/60 px-3 py-2 text-[0.8125rem] text-tinta">
           <Icono nombre="aviso" tam={15} className="mt-0.5 shrink-0" />
           {dudosos === 1 ? 'Un campo se dedujo con poca confianza. Revísalo antes de citar.' : `${dudosos} campos se dedujeron con poca confianza. Revísalos antes de citar.`}
+        </p>
+      ) : null}
+      {!m.anio && sf ? (
+        <p className="rounded-s border border-filete bg-hoja px-3 py-2 text-[0.875rem]">
+          <span className="font-mono">s. f.</span>{sf.desde || sf.hasta ? <> (h. {sf.desde ?? '…'}{sf.hasta && sf.hasta !== sf.desde ? `-${sf.hasta}` : ''}{sf.fundamento ? `, según ${sf.fundamento}` : ''})</> : sf.fundamento ? <> ({sf.fundamento})</> : null}
+          <span className="mt-1 block text-[0.8125rem] text-apagado">Sin año impreso. La horquilla es orientativa y no se usa al citar.</span>
         </p>
       ) : null}
       <div className="grid grid-cols-2 gap-x-4 gap-y-4">

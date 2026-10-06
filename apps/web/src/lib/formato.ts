@@ -109,3 +109,18 @@ export function etiquetaCorta(a: Ancla, etiqueta: string): string {
   if (a.tipo === 'hoja') return `filas ${a.filaDesde}-${a.filaHasta}`;
   return etiqueta;
 }
+
+/** Año para la cabecera del lector: «1975/2009», «s. f. (h. 1650-1670)». */
+export function anioVisible(m: Pick<MetadatosDocumento, 'anio' | 'anioOriginal' | 'sinFecha'>): string {
+  if (!m.anio && m.sinFecha && (m.sinFecha.desde || m.sinFecha.hasta)) {
+    const { desde, hasta } = m.sinFecha;
+    return `s. f. (h. ${desde ?? '…'}${hasta && hasta !== desde ? `-${hasta}` : ''})`;
+  }
+  return anioCita(m);
+}
+
+/** «A fondo (RTVE)»: el contenedor con su editorial o cadena, si la hay. */
+export function contenedorVisible(m: Pick<MetadatosDocumento, 'contenedor' | 'editorial'>): string | null {
+  if (!m.contenedor) return null;
+  return m.editorial && !m.contenedor.includes(m.editorial) ? `${m.contenedor} (${m.editorial})` : m.contenedor;
+}
