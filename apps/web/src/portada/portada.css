@@ -34,18 +34,8 @@
   color-scheme: light;
 }
 
-/* DM Sans, la letra de la interfaz de la aplicación; si no llega a tiempo, no se espera (cero saltos). */
-@font-face {
-  font-family: 'DM Sans';
-  src: url('/portada/dm-sans.woff2') format('woff2-variations'), url('/portada/dm-sans.woff2') format('woff2');
-  font-weight: 100 1000;
-  font-display: optional;
-}
-@font-face {
-  font-family: Mano;
-  src: url('/portada/mano.woff2') format('woff2');
-  font-display: swap;
-}
+/* DM Sans (la letra de la interfaz de la aplicación) la carga el script cuando la página ya ha cargado. */
+/* La letra de mano también llega por el script, después de cargar: las notas aparecen al final del dibujo. */
 
 *, *::before, *::after { box-sizing: border-box; }
 html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; scroll-behavior: smooth; }
@@ -180,7 +170,7 @@ img, svg { display: block; max-width: 100%; }
 .acciones { display: flex; flex-wrap: wrap; gap: 0.75rem; }
 .leer { font-style: italic; color: var(--tinta-2); text-decoration-color: var(--filete-2); text-underline-offset: 0.25em; align-self: start; }
 .nota-mano {
-  font-family: var(--mano); color: var(--rojo); font-size: 1.3rem; line-height: 1.1;
+  font-family: var(--mano); color: var(--rojo); font-size: 1.3rem; line-height: 1.6rem; height: 1.6rem; white-space: nowrap;
   transform: rotate(-3deg); transform-origin: left; margin: -0.5rem 0 -0.3rem 0.4rem;
 }
 
@@ -244,6 +234,11 @@ img, svg { display: block; max-width: 100%; }
   padding: 0.1rem 0.6rem; border: 1px solid rgb(193 69 59 / 0.45); border-radius: 50% / 40%;
 }
 
+/* Las láminas diferidas ocupan su caja desde el principio. */
+.diferido { display: block; }
+.diferido > svg, .diferido img { width: 100%; height: auto; }
+.mano-margen.diferido, .mano-ficha.diferido { display: block; }
+
 /* Las láminas. */
 .lamina { grid-row: 3; margin: clamp(2.5rem, 5vw, 4rem) 0 0; }
 .lamina svg { width: 100%; height: auto; }
@@ -265,7 +260,7 @@ img, svg { display: block; max-width: 100%; }
 .especimen figcaption { margin-top: 1rem; display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 0.6rem 1.2rem; font-size: 0.9rem; color: var(--tinta-2); }
 .especimen .folio { font-size: 1rem; }
 .especimen .mano-ficha { position: absolute; right: -1.2rem; bottom: -3.2rem; width: 7rem; transform: rotate(-24deg); }
-.especimen .nota-mano { position: absolute; right: 6rem; bottom: -3.4rem; font-size: 1.15rem; max-width: 17rem; text-align: right; transform: rotate(-2deg); color: var(--tinta-2); }
+.especimen .nota-mano { position: absolute; right: 6rem; bottom: -3.4rem; font-size: 1.15rem; line-height: 1.15; height: auto; white-space: normal; max-width: 17rem; text-align: right; transform: rotate(-2deg); color: var(--tinta-2); }
 .especimen-minuto { grid-row: 4; margin: 5.2rem 0 0; font-size: 1.1rem; font-style: italic; }
 .especimen ~ .reclamo { grid-row: 5; }
 .especimen-minuto .folio { font-style: normal; }

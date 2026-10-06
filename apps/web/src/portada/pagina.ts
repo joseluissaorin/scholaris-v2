@@ -6,7 +6,7 @@
  * la pluma dibuje cuando el dibujo entra en pantalla.
  */
 import css from './portada.css?raw';
-import { aSvg, type Lengua } from './dibujo/boceto';
+import { aSvg, enLengua, type Lengua } from './dibujo/boceto';
 import { DIBUJOS, type NombreDibujo } from './dibujo/dibujos';
 import { CSS_TINTAS } from './dibujo/tintas';
 import { TEXTOS, type Capitulo, type Textos } from './textos';
@@ -21,6 +21,37 @@ const esc = (t: string) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replac
 
 function dibujo(nombre: NombreDibujo, lengua: Lengua, o: { decorativo?: boolean; espera?: number; sufijo?: string } = {}): string {
   return aSvg(DIBUJOS[nombre], { lengua, ...o });
+}
+
+/**
+ * Las láminas de más abajo no van dentro del HTML: se prerenderizan como SVG
+ * sueltos en /portada/laminas/ y el script los mete en la página, en línea
+ * (para que la pluma pueda dibujarlos), un poco antes de que lleguen a la
+ * pantalla. Mientras tanto ocupan su caja exacta (cero saltos) y, sin
+ * JavaScript, se ven como imagen.
+ */
+const laminas = new Map<string, string>();
+
+/** El SVG suelto lleva sus tintas dentro, para verse también como <img>. */
+function independiente(svg: string): string {
+  const estilo = `<style>:root{${CSS_TINTAS}}.nt{font-family:'Segoe Print','Bradley Hand',cursive}.c-pl,.c-co,.c-en{mix-blend-mode:multiply}</style>`;
+  return svg.replace(/^(<svg[^>]*>)/, `$1${estilo}`);
+}
+
+function diferido(nombre: NombreDibujo, lengua: Lengua, o: { decorativo?: boolean; clase?: string } = {}): string {
+  const d = DIBUJOS[nombre];
+  const [, , w, h] = d.caja ?? [0, 0, d.ancho, d.alto];
+  const fichero = `${nombre}-${lengua}.svg`;
+  if (!laminas.has(fichero)) laminas.set(fichero, independiente(aSvg(d, { lengua, decorativo: o.decorativo })));
+  const ruta = `/portada/laminas/${fichero}`;
+  const alt = o.decorativo ? '' : enLengua(d.descripcion, lengua);
+  return `<span class="diferido${o.clase ? ` ${o.clase}` : ''}" data-lamina="${ruta}" style="aspect-ratio:${w}/${h}"><noscript><img src="${ruta}" width="${w}" height="${h}" alt="${esc(alt)}" loading="lazy"></noscript></span>`;
+}
+
+/** Los SVG sueltos de una lengua, para escribirlos al construir (o servirlos en desarrollo). */
+export function laminasDe(lengua: Lengua): { fichero: string; svg: string }[] {
+  pagina(lengua);
+  return [...laminas].filter(([f]) => f.endsWith(`-${lengua}.svg`)).map(([fichero, svg]) => ({ fichero, svg }));
 }
 
 /** CSS sin comentarios ni espacios de sobra: va entero dentro del HTML. */
@@ -38,7 +69,7 @@ const SCRIPT_CABEZA =
   "try{if('IntersectionObserver'in window&&!matchMedia('(prefers-reduced-motion: reduce)').matches)document.documentElement.classList.add('anima')}catch(e){}";
 
 /** La pluma: cada dibujo se dibuja la primera vez que entra en pantalla. */
-const SCRIPT_PIE = `(function(){var d=document.documentElement;if(!d.classList.contains('anima'))return;var t=[].slice.call(document.querySelectorAll('svg.dibujo'));var o=new IntersectionObserver(function(es){es.forEach(function(e){if(e.isIntersecting){e.target.classList.add('visto');o.unobserve(e.target)}})},{rootMargin:'0px 0px -10% 0px',threshold:0.15});t.forEach(function(s){o.observe(s)});addEventListener('beforeprint',function(){t.forEach(function(s){s.classList.add('visto')})})})()`;
+const SCRIPT_PIE = `(function(){var d=document.documentElement,n=0,io='IntersectionObserver'in window,todos=function(q,f){[].forEach.call(document.querySelectorAll(q),f)};var dib=d.classList.contains('anima')&&new IntersectionObserver(function(es){es.forEach(function(e){if(e.isIntersecting){e.target.classList.add('visto');dib.unobserve(e.target)}})},{rootMargin:'0px 0px -10% 0px',threshold:0.15});function mirar(s){if(dib)dib.observe(s)}todos('svg.dibujo',mirar);function cargar(el){var u=el.getAttribute('data-lamina');if(!u)return;el.removeAttribute('data-lamina');fetch(u).then(function(r){return r.text()}).then(function(t){var k=++n;el.innerHTML=t.replace(/\\b(m[tc]-[\\w-]+)/g,'$1-'+k);var s=el.querySelector('svg');if(s)mirar(s)})}function luego(){try{[['DM Sans','dm-sans',{weight:'100 1000'}],['Mano','mano',{}]].forEach(function(f){new FontFace(f[0],'url(/portada/'+f[1]+'.woff2)',f[2]).load().then(function(x){document.fonts.add(x)})})}catch(e){}if(io){var lz=new IntersectionObserver(function(es){es.forEach(function(e){if(e.isIntersecting){lz.unobserve(e.target);cargar(e.target)}})},{rootMargin:'700px 0px'});todos('[data-lamina]',function(e){lz.observe(e)})}else todos('[data-lamina]',cargar)}if(document.readyState==='complete')luego();else addEventListener('load',luego);addEventListener('beforeprint',function(){todos('svg.dibujo',function(s){s.classList.add('visto')})})})()`;
 
 function cabeza(t: Textos): string {
   const url = `${ORIGEN}${t.ruta}`;
@@ -114,11 +145,10 @@ interface Extras {
 }
 
 function capitulo(c: Capitulo, lengua: Lengua, x: Extras = {}, indice = 0): string {
-  const mano = (n: number) => `<span class="mano-margen" aria-hidden="true">${dibujo('manecilla', lengua, { decorativo: true, sufijo: `${c.id}-${n}` })}</span>`;
-  let senaladas = 0;
+  const mano = () => diferido('manecilla', lengua, { decorativo: true, clase: 'mano-margen' });
   const parrafos = c.parrafos
     .map((p, i) => {
-      const conMano = p.replace(/<strong class="senalada">/g, () => `${mano(senaladas++)}<strong class="senalada">`);
+      const conMano = p.replace(/<strong class="senalada">/g, () => `${mano()}<strong class="senalada">`);
       return `<p>${i === 0 && x.inicial ? x.inicial : ''}${conMano}</p>`;
     })
     .join('');
@@ -142,12 +172,12 @@ function ensayo(t: Textos): string {
   const [abundancia, archivo, maquinas, mano, constelaciones, nunca] = t.capitulos as [Capitulo, Capitulo, Capitulo, Capitulo, Capitulo, Capitulo];
   const l = t.lengua;
   const letra = abundancia.parrafos[0]!.charAt(0);
-  const inicial = `<span class="inicial" aria-hidden="true">${dibujo('inicial', l, { decorativo: true })}</span><span class="solo-lector">${letra}</span>`;
+  const inicial = `${diferido('inicial', l, { decorativo: true, clase: 'inicial' })}<span class="solo-lector">${letra}</span>`;
   const e = t.especimen;
   const especimen = `<figure class="especimen">
 <blockquote lang="es"><p style="margin:0">«${esc(e.cita)}»</p></blockquote>
 <figcaption><span>${e.fuente}</span><span class="folio">${esc(e.folio)}</span></figcaption>
-<span class="mano-ficha" aria-hidden="true">${dibujo('manecilla', l, { decorativo: true, sufijo: 'ficha' })}</span>
+${diferido('manecilla', l, { decorativo: true, clase: 'mano-ficha' })}
 <span class="nota-mano" aria-hidden="true">${esc(e.nota)}</span>
 </figure>
 <p class="especimen-minuto">${esc(e.minuto).replace('12:04', '<span class="folio">12:04</span>')}</p>`;
@@ -161,12 +191,12 @@ function ensayo(t: Textos): string {
 <p class="reclamo" aria-hidden="true">${esc(t.quien.parrafos[0]!.split(' ').slice(0, 3).join(' '))}</p>
 </section>`;
   return `<article id="texto" class="ensayo">
-${capitulo(sinPrimeraLetra(abundancia), l, { inicial, despues: `<figure class="lamina lamina-ancha">${dibujo('biblioteca', l)}</figure>` }, 1)}
+${capitulo(sinPrimeraLetra(abundancia), l, { inicial, despues: `<figure class="lamina lamina-ancha">${diferido('biblioteca', l)}</figure>` }, 1)}
 ${capitulo(archivo, l, {}, 2)}
-${capitulo(maquinas, l, { despues: `<figure class="lamina lamina-media">${dibujo('maquina', l)}</figure>` }, 3)}
+${capitulo(maquinas, l, { despues: `<figure class="lamina lamina-media">${diferido('maquina', l)}</figure>` }, 3)}
 ${capitulo(mano, l, { despues: especimen }, 4)}
-${capitulo(constelaciones, l, { despues: `<figure class="lamina lamina-derecha">${dibujo('constelacion', l)}</figure>` }, 5)}
-${capitulo(nunca, l, { despues: `<figure class="lamina lamina-media">${dibujo('triada', l)}</figure>` }, 6)}
+${capitulo(constelaciones, l, { despues: `<figure class="lamina lamina-derecha">${diferido('constelacion', l)}</figure>` }, 5)}
+${capitulo(nunca, l, { despues: `<figure class="lamina lamina-media">${diferido('triada', l)}</figure>` }, 6)}
 ${indice}
 ${capitulo(t.quien, l, {}, 8)}
 </article>`;
@@ -178,9 +208,9 @@ function colofon(t: Textos): string {
 <h2 id="h-colofon">${esc(c.titulo)}</h2>
 <p class="lampara">${esc(c.texto)}</p>
 <p class="firma">${esc(c.firma)}</p>
-<div class="caracol">${dibujo('caracol', t.lengua)}</div>
+${diferido('caracol', t.lengua, { clase: 'caracol' })}
 <div class="acciones"><a class="boton boton-tinta boton-g" href="${ENTRAR}">${esc(c.empezar)} <span class="flecha" aria-hidden="true">→</span></a><a class="boton boton-papel boton-g" href="${DEMOSTRACION}">${esc(c.probar)}</a></div>
-<img class="logo" src="/portada/logo.webp" width="88" height="88" alt="" loading="lazy" decoding="async">
+<img class="logo" src="/portada/logo-192.webp" width="88" height="88" alt="" loading="lazy" decoding="async">
 </section>`;
 }
 
@@ -192,7 +222,7 @@ ${cabeza(t)}
 <body>
 <a class="saltar" href="#texto">${esc(t.saltar)}</a>
 <header class="cabecera">
-<a class="marca" href="${t.ruta}" aria-label="${esc(t.nav.inicio)}"><img src="/portada/logo.webp" width="46" height="46" alt="" fetchpriority="low"><span>Scholaris</span></a>
+<a class="marca" href="${t.ruta}" aria-label="${esc(t.nav.inicio)}"><img src="/portada/logo-96.webp" width="46" height="46" alt="" fetchpriority="low"><span>Scholaris</span></a>
 <nav aria-label="${lengua === 'es' ? 'Principal' : 'Main'}">
 <a class="ensayo-enlace" href="#texto">${esc(t.nav.ensayo)}</a>
 <a href="${t.otra.ruta}" hreflang="${t.otra.hreflang}" lang="${t.otra.hreflang}" title="${esc(t.otra.etiqueta)}">${esc(t.otra.nombre)}</a>

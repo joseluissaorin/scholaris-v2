@@ -312,7 +312,7 @@ export function aSvg(dibujo: Dibujo, opciones: OpcionesSvg = {}): string {
   const mascara = (nombre: string, trazos: string[]) =>
     trazos.length ? `<mask id="${nombre}" maskUnits="userSpaceOnUse" ${caja}><g fill="none" stroke="#fff" stroke-linecap="round" stroke-linejoin="round">${trazos.join('')}</g></mask>` : '';
   return [
-    `<svg class="dibujo${opciones.clase ? ` ${opciones.clase}` : ''}" viewBox="${cx} ${cy} ${cw} ${ch}" width="${cw}" height="${ch}"${etiquetas} data-dibujo="${id}">`,
+    `<svg xmlns="http://www.w3.org/2000/svg" class="dibujo${opciones.clase ? ` ${opciones.clase}` : ''}" viewBox="${cx} ${cy} ${cw} ${ch}" width="${cw}" height="${ch}"${etiquetas} data-dibujo="${id}">`,
     textos,
     `<defs>${mascara(`mt-${id}`, mascaraTinta)}${mascara(`mc-${id}`, mascaraColor)}</defs>`,
     capas.lapiz.length ? `<g class="c-la" fill="none" stroke="var(--d-lapiz)" stroke-linecap="round">${capas.lapiz.join('')}</g>` : '',
