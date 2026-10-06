@@ -323,6 +323,49 @@ En `capturas/restauracion/`:
   la otra (Biblioteca, Buscar, Escribir, Cuadernos, Mapa, Corpus, Vigilantes y
   Ajustes, más tres en móvil).
 
+## 13. Figuras, fotogramas y «Todo el SPDF»
+
+Lo que la ingesta ve en las imágenes se puede ver y recorrer en todas partes
+(`src/componentes/inspector/`):
+
+- **El visor** (`figuras.tsx`): la imagen grande sobre una mesa de luz café, lo
+  que se ve (la descripción automática, marcada como tal: sirve para buscar, no
+  es una cita), el pie impreso, dónde está, «Citar figura» (el pie con su cita
+  en el estilo del usuario), «Buscar parecidas» (por el vector de la imagen) y
+  «Ver en la página». ← y → recorren las figuras. Es el mismo en el lector, en
+  el inspector y en Buscar.
+- **Libros**: cada figura se marca sobre la imagen de su página (un recuadro
+  rojo numerado si se sabe su región; una pestaña azul con el pie si no), con
+  la descripción al pasar el ratón; el texto alternativo de la página dice qué
+  figuras lleva. El panel «Figuras» las enseña con su pie y su descripción, y
+  se busca en ellas.
+- **Vídeos**: la tira «Lo que se ve» del reproductor tiene todos los fotogramas
+  clave con su descripción, se busca en ellas, marca el que está en pantalla y
+  salta a su segundo. En la transcripción, una marca de escena (fotograma
+  pequeño, instante y descripción que se despliega) donde cambia lo que se ve,
+  una cada 45 s como mucho salvo los cambios de escena.
+- **Buscar**: el filtro «Figuras e imágenes» busca láminas, diagramas y
+  fotogramas de toda la biblioteca por su descripción, su pie y su imagen
+  (`GET /figuras`); los pasajes que salen por la vía visual enseñan la figura
+  que los respalda.
+- **Todo el SPDF** (`/documentos/:id/contenido`, el icono de capas en la barra
+  del lector): ficha con la procedencia de cada campo, páginas o tramos (imagen,
+  texto, notas, cabecera, pie, lector, confianza, folio y cómo se dedujo),
+  secciones, fragmentos con su línea de contexto y su capa de búsqueda,
+  figuras, hablantes, entidades, espacios vectoriales con un mapa 2D
+  (componentes principales de una muestra, con las formas de Kandinsky por
+  objetivo), el registro de la ingesta (fases, proveedores, tiempos, llamadas y
+  lo que costó en el plan) y el fichero (versión, huella, tamaño). «Ver JSON» y
+  «Descargar .spdf» para quien lo quiera tal cual. Las listas largas van
+  virtualizadas y se piden a trozos.
+
+La región de cada figura dentro de su página y si un fotograma es un cambio de
+escena se guardan desde la ingesta del 6-10-2026 como claves de más en
+`figuras.ancla` (`region`, `escena`); los documentos anteriores enseñan la
+página entera y todos sus fotogramas.
+
+En `capturas/inspector/` están las pantallas de todo esto.
+
 ## 14. Movimiento y bocetos a mano
 
 Todo se mueve, y siempre con el mismo lenguaje que el relieve: lo que se pulsa

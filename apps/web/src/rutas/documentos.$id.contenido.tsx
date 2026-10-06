@@ -7,7 +7,7 @@
  * registro de la ingesta y el propio fichero. Las listas largas van
  * virtualizadas y se piden a trozos.
  */
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { createFileRoute, Link } from '@tanstack/react-router';
 import { useQuery, useSuspenseQuery } from '@tanstack/react-query';
 import { Boton, Composicion, Consejo, cx, Esqueleto, Icono } from '@scholaris/ui';
@@ -39,6 +39,12 @@ function Inspector() {
   const { data: doc } = useSuspenseQuery(q.documento(id));
   const { data: c, isError } = useQuery(qi.contenido(id));
   const [json, setJson] = useState(false);
+  // En el móvil el índice es una tira que se desliza: el apartado activo, a la vista (solo en horizontal).
+  const indice = useRef<HTMLElement>(null);
+  useEffect(() => {
+    const n = indice.current, a = n?.querySelector<HTMLElement>('[data-activo]');
+    if (n && a && n.scrollWidth > n.clientWidth) n.scrollLeft = a.offsetLeft - n.clientWidth / 2 + a.offsetWidth / 2;
+  }, [ver]);
   const medio = esMedio(doc.tipo);
 
   const nombres: Record<Apartado, string> = {
@@ -89,9 +95,10 @@ function Inspector() {
 
         <div className="mt-8 lg:grid lg:grid-cols-[13rem_minmax(0,1fr)] lg:gap-8">
           {/* Índice de apartados */}
-          <nav aria-label="Apartados del SPDF" className="sin-barra -mx-4 mb-5 flex gap-1 overflow-x-auto px-4 lg:sticky lg:top-24 lg:mx-0 lg:mb-0 lg:flex-col lg:self-start lg:overflow-visible lg:px-0">
+          <nav ref={indice} aria-label="Apartados del SPDF" className="sin-barra -mx-4 mb-5 flex gap-1 overflow-x-auto px-4 lg:sticky lg:top-24 lg:mx-0 lg:mb-0 lg:flex-col lg:self-start lg:overflow-visible lg:px-0">
             {visibles.map((a) => (
               <Link key={a} to="/documentos/$id/contenido" params={{ id }} search={{ ver: a === 'resumen' ? undefined : a }} resetScroll={false}
+                data-activo={ver === a ? '' : undefined}
                 className={cx('flex h-9 shrink-0 items-center gap-2 rounded-xl px-3 text-[0.875rem] transition-[background,box-shadow]', ver === a ? 'bg-cream-50 font-semibold text-coffee-800 shadow-[var(--relieve)] ring-1 ring-cream-400' : 'font-medium text-coffee-600 hover:bg-cream-200 hover:text-coffee-800')}>
                 {ver === a ? <span aria-hidden className="h-1.5 w-1.5 shrink-0 rounded-full bg-rojo" /> : null}
                 <span className="flex-1">{nombres[a]}</span>

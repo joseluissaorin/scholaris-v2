@@ -164,7 +164,7 @@ export function VisorFigura({ figuras, indice, alCambiar, alIr, contexto }: {
     setParecidas({ de: base.id, lista: null });
     try {
       const r = await api().figuras.parecidas(base.id, 12);
-      setParecidas({ de: base.id, lista: r.map(deEncontrada) });
+      setParecidas({ de: base.id, lista: r.map(deEncontrada).filter((x) => !esVacio(x)) });
     } catch (e) {
       setParecidas({ de: base.id, lista: [], error: e instanceof Error ? e.message : 'No se pudieron buscar.' });
     }

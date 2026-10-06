@@ -7,6 +7,7 @@
  *   queue      Trabajo de fondo (vigilantes programados).
  *   scheduled  Cron: encola los vigilantes diarios (y los semanales los lunes).
  */
+import type { MensajeCorreo } from '../rutas/social.js';
 import { recordarDemostracion, redireccionPortada } from './portada.js';
 import { prepararMotorWorkers } from '@scholaris/spdf/workers';
 import { PREFIJO_API, PREFIJO_V1 } from '@scholaris/contrato';
@@ -56,6 +57,16 @@ function plataforma(env: Env, peticion: Request): Plataforma {
     ...(env.ORIGENES_CORS ? { origenes: env.ORIGENES_CORS.split(',').map((s) => s.trim()) } : {}),
     // El ritmo por usuario lo lleva la propia Estantería (atender): sin un salto más a otro DO.
     cacheSesiones: cacheSesionesCf,
+    ...(env.CORREO ? {
+      correo: async (m: MensajeCorreo) => {
+        await env.CORREO!.send({
+          to: m.para,
+          from: { email: env.CORREO_REMITENTE ?? 'scholaris@joseluissaorin.com', name: 'Scholaris' },
+          subject: m.asunto, text: m.texto, ...(m.html ? { html: m.html } : {}),
+        });
+        return true;
+      },
+    } : {}),
     atender: (usuario: UsuarioSesion, p: Request) => env.ESTANTERIA.getByName(usuario.id).atender(usuario, p),
     tiempoReal: async (p, canal) => {
       const nombre = canal.tarea ? `tarea:${canal.usuario}:${canal.tarea}` : `usuario:${canal.usuario}`;

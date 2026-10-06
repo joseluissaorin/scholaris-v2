@@ -34,6 +34,10 @@ export interface Env {
   ESPACIO_VECTORIAL?: string;
   DIMENSIONES?: string;
   AI_GATEWAY?: string;
+  /** Correo saliente (invitaciones): binding `send_email` de Cloudflare Email. */
+  CORREO?: { send(m: { to: string; from: { email: string; name?: string }; subject: string; text: string; html?: string; replyTo?: string }): Promise<unknown> };
+  /** Remitente del correo; por defecto scholaris@joseluissaorin.com. */
+  CORREO_REMITENTE?: string;
   CLOUDFLARE_ACCOUNT_ID?: string;
   CLERK_PUBLISHABLE_KEY?: string;
   CLERK_EMISOR?: string;

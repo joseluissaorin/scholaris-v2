@@ -168,7 +168,7 @@ function Lector() {
 
           <BotonReferencia documento={doc.id} className="hidden md:flex" />
           <Consejo texto="Todo lo que contiene el .spdf: páginas, fragmentos, figuras, vectores, procedencia">
-            <Link to="/documentos/$id/contenido" params={{ id: doc.id }} aria-label="Ver todo el SPDF" className="hidden h-9 shrink-0 items-center gap-1.5 rounded-xl px-2.5 text-[0.8125rem] font-medium text-coffee-500 hover:bg-cream-200 hover:text-coffee-800 md:flex"><Icono nombre="pila" tam={16} /><span className="hidden 2xl:inline">Todo el SPDF</span></Link>
+            <Link to="/documentos/$id/contenido" params={{ id: doc.id }} aria-label="Ver todo el SPDF" className="flex h-9 shrink-0 items-center gap-1.5 rounded-xl px-2.5 text-[0.8125rem] font-medium text-coffee-500 hover:bg-cream-200 hover:text-coffee-800 md:flex"><Icono nombre="pila" tam={16} /><span className="hidden 2xl:inline">Todo el SPDF</span></Link>
           </Consejo>
           <div className="hidden items-center gap-1 sm:flex">
             <BotonPanel activo={panel === 'indice'} icono="indice" etiqueta="Índice" alPulsar={() => abrirPanel('indice')} />

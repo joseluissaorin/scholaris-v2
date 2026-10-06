@@ -77,6 +77,9 @@
 
   "ai": { "binding": "AI" },
 
+  // Correo de las invitaciones (Cloudflare Email; joseluissaorin.com ya tiene SPF, DKIM y DMARC de Cloudflare).
+  "send_email": [{ "name": "CORREO" }],
+
   // Vigilantes: a diario a las 06:17 UTC (los semanales, los lunes).
   "triggers": { "crons": ["17 6 * * *"] },
 
@@ -142,6 +145,7 @@
         "consumers": [{ "queue": "scholaris-produccion-fondo", "max_batch_size": 10, "max_batch_timeout": 5, "max_retries": 5 }]
       },
       "ai": { "binding": "AI" },
+      "send_email": [{ "name": "CORREO" }],
       "vars": {
         "ESPACIO_VECTORIAL": "gemini-embedding-2@1536",
         // Sin AI Gateway (ver arriba).
