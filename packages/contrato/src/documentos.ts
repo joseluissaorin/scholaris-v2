@@ -6,6 +6,7 @@
  *   PATCH  /documentos/:id/metadatos  Partial<MetadatosDocumento> → DetalleDocumento
  *   POST   /documentos/:id/metadatos/rehacer  { simular? } → DetalleDocumento  (solo la ficha, sin releer; respeta lo que editó el usuario; con simular, la que saldría sin escribirla)
  *   POST   /documentos/:id/folios/rehacer  { juez?, simular? } → FoliosRehechos  (solo los folios, sin releer: desde las unidades guardadas)
+ *   POST   /documentos/:id/paginas/rehacer { simular?, soloSinImagen? } → PaginasRehechas (rasteriza el PDF original otra vez: imágenes y miniaturas, sin releer el texto)
  *   DELETE /documentos/:id                        → Ok
  *   POST   /documentos/:id/reprocesar  { fases? } → IngestaIniciada
  *   POST   /documentos/:id/reintentar             → IngestaIniciada  (tras un error: reaprovecha original, paquete y lecturas ya hechas)
@@ -146,6 +147,28 @@ export interface RehacerFolios {
   juez?: boolean;
   /** Calcular y contar los cambios sin escribirlos. */
   simular?: boolean;
+}
+
+/** Petición para rehacer las imágenes de página de un PDF. */
+export interface RehacerPaginas {
+  /** Solo cuenta lo que haría (páginas, cuáles no tienen imagen completa), sin convertir nada. */
+  simular?: boolean;
+}
+
+/** Resultado de rehacer las imágenes de página (rasterizar otra vez el original). */
+export interface PaginasRehechas {
+  documento: string;
+  simulado: boolean;
+  /** Unidades de página del documento. */
+  paginas: number;
+  /** Las que no tenían imagen completa (solo la vista previa de la v1, o nada). */
+  sinImagen: number;
+  /** Las que ahora tienen imagen y miniatura nuevas. */
+  actualizadas: number;
+  /** Si el servidor tiene conversor para hacerlo de verdad. */
+  conversor: boolean;
+  ms: number;
+  avisos: string[];
 }
 
 /** Resultado de rehacer los folios de un documento. */

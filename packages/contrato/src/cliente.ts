@@ -16,7 +16,7 @@ import type {
   CompletarSubida, IngestaIniciada, Ingestar, NuevaSubida, PedirRecursos, RecursosFirmados, SubidaCreada, SubidaUrl, UrlsPartes,
 } from './subidas.js';
 import type {
-  CompletarPartesImportacion, DetalleDocumento, FiguraVista, FiltrosDocumentos, FoliosRehechos, FragmentoVista, ImportacionSpdf, ImportarRecursos, MapaFolios,
+  CompletarPartesImportacion, DetalleDocumento, FiguraVista, FiltrosDocumentos, FoliosRehechos, PaginasRehechas, RehacerPaginas, FragmentoVista, ImportacionSpdf, ImportarRecursos, MapaFolios,
   ParcheMetadatos, PedirPartesImportacion, RehacerFolios,
   Reprocesar, ResumenDocumento, SeccionVista, UnidadVista, VolcadoDocumento,
 } from './documentos.js';
@@ -181,6 +181,8 @@ export function crearCliente(opciones: OpcionesCliente) {
       rehacerMetadatos: (id: string, p: { simular?: boolean } = {}) => post<DetalleDocumento>(`/documentos/${e(id)}/metadatos/rehacer`, p),
       /** Recalcula los folios desde las unidades guardadas, sin volver a leer el documento. */
       rehacerFolios: (id: string, p: RehacerFolios = {}) => post<FoliosRehechos>(`/documentos/${e(id)}/folios/rehacer`, p),
+      /** Rasteriza otra vez el PDF original: imágenes de página nítidas, sin releer el texto. */
+      rehacerPaginas: (id: string, p: RehacerPaginas = {}) => post<PaginasRehechas>(`/documentos/${e(id)}/paginas/rehacer`, p),
       borrar: (id: string) => del(`/documentos/${e(id)}`),
       reprocesar: (id: string, p: Reprocesar = {}) => post<IngestaIniciada>(`/documentos/${e(id)}/reprocesar`, p),
       reintentar: (id: string) => post<IngestaIniciada>(`/documentos/${e(id)}/reintentar`),

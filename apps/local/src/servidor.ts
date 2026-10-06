@@ -185,6 +185,7 @@ export async function crearServidorLocal(o: OpcionesServidor): Promise<ServidorL
         rmSync(carpeta(usuario.id), { recursive: true, force: true });
         await abrir(usuario.id);
       },
+      ...(o.convertir ? { convertir: o.convertir } : {}),
     };
   };
 

@@ -256,7 +256,7 @@ export function inteligenciaConMemoria(ia: Inteligencia, almacen: AlmacenAmpliad
   };
 }
 
-function archivoDe(almacen: AlmacenAmpliado, clave: string, nombre: string, mime: string, tipo?: string): ArchivoConvertir {
+export function archivoDe(almacen: AlmacenAmpliado, clave: string, nombre: string, mime: string, tipo?: string): ArchivoConvertir {
   return {
     nombre, mime, ...(tipo ? { tipo } : {}), bytes: 0,
     async leer() { const b = await almacen.bytes(clave); if (!b) throw new ErrorReserva('No encuentro el original en el almacén.'); return b; },

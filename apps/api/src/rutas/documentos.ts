@@ -3,7 +3,7 @@ import type { Hono } from 'hono';
 import type { Ancla, Documento, MetadatosDocumento, ValorSQL } from '@scholaris/nucleo';
 import { enLista, limpiarMarcadoOCR, vectorABytes } from '@scholaris/nucleo';
 import type {
-  DetalleDocumento, FiguraVista, FoliosRehechos, FragmentoVista, MapaFolios, Pagina, ParcheMetadatos, RehacerFolios, Reprocesar, ResumenDocumento, SeccionVista,
+  DetalleDocumento, FiguraVista, FoliosRehechos, FragmentoVista, MapaFolios, Pagina, PaginasRehechas, ParcheMetadatos, RehacerFolios, RehacerPaginas, Reprocesar, ResumenDocumento, SeccionVista,
   UnidadVista, VolcadoDocumento,
 } from '@scholaris/contrato';
 import {
@@ -19,6 +19,7 @@ import { alBorrarDocumento } from '@scholaris/funciones';
 import { cacheEnAlmacen, rehacerFicha, unidadDeFila } from '@scholaris/ingesta';
 import type { PuertosUsuario } from '../puertos.js';
 import { lanzarIngesta, prefijoDocumento } from './subidas.js';
+import { archivoDe } from '../compartido/motor-ingesta.js';
 import { extrasFigura } from './contenido.js';
 import { claveDe, cursorADesplazamiento, desplazamientoACursor, entero, etiquetaAncla, exigirEscritura, json, prm, puertos, type Ctx } from './util.js';
 
@@ -208,6 +209,55 @@ export function rutasDocumentos(app: Hono<Entorno>): void {
       invalidarBuscador(p.sql);
     }
     return c.json({ ...r, simulado: !!b.simular } satisfies FoliosRehechos);
+  });
+
+  /*
+   * Rehacer las imágenes de página: rasteriza otra vez el PDF original en el
+   * conversor del servidor y guarda imagen y miniatura de cada página, sin tocar
+   * el texto ni los folios. Para los migrados de la v1, que solo traían una vista
+   * previa de 160-200 px. `simular` cuenta lo que haría sin convertir.
+   */
+  app.post('/documentos/:id/paginas/rehacer', async (c: Ctx) => {
+    const p = puertos(c);
+    const b = await cuerpoJson<RehacerPaginas>(c).catch(() => ({} as RehacerPaginas));
+    if (!b.simular) exigirEscritura(c);
+    const d = await documentoOError(p, prm(c, 'id'));
+    exigir(d.tipo === 'pdf' || d.tipo === 'pdf_escaneado', 'Solo se pueden rehacer las páginas de un PDF.');
+    const filas = await p.sql.ejecutar<{ id: string; ancla: string; imagen: string | null }>(
+      "SELECT id, ancla, imagen FROM unidades WHERE documento = ? AND json_extract(ancla, '$.tipo') = 'pagina' ORDER BY orden", d.id);
+    const sinImagen = filas.filter((f) => !f.imagen).length;
+    const avisos: string[] = [];
+    if (!d.original) avisos.push('El documento no tiene el original guardado: no hay nada que rasterizar.');
+    if (!p.convertir) avisos.push('Este servidor no tiene conversor: no se pueden rasterizar las páginas aquí.');
+    const base = { documento: d.id, paginas: filas.length, sinImagen, conversor: !!p.convertir };
+    if (b.simular) return c.json<PaginasRehechas>({ ...base, simulado: true, actualizadas: 0, ms: 0, avisos });
+    exigir(!!d.original, 'El documento no tiene el original guardado.');
+    exigir(!!p.convertir, 'Este servidor no tiene conversor para rasterizar las páginas.');
+    if (await tareaDeDocumento(p.sql, d.id)) fallo('conflicto', 'El documento se está procesando: espera a que termine.');
+    const t0 = Date.now();
+    const prefijo = prefijoDocumento(p.usuario.id, d.id);
+    // En una carpeta aparte: las vistas previas de la v1 se quedan donde estaban.
+    const sub = `paginas-${Date.now().toString(36)}/`;
+    const paquete = await p.convertir!(archivoDe(p.almacen, d.original, d.metadatos.titulo || d.id, d.mime, d.tipo),
+      (id, datos, mime) => p.almacen.poner(`${prefijo}${sub}${id}`, datos, mime));
+    const paginas = paquete.contenido.clase === 'pdf' || paquete.contenido.clase === 'imagenes' ? paquete.contenido.paginas : [];
+    if (!paginas.length) avisos.push('El conversor no devolvió páginas.');
+    if (paquete.unidades && paquete.unidades !== filas.length) avisos.push(`El original tiene ${paquete.unidades} páginas y el documento ${filas.length}: se emparejan por la página física.`);
+    let actualizadas = 0;
+    await p.sql.transaccion(async (tx) => {
+      for (const f of filas) {
+        const fisica = json<{ fisica?: number }>(f.ancla, {}).fisica;
+        const pag = fisica ? paginas[fisica - 1] : undefined;
+        if (!pag?.imagen) continue;
+        await tx.ejecutar('UPDATE unidades SET imagen = ?, miniatura = ? WHERE id = ?', `${sub}${pag.imagen}`, pag.miniatura ? `${sub}${pag.miniatura}` : null, f.id);
+        actualizadas++;
+      }
+    });
+    const ms = Date.now() - t0;
+    await p.sql.ejecutar('INSERT INTO procedencia (documento, fase, proveedor, detalle, ms, cuando) VALUES (?, ?, ?, ?, ?, ?)', d.id, 'paginas', 'rehacer:conversor',
+      JSON.stringify({ que: 'rehacer', paginas: filas.length, actualizadas, carpeta: sub }), ms, ahora());
+    await escribirDocumento(p.sql, { ...d, actualizado: ahora() });
+    return c.json<PaginasRehechas>({ ...base, simulado: false, actualizadas, ms, avisos: [...avisos, ...paquete.avisos.slice(0, 5)] });
   });
 
   app.delete('/documentos/:id', async (c: Ctx) => {

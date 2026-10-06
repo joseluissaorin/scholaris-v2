@@ -6,6 +6,8 @@
 import type { Almacen, Emisor, IndiceVectorial, Inteligencia, SQL } from '@scholaris/nucleo';
 import type { Concesion, EventoTiempoReal, ModoInstancia, Plan } from '@scholaris/contrato';
 import type { Cuentas } from './compartido/cuentas.js';
+import type { ArchivoConvertir } from './compartido/motor-ingesta.js';
+import type { PaqueteConversion } from '@scholaris/imprenta';
 
 /** El almacén con lo que hace falta para las subidas por partes y las URLs firmadas. */
 export interface AlmacenAmpliado extends Almacen {
@@ -133,4 +135,9 @@ export interface PuertosUsuario {
   segundoPlano(p: Promise<unknown>): void;
   /** Borra la estantería entera (baja de la cuenta). */
   vaciarEstanteria(): Promise<void>;
+  /**
+   * El conversor del servidor (Container en Cloudflare, imprenta de Node en local),
+   * para rehacer partes de un documento sin volver a leerlo. Puede faltar.
+   */
+  convertir?(archivo: ArchivoConvertir, guardar: (id: string, datos: Uint8Array, mime: string) => Promise<void>): Promise<PaqueteConversion>;
 }
