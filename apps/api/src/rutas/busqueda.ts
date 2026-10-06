@@ -136,16 +136,29 @@ export function rutasBusqueda(app: Hono<Entorno>): void {
       const enviar = (e: EventoBusquedaEnDos) => sse.writeSSE({ event: e.tipo, data: JSON.stringify(e) });
       let preliminar: Promise<void> = Promise.resolve();
       let terminado = false;
+      let fusionEnviada = false;
+      // Lo primero que se pinta: la vía léxica sola (FTS en la propia estantería, sin esperar
+      // al vector de la consulta). La fusión y el definitivo la sustituyen al llegar.
+      const lexica = (async () => {
+        const o = opciones(b);
+        if (o.vias && !o.vias.includes('lexica')) return;
+        const rl = await buscador.buscar(b.consulta, { ...o, vias: ['lexica'], reordenar: false, juez: false });
+        const vistas = await Promise.all((await soloAmbito(c, rl.resultados)).map((x) => aVista(p, x)));
+        if (vistas.length && !fusionEnviada && !terminado) await enviar({ tipo: 'preliminar', resultados: vistas, ms: Date.now() - t0, via: 'lexica' });
+      })().catch((e) => console.error('preliminar lexica', e));
       try {
         const r = await buscador.buscar(b.consulta, {
           ...opciones(b),
           alPreliminar: (rs) => {
+            fusionEnviada = true;
             preliminar = (async () => {
+              await lexica;
               const vistas = await Promise.all((await soloAmbito(c, rs)).map((x) => aVista(p, x)));
-              if (!terminado) await enviar({ tipo: 'preliminar', resultados: vistas, ms: Date.now() - t0 });
+              if (!terminado) await enviar({ tipo: 'preliminar', resultados: vistas, ms: Date.now() - t0, via: 'fusion' });
             })().catch((e) => console.error('preliminar', e));
           },
         });
+        await lexica;
         await preliminar;
         const salida = await final(r);
         terminado = true;

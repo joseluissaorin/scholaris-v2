@@ -3,7 +3,7 @@
  *
  *   POST /busqueda              Buscar      → RespuestaBusqueda
  *        con «accept: text/event-stream», en dos tiempos (EventoBusquedaEnDos):
- *        «preliminar» con el orden de la fusión en cuanto lo hay (~350 ms) y
+ *        «preliminar» con lo léxico en cuanto lo hay y luego con el orden de la fusión, y
  *        «final» con la RespuestaBusqueda reordenada. Si no hace falta reordenar,
  *        llega solo «final». Los ids de fragmento son los mismos en los dos: la
  *        interfaz pinta el preliminar y recoloca cada tarjeta por su id al llegar
@@ -68,7 +68,11 @@ export interface Responder extends Buscar {
 
 /** Eventos SSE de /busqueda en dos tiempos (campo `event` = `tipo`). */
 export type EventoBusquedaEnDos =
-  | { tipo: 'preliminar'; resultados: ResultadoVista[]; intencion?: IntencionConsulta; ms: number }
+  /**
+   * Puede llegar dos veces, y cada una sustituye a la anterior: primero la vía
+   * léxica sola (`via: 'lexica'`, en cuanto la hay) y luego la fusión sin reordenar (`via: 'fusion'`).
+   */
+  | { tipo: 'preliminar'; resultados: ResultadoVista[]; intencion?: IntencionConsulta; ms: number; via?: 'lexica' | 'fusion' }
   | { tipo: 'final'; respuesta: RespuestaBusqueda }
   | { tipo: 'error'; mensaje: string };
 

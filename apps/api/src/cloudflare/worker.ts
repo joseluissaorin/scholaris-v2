@@ -55,6 +55,7 @@ function plataforma(env: Env, peticion: Request): Plataforma {
     ...(env.ADMIN_TOKEN ? { tokenAdmin: env.ADMIN_TOKEN } : {}),
     ...(env.ORIGENES_CORS ? { origenes: env.ORIGENES_CORS.split(',').map((s) => s.trim()) } : {}),
     // El ritmo por usuario lo lleva la propia Estantería (atender): sin un salto más a otro DO.
+    cacheSesiones: cacheSesionesCf,
     atender: (usuario: UsuarioSesion, p: Request) => env.ESTANTERIA.getByName(usuario.id).atender(usuario, p),
     tiempoReal: async (p, canal) => {
       const nombre = canal.tarea ? `tarea:${canal.usuario}:${canal.tarea}` : `usuario:${canal.usuario}`;
@@ -65,6 +66,17 @@ function plataforma(env: Env, peticion: Request): Plataforma {
     },
   };
 }
+
+/** Sesiones resueltas en la Cache API de la ubicación (milisegundos, frente a un viaje a D1). */
+const cacheSesionesCf = {
+  async leer(clave: string): Promise<string | null> {
+    const r = await caches.default.match(`https://sesiones.scholaris.interno/${encodeURIComponent(clave)}`);
+    return r ? r.text() : null;
+  },
+  async guardar(clave: string, valor: string, segundos: number): Promise<void> {
+    await caches.default.put(`https://sesiones.scholaris.interno/${encodeURIComponent(clave)}`, new Response(valor, { headers: { 'cache-control': `max-age=${segundos}` } }));
+  },
+};
 
 const esPagina = (ruta: string) => !/\.[a-z0-9]+$/i.test(ruta.split('/').pop() ?? '');
 

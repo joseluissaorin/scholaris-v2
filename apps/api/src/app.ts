@@ -23,6 +23,7 @@ import type { Entorno } from './entorno.js';
 import type { AlmacenAmpliado, ConfigInstancia, PuertosUsuario, UsuarioSesion } from './puertos.js';
 import { cuerpoError, cuerpoJson, ErrorScholaris, fallo, responderError } from './compartido/errores.js';
 import { firmarBillete, igualesSeguro, verificarParametros } from './compartido/firmas.js';
+import { sha256Hex } from './compartido/cifrado.js';
 import type { Cuentas } from './compartido/cuentas.js';
 import type { VerificadorClerk } from './compartido/clerk.js';
 import { LIMITES } from './compartido/planes.js';
@@ -107,6 +108,11 @@ export interface Plataforma {
   clerk?: VerificadorClerk;
   /** Orígenes CORS admitidos (además del propio). */
   origenes?: string[];
+  /**
+   * Caché compartida de sesiones resueltas (en Cloudflare, la Cache API de cada
+   * ubicación): evita ir a D1 en cada aislamiento nuevo. Sin ella, solo la memoria.
+   */
+  cacheSesiones?: { leer(clave: string): Promise<string | null>; guardar(clave: string, valor: string, segundos: number): Promise<void> };
   /** Limitador de ritmo: true si se admite la petición. */
   admitir?(clave: string, porMinuto: number): Promise<{ ok: boolean; reintentar?: number }>;
   /** Entrega una petición ya autenticada a la estantería del usuario. */
@@ -211,12 +217,21 @@ export function crearPuerta(pl: Plataforma) {
       // Resultado ya resuelto en caché un minuto (una revocación tarda como mucho eso en surtir efecto).
       const hay = clavesVistas.get(token);
       if (hay && hay.hasta > Date.now()) return hay.sesion;
+      // Después, la caché de la ubicación (otro aislamiento ya la resolvió hace menos de un minuto).
+      const claveCache = pl.cacheSesiones ? `clave:${await sha256Hex(token)}` : '';
+      const enCache = pl.cacheSesiones ? await pl.cacheSesiones.leer(claveCache).catch(() => null) : null;
+      if (enCache) {
+        const sesion = JSON.parse(enCache) as UsuarioSesion;
+        clavesVistas.set(token, { sesion, hasta: Date.now() + 60_000 });
+        return sesion;
+      }
       const k = await pl.cuentas.autenticarClave(token);
       if (!k) fallo('no_autenticado', 'La clave de API no es válida, ha caducado o se ha revocado.');
       const u = await pl.cuentas.usuario(k.usuario);
       if (!u) fallo('no_autenticado', 'La cuenta de esta clave ya no existe.');
       const sesion: UsuarioSesion = { ...u, funciones: u.plan === 'pro' ? ['scholaris'] : [], via: 'clave_api', alcances: k.alcances };
       clavesVistas.set(token, { sesion, hasta: Date.now() + 60_000 });
+      if (pl.cacheSesiones) await pl.cacheSesiones.guardar(claveCache, JSON.stringify(sesion), 60).catch(() => undefined);
       if (clavesVistas.size > 2000) clavesVistas.delete(clavesVistas.keys().next().value as string);
       return sesion;
     }
@@ -226,11 +241,21 @@ export function crearPuerta(pl: Plataforma) {
     const u: UsuarioSesion = { id: id.id, correo: id.correo, nombre: id.nombre, plan: id.plan, funciones: id.funciones, via: 'clerk' };
     if (id.imagen) u.imagen = id.imagen;
     // D1 solo cuando hace falta: alta, cambio de plan, o cada diez minutos (para «visto»).
-    const conocido = usuariosVistos.get(u.id);
+    let conocido = usuariosVistos.get(u.id);
+    if (!conocido && pl.cacheSesiones) {
+      // Otro aislamiento de esta ubicación ya lo dio de alta hace poco: sin ir a D1.
+      const visto = await pl.cacheSesiones.leer(`visto:${u.id}`).catch(() => null);
+      if (visto) {
+        conocido = JSON.parse(visto) as { plan: string; cuando: number; correo: string; nombre: string };
+        usuariosVistos.set(u.id, conocido);
+      }
+    }
     if (!conocido || conocido.plan !== u.plan || Date.now() - conocido.cuando > 600_000 || (!u.correo && !conocido.correo)) {
       await pl.cuentas.asegurarUsuario(u);
       const guardado = u.correo ? null : await pl.cuentas.usuario(u.id);
-      usuariosVistos.set(u.id, { plan: u.plan, cuando: Date.now(), correo: u.correo || guardado?.correo || '', nombre: guardado?.nombre || u.nombre });
+      const v = { plan: u.plan, cuando: Date.now(), correo: u.correo || guardado?.correo || '', nombre: guardado?.nombre || u.nombre };
+      usuariosVistos.set(u.id, v);
+      if (pl.cacheSesiones) await pl.cacheSesiones.guardar(`visto:${u.id}`, JSON.stringify(v), 600).catch(() => undefined);
       if (usuariosVistos.size > 5000) usuariosVistos.delete(usuariosVistos.keys().next().value as string);
     }
     // El token de sesión de Clerk no siempre lleva el correo: se completa con lo guardado.
