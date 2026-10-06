@@ -111,6 +111,10 @@ export function candidatosLocales(meta: MetadatosIncrustados, nombreArchivo: str
   }
   // La fecha de creación del PDF no es la de publicación: solo si es un EPUB (dc:date).
   if (epub && meta.anio) d.anio = meta.anio;
+  // Un vídeo traído por su URL (YouTube): la fecha es la de publicación que da la propia plataforma.
+  const video = meta.tipoCSL === 'motion_picture' && !!meta.url;
+  if (video && meta.anio) d.anio = meta.anio;
+  if (video && meta.fecha) d.fecha = meta.fecha;
   for (const k of ['editorial', 'idioma', 'isbn', 'url', 'subtitulo', 'resumen'] as const) if (meta[k]) (d as Record<string, unknown>)[k] = meta[k];
   const doi = limpiarDoi(meta.doi) ?? limpiarDoi(meta.doiEnTexto) ?? limpiarDoi(meta.identificadores?.join(' '));
   if (doi) d.doi = doi;
