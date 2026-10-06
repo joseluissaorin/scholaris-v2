@@ -4,6 +4,7 @@
 import { readFileSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, dirname } from 'node:path';
+import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 export const AQUI = dirname(fileURLToPath(import.meta.url));
@@ -24,14 +25,18 @@ export function secreto(fichero: string, clave: string): string | undefined {
   return undefined;
 }
 
-/** Token OAuth de wrangler (para la API REST de Workers AI). */
-export function tokenWrangler(): string | undefined {
+/** Token OAuth de wrangler (para la API REST de Workers AI). Si ha caducado, `wrangler whoami` lo renueva. */
+export function tokenWrangler(renovar = true): string | undefined {
   for (const ruta of [join(homedir(), '.wrangler', 'config', 'default.toml'), join(homedir(), 'Library', 'Preferences', '.wrangler', 'config', 'default.toml')]) {
     if (!existsSync(ruta)) continue;
     const t = readFileSync(ruta, 'utf8');
     const tok = t.match(/^oauth_token\s*=\s*"([^"]+)"/m)?.[1];
     const exp = t.match(/^expiration_time\s*=\s*"([^"]+)"/m)?.[1];
-    if (tok && (!exp || Date.parse(exp) > Date.now() + 60_000)) return tok;
+    if (tok && (!exp || Date.parse(exp) > Date.now() + 5 * 60_000)) return tok;
+  }
+  if (renovar) {
+    try { execFileSync('npx', ['wrangler', 'whoami'], { stdio: 'ignore', cwd: homedir() }); } catch { /* sin wrangler */ }
+    return tokenWrangler(false);
   }
   return undefined;
 }

@@ -67,6 +67,19 @@ describe('Gemini · lector', () => {
     await l.leerPliego({ imagenes: IMG(1), primeraFisica: 2 });
     expect(llamadas.map((x) => ((x.cuerpo as Cuerpo).generationConfig.thinkingConfig as { thinkingLevel: string }).thinkingLevel)).toEqual(['minimal', 'low', 'low']);
   });
+
+  it('Flash lee sin pensar (presupuesto 0) y, si el modelo no lo admite, baja a minimal y luego a low', async () => {
+    const { fetch, llamadas } = fetchFalso((ll) => {
+      const tc = (ll.cuerpo as Cuerpo).generationConfig.thinkingConfig as Record<string, unknown>;
+      if (ll.url.includes('raro') && (tc.thinkingBudget === 0 || tc.thinkingLevel === 'minimal')) return { estado: 400, cuerpo: 'thinking not supported' };
+      return respuestaGemini(paginasJSON(1, 1));
+    });
+    const g = crearGemini({ clave: 'K', fetch });
+    await g.lector({ modelo: 'gemini-3.8-flash' }).leerPliego({ imagenes: IMG(1), primeraFisica: 1 });
+    expect((llamadas[0]?.cuerpo as Cuerpo).generationConfig.thinkingConfig).toEqual({ thinkingBudget: 0 });
+    await g.lector({ modelo: 'gemini-raro' }).leerPliego({ imagenes: IMG(1), primeraFisica: 1 });
+    expect(llamadas.slice(1).map((l) => (l.cuerpo as Cuerpo).generationConfig.thinkingConfig)).toEqual([{ thinkingBudget: 0 }, { thinkingLevel: 'minimal' }, { thinkingLevel: 'low' }]);
+  });
 });
 
 describe('Gemini · embebedor', () => {

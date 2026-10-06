@@ -3,7 +3,7 @@
  * REST (`/accounts/<cuenta>/ai/run/<modelo>`) con un token que tenga `ai:write`.
  *
  * Reservas baratas de Scholaris:
- * - Lector: modelo de visión (por defecto Gemma 4 26B A4B, ver RESULTADOS.md), una o pocas páginas por llamada.
+ * - Lector: modelo de visión (por defecto Llama 4 Scout, ver RESULTADOS.md), una o pocas páginas por llamada.
  * - Transcriptor: whisper-large-v3-turbo con marcas por palabra; los WAV largos se trocean aquí.
  * - Reordenador: bge-reranker-base o bge-m3 (multilingüe) en modo consulta + contextos.
  * - Embebedor: qwen3-embedding-0.6b (texto, 1024 dims).
@@ -40,7 +40,9 @@ export interface ConfigWorkersAI extends OpcionesComunes {
 }
 
 export const MODELOS_WORKERS_AI = {
-  lector: '@cf/google/gemma-4-26b-a4b-it',
+  /** Mejor CER de los de visión de Workers AI en el banco (0,058 frente a 0,105 de Gemma 4). */
+  lector: '@cf/meta/llama-4-scout-17b-16e-instruct',
+  lectorBarato: '@cf/google/gemma-4-26b-a4b-it',
   transcriptor: '@cf/openai/whisper-large-v3-turbo',
   reordenador: '@cf/baai/bge-reranker-base',
   reordenadorMultilingue: '@cf/baai/bge-m3',

@@ -22,6 +22,7 @@ import {
 } from '../src/index.js';
 import { AQUI, ORIGINALES, SALIDA, secreto, tokenWrangler, leerBytes, guardar, cer, f1Palabras, tabla } from './comun-vivo.js';
 
+const TRABAJO = process.env.PROVWORK ?? '/tmp/provwork';
 const CUENTA_CF = 'f22c7a728ddc8e41cefd2644f8fb7632';
 const claves = {
   gemini: secreto('gemini', 'GEMINI_API_KEY'),
@@ -54,7 +55,7 @@ interface DocBanco {
 
 function documentos(): DocBanco[] {
   const ref = (n: string) => {
-    const r = join(tmpdir(), 'provwork', 'ref', `${n}.json`);
+    const r = join(TRABAJO, 'ref', `${n}.json`);
     return existsSync(r) ? (JSON.parse(readFileSync(r, 'utf8')) as Record<string, string>) : capaDeTexto(join(ORIGINALES, n));
   };
   return [
@@ -177,7 +178,7 @@ async function seccionLector(): Promise<void> {
   decir('\n### Lector Gemini: modelo × tamaño de pliego\n');
   decir(tabla(CABECERA_LECTOR, medidas.map(filaLector)));
   // Referencia: la tubería antigua (Gemma 3 27B) en la página de oro.
-  const viejo = join(tmpdir(), 'provwork', 'ref', 'viejo-casamiento-p10.txt');
+  const viejo = join(TRABAJO, 'ref', 'viejo-casamiento-p10.txt');
   const oro = documentos()[0]?.oro;
   if (existsSync(viejo) && oro) decir(`\nCER de la tubería antigua (Gemma-3-27B, SPDF v3) en la página de oro: ${cer(readFileSync(viejo, 'utf8'), oro.texto).toFixed(3)}`);
 }
@@ -186,7 +187,7 @@ async function seccionLector(): Promise<void> {
 async function seccionImagenes(): Promise<void> {
   if (!claves.gemini) return;
   const doc = documentos()[0] as DocBanco;
-  const dir = join(tmpdir(), 'provwork', 'jpg');
+  const dir = join(TRABAJO, 'jpg');
   execFileSync('mkdir', ['-p', dir]);
   if (!existsSync(join(dir, `p-${doc.desde}.jpg`))) {
     execFileSync('pdftoppm', ['-jpeg', '-jpegopt', 'quality=82', '-r', '150', '-f', String(doc.desde), '-l', String(doc.hasta), join(ORIGINALES, doc.fichero), join(dir, 'p')]);
@@ -237,7 +238,7 @@ async function seccionEmbebedor(): Promise<void> {
     return { consulta: consultas[i], mejor: s.indexOf(Math.max(...s)), puntuaciones: s.map((x) => +x.toFixed(3)) };
   });
   // Multimodal: imagen de página y PDF de una página.
-  const jpg = join(tmpdir(), 'provwork', 'jpg', 'p-10.jpg');
+  const jpg = join(TRABAJO, 'jpg', 'p-10.jpg');
   const filas: Array<Array<string | number>> = [['texto (4 doc + 3 consultas)', vd[0]?.length ?? 0, msTexto, aciertos.map((a) => a.mejor).join(',')]];
   if (existsSync(jpg)) {
     const t1 = performance.now();
@@ -326,7 +327,7 @@ async function seccionWorkers(): Promise<void> {
   const w = crearWorkersAI({ cuenta: CUENTA_CF, token: claves.cloudflare, contador });
   const filas: Array<Array<string | number>> = [];
   const doc = documentos()[0] as DocBanco;
-  const jpgDir = join(tmpdir(), 'provwork', 'jpg');
+  const jpgDir = join(TRABAJO, 'jpg');
   if (existsSync(join(jpgDir, 'p-10.jpg'))) {
     for (const modelo of (process.env.MODELOS_CF ?? '@cf/google/gemma-4-26b-a4b-it,@cf/zai-org/glm-5.3-flash,@cf/meta/llama-4-scout-17b-16e-instruct,@cf/mistralai/mistral-small-3.1-24b-instruct').split(',')) {
       contador.reiniciar();
@@ -449,7 +450,30 @@ async function seccionInteligencia(): Promise<void> {
   decir(`\nPrueba: vector de ${v[0]?.length} dims; reordenar → ${s.map((x) => x.toFixed(3)).join(', ')}; ${usos.length} usos registrados por onUso.`);
 }
 
+
+/** Libro entero, como lo haría la ingesta: muchas llamadas a la vez. */
+async function seccionRendimiento(): Promise<void> {
+  if (!claves.gemini) return;
+  const contador = new ContadorUso();
+  const g = crearGemini({ clave: claves.gemini, contador, concurrencia: 64 });
+  const filas: Array<Array<string | number>> = [];
+  const casos = (process.env.RENDIMIENTO ?? 'casamiento:1:43:1:32,casamiento:1:43:2:32,discarded:1:96:1:48,discarded:1:96:2:48').split(',');
+  for (const caso of casos) {
+    const [id, d, h, tam, conc] = caso.split(':');
+    const base = documentos().find((x) => x.id === id) as DocBanco;
+    const doc = { ...base, desde: Number(d), hasta: Number(h) };
+    const modelo = process.env.MODELO_RENDIMIENTO ?? 'gemini-3.5-flash-lite';
+    const { medida } = await medirLector(modelo, g.lector({ modelo }), doc, Number(tam), contador, Number(conc));
+    const n = doc.hasta - doc.desde + 1;
+    filas.push([id as string, modelo, n, Number(tam), Number(conc), medida.muroS, medida.muroS / n, medida.latMediaS, medida.latMaxS, medida.usdPor1000, medida.cerOro ?? (medida.f1 !== undefined ? `F1 ${medida.f1.toFixed(3)}` : '—'), medida.folios ?? '', medida.errores]);
+    console.log(filas.at(-1)?.join(' | '));
+  }
+  decir('\n### Rendimiento: documento entero en paralelo\n');
+  decir(tabla(['doc', 'modelo', 'páginas', 'pliego', 'simultáneas', 'muro s', 's/página (muro)', 'lat. media s', 'lat. máx s', '$/1000 p', 'calidad', 'folios', 'errores'], filas));
+}
+
 const SECCIONES: Record<string, () => Promise<void>> = {
+  rendimiento: seccionRendimiento,
   lector: seccionLector, imagenes: seccionImagenes, embebedor: seccionEmbebedor, redactor: seccionRedactor,
   transcriptor: seccionTranscriptor, workers: seccionWorkers, openrouter: seccionOpenRouter, jev: seccionJev,
   cascada: seccionCascada, inteligencia: seccionInteligencia,

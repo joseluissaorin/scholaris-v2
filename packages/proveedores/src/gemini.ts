@@ -43,7 +43,21 @@ export interface ConfigGemini extends OpcionesComunes {
   cabeceras?: Record<string, string>;
 }
 
-type NivelPensamiento = 'minimal' | 'low' | 'medium' | 'high';
+/** «ninguno» = `thinkingBudget: 0` (lo admite gemini-3.8-flash; ~25 % menos de latencia en lectura). */
+type NivelPensamiento = 'ninguno' | 'minimal' | 'low' | 'medium' | 'high';
+
+const SIGUIENTE_NIVEL: Record<string, NivelPensamiento | null> = { ninguno: 'minimal', minimal: 'low', low: null, medium: null, high: null };
+
+export function configPensamiento(nivel: NivelPensamiento): Record<string, unknown> {
+  return nivel === 'ninguno' ? { thinkingBudget: 0 } : { thinkingLevel: nivel };
+}
+
+function nivelDe(tc: unknown): NivelPensamiento | undefined {
+  const t = tc as { thinkingLevel?: NivelPensamiento; thinkingBudget?: number } | undefined;
+  if (!t) return undefined;
+  if (t.thinkingBudget === 0) return 'ninguno';
+  return t.thinkingLevel;
+}
 type Resolucion = 'baja' | 'media' | 'alta';
 
 const RESOLUCION: Record<Resolucion, string> = {
@@ -106,39 +120,42 @@ export function crearGemini(config: ConfigGemini): ClienteGemini {
   const limitar = limitador(config.concurrencia ?? 16);
   const cabeceras = { 'x-goog-api-key': config.clave, ...(config.cabeceras ?? {}) };
   /** Modelos que han rechazado un nivel de pensamiento → el que aceptan. */
+  /** «modelo:nivel pedido» → nivel que el modelo acepta de verdad. */
   const pensamientoAceptado = new Map<string, NivelPensamiento | null>();
 
   const opcionesPeticion = (timeoutMs?: number): OpcionesComunes => ({ ...config, ...(timeoutMs ? { timeoutMs } : {}) });
 
+  /** Lectura y redacción rápida: sin pensar. Flash-Lite usa «minimal»; Flash, presupuesto 0. */
   function nivelPorDefecto(modelo: string): NivelPensamiento {
-    return /lite/.test(modelo) ? 'minimal' : 'low';
+    return /lite/.test(modelo) ? 'minimal' : 'ninguno';
   }
 
   async function generar(modelo: string, cuerpo: Record<string, unknown>, operacion: UsoProveedor['operacion'], extra: Partial<UsoProveedor> = {}, timeoutMs?: number) {
     const t0 = ahora();
     const gc = { ...((cuerpo.generationConfig as Record<string, unknown>) ?? {}) };
-    const tc = gc.thinkingConfig as { thinkingLevel?: NivelPensamiento } | undefined;
-    if (tc?.thinkingLevel && pensamientoAceptado.has(modelo)) {
-      const aceptado = pensamientoAceptado.get(modelo);
-      if (aceptado) gc.thinkingConfig = { thinkingLevel: aceptado }; else delete gc.thinkingConfig;
+    const nivelPedido = nivelDe(gc.thinkingConfig);
+    if (nivelPedido && pensamientoAceptado.has(`${modelo}:${nivelPedido}`)) {
+      const aceptado = pensamientoAceptado.get(`${modelo}:${nivelPedido}`);
+      if (aceptado) gc.thinkingConfig = configPensamiento(aceptado); else delete gc.thinkingConfig;
     }
     const llamar = (c: Record<string, unknown>) => limitar(() => pedir<RespuestaGenerar>({
       proveedor: 'gemini', url: `${base}/v1beta/models/${modelo}:generateContent`, cabeceras, cuerpo: c,
     }, opcionesPeticion(timeoutMs)));
-    let r: RespuestaGenerar;
-    try {
-      r = await llamar({ ...cuerpo, generationConfig: gc });
-    } catch (e) {
-      // Algunos modelos no admiten ciertos niveles de pensamiento («minimal» en Flash): se reintenta con el siguiente.
-      const nivel = (gc.thinkingConfig as { thinkingLevel?: NivelPensamiento } | undefined)?.thinkingLevel;
-      if (e instanceof ErrorProveedor && e.estado === 400 && nivel && /thinking/i.test(e.cuerpo ?? '')) {
-        const siguiente: NivelPensamiento | null = nivel === 'minimal' ? 'low' : null;
-        pensamientoAceptado.set(modelo, siguiente);
-        const gc2 = { ...gc };
-        if (siguiente) gc2.thinkingConfig = { thinkingLevel: siguiente }; else delete gc2.thinkingConfig;
-        r = await llamar({ ...cuerpo, generationConfig: gc2 });
-      } else throw e;
+    let r: RespuestaGenerar | undefined;
+    // Algunos modelos no admiten ciertos niveles de pensamiento («minimal» en Flash, presupuesto 0 en otros):
+    // se baja por la escalera ninguno → minimal → low → sin configuración, y se recuerda.
+    for (let intento = 0; intento < 4 && !r; intento++) {
+      try {
+        r = await llamar({ ...cuerpo, generationConfig: gc });
+      } catch (e) {
+        const nivel = nivelDe(gc.thinkingConfig);
+        if (!(e instanceof ErrorProveedor && e.estado === 400 && nivel && /thinking/i.test(e.cuerpo ?? ''))) throw e;
+        const siguiente = SIGUIENTE_NIVEL[nivel] ?? null;
+        if (nivelPedido) pensamientoAceptado.set(`${modelo}:${nivelPedido}`, siguiente);
+        if (siguiente) gc.thinkingConfig = configPensamiento(siguiente); else delete gc.thinkingConfig;
+      }
     }
+    if (!r) throw new ErrorProveedor('gemini', `${modelo} no acepta ninguna configuración de pensamiento`);
     const cand = r.candidates?.[0];
     const texto = (cand?.content?.parts ?? []).filter((p) => !p.thought && typeof p.text === 'string').map((p) => p.text).join('');
     const um = r.usageMetadata ?? {};
@@ -178,7 +195,7 @@ export function crearGemini(config: ConfigGemini): ClienteGemini {
           responseJsonSchema: ESQUEMA_PAGINAS,
           mediaResolution: RESOLUCION[o.resolucion ?? 'media'],
           maxOutputTokens: o.maxTokensSalida ?? 65_536,
-          thinkingConfig: { thinkingLevel: o.pensamiento ?? nivelPorDefecto(modelo) },
+          thinkingConfig: configPensamiento(o.pensamiento ?? nivelPorDefecto(modelo)),
         },
       };
       // Un pliego de 16 páginas densas puede tardar; el tiempo límite crece con las páginas.
@@ -294,7 +311,7 @@ export function crearGemini(config: ConfigGemini): ClienteGemini {
           role: m.rol === 'modelo' ? 'model' : 'user',
           parts: m.partes.map((p) => ('texto' in p ? { text: p.texto } : { inline_data: { mime_type: normalizarMime(p.mime), data: aBase64(p.bytes) } })),
         }));
-        const generationConfig: Record<string, unknown> = { thinkingConfig: { thinkingLevel: pet.calidad === 'alta' ? 'low' : nivelPorDefecto(modelo) } };
+        const generationConfig: Record<string, unknown> = { thinkingConfig: configPensamiento(pet.calidad === 'alta' ? 'low' : nivelPorDefecto(modelo)) };
         if (pet.temperatura !== undefined) generationConfig.temperature = pet.temperatura;
         if (pet.maxTokens !== undefined) generationConfig.maxOutputTokens = pet.maxTokens;
         if (pet.esquema) { generationConfig.responseMimeType = 'application/json'; generationConfig.responseJsonSchema = pet.esquema; }

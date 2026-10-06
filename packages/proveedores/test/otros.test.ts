@@ -26,12 +26,12 @@ describe('Workers AI', () => {
     const w = crearWorkersAI({ cuenta: 'C', token: 'T', fetch });
     const [p] = await w.lector().leerPliego({ imagenes: IMG(1), primeraFisica: 3 });
     expect(p?.fisica).toBe(3);
-    expect(llamadas[0]?.url).toBe('https://api.cloudflare.com/client/v4/accounts/C/ai/run/@cf/google/gemma-4-26b-a4b-it');
+    expect(llamadas[0]?.url).toBe('https://api.cloudflare.com/client/v4/accounts/C/ai/run/@cf/meta/llama-4-scout-17b-16e-instruct');
     expect(llamadas[0]?.cabeceras.authorization).toBe('Bearer T');
     const c = llamadas[0]?.cuerpo as { response_format: { type: string }; messages: Array<{ content: Array<{ type: string }> }> };
     expect(c.response_format.type).toBe('json_schema');
     expect(c.messages[0]?.content.map((x) => x.type)).toEqual(['text', 'text', 'image_url']);
-    expect(w.contador.total().usd).toBeCloseTo((900 * 0.1 + 300 * 0.3) / 1e6);
+    expect(w.contador.total().usd).toBeCloseTo((900 * 0.27 + 300 * 0.85) / 1e6);
   });
 
   it('el lector rechaza un PDF si el modelo no lo admite (la cascada pasa al siguiente)', async () => {
