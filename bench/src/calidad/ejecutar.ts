@@ -57,8 +57,26 @@ function sha(): string {
   } catch { return '?'; }
 }
 
-/** El sistema de producción: lo que monta la API (comprensión con plazo, Jev). */
-export const PRODUCCION: Sistema = { nombre: 'produccion', vias: ['lexica', 'densa', 'visual'], comprender: true, reordenador: 'jev' };
+/** El sistema de producción: lo que monta la API con los valores por defecto del buscador (sin comprensión, Jev). */
+export const PRODUCCION: Sistema = { nombre: 'produccion', vias: ['lexica', 'densa', 'visual'], comprender: false, reordenador: 'jev' };
+
+/**
+ * El buscador tal como estaba antes del banco (commit 2dc34b7), para medir la
+ * mejora con los mismos juicios: comprensión con plazo de 350 ms, k=60, pesos
+ * antiguos, fundir contiguos, 0,85 por unidad, léxica con todas las expansiones,
+ * Jev con 0,7 y la cita literal sola.
+ */
+export const ANTES: Sistema = {
+  nombre: 'antes', vias: ['lexica', 'densa', 'visual'], comprender: true, reordenador: 'jev',
+  ajustes: {
+    kRrf: 60, fundirContiguos: true, penalizacionUnidad: 0.85, pesoReordenador: 0.7, literalConAfines: false,
+    expansionesLexicas: ['parafrasis', 'enunciado', 'traduccion'],
+    pesos: {
+      conceptual: { lexica: 0.8, densa: 1.0, visual: 0.3 }, visual: { lexica: 0.4, densa: 0.6, visual: 1.0 },
+      cita: { lexica: 1.0, densa: 0.45, visual: 0.1 }, temporal: { lexica: 0.8, densa: 1.0, visual: 0.2 },
+    },
+  },
+};
 
 export async function evaluarSistema(m: Montaje, s: Sistema, consultas: Consulta[], plazo?: number): Promise<{ resumen: ResumenSistema; porConsulta: Record<string, MetricasConsulta & { ids: string[] }> }> {
   const juicios = cargarJuicios();
@@ -196,7 +214,7 @@ ${hist.join('\n')}
 export async function ejecutar(args: string[]): Promise<void> {
   const valor = (k: string) => { const i = args.indexOf(k); return i >= 0 ? args[i + 1] : undefined; };
   const nombres = valor('--sistemas')?.split(',');
-  const todos = [...SISTEMAS, PRODUCCION];
+  const todos = [ANTES, ...SISTEMAS, PRODUCCION];
   const sistemas = nombres ? todos.filter((s) => nombres.includes(s.nombre)) : todos;
   const principal = valor('--principal') ?? 'produccion';
   const m = montar();
@@ -211,7 +229,7 @@ export async function ejecutar(args: string[]): Promise<void> {
   const detalle: Record<string, unknown> = {};
   for (const s of sistemas) {
     // Producción: comprensión con su plazo real (350 ms), con la caché de disco del redactor.
-    const r = await evaluarSistema(m, s, consultas, s.nombre === 'produccion' ? 350 : undefined);
+    const r = await evaluarSistema(m, s, consultas, s.nombre === 'produccion' || s.nombre === 'antes' ? 350 : undefined);
     e.sistemas[s.nombre] = r.resumen;
     detalle[s.nombre] = r.porConsulta;
     console.error(`${s.nombre.padEnd(14)} nDCG@10 ${f3(r.resumen.ndcg10)}  R@20 ${f3(r.resumen.recall20)}  MRR ${f3(r.resumen.mrr)}  p50 ${r.resumen.msP50} ms  top10 juzgado ${pct(r.resumen.juzgados10)} %  repetidos ${r.resumen.repetidos}`);

@@ -156,7 +156,6 @@ export async function evaluarCitas(m: Montaje, sistema = 'completa'): Promise<Me
   const s = SISTEMAS.find((x) => x.nombre === sistema)!;
   const buscador = buscadorPara(m, s);
   const ancla = m.sql.bd.prepare('SELECT documento, unidad, ancla, ancla_fin, texto FROM fragmentos WHERE id = ?');
-  const unidadDe = (id: string) => (ancla.get(id) as { unidad: string } | undefined)?.unidad;
   const usd0 = m.contador.total().usd;
   const t0 = performance.now();
   let tp = 0, fp = 0, conAcierto = 0, apoyos = 0, indebidas = 0, inventadas = 0, verOk = 0;
@@ -167,15 +166,28 @@ export async function evaluarCitas(m: Montaje, sistema = 'completa'): Promise<Me
       verificarAfirmacion(a.texto, { buscador, juez: m.ia.juez }),
     ]);
     const citas = ac.afirmaciones.flatMap((x) => x.citas).filter((c) => c.estado === 'aceptada');
-    const oroUnidades = new Set(a.oro.map(unidadDe));
+    // Rango de páginas físicas de un fragmento o de una cita (las citas pueden fundir pasajes cercanos: «pp. 166-168»).
+    const rango = (ini: Ancla, fin?: Ancla | null): [number, number] | null =>
+      ini.tipo === 'pagina' ? [ini.fisica, fin?.tipo === 'pagina' ? fin.fisica : ini.fisica] : null;
+    const oro = a.oro.map((id) => ancla.get(id) as { documento: string; unidad: string; ancla: string; ancla_fin: string | null } | undefined).filter((x) => !!x);
     let acierto = false;
     const vistas: unknown[] = [];
     for (const c of citas) {
       const f = ancla.get(c.fragmento) as { documento: string; unidad: string; ancla: string; ancla_fin: string | null; texto: string } | undefined;
-      const inventada = !f || f.documento !== c.documento || JSON.stringify(JSON.parse(f.ancla)) !== JSON.stringify(c.ancla)
-        || (c.evidencia ? !contieneLiteral(f.texto, c.evidencia) : false);
+      const rc = rango(c.ancla as Ancla, c.anclaFin as Ancla | undefined);
+      const rf = f ? rango(JSON.parse(f.ancla) as Ancla, f.ancla_fin ? JSON.parse(f.ancla_fin) as Ancla : null) : null;
+      // Inventada: el fragmento no existe, es de otro documento, la cita no cubre sus páginas
+      // (o, si no es de páginas, el ancla no es la suya) o la evidencia no está literalmente en el pasaje.
+      const inventada = !f || f.documento !== c.documento
+        || (rc && rf ? !(rc[0] <= rf[0] && rf[1] <= rc[1]) : JSON.stringify(JSON.parse(f.ancla)) !== JSON.stringify(c.ancla))
+        || (c.evidencia ? !contieneLiteral(c.pasaje || f.texto, c.evidencia) : false);
       if (inventada) inventadas++;
-      const buena = !inventada && (a.oro.includes(c.fragmento) || oroUnidades.has(f!.unidad));
+      const buena = !inventada && (a.oro.includes(c.fragmento) || oro.some((o) => {
+        if (o.documento !== f!.documento) return false;
+        if (o.unidad === f!.unidad) return true;
+        const ro = rango(JSON.parse(o.ancla) as Ancla, o.ancla_fin ? JSON.parse(o.ancla_fin) as Ancla : null);
+        return !!(ro && rc && ro[0] <= rc[1] && rc[0] <= ro[1]);
+      }));
       if (a.tipo === 'negativa') indebidas++;
       else if (buena) { tp++; acierto = true; } else fp++;
       vistas.push({ fragmento: c.fragmento, donde: anclaACita(c.ancla as Ancla, c.anclaFin as Ancla | undefined), buena, inventada, respaldo: c.respaldo });

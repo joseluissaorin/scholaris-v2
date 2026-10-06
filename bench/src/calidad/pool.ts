@@ -22,7 +22,8 @@ export async function pool(args: string[]): Promise<void> {
   const m = montar();
   const consultas = cargarConsultas().filter((c) => !c.pagina);
   const previo: Pool = existsSync(RUTA_POOL) ? JSON.parse(readFileSync(RUTA_POOL, 'utf8')) as Pool : {};
-  for (const s of SISTEMAS) {
+  const { ANTES, PRODUCCION } = await import('./ejecutar.js');
+  for (const s of [ANTES, ...SISTEMAS, PRODUCCION]) {
     const b = buscadorPara(m, s);
     let hechas = 0;
     await enParalelo(consultas, 8, async (c) => {

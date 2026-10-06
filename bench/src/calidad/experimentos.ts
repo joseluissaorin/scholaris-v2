@@ -9,7 +9,7 @@ import { writeFileSync } from 'node:fs';
 import type { AjustesBusqueda } from '@scholaris/busqueda';
 import { join } from 'node:path';
 import { DIR_DATOS_CALIDAD } from './estanteria.js';
-import { evaluarSistema, PRODUCCION } from './ejecutar.js';
+import { evaluarSistema, medirLatencia, PRODUCCION } from './ejecutar.js';
 import { cargarConsultas, type Consulta } from './juego.js';
 import { montar, type Sistema } from './montaje.js';
 
@@ -75,6 +75,17 @@ function grupos(m: ReturnType<typeof montar>): Record<string, Sistema[]> {
       { ...C, nombre: 'mejor sin reord.', ajustes: MEJOR },
       ...reord.flatMap((r) => [0.5, 0.7, 0.9].map((w) => ({ ...C, nombre: `${r} ${w}`, reordenador: r, ajustes: { ...MEJOR, pesoReordenador: w } }))),
     ],
+    rapidez: [
+      { ...H, nombre: 'jev 30×2000', reordenador: 'jev' },
+      { ...H, nombre: 'jev 20×2000', reordenador: 'jev', opciones: { reordenarTop: 20 } },
+      { ...H, nombre: 'jev 30×1000', reordenador: 'jev', ajustes: { caracteresReordenar: 1000 } },
+      { ...H, nombre: 'jev 20×1000', reordenador: 'jev', opciones: { reordenarTop: 20 }, ajustes: { caracteresReordenar: 1000 } },
+      { ...H, nombre: 'jev 15×800', reordenador: 'jev', opciones: { reordenarTop: 15 }, ajustes: { caracteresReordenar: 800 } },
+      { ...H, nombre: 'jev margen 0,3', reordenador: 'jev', ajustes: { margenReordenar: 0.3 } },
+      { ...H, nombre: 'jev margen 0,5', reordenador: 'jev', ajustes: { margenReordenar: 0.5 } },
+      { ...H, nombre: 'jev10 30×2000', reordenador: 'jev10' },
+      { ...H, nombre: 'sin reordenar' },
+    ],
     produccion: [{ ...PRODUCCION }],
   };
 }
@@ -88,11 +99,16 @@ export async function experimentos(args: string[]): Promise<void> {
   const m = montar();
   const todas = cargarConsultas();
   const gs = grupos(m);
-  const elegidos = args.filter((a) => !a.startsWith('--'));
+  const elegidos = args.filter((a, i) => !a.startsWith('--') && args[i - 1] !== '--latencia');
   const nombres = elegidos.length ? elegidos : Object.keys(gs).filter((g) => g !== 'produccion');
   for (const g of nombres) {
     const lista = g === 'vista'
-      ? [{ ...C, nombre: 'L+D+V (texto)' }, { ...C, nombre: 'L+D (texto)', vias: ['lexica', 'densa'] } as Sistema]
+      ? [
+        { ...H, nombre: 'visual 0,3 (texto)', reordenador: 'jev', ajustes: { pesos: { conceptual: { visual: 0.3 }, temporal: { visual: 0.3 }, cita: { visual: 0.1 } } } },
+        { ...H, nombre: 'visual 0,3 sin reord. (texto)', ajustes: { pesos: { conceptual: { visual: 0.3 }, temporal: { visual: 0.3 }, cita: { visual: 0.1 } } } },
+        { ...H, nombre: 'sin visual (texto)', reordenador: 'jev', vias: ['lexica', 'densa'] },
+        { ...H, nombre: 'sin visual sin reord. (texto)', vias: ['lexica', 'densa'] },
+      ] as Sistema[]
       : gs[g];
     if (!lista) { console.error(`Grupo desconocido: ${g}`); continue; }
     const consultas = g === 'vista' ? consultasDeTexto(todas) : todas;
@@ -101,9 +117,13 @@ export async function experimentos(args: string[]): Promise<void> {
     for (const s of lista) {
       const r = await evaluarSistema(m, s, consultas);
       detalle[s.nombre] = r;
+      if (args.includes('--latencia')) {
+        const l = await medirLatencia(s, consultas.filter((c) => !c.pagina).slice(0, Number(args[args.indexOf('--latencia') + 1]) || 60));
+        r.resumen.msP50 = l.p50; r.resumen.msP95 = l.p95;
+      }
       const cl = r.resumen.porClase;
       const c = (k: string) => (cl[k]?.ndcg10 ?? 0).toFixed(3);
-      filas.push(`| ${s.nombre} | ${r.resumen.ndcg10.toFixed(3)} | ${r.resumen.recall20.toFixed(3)} | ${r.resumen.mrr.toFixed(3)} | ${c('es')} | ${c('en')} | ${c('interlingue')} | ${c('literal')} | ${c('conceptual')} | ${c('medio')} | ${c('cruzada')} | ${c('grafia')} | ${c('filtro')} | ${r.resumen.msP50} | ${(r.resumen.usdPorConsulta * 1000).toFixed(3)} |`);
+      filas.push(`| ${s.nombre} | ${r.resumen.ndcg10.toFixed(3)} | ${r.resumen.recall20.toFixed(3)} | ${r.resumen.mrr.toFixed(3)} | ${c('es')} | ${c('en')} | ${c('interlingue')} | ${c('literal')} | ${c('conceptual')} | ${c('medio')} | ${c('cruzada')} | ${c('grafia')} | ${c('filtro')} | ${r.resumen.msP50}${args.includes('--latencia') ? ` / ${r.resumen.msP95}` : ''} | ${(r.resumen.usdPorConsulta * 1000).toFixed(3)} |`);
       console.error(`  ${g} · ${s.nombre}: ${r.resumen.ndcg10.toFixed(3)}`);
     }
     console.log(`\n### ${g} (${consultas.length} consultas)\n\n| Sistema | nDCG@10 | R@20 | MRR | es | en | interl. | literal | concept. | medio | cruzada | grafía | filtro | ms p50 | m$ |\n|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|\n${filas.join('\n')}`);

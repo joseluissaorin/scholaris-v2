@@ -9,7 +9,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Agent, setGlobalDispatcher } from 'undici';
 import { Buscador, IndiceVectorialSQL, reordenadorConRedactor, type AjustesBusqueda, type OpcionesBusqueda, type Via } from '@scholaris/busqueda';
-import { crearInteligencia, crearWorkersAI, ContadorUso, type InteligenciaConUso } from '@scholaris/proveedores';
+import { crearInteligencia, crearJev, crearWorkersAI, ContadorUso, type InteligenciaConUso } from '@scholaris/proveedores';
 import type { Embebedor, Redactor, Reordenador } from '@scholaris/nucleo';
 import { cargarEntorno } from '../entorno.js';
 import { abrirEstanteria, DIR_DATOS_CALIDAD } from './estanteria.js';
@@ -106,6 +106,8 @@ export function montar(o: { cache?: boolean } = {}): Montaje {
   const indice = new IndiceVectorialSQL(sql, ia.embebedor.espacio);
   const redactor = cache ? redactorConCache(ia.redactor) : ia.redactor;
   const reordenadores: Record<string, Reordenador> = { jev: ia.reordenador, 'flash-lite': reordenadorConRedactor(ia.redactor) };
+  // Jev en peticiones de 10 pasajes en paralelo (unos 70 ms menos que 24 por petición).
+  if (env.TYPESAFE_API_KEY) reordenadores.jev10 = crearJev({ clave: env.TYPESAFE_API_KEY, contador, concurrencia: 16 }).reordenador({ pasajesPorPeticion: 10 });
   if (env.CLOUDFLARE_ACCOUNT_ID && env.CLOUDFLARE_API_TOKEN) {
     const w = crearWorkersAI({ cuenta: env.CLOUDFLARE_ACCOUNT_ID, token: env.CLOUDFLARE_API_TOKEN, contador });
     reordenadores['bge-m3'] = w.reordenador({ modelo: '@cf/baai/bge-m3' });
