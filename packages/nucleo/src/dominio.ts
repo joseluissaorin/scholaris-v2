@@ -108,8 +108,11 @@ export interface Autor {
 export interface MetadatosDocumento {
   titulo: string;
   subtitulo?: string;
+  /** Título de la obra en su lengua original (en traducciones). */
+  tituloOriginal?: string;
   autores: Autor[];
   editores?: Autor[];
+  traductores?: Autor[];
   anio?: number;
   /** Año de la edición original, si difiere (clave para la lógica temporal). */
   anioOriginal?: number;
@@ -296,6 +299,8 @@ export interface Progreso {
   mensaje?: string;
   /** Unidades ya leídas: permite que la interfaz enseñe páginas mientras se procesa. */
   unidadesListas?: number;
+  /** Unidades ya indexadas y buscables (al menos por texto). */
+  unidadesBuscables?: number;
   error?: string;
   /** Milisegundos desde el inicio. */
   transcurrido: number;
