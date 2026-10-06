@@ -64,6 +64,8 @@ export interface OpcionesResueltas {
   calidadJpeg: number;
   ladoMiniatura: number;
   hilos: number;
+  /** El número de hilos no lo fijó quien llama: se ajusta al tamaño del documento. */
+  hilosAuto: boolean;
   recortarFiguras: boolean;
   paginas: number[] | null;
   tramo: number;
@@ -83,6 +85,7 @@ export function resolverOpciones(o: OpcionesConversion, plataforma: Plataforma):
     calidadJpeg: o.calidadJpeg ?? 0.8,
     ladoMiniatura: o.ladoMiniatura ?? 240,
     hilos: o.hilos ?? plataforma.hilosPorDefecto(),
+    hilosAuto: o.hilos === undefined,
     recortarFiguras: o.recortarFiguras ?? false,
     paginas: o.paginas ?? null,
     tramo: o.tramo ?? 600,

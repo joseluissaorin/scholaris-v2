@@ -70,7 +70,17 @@ export function pdfjsNavegador(): Promise<typeof import('pdfjs-dist')> {
   pdfjsCargado ??= (async () => {
     // Importar el worker de pdf.js define globalThis.pdfjsWorker: pdf.js analiza
     // en este mismo hilo (que ya es un Web Worker) en vez de crear otro.
-    await import('pdfjs-dist/build/pdf.worker.mjs');
+    // Truco: el módulo del worker de pdf.js se engancha a `self` si cree estar
+    // en un Web Worker propio (y manda un «ready» que ensucia nuestro canal).
+    // Con `window` definido mientras se evalúa, no lo hace.
+    const g = globalThis as { window?: unknown };
+    const habia = 'window' in g;
+    if (!habia) g.window = globalThis;
+    try {
+      await import('pdfjs-dist/build/pdf.worker.mjs');
+    } finally {
+      if (!habia) delete g.window;
+    }
     return import('pdfjs-dist');
   })();
   return pdfjsCargado;
@@ -85,6 +95,8 @@ export function parametrosPdfjsNavegador(): Record<string, unknown> {
     wasmUrl: `${r}wasm/`,
     CanvasFactory: FabricaLienzoOffscreen,
     FilterFactory: FiltrosNulos,
+    // pdf.js lo calcula mirando document.baseURI, que en un worker no existe.
+    useWorkerFetch: true,
     isEvalSupported: false,
     // Sin document no hay FontFace en el DOM: los glifos se dibujan como trazos.
     disableFontFace: true,

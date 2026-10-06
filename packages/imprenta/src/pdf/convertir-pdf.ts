@@ -72,7 +72,13 @@ export async function convertirPdf(ctx: Contexto, bytes: Uint8Array, origen: Ori
   await ctx.emitir({ tipo: 'inicio', entrada: 'pdf', origen, unidades: total, metadatos });
 
   const lista = (op.paginas ?? Array.from({ length: total }, (_, i) => i + 1)).filter((p) => p >= 1 && p <= total);
-  const hilos = Math.min(op.hilos, lista.length);
+  // Arrancar un trabajador cuesta (pdf.js + el documento): uno por cada ~25
+  // páginas como mucho; con pocos, en este mismo hilo.
+  let hilos = Math.min(op.hilos, lista.length);
+  if (op.hilosAuto) {
+    hilos = Math.min(hilos, Math.ceil(lista.length / 25));
+    if (hilos <= 1) hilos = 0;
+  }
   const motor = hilos > 0 ? await ctx.medir('trabajadores', () => plataforma.motorPdf(bytes, hilos)) : motorLocal(plataforma, lib, doc);
   const opPagina: OpcionesPaginaCruda = {
     ladoEscaneada: op.ladoEscaneada,
