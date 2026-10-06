@@ -537,6 +537,34 @@ export async function consolidar(
   const figurasP = pasoFiguras(paquete, unidades, puertos.fuente, ia.redactor, { reloj, describir: ctx.opciones.describirFiguras !== false, ...(meta.idioma ? { idioma: meta.idioma } : {}), contexto: `«${meta.titulo}»` });
   figurasP.catch(() => undefined);
 
+  // Lo que no existía en ninguna tanda (las costuras; en los medios, todo) se empieza ya:
+  // su contexto y sus vectores no dependen de que las tandas terminen de enriquecerse.
+  const textosProvisionales = new Set(provisionales.map((p) => p.texto));
+  const nuevos = new Set(finales.filter((f) => medio || !textosProvisionales.has(f.texto)));
+  finales.forEach((f, i) => { f.orden = i; if (nuevos.has(f)) f.id = `${documento}:c${huellaCorta(`${i}|${f.seccion.join('›')}|${f.texto}`)}`; });
+  const tiemposVector = new Map<string, number>();
+  for (const f of finales) if (f.ancla.tipo === 'tiempo') tiemposVector.set(f.id, f.ancla.t0);
+  const metaFija = meta;
+  const adelanto = (async () => {
+    const lista = [...nuevos];
+    if (!lista.length) return;
+    const t = reloj();
+    if (!ctx.opciones.sinContexto) {
+      const r = await pasoContexto(lista, metaFija, ia.redactor, { concurrencia: plan.concurrencia, reloj, limiteMs: 20_000 });
+      let extractivos = 0;
+      for (const f of lista) {
+        f.contexto = r.contextos[f.id] ?? '';
+        if (!f.contexto) { f.contexto = contextoExtractivo(f, metaFija); extractivos++; }
+      }
+      procedencia.push({ ...r.procedencia, detalle: { ...r.procedencia.detalle, extractivos, que: 'nuevos' } });
+    }
+    const doc = { ...documentoProvisional(ctx), metadatos: metaFija };
+    const v = await vectorizarYGuardar(ctx, lista.map((f) => ({ objetivo: 'fragmento' as const, id: f.id, texto: textoVectorizable(f) })), doc, tiemposVector);
+    procedencia.push(...v.procedencia.map((p) => ({ ...p, detalle: { ...p.detalle, que: 'fragmentos-nuevos' } })));
+    marca('nuevos', t);
+  })();
+  adelanto.catch(() => undefined);
+
   // Reconciliar con los provisionales, ya enriquecidos: mismo texto y sección → mismo id, contexto y vectores.
   if (extras.esperarTandas) {
     tm = reloj();
@@ -556,7 +584,7 @@ export async function consolidar(
   const pendientesVector = new Set<string>();
   let reaprovechados = 0;
   finales.forEach((f, i) => {
-    f.orden = i;
+    if (nuevos.has(f)) return;
     const p = medio ? undefined : porClave.get(f.texto);
     if (p && !usados.has(p.id)) {
       usados.add(p.id);
@@ -570,11 +598,7 @@ export async function consolidar(
       else reaprovechados++;
     } else {
       f.id = `${documento}:c${huellaCorta(`${i}|${f.seccion.join('›')}|${f.texto}`)}`;
-      // Una costura (cola de una tanda + cabo de la siguiente) cuenta lo mismo que su cola:
-      // se reaprovecha su línea de contexto y solo se vuelve a vectorizar.
-      const cabeza = f.texto.slice(0, 160);
-      const madre = medio || cabeza.length < 60 ? undefined : provisionales.find((q) => q.contexto && !usados.has(q.id) && q.seccion.join('›') === f.seccion.join('›') && (q.texto.startsWith(cabeza) || f.texto.startsWith(q.texto.slice(0, 160))));
-      if (madre) f.contexto = madre.contexto; else pendientesContexto.push(f);
+      pendientesContexto.push(f);
       pendientesVector.add(f.id);
     }
   });
@@ -593,6 +617,7 @@ export async function consolidar(
   }
   marca('contexto', tm);
 
+  await adelanto;
   // Escribir: unidades definitivas, secciones, fragmentos (orden final), fuera los provisionales sobrantes.
   tm = reloj();
   const idUnidad = (orden: number) => idUnidadDe(documento, orden);
@@ -627,8 +652,6 @@ export async function consolidar(
 
   // Vectores de lo nuevo, figuras (y sus vectores), y en medios, fotogramas.
   tm = reloj();
-  const tiemposVector = new Map<string, number>();
-  for (const f of finales) if (f.ancla.tipo === 'tiempo') tiemposVector.set(f.id, f.ancla.t0);
   const vf = await vectorizarYGuardar(ctx, finales.filter((f) => pendientesVector.has(f.id)).map((f) => ({ objetivo: 'fragmento' as const, id: f.id, texto: textoVectorizable(f) })), documentoFinal, tiemposVector);
   procedencia.push(...vf.procedencia.map((p) => ({ ...p, detalle: { ...p.detalle, que: 'fragmentos-consolidacion' } })));
   const fig = await figurasP;
