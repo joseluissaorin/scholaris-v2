@@ -467,5 +467,7 @@ export function normalizarLectura(l: Partial<MetadatosDocumento>): Partial<Metad
   if (r.doi) { const d = limpiarDoi(r.doi); if (d) r.doi = d; else delete r.doi; }
   if (r.idioma) r.idioma = r.idioma.toLowerCase().slice(0, 5);
   if (r.titulo) r.titulo = limpiarTitulo(r.titulo);
+  // Un «resumen» de cuatro palabras es una lista de materias, no un resumen.
+  if (r.resumen && r.resumen.split(/\s+/).length < 8) delete r.resumen;
   return r;
 }

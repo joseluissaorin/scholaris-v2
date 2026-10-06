@@ -112,7 +112,7 @@ export async function ejecutarIngesta(paquete: PaqueteConversion, puertos: Puert
   const vectorizarEnTodos = async (piezas: PiezaVector[], etiqueta: string) => {
     if (!piezas.length) return;
     const t0 = reloj();
-    const ps = await Promise.all(embebedores.map((e) => vectorizar(piezas, e, puertos.fuente, guardar, { concurrencia: 8, reloj })));
+    const ps = await Promise.all(embebedores.map((e) => vectorizar(piezas, e, puertos.fuente, guardar, { concurrencia: 16, loteTexto: 50, loteImagen: 8, reloj })));
     procedencia.push(...ps.map((p) => ({ ...p, detalle: { ...p.detalle, que: etiqueta } })));
     tiempos[`vectores:${etiqueta}`] = reloj() - t0;
   };

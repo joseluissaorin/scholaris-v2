@@ -5,6 +5,8 @@
  *   pnpm bench comparar [etiqueta…]
  */
 
+import { existsSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { Agent, setGlobalDispatcher } from 'undici';
 import { ingerir, type OpcionesBanco } from './ingesta.js';
 
@@ -38,7 +40,9 @@ function opciones(args: string[]): { posicionales: string[]; o: OpcionesBanco } 
 
 if (orden === 'ingesta') {
   const { posicionales, o } = opciones(resto);
-  for (const ruta of posicionales) {
+  for (const r of posicionales) {
+    // `pnpm bench` corre dentro de bench/: las rutas relativas se resuelven desde donde se lanzó.
+    const ruta = existsSync(r) ? r : resolve(process.env.INIT_CWD ?? '.', r);
     const inf = await ingerir(ruta, o);
     console.log(JSON.stringify({ etiqueta: inf.etiqueta, ms: inf.ms, usd: inf.usd, unidades: inf.unidades, fragmentos: inf.fragmentos, folios: inf.folios, titulo: inf.metadatos.titulo }, null, 2));
   }
