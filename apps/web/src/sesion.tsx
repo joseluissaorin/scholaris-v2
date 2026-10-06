@@ -20,6 +20,8 @@ export const useSesion = () => useContext(Contexto);
 const SesionClerk = lazy(() => import('./sesion-clerk'));
 
 export function claveClerk(config: ConfigPublica): string | undefined {
+  // En local manda el servidor: una clave de Clerk horneada en la web no debe colarse (el modo sin conexión no tiene Clerk).
+  if (config.modo === 'local') return config.clerkPublishableKey;
   return config.clerkPublishableKey ?? (import.meta.env.VITE_CLERK_PUBLISHABLE_KEY as string | undefined);
 }
 

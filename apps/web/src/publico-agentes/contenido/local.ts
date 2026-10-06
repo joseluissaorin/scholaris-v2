@@ -10,7 +10,7 @@ export const local: Pagina = {
   es: {
     titulo: 'Scholaris en tu ordenador o en tu propia cuenta de Cloudflare',
     corto: 'Versión local',
-    descripcion: 'La misma aplicación con SQLite y tu disco: en Node, en Docker, como ejecutable de escritorio o desplegada en tu cuenta de Cloudflare. Qué se queda en tu máquina y qué sigue necesitando la nube.',
+    descripcion: 'La misma aplicación con SQLite y tu disco: en Node, en Docker, como ejecutable de escritorio o desplegada en tu cuenta de Cloudflare. Qué se queda en tu máquina y cómo funciona sin conexión.',
     md: `## Cuatro maneras
 
 La instancia de [scholaris.joseluissaorin.com](/acerca) es la versión alojada, la que se paga con el plan Pro. El mismo código funciona también en tu ordenador:
@@ -18,7 +18,7 @@ La instancia de [scholaris.joseluissaorin.com](/acerca) es la versión alojada, 
 | Cómo | Qué es | Dónde quedan tus datos |
 | --- | --- | --- |
 | Node | La misma API sobre Node, SQLite (con sqlite-vec para los vectores) y el disco, con una cola que se reanuda si se corta; escucha en el puerto 8790 | La carpeta que elijas |
-| Docker | Lo mismo en un contenedor con ffmpeg; una variante añade InferBox, un servidor de modelos con GPU NVIDIA | Un volumen de Docker |
+| Docker | Lo mismo en un contenedor con ffmpeg; una variante lo monta sin conexión con sus modelos (Ollama, EmbeddingGemma 2 y Whisper), con o sin GPU NVIDIA | Un volumen de Docker |
 | Escritorio | Un solo ejecutable (Bun) para macOS, Windows y Linux, con la web dentro, que abre el navegador al arrancar | ~/Scholaris |
 | Tu cuenta de Cloudflare | Un guion crea la base de datos, el almacenamiento, el índice de vectores y la cola, y despliega el Worker (necesita Workers de pago) | Tu cuenta |
 
@@ -30,18 +30,23 @@ El código se publicará con licencia **EUPL-1.2** en [${REPO.replace('https://'
 
 ## Qué se queda en tu máquina y qué no
 
-En la versión local, **tus ficheros, tu biblioteca, los vectores y el índice viven en tu disco**. Pero Scholaris no funciona del todo sin conexión: para leer páginas necesita al menos un lector en la nube.
+En la versión local, **tus ficheros, tu biblioteca, los vectores y el índice viven en tu disco**. La inteligencia se elige:
+
+- **Con tus claves** (Gemini; OpenRouter, TypeSafe y Workers AI opcionales): lo más rápido y lo más fiel. Las páginas, el audio y los pasajes van a esos proveedores, con sus condiciones.
+- **Sin conexión** (\`SCHOLARIS_SIN_CONEXION=1\`): ninguna clave de nube. Todo corre en tu máquina o en tu red y nada sale a internet; una guardia de red bloquea y anota cualquier intento, y una prueba de punta a punta lo comprueba.
 
 | Pieza | Sin conexión | Con un proveedor en la nube |
 | --- | --- | --- |
-| Leer páginas (escaneados, fotos, diapositivas) | No hay lector local todavía | Gemini, OpenRouter (Mistral OCR) o Workers AI |
-| Vectores | InferBox (Qwen3-VL Embedding, 2048 dimensiones) | Gemini Embedding 2 |
-| Reordenar y juzgar | InferBox | Jev (TypeSafe) o Workers AI |
-| Transcribir | InferBox | Gemini Transcribe o Whisper en Workers AI |
-| Redactar respuestas | InferBox | Gemini u OpenRouter |
-| Buscar y citar sobre lo ya leído | Sí: la búsqueda por palabras siempre; la de sentido, con InferBox | |
+| Leer páginas (escaneados, fotos, diapositivas) | Un modelo de visión propio: Qwen3-VL 8B Instruct en Ollama, llama.cpp o vLLM | Gemini, OpenRouter (Mistral OCR) o Workers AI |
+| Vectores | EmbeddingGemma 2 (texto, imagen, audio y vídeo, 768 dimensiones), en un servidor propio o en InferBox | Gemini Embedding 2 |
+| Reordenar | bge-reranker-v2-m3 | Jev (TypeSafe) o Workers AI |
+| Juzgar citas y redactar | El mismo modelo de visión, con probabilidades de los logprobs | Jev, Gemini u OpenRouter |
+| Transcribir | Whisper large-v3-turbo (whisper.cpp) o Parakeet en InferBox | Gemini Transcribe o Whisper en Workers AI |
+| Fichas bibliográficas | Solo lo que dice el documento (los catálogos en línea se abren con \`SCHOLARIS_CATALOGOS=1\`) | Crossref, OpenAlex, Open Library, Wikidata |
 
-La clave de Gemini es la única obligatoria en la práctica; las de OpenRouter y TypeSafe, Workers AI y OpenAlex son opcionales. Lo que sí funciona del todo sin conexión es **abrir y buscar un .spdf ya leído** con el SDK de Python (ver [El formato SPDF](/saber/spdf)).
+Lo que cuesta, medido en un Mac con M4 Max: una página escaneada del siglo XVIII tarda unos 26 s (la nube lee el libro entero en 13-20 s), con un CER de 0,06 en la página transcrita a mano frente a 0,006 con Gemini; 19 minutos de audio quedan listos en 2 min 34 s; la búsqueda da 0,804 de nDCG@10 frente a 0,899; y las citas que acepta son todas correctas y ninguna inventada, aunque deja sin cita más afirmaciones que la nube (61,5 % de exhaustividad frente a 100 %). Solo con CPU, leer escaneados se mide en minutos por página. El informe completo, con cómo reproducirlo, está en el repositorio (\`packages/proveedores/SIN-CONEXION.md\`), y el Docker de todo junto en \`deploy/docker/compose.sin-conexion.yml\`.
+
+Además, **abrir y buscar un .spdf ya leído** funciona sin nada de lo anterior, con el SDK de Python (ver [El formato SPDF](/saber/spdf)).
 
 ## Lo mismo por fuera
 
@@ -51,7 +56,7 @@ La versión local habla la misma API (v1 y v2) y el mismo MCP que la nube, así 
   en: {
     titulo: 'Scholaris on your computer, or in your own Cloudflare account',
     corto: 'Self-hosting',
-    descripcion: 'The same app with SQLite and your disk: on Node, in Docker, as a desktop executable or deployed to your Cloudflare account. What stays on your machine and what still needs the cloud.',
+    descripcion: 'The same app with SQLite and your disk: on Node, in Docker, as a desktop executable or deployed to your Cloudflare account. What stays on your machine and how it works offline.',
     md: `## Four ways
 
 The instance at [scholaris.joseluissaorin.com](/en) is the hosted version, the one paid for with the Pro plan. The same code also runs on your computer:
@@ -59,7 +64,7 @@ The instance at [scholaris.joseluissaorin.com](/en) is the hosted version, the o
 | How | What it is | Where your data lives |
 | --- | --- | --- |
 | Node | The same API on Node, SQLite (with sqlite-vec for vectors) and the disk, with a queue that resumes if interrupted; listens on port 8790 | The folder you choose |
-| Docker | The same in a container with ffmpeg; a variant adds InferBox, a model server with an NVIDIA GPU | A Docker volume |
+| Docker | The same in a container with ffmpeg; a variant runs it offline with its models (Ollama, EmbeddingGemma 2 and Whisper), with or without an NVIDIA GPU | A Docker volume |
 | Desktop | A single executable (Bun) for macOS, Windows and Linux, with the web app inside, that opens the browser on start | ~/Scholaris |
 | Your Cloudflare account | A script creates the database, storage, vector index and queue, and deploys the Worker (needs paid Workers) | Your account |
 
@@ -71,18 +76,23 @@ The code will be published under the **EUPL-1.2** at [${REPO.replace('https://',
 
 ## What stays on your machine and what does not
 
-In the home version, **your files, your library, the vectors and the index live on your disk**. But Scholaris does not work fully offline: to read pages it needs at least one cloud reader.
+In the home version, **your files, your library, the vectors and the index live on your disk**. You choose where the intelligence runs:
+
+- **With your keys** (Gemini; OpenRouter, TypeSafe and Workers AI optional): the fastest and most faithful. Pages, audio and passages go to those providers, under their terms.
+- **Offline** (\`SCHOLARIS_SIN_CONEXION=1\`): no cloud key at all. Everything runs on your machine or your network and nothing goes out to the internet; a network guard blocks and logs any attempt, and an end-to-end test checks it.
 
 | Piece | Offline | With a cloud provider |
 | --- | --- | --- |
-| Reading pages (scans, photos, slides) | No local reader yet | Gemini, OpenRouter (Mistral OCR) or Workers AI |
-| Vectors | InferBox (Qwen3-VL Embedding, 2048 dimensions) | Gemini Embedding 2 |
-| Reranking and judging | InferBox | Jev (TypeSafe) or Workers AI |
-| Transcribing | InferBox | Gemini Transcribe or Whisper on Workers AI |
-| Drafting answers | InferBox | Gemini or OpenRouter |
-| Searching and citing what is already read | Yes: word search always; search by meaning, with InferBox | |
+| Reading pages (scans, photos, slides) | Your own vision model: Qwen3-VL 8B Instruct on Ollama, llama.cpp or vLLM | Gemini, OpenRouter (Mistral OCR) or Workers AI |
+| Vectors | EmbeddingGemma 2 (text, image, audio and video, 768 dimensions), on its own server or on InferBox | Gemini Embedding 2 |
+| Reranking | bge-reranker-v2-m3 | Jev (TypeSafe) or Workers AI |
+| Judging citations and drafting | The same vision model, with probabilities from logprobs | Jev, Gemini or OpenRouter |
+| Transcribing | Whisper large-v3-turbo (whisper.cpp) or Parakeet on InferBox | Gemini Transcribe or Whisper on Workers AI |
+| Bibliographic records | Only what the document says (online catalogues open with \`SCHOLARIS_CATALOGOS=1\`) | Crossref, OpenAlex, Open Library, Wikidata |
 
-In practice the Gemini key is the only required one; OpenRouter, TypeSafe, Workers AI and OpenAlex are optional. What does work fully offline is **opening and searching an .spdf that has already been read** with the Python SDK (see [The SPDF format](/en/knowledge/spdf)).
+What it costs, measured on an M4 Max Mac: an eighteenth-century scanned page takes about 26 s (the cloud reads the whole book in 13-20 s), with a CER of 0.06 on the hand-transcribed page against 0.006 with Gemini; 19 minutes of audio are ready in 2 min 34 s; search scores 0.804 nDCG@10 against 0.899; and every citation it accepts is correct and none is invented, though it leaves more claims without a citation than the cloud does (61.5 % recall against 100 %). On CPU alone, reading scans takes minutes per page. The full report, with how to reproduce it, is in the repository (\`packages/proveedores/SIN-CONEXION.md\`), and the all-in-one Docker setup in \`deploy/docker/compose.sin-conexion.yml\`.
+
+On top of that, **opening and searching an .spdf that has already been read** works with none of the above, through the Python SDK (see [The SPDF format](/en/knowledge/spdf)).
 
 ## The same from outside
 

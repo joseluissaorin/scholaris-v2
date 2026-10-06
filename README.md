@@ -89,16 +89,41 @@ Scholaris no trae inteligencia propia: la pone quien lo instala, con sus claves,
 
 | Clave | ¿Hace falta? | Para qué |
 |---|---|---|
-| `GEMINI_API_KEY` ([Google AI Studio](https://aistudio.google.com/apikey)) | **Sí** | Leer páginas y escaneados, vectores de búsqueda (Gemini Embedding), transcribir audio y vídeo, metadatos, respuestas |
+| `GEMINI_API_KEY` ([Google AI Studio](https://aistudio.google.com/apikey)) | **Sí**, salvo [sin conexión](#sin-conexión) | Leer páginas y escaneados, vectores de búsqueda (Gemini Embedding), transcribir audio y vídeo, metadatos, respuestas |
 | `OPENROUTER_API_KEY` | No | Lector y redactor de reserva cuando Gemini falla o está saturado |
 | `TYPESAFE_API_KEY` (Jev) | No, pero mejora mucho la búsqueda | Reordenador y juez de citas (en el banco, +0,07 de nDCG@10) |
 | `CLOUDFLARE_ACCOUNT_ID` + `CLOUDFLARE_API_TOKEN` (Workers AI) | No | Whisper para transcribir barato, lector y reordenador de reserva |
 | `OPENALEX_API_KEY` | No | Completar y comprobar fichas bibliográficas (Crossref y Wikidata no piden clave) |
-| `INFERBOX_URL` + `INFERBOX_API_KEY` | No | Un servidor de inferencia propio con GPU: vectores, transcripción, reordenador y redacción en casa |
+| `INFERBOX_URL` + `INFERBOX_API_KEY` | No | [InferBox](https://github.com/joseluissaorin/InferBox), un servidor de inferencia propio con GPU: con claves de nube, añade un segundo espacio vectorial y sirve de reserva para transcribir, reordenar y redactar; [sin conexión](#sin-conexión), puede llevar toda la inteligencia |
 
-Basta con una de estas combinaciones: **Gemini sola**; **OpenRouter con un InferBox**; o **Workers AI** (`CLOUDFLARE_ACCOUNT_ID` y `CLOUDFLARE_API_TOKEN`). TypeSafe solo añade el reordenador y el juez.
+Basta con una de estas combinaciones: **Gemini sola**; **OpenRouter con un InferBox**; **Workers AI** (`CLOUDFLARE_ACCOUNT_ID` y `CLOUDFLARE_API_TOKEN`); o **ninguna clave**, [sin conexión](#sin-conexión), con tus propios modelos. TypeSafe solo añade el reordenador y el juez.
 
-**Sin conexión, hoy no.** Tus datos viven en tu disco, pero el servidor necesita al menos un lector en la nube (Gemini, OpenRouter o Workers AI) para arrancar la inteligencia: sin ninguno, ni la ingesta ni la búsqueda funcionan. Un InferBox se encarga en casa de los vectores, la transcripción, el reordenador y la redacción, pero no lee páginas. Lo que sí es tuyo sin red es el formato: cada `.spdf` es un SQLite que se abre, se lee y se busca sin Scholaris (con `sqlite3` o con `scholaris.v2.spdf4` del SDK de Python).
+#### Sin conexión
+
+Con `SCHOLARIS_SIN_CONEXION=1`, Scholaris no usa ninguna clave de nube (aunque estén puestas) y toda la inteligencia corre en servidores de tu propia red: lee las páginas con un modelo de visión, vectoriza, reordena, transcribe, juzga y redacta sin que nada salga de tu máquina. La versión local pone además una guardia de red que bloquea y anota cualquier petición a internet; el banco y una prueba de punta a punta comprueban que no se hace ninguna. Sin catálogos en línea, la ficha bibliográfica sale solo del documento (`SCHOLARIS_CATALOGOS=1` abre OpenAlex, Crossref, Open Library y Wikidata a sabiendas: sale el título y los autores, nunca el texto), y no hay Clerk ni YouTube por URL.
+
+| Variable | Qué |
+|---|---|
+| `SCHOLARIS_SIN_CONEXION=1` | Activa el modo. Toda URL tiene que ser local (localhost, red privada, Tailscale, servicio de Docker o `.local`); si no, no arranca |
+| `INFERENCIA_URL` | El servidor de chat y visión: Ollama, llama.cpp, vLLM, LM Studio o InferBox (`INFERENCIA_SABOR` si no se deduce del puerto) |
+| `INFERENCIA_MODELO_LECTOR` | El modelo de visión que lee las páginas; también redacta y juzga si no pones `INFERENCIA_MODELO_REDACTOR` ni `INFERENCIA_MODELO_JUEZ` |
+| `INFERENCIA_EMBEBEDOR_URL` | El servidor de vectores con EmbeddingGemma 2 ([`deploy/inferencia/embeddinggemma2`](deploy/inferencia/embeddinggemma2)) |
+| `INFERENCIA_REORDENADOR_URL` | Un `/v1/rerank` (el mismo servidor de vectores con bge-reranker-v2-m3, o llama.cpp con `--reranking`) |
+| `INFERENCIA_TRANSCRIPCION_URL` | Whisper con el formato de OpenAI (whisper.cpp, faster-whisper-server) o el `/v1/transcribe` de InferBox (Whisper o Parakeet) |
+| `INFERENCIA_CLAVE`, `INFERENCIA_DIMS`, `INFERENCIA_CONCURRENCIA` | Clave del servidor, dimensiones (768, 512, 256 o 128) y peticiones a la vez |
+
+Los modelos recomendados, todos con licencia abierta: **Qwen3-VL 8B Instruct** para leer (la variante «-instruct»: la que piensa no deja apagar el razonamiento), **EmbeddingGemma 2** de Google DeepMind para los vectores (texto, imagen, audio y vídeo en un solo espacio de 768 dimensiones; Ollama solo lo sirve para texto, por eso va en su propio servidor), **bge-reranker-v2-m3** para reordenar y **Whisper large-v3-turbo** (o Parakeet en InferBox) para transcribir. Con Docker, todo junto:
+
+```bash
+docker compose -f deploy/docker/compose.yml -f deploy/docker/compose.sin-conexion.yml up -d
+docker compose -f deploy/docker/compose.yml -f deploy/docker/compose.sin-conexion.yml run --rm modelos   # la primera vez
+```
+
+(con GPU NVIDIA, añade `-f deploy/docker/compose.sin-conexion.gpu.yml`). La primera vez se bajan unos 9 GB de modelos; después puedes desenchufar la red.
+
+Lo que cuesta, medido en un Mac con M4 Max ([informe completo](packages/proveedores/SIN-CONEXION.md)): una página escaneada del siglo XVIII tarda unos 26 s en leerse (la nube lee el libro entero en 13-20 s), con un CER de 0,06 en la página transcrita a mano (Gemini: 0,006); 19 minutos de audio quedan listos en 2 min 34 s, con un 2,2 % de diferencia de palabras respecto a la transcripción de Gemini; la búsqueda da 0,804 de nDCG@10 frente a 0,899 en la nube; y las citas que acepta son todas correctas, sin ninguna inventada, aunque deja sin cita 5 de las 13 afirmaciones que la tienen. Solo con CPU, los vectores y la transcripción van bien, pero leer escaneados se mide en minutos por página.
+
+Y el formato sigue siendo tuyo sin red: cada `.spdf` es un SQLite que se abre, se lee y se busca sin Scholaris (con `sqlite3` o con `scholaris.v2.spdf4` del SDK de Python).
 
 ### 1. En tu ordenador, con Node
 
@@ -128,7 +153,7 @@ docker run -d --name scholaris -p 8790:8790 -v scholaris-datos:/data \
   -e GEMINI_API_KEY=tu-clave ghcr.io/joseluissaorin/scholaris:latest
 ```
 
-Con una GPU NVIDIA, [InferBox](https://github.com/joseluissaorin/InferBox) se construye desde su repositorio y pone en casa vectores, transcripción, reordenador y redacción (pon `INFERBOX_API_KEY` en el `.env`):
+Para no depender de ninguna nube, mira [Sin conexión](#sin-conexión) (`compose.sin-conexion.yml`). Con una GPU NVIDIA y claves de nube, [InferBox](https://github.com/joseluissaorin/InferBox) se construye desde su repositorio y pone en casa vectores, transcripción, reordenador y redacción (pon `INFERBOX_API_KEY` en el `.env`):
 
 ```bash
 docker compose -f deploy/docker/compose.yml -f deploy/docker/compose.gpu.yml up -d --build

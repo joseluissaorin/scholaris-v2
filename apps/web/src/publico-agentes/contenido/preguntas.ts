@@ -54,7 +54,7 @@ Solo si la compartes: invitando a alguien por correo o creando un enlace públic
 
 ### ¿Puedo usarlo sin conexión?
 
-En parte. La versión local guarda todo en tu ordenador y, con InferBox, hace allí los vectores, la transcripción y las respuestas; pero para leer páginas necesita todavía un proveedor en la nube. Lo que sí funciona del todo sin conexión es abrir y buscar un .spdf ya leído con el SDK de Python. Ver [Versión local](/saber/version-local).
+Sí, con la versión local en modo sin conexión: lee las páginas con un modelo de visión abierto (Qwen3-VL), hace los vectores con EmbeddingGemma 2, transcribe con Whisper y juzga las citas con modelos que corren en tu ordenador o en tu red, sin ninguna clave de nube y sin que nada salga a internet. Es más lento (unos 26 s por página escaneada en un Mac con M4 Max, frente a segundos para el libro entero en la nube) y algo menos fino, y sin red no se consultan los catálogos bibliográficos. Además, abrir y buscar un .spdf ya leído funciona sin nada de eso, con el SDK de Python. Ver [Versión local](/saber/version-local).
 
 ### ¿Es de código abierto?
 
@@ -131,7 +131,7 @@ Only if you share it: by inviting someone by email or creating a public link, wh
 
 ### Can I use it offline?
 
-Partly. The home version keeps everything on your computer and, with InferBox, computes vectors, transcripts and answers there; but it still needs a cloud provider to read pages. What does work fully offline is opening and searching an .spdf that has already been read, with the Python SDK. See [Self-hosting](/en/knowledge/self-hosting).
+Yes, with the home version in offline mode: it reads pages with an open vision model (Qwen3-VL), embeds with EmbeddingGemma 2, transcribes with Whisper and judges citations with models running on your computer or your network, with no cloud key and nothing going out to the internet. It is slower (about 26 s per scanned page on an M4 Max Mac, against seconds for the whole book in the cloud) and somewhat less sharp, and without a network the bibliographic catalogues are not consulted. On top of that, opening and searching an .spdf that has already been read works with none of this, through the Python SDK. See [Self-hosting](/en/knowledge/self-hosting).
 
 ### Is it open source?
 

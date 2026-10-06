@@ -57,7 +57,8 @@ Un mismo .spdf puede llevar vectores de varios modelos a la vez, y cada uno se d
 | Espacio | Modelo | Dimensiones | Cuándo |
 | --- | --- | --- | --- |
 | gemini-embedding-2@1536 | Gemini Embedding 2, multimodal, recortado | 1536 | Por defecto, en la nube y en casa |
-| qwen3-vl-embedding-2b@2048 | Qwen3-VL Embedding 2B, en InferBox | 2048 | En la versión local con GPU |
+| embeddinggemma-2@768 | EmbeddingGemma 2 (texto, imagen, audio y vídeo), en tu máquina | 768 (o 512, 256, 128) | En la versión local sin conexión |
+| qwen3-vl-embedding-2b@2048 | Qwen3-VL Embedding 2B, en InferBox | 2048 | En la versión local con InferBox, como espacio extra |
 | qwen3-embedding-0.6b@1024 | Qwen3 Embedding 0.6B, en Workers AI | 1024 | Si no hay clave de Gemini |
 
 Al importar un .spdf solo se calculan los vectores que falten para el espacio que use tu biblioteca; el texto y las anclas no se vuelven a leer.
@@ -132,7 +133,8 @@ One .spdf can carry vectors from several models at once, each declared in the \`
 | Space | Model | Dimensions | When |
 | --- | --- | --- | --- |
 | gemini-embedding-2@1536 | Gemini Embedding 2, multimodal, truncated | 1536 | By default, in the cloud and at home |
-| qwen3-vl-embedding-2b@2048 | Qwen3-VL Embedding 2B, on InferBox | 2048 | In the home version with a GPU |
+| embeddinggemma-2@768 | EmbeddingGemma 2 (text, image, audio and video), on your machine | 768 (or 512, 256, 128) | In the home version offline |
+| qwen3-vl-embedding-2b@2048 | Qwen3-VL Embedding 2B, on InferBox | 2048 | In the home version with InferBox, as an extra space |
 | qwen3-embedding-0.6b@1024 | Qwen3 Embedding 0.6B, on Workers AI | 1024 | When there is no Gemini key |
 
 When an .spdf is imported, only the vectors missing for your library's space are computed; text and anchors are not read again.

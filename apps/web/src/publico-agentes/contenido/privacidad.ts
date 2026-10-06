@@ -36,11 +36,11 @@ Todo vive en Cloudflare, en la cuenta de Scholaris:
 | OpenRouter (con Mistral OCR) | Páginas que los lectores anteriores no pudieron leer; texto para redactar si Gemini falla | Lector y redactor de reserva |
 | TypeSafe (Jev) | Pares de consulta y pasaje, afirmaciones y pasajes, candidatos de número de página | Reordenar resultados, juzgar citas y decidir folios dudosos |
 
-Estos proveedores reciben lo justo para cada tarea y se usan con sus API de pago o empresariales. Sus condiciones (no las nuestras) dicen cuánto tiempo conservan los datos y si los usan para algo más; por ejemplo, las condiciones de pago de la API de Gemini excluyen el uso de las peticiones para mejorar sus productos, aunque permiten guardarlas un tiempo limitado para detectar abusos. Si eso no te basta, usa la versión local con tus propias claves o con InferBox.
+Estos proveedores reciben lo justo para cada tarea y se usan con sus API de pago o empresariales. Sus condiciones (no las nuestras) dicen cuánto tiempo conservan los datos y si los usan para algo más; por ejemplo, las condiciones de pago de la API de Gemini excluyen el uso de las peticiones para mejorar sus productos, aunque permiten guardarlas un tiempo limitado para detectar abusos. Si eso no te basta, usa la versión local con tus propias claves o, en su [modo sin conexión](/saber/version-local), sin ningún proveedor: los modelos corren en tu máquina o en tu red y ninguna petición sale a internet.
 
 ## Qué se manda a las bases bibliográficas abiertas
 
-Para completar y contrastar la ficha de cada documento, Scholaris pregunta a Crossref, OpenAlex, Open Library, Wikidata, Wikipedia, arXiv, DataCite y, como último recurso, Google Books. Lo que se manda es **el título, los autores, el ISBN o el DOI**, nunca el texto. Para enlazar entidades se manda a Wikidata el nombre de cada entidad. Las peticiones se identifican como «Scholaris/2» con la dirección de la web.
+Para completar y contrastar la ficha de cada documento, Scholaris pregunta a Crossref, OpenAlex, Open Library, Wikidata, Wikipedia, arXiv, DataCite y, como último recurso, Google Books. Lo que se manda es **el título, los autores, el ISBN o el DOI**, nunca el texto. Para enlazar entidades se manda a Wikidata el nombre de cada entidad. Las peticiones se identifican como «Scholaris/2» con la dirección de la web. En el modo sin conexión de la versión local estas consultas van apagadas, salvo que las abras tú.
 
 ## Tus propias claves
 
@@ -89,11 +89,11 @@ Everything lives on Cloudflare, in Scholaris's account:
 | OpenRouter (with Mistral OCR) | Pages the previous readers could not read; text to draft if Gemini fails | Fallback reader and writer |
 | TypeSafe (Jev) | Query and passage pairs, claims and passages, page-number candidates | Reranking results, judging citations and settling doubtful folios |
 
-These providers get just what each task needs and are used through their paid or business APIs. Their terms (not ours) say how long they keep data and whether they use it for anything else; for instance, the Gemini API's paid terms exclude using requests to improve their products, while allowing them to be kept for a limited time to detect abuse. If that is not enough for you, use the home version with your own keys or with InferBox.
+These providers get just what each task needs and are used through their paid or business APIs. Their terms (not ours) say how long they keep data and whether they use it for anything else; for instance, the Gemini API's paid terms exclude using requests to improve their products, while allowing them to be kept for a limited time to detect abuse. If that is not enough for you, use the home version with your own keys or, in its [offline mode](/en/knowledge/self-hosting), with no provider at all: the models run on your machine or your network and no request goes out to the internet.
 
 ## What is sent to open bibliographic databases
 
-To complete and check each document's record, Scholaris asks Crossref, OpenAlex, Open Library, Wikidata, Wikipedia, arXiv, DataCite and, as a last resort, Google Books. What is sent is **the title, the authors, the ISBN or the DOI**, never the text. To link entities, each entity's name is sent to Wikidata. Requests identify themselves as "Scholaris/2" with the site's address.
+To complete and check each document's record, Scholaris asks Crossref, OpenAlex, Open Library, Wikidata, Wikipedia, arXiv, DataCite and, as a last resort, Google Books. What is sent is **the title, the authors, the ISBN or the DOI**, never the text. To link entities, each entity's name is sent to Wikidata. Requests identify themselves as "Scholaris/2" with the site's address. In the offline mode of the home version these lookups are off unless you turn them on.
 
 ## Your own keys
 

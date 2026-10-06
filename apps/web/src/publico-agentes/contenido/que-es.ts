@@ -43,7 +43,7 @@ Scholaris no escribe ensayos, no resume libros para que no tengas que leerlos y 
 - No busca en internet por ti: trabaja sobre lo que tú le das. Para descubrir literatura nueva hay herramientas mejores (ver [Alternativas](/saber/alternativas)).
 - No escribe tu texto. La función «citar» devuelve tu propio texto con las citas insertadas, no un texto nuevo.
 - No garantiza que un número de página impreso sea correcto cuando el libro no lo imprime: en ese caso cita la posición física entre corchetes, «p. [12]», y lo dice.
-- No funciona del todo sin conexión: incluso la versión local necesita un proveedor en la nube para leer páginas (ver [Versión local](/saber/version-local)).
+- Sin conexión es más lento y algo menos fino: la versión local puede funcionar sin ningún proveedor en la nube, con modelos abiertos en tu máquina, pero un libro escaneado tarda minutos en vez de segundos y la búsqueda y las citas pierden algo de exhaustividad (ver [Versión local](/saber/version-local)).
 
 ## Para quién es
 
@@ -87,7 +87,7 @@ Scholaris does not write essays, does not summarise books so you can skip them a
 - It does not search the internet for you: it works on what you give it. For discovering new literature there are better tools (see [Alternatives](/en/knowledge/alternatives)).
 - It does not write your text. The "cite" function gives you back your own text with the citations inserted, not a new text.
 - It cannot guarantee a printed page number when the book does not print one: in that case it cites the physical position in brackets, "p. [12]", and says so.
-- It does not work fully offline: even the home version needs a cloud provider to read pages (see [Self-hosting](/en/knowledge/self-hosting)).
+- Offline is slower and somewhat less sharp: the home version can run with no cloud provider at all, on open models on your machine, but a scanned book takes minutes instead of seconds and search and citations lose some recall (see [Self-hosting](/en/knowledge/self-hosting)).
 
 ## Who it is for
 

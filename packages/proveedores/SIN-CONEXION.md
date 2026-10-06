@@ -77,7 +77,7 @@ El reordenador local tarda 0,56 s por consulta (40 pasajes en MPS).
 | Transcripción | Gemini Transcribe | whisper.cpp large-v3-turbo: 2,2 % de WER contra la de Gemini |
 | Metadatos | «Gustavo Adolfo Bécquer» | «Gustavo Adolfo Béquer»: sin catálogos, la errata del audio se queda |
 | *El casamiento en la muerte* (escaneado del XVIII, 43 páginas) | 13-20 s, ~0,17 $ | **22 min 44 s**, 0 $; primera página legible a los 24 s |
-| Lectura | Gemini 3.8 Flash, CER 0,006 contra el oro | Qwen3-VL 8B: CER 0,069 contra la lectura de Gemini (mediana 0,048 por página); 1 página de 32 incompleta |
+| Lectura | Gemini 3.8 Flash, CER 0,006 contra el oro (p. 10) | Qwen3-VL 8B: CER 0,06 contra el oro; 0,069 contra la lectura de Gemini en todo el libro (mediana 0,048 por página); 1 página de 32 incompleta |
 | Folios impresos | 30/31 | 32/32 iguales a los de la nube (la secuencia los deduce aunque el modelo vea pocos) |
 
 Lectura: ~26 s por página con dos a la vez (unos 60 tokens/s por petición en Metal). Un libro de 300 páginas escaneadas son unas 2 horas y media en este Mac; uno digital con capa de texto buena apenas pasa por el lector (solo las páginas con tablas, fórmulas o maquetación difícil).
