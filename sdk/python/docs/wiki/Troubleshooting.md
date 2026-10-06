@@ -30,7 +30,7 @@ pip install --user git+https://github.com/joseluissaorin/scholaris.git
 # Or use virtual environment
 python -m venv venv
 source venv/bin/activate  # On Windows: venv\Scripts\activate
-pip install scholaris
+pip install "scholaris-sdk[v1]"
 ```
 
 ### SSL certificate errors
@@ -130,7 +130,7 @@ for paper in papers:
 **Solutions:**
 ```bash
 # Install pdf2bib for better results
-pip install scholaris[pdf]
+pip install "scholaris-sdk[v1]"
 ```
 
 ```python

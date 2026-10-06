@@ -328,7 +328,7 @@ def main():
     print("=" * 80)
     print("""
 1. Install dependencies:
-   pip install scholaris[citation]  # Includes ChromaDB for RAG mode
+   pip install "scholaris-sdk[v1]" chromadb  # ChromaDB for RAG mode
 
 2. Set API keys:
    export GEMINI_API_KEY="your-gemini-api-key"

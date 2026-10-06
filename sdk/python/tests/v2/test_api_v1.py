@@ -1,6 +1,6 @@
 """Fachada de la API v1 (scholaris.api) sin red: una sesión de requests falsa.
 
-Contra un servidor de verdad: SCHOLARIS_URL=http://localhost:8787 pytest tests/v2/test_api_v1.py
+Contra un servidor de verdad: SCHOLARIS_URL=http://localhost:8790 pytest tests/v2/test_api_v1.py
 """
 import json
 import os

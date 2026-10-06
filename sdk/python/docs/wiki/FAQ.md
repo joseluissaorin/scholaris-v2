@@ -8,7 +8,7 @@ Scholaris is a Python library that automates academic research workflows. It hel
 
 ### Is Scholaris free?
 
-Yes, Scholaris is open-source software under the MIT License. It's completely free to use. However, some features require a Google Gemini API key, which has free and paid tiers.
+Yes, Scholaris is open-source software under the EUPL-1.2. It's completely free to use. However, some features require a Google Gemini API key, which has free and paid tiers.
 
 ### What can I do with Scholaris?
 

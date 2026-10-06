@@ -41,7 +41,7 @@ Scholaris is a Python library that automates academic research tasks:
 
 - **GitHub Repository**: https://github.com/joseluissaorin/scholaris
 - **Issue Tracker**: https://github.com/joseluissaorin/scholaris/issues
-- **License**: MIT License
+- **License**: EUPL-1.2
 
 ## Getting Help
 
@@ -105,4 +105,4 @@ scholar.export_docx(review, "review.docx")
 
 **Last Updated**: 2026-01-01  
 **Version**: 1.0.0  
-**License**: MIT
+**License**: EUPL-1.2

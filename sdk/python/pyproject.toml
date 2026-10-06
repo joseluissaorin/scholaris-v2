@@ -1,26 +1,35 @@
 [build-system]
-requires = ["setuptools>=61.0", "wheel"]
+requires = ["setuptools>=77.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "scholaris"
+name = "scholaris-sdk"
 version = "2.0.0"
 authors = [
     {name = "José Luis Saorín Ferrer", email = "jl@joseluissaorin.com"},
 ]
-description = "Scholaris: lector de SPDF 4.0 sin conexión, cliente de la API v2 y herramientas de citas"
+description = "Cliente de Python para Scholaris: API de citas con página verificada y lector de SPDF 4.0 sin conexión"
 readme = "README.md"
+license = "EUPL-1.2"
+license-files = ["LICENSE"]
 requires-python = ">=3.9"
+keywords = ["scholaris", "citas", "citations", "spdf", "bibliografía", "rag", "academic"]
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 4 - Beta",
     "Intended Audience :: Science/Research",
+    "Intended Audience :: Developers",
+    "Natural Language :: Spanish",
+    "Natural Language :: English",
+    "Operating System :: OS Independent",
     "Topic :: Scientific/Engineering :: Information Analysis",
-    "License :: OSI Approved :: MIT License",
+    "Topic :: Text Processing :: Markup",
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
     "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
 ]
 dependencies = [
     "requests>=2.31.0",
@@ -30,7 +39,6 @@ dependencies = [
 vectores = ["numpy>=1.24.0"]
 v1 = [
     "python-dotenv>=1.0.0",
-    "requests>=2.31.0",
     "pdf2bib>=1.2",
     "bibtexparser>=1.4.0",
     "PyPaperBot>=1.2.0",
@@ -43,20 +51,24 @@ v1 = [
     "numpy>=1.24.0",
     "Pillow>=9.0.0",
 ]
-
 dev = [
     "pytest>=7.0.0",
-    "black>=22.0.0",
-    "mypy>=0.990",
-    "flake8>=5.0.0",
+    "numpy>=1.24.0",
 ]
 
 [project.scripts]
 scholaris = "scholaris.cli:main"
 
 [project.urls]
-"Homepage" = "https://github.com/joseluissaorin/scholaris"
-"Bug Tracker" = "https://github.com/joseluissaorin/scholaris/issues"
+Homepage = "https://scholaris.joseluissaorin.com"
+Documentation = "https://scholaris.joseluissaorin.com/api"
+Source = "https://github.com/joseluissaorin/scholaris-v2"
+Issues = "https://github.com/joseluissaorin/scholaris-v2/issues"
+
+# Solo se publica el paquete `scholaris`. `spdf/` (referencia de los formatos
+# SPDF 1.0 a 3.0) se queda en el repositorio: su nombre ya existe en PyPI.
+[tool.setuptools.packages.find]
+include = ["scholaris", "scholaris.*"]
 
 [tool.black]
 line-length = 100

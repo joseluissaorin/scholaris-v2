@@ -5,7 +5,7 @@ que hagan falta) y úsala aquí. Sirve igual para la nube y para la versión
 local (Docker o escritorio).
 
     from scholaris.v2 import Scholaris
-    s = Scholaris("https://scholaris-v2.jlsf2005.workers.dev", clave="sch_…")
+    s = Scholaris("https://scholaris.joseluissaorin.com", clave="sch_…")
     doc = s.subir("articulo.pdf")                 # sube, convierte en el servidor y espera
     for r in s.buscar("atención escalada", k=5):
         print(r["citaCorta"], r["fragmento"]["texto"][:80])

@@ -389,7 +389,7 @@ If you use someone else's code or idea, credit them.
 
 ## License
 
-By contributing, you agree that your contributions will be licensed under the MIT License.
+By contributing, you agree that your contributions will be licensed under the EUPL-1.2.
 
 ---
 

@@ -86,7 +86,7 @@ const { pasajes } = await pedir(\`/buscar?k=3&q=\${encodeURIComponent('atención
 for (const p of pasajes) console.log(p.cita, p.texto.slice(0, 80), p.enlace);
 const r = await pedir('/preguntar', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pregunta: '¿Qué es la atención multicabeza?' }) });
 console.log(r.respuesta);`,
-  pyInstalar: 'pip install scholaris',
+  pyInstalar: 'pip install scholaris-sdk',
   py: `from scholaris.api import Scholaris
 
 s = Scholaris("sch_…")                      # o la variable SCHOLARIS_CLAVE

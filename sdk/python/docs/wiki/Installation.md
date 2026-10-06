@@ -84,7 +84,7 @@ Install with extras for enhanced functionality:
 #### PDF Enhancement (`[pdf]`)
 
 ```bash
-pip install scholaris[pdf]
+pip install "scholaris-sdk[v1]"
 ```
 
 Adds **pdf2bib** for improved citation extraction from PDFs.
@@ -92,7 +92,7 @@ Adds **pdf2bib** for improved citation extraction from PDFs.
 #### Development Tools (`[dev]`)
 
 ```bash
-pip install scholaris[dev]
+pip install "scholaris-sdk[dev]"
 ```
 
 Adds:
@@ -147,7 +147,7 @@ print(f"Version: {scholaris.__version__}")
 On Linux/macOS, use `--user` flag:
 
 ```bash
-pip install --user scholaris
+pip install --user "scholaris-sdk[v1]"
 ```
 
 ### SSL Certificate Errors

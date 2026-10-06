@@ -137,7 +137,7 @@ This approach:
 
 - Claude Code CLI installed
 - Python 3.9+
-- Scholaris library installed: `pip install scholaris` or `pip install git+https://github.com/joseluissaorin/scholaris`
+- Scholaris library installed: `pip install "scholaris-sdk[v1]"` or `pip install git+https://github.com/joseluissaorin/scholaris`
 - `GEMINI_API_KEY` environment variable set
 
 ## Updating
@@ -180,5 +180,5 @@ Feel free to modify the skill files to match your workflow:
 - Check API quota and rate limits
 
 ### CLI not found
-- Ensure scholaris is installed: `pip install scholaris`
+- Ensure scholaris is installed: `pip install "scholaris-sdk[v1]"`
 - Check that your Python bin directory is in PATH

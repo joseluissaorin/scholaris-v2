@@ -301,6 +301,6 @@ curl -s ${B}/preguntar -H "Authorization: Bearer $SCHOLARIS" -H "Content-Type: a
 - [Human guide (Spanish and English)](${origen}/api): copy-paste examples in curl, JavaScript and Python.
 - [OpenAPI 3.1](${B}/openapi.json)
 - [MCP server](${origen}/mcp): Streamable HTTP with OAuth or a key with the \`mcp\` scope. Tools: search, cite, open_page, verify_claim.
-- [Python](${origen}/api#python): \`pip install scholaris\`, then \`from scholaris.api import Scholaris; Scholaris("sch_…").buscar("…")\`.
+- [Python](${origen}/api#python): \`pip install scholaris-sdk\` (import name \`scholaris\`), then \`from scholaris.api import Scholaris; Scholaris("sch_…").buscar("…")\`.
 `;
 }

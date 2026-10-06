@@ -299,7 +299,7 @@ For complete API reference, see [REFERENCE.md](REFERENCE.md).
 
 - Python 3.9+
 - Gemini API Key (set as `GEMINI_API_KEY` environment variable)
-- Dependencies: `pip install scholaris` or from git
+- Dependencies: `pip install "scholaris-sdk[v1]"` or from git
 
 ## File Locations
 

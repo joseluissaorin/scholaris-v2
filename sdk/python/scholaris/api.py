@@ -14,7 +14,7 @@ Ajustes → Claves de API, y:
     print(s.citar("La atención sustituye a la recurrencia.")["texto"])
     print(s.verificar("El Transformer prescinde de la recurrencia.")["veredicto"])
 
-Contra la versión local: `Scholaris(base="http://localhost:8787")`.
+Contra la versión local: `Scholaris(base="http://localhost:8790")`.
 Para todo lo demás (bibliotecas, SPDF, metadatos), `scholaris.v2.Scholaris`.
 """
 from __future__ import annotations
@@ -28,7 +28,7 @@ import requests
 
 __all__ = ["Scholaris", "ErrorScholaris", "BASE"]
 
-BASE = os.environ.get("SCHOLARIS_URL", "https://scholaris-v2.jlsf2005.workers.dev")
+BASE = os.environ.get("SCHOLARIS_URL", "https://scholaris.joseluissaorin.com")
 _MAX_CRUDO = 95 * 1024 * 1024
 _MIMES = {".md": "text/markdown", ".epub": "application/epub+zip", ".m4a": "audio/mp4", ".opus": "audio/ogg", ".mkv": "video/x-matroska"}
 
