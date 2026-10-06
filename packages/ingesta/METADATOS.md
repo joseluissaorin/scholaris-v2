@@ -49,7 +49,13 @@ Para rehacer solo la ficha de un documento ya leído, sin volver a leerlo: `POST
 - un campo vacío nunca borra uno lleno, y lo del usuario no se toca;
 - un tipo genérico («document») sí se puede mejorar.
 
-Además, ni una clave del almacén («original», «paquete») ni un título genérico («Entrevista», «Vídeo») valen como título. La ruta ya no pasa la clave del original como nombre de archivo. Esto salió de regresiones reales en producción (Iconologia titulada «original», Cela como «Entrevista», años y autores perdidos), que están reconstruidas en `test/rehacer.test.ts`. El banco mide también «rehecho sobre antes»: 51/52, y ningún campo empeora.
+Hay dos excepciones, porque «no empeorar» no puede proteger un valor falso:
+- Si la identidad cambia con pruebas fuertes (otro episodio u otro invitado, con el título de un catálogo de confianza 0,9 o más y sin ningún autor en común), los campos que dependen de ella se sustituyen en bloque: título, subtítulo, autores, entrevistadores, fecha, año, contenedor y URL.
+- En audio y vídeo, un autor o entrevistador que la transcripción no nombra nunca no sobrevive.
+
+Los autores se limpian siempre: la misma persona aparece una sola vez («Sanderson, Grant» y «Grant Sanderson (3Blue1Brown)» son la misma), y un canal («3Blue1Brown») nunca es un apellido, sino la editorial.
+
+Además, ni una clave del almacén («original», «paquete») ni un título genérico («Entrevista», «Vídeo») valen como título. La ruta ya no pasa la clave del original como nombre de archivo. Esto salió de regresiones reales en producción (Iconologia titulada «original», Cela como «Entrevista», años y autores perdidos), que están reconstruidas en `test/rehacer.test.ts`. El banco mide también «rehecho sobre antes»: 54/55, y ningún campo empeora.
 
 ## Resultados (banco, 6 de octubre de 2026)
 

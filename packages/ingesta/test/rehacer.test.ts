@@ -84,3 +84,39 @@ describe('noEmpeorar', () => {
     expect(m.procedencia?.anioOriginal?.fuente).toBe('usuario');
   });
 });
+
+describe('rehacer con otra identidad y canales (preview)', () => {
+  const httpFalso = (reglas: Array<[string, unknown]>): import('../src/tipos.js').Http => async (url) => {
+    const r = reglas.find(([k]) => decodeURIComponent(url).includes(k));
+    if (!r) return { ok: false, status: 404, json: async () => ({}) };
+    const v = r[1];
+    return { ok: true, status: 200, json: async () => v, text: async () => (typeof v === 'string' ? v : JSON.stringify(v)) } as Awaited<ReturnType<import('../src/tipos.js').Http>>;
+  };
+
+  it('«Entrevista a Alberto Cortez» que en realidad es Cabral: el autor falso no sobrevive', async () => {
+    const http = httpFalso([
+      ['rtve.es/play/videos/a-fondo/', '… https://www.rtve.es/api/programas/73250 …'],
+      ['api/programas/73250/videos.json', { page: { totalPages: 1, items: [
+        { id: '3127003', title: 'Facundo Cabral', dateOfEmission: '02-07-1978 00:00:00', duration: 3_300_000, htmlUrl: 'https://www.rtve.es/play/videos/a-fondo/facundo-cabral/3127003/', description: '<p>Joaqu&iacute;n Soler Serrano entrevista al cantautor.</p>' },
+        { id: '3000001', title: 'Alberto Cortez', dateOfEmission: '11-11-1979 00:00:00', duration: 3_500_000, htmlUrl: 'https://www.rtve.es/play/videos/a-fondo/alberto-cortez/3000001/' },
+      ] } }],
+      ['wbsearchentities', { search: [{ id: 'Q8183492', label: 'A fondo', description: 'Spanish television show' }] }],
+      ['query.wikidata.org', { results: { bindings: [{ item: { value: 'http://www.wikidata.org/entity/Q8183492' }, itemLabel: { value: 'A fondo' }, claseLabel: { value: 'programa de televisión' }, duenoLabel: { value: 'RTVE' }, presLabel: { value: 'Joaquín Soler Serrano' } }] } }],
+    ]);
+    const previa = { titulo: 'Entrevista a Alberto Cortez', autores: [{ nombre: 'Alberto', apellidos: 'Cortez' }], entrevistadores: [{ nombre: 'Joaquín', apellidos: 'Soler Serrano' }], contenedor: 'A fondo', tipoCSL: 'interview' };
+    const unidades = Array.from({ length: 20 }, (_, i) => tramo(i, 'Joaquín Soler Serrano: Facundo Cabral, bienvenido. Cabral, ¿eres un místico? Facundo Cabral: Es inevitable, Joaquín.'));
+    const redactor = redactorFalso(() => ({ titulo: 'Entrevista a Alberto Cortez', contenedor: 'A fondo', autores: [{ nombre: 'Alberto', apellidos: 'Cortez' }], tipoCSL: 'interview' }));
+    const r = await rehacerFicha(previa, { tipo: 'video', nombreArchivo: 'Entrevista a Alberto Cortez.mp4', duracion: 3219, unidades }, { redactor, http });
+    expect(r.metadatos).toMatchObject({ titulo: 'Facundo Cabral', anio: 1978, contenedor: 'A fondo' });
+    expect(r.metadatos.autores.map((a) => a.apellidos)).toEqual(['Cabral']);
+    expect(r.metadatos.entrevistadores?.map((a) => a.apellidos)).toEqual(['Soler Serrano']);
+  });
+
+  it('«Vectors»: sin autor duplicado, sin el canal como apellido y con el canal en editorial', async () => {
+    const previa = { titulo: 'Vectors', autores: [{ nombre: '', apellidos: '3Blue1Brown' }], tipoCSL: 'broadcast' };
+    const lectura = { titulo: 'Vectors', contenedor: 'Essence of linear algebra', autores: [{ nombre: 'Grant', apellidos: 'Sanderson' }, { nombre: 'Grant Sanderson', apellidos: '(3Blue1Brown)' }] };
+    const m = await rehacer(previa, lectura, [tramo(0, 'The fundamental root of it all is the vector.')], 'video', 'vectors.mp4');
+    expect(m.autores).toEqual([{ nombre: 'Grant', apellidos: 'Sanderson' }]);
+    expect(m.editorial).toBe('3Blue1Brown');
+  });
+});

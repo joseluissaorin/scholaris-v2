@@ -103,6 +103,12 @@ const ORO: Record<string, Oro> = {
       contenedor: contiene('contenedor', 'a fondo'), entrevistador: (m) => Boolean(m.entrevistadores?.some((a) => a.apellidos === 'Soler Serrano')),
     },
   },
+  // El mismo vídeo con la ficha que tenía en el preview: el canal como único autor. Rehacer: persona como autor, una sola vez; canal a editorial.
+  '3b1b-canal': {
+    spdf: '3b1b_1min_real', archivo: 'vectors.mp4', tipo: 'video', duracion: 60,
+    autores: ['sanderson'],
+    campos: { sinCanalDeAutor: (m) => !m.autores.some((a) => /3blue1brown/i.test(`${a.nombre} ${a.apellidos}`)), editorial: contiene('editorial', '3blue1brown') },
+  },
   // «Vectors | Chapter 1, Essence of linear algebra», 3Blue1Brown (Grant Sanderson): el capítulo dentro de la serie.
   '3b1b_1min_real': {
     archivo: '3b1b_1min_real.mp4', tipo: 'video', duracion: 60,

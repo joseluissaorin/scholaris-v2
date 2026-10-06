@@ -298,3 +298,16 @@ describe('rehacer solo la ficha', () => {
     expect(r.metadatos.autores[0]?.apellidos).toBe('de Vega Carpio');
   });
 });
+
+describe('autores limpios', () => {
+  it('misma persona una vez, canal fuera de los apellidos, apellidos con mayúsculas internas no son canales', async () => {
+    const { limpiarAutores, esCanal } = await import('../src/pasos/metadatos.js');
+    const r = limpiarAutores([{ nombre: 'Grant', apellidos: 'Sanderson' }, { nombre: 'Grant Sanderson', apellidos: '(3Blue1Brown)' }, { nombre: '', apellidos: 'Sanderson, Grant' }]);
+    expect(r.autores).toEqual([{ nombre: 'Grant', apellidos: 'Sanderson' }]);
+    expect(r.canales).toEqual(['3Blue1Brown']);
+    expect(esCanal('McLuhan')).toBe(false);
+    expect(esCanal('Quino')).toBe(false);
+    expect(esCanal('3Blue1Brown')).toBe(true);
+    expect(limpiarAutores([{ nombre: '', apellidos: '3Blue1Brown' }]).autores).toEqual([{ nombre: '', apellidos: '3Blue1Brown' }]);
+  });
+});

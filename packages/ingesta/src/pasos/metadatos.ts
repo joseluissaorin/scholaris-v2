@@ -20,11 +20,12 @@ import type { MetadatosIncrustados } from '@scholaris/imprenta';
 import type { Http, Procedencia, UnidadLeida } from '../tipos.js';
 import { normalizar, similitud } from '../texto.js';
 import { nombreCompleto, partirAutores, separarNombre } from './autores.js';
-import { conOrcid, crearConsultor, enriquecer, leerColofon, pruebasNuevas, type CacheConsultas, type Colofon, type Consultor } from '../enriquecimiento/index.js';
+import { conOrcid, crearConsultor, enriquecer, leerColofon, presencia, pruebasNuevas, type CacheConsultas, type Colofon, type Consultor } from '../enriquecimiento/index.js';
 import { autorDe } from './metadatos/nombres.js';
 
 export * from '../enriquecimiento/index.js';
-export { autorDe, esEntidad, claveAutor } from './metadatos/nombres.js';
+export { autorDe, esEntidad, claveAutor, esCanal, limpiarAutores, mismaPersonaNombre } from './metadatos/nombres.js';
+import { esCanal, limpiarAutores, mismaPersonaNombre } from './metadatos/nombres.js';
 
 type Fuente = FuenteMetadato;
 type Campo = Exclude<keyof MetadatosDocumento, 'procedencia'>;
@@ -465,7 +466,29 @@ export function fusionarMetadatos(candidatos: Candidato[], nombreArchivo: string
     // Con año, la horquilla de «s. f.» sobra.
   if (salida.anio !== undefined && salida.sinFecha && procedencia.sinFecha?.fuente !== 'usuario') { delete salida.sinFecha; delete procedencia.sinFecha; }
   if (salida.titulo) salida.titulo = limpiarTitulo(salida.titulo);
+  repararPersonas(salida, procedencia);
   return { titulo: salida.titulo, autores: salida.autores ?? [], ...salida, procedencia };
+}
+
+/**
+ * Personas limpias: sin duplicados de la misma persona, sin «(canal)» pegado al
+ * nombre y sin el canal o la editorial como apellido; el canal va a editorial.
+ */
+function repararPersonas(m: Partial<MetadatosDocumento>, procedencia: NonNullable<MetadatosDocumento['procedencia']>): void {
+  if (m.autores?.length) {
+    const { autores, canales } = limpiarAutores(m.autores, { ...(m.editorial ? { editorial: m.editorial } : {}), ...(m.contenedor ? { contenedor: m.contenedor } : {}) });
+    m.autores = autores;
+    if (canales.length && !m.editorial && procedencia.editorial?.fuente !== 'usuario') {
+      m.editorial = canales[0];
+      procedencia.editorial = { fuente: procedencia.autores?.fuente ?? 'lectura', confianza: Math.min(0.8, procedencia.autores?.confianza ?? 0.8) };
+    }
+  }
+  if (m.entrevistadores?.length) m.entrevistadores = limpiarAutores(m.entrevistadores).autores;
+  // Quien entrevista no es además autor (salvo que no quede nadie más).
+  if (m.entrevistadores?.length && m.autores && m.autores.length > 1) {
+    const sin = m.autores.filter((a) => !m.entrevistadores!.some((e) => mismaPersonaNombre(a, e)));
+    if (sin.length) m.autores = sin;
+  }
 }
 
 /** Los campos que el usuario ya editó (según la procedencia): no se tocan al reprocesar. */
@@ -674,8 +697,27 @@ export async function rehacerFicha(
   };
   let r = await pasoMetadatos(entrada, puertos, opciones);
   if (!medio) r = await refinarMetadatos(r, { ...entrada, todas: documento.unidades }, puertos, opciones);
-  return { ...r, metadatos: noEmpeorar(previa, r.metadatos) };
+  let base = previa;
+  if (medio) {
+    // Una persona que la transcripción no nombra nunca no puede seguir de autor ni de entrevistador.
+    const texto = ` ${normalizar(documento.unidades.map((u) => u.texto).join(' '))} `;
+    if (texto.length > 1500) {
+      const ev = { textoNormalizado: texto, hablantes: [] as string[] };
+      const nombrada = (a: Autor) => presencia(`${a.nombre} ${a.apellidos}`, ev) >= 5 || !a.nombre;
+      base = { ...previa, autores: previa.procedencia?.autores?.fuente === 'usuario' ? previa.autores : previa.autores.filter(nombrada) };
+      if (previa.entrevistadores && previa.procedencia?.entrevistadores?.fuente !== 'usuario') base.entrevistadores = previa.entrevistadores.filter(nombrada);
+    }
+  }
+  // ¿Ha cambiado la identidad (otro episodio, otro invitado) con pruebas fuertes? Entonces lo que depende de ella va en bloque.
+  const pt = r.metadatos.procedencia?.titulo;
+  const otraIdentidad = Boolean(pt && ['rtve', 'wikidata', 'crossref', 'datacite', 'arxiv'].includes(pt.fuente) && pt.confianza >= 0.9
+    && normalizar(r.metadatos.titulo) !== normalizar(previa.titulo)
+    && !previa.autores.some((a) => r.metadatos.autores.some((b) => mismaPersonaNombre(a, b))));
+  return { ...r, metadatos: noEmpeorar(base, r.metadatos, { otraIdentidad }) };
 }
+
+/** Campos que dependen de qué obra o qué episodio es: si cambia la identidad con pruebas, cambian juntos. */
+const IDENTIDAD: Campo[] = ['titulo', 'subtitulo', 'autores', 'entrevistadores', 'fecha', 'anio', 'contenedor', 'url'];
 
 /** Confianza que se le supone a un campo existente sin procedencia (fichas de la v1, importadas o editadas fuera). */
 const CONFIANZA_PREVIA = 0.85;
@@ -688,7 +730,7 @@ const MARGEN = 0.05;
  * nunca borra uno lleno; un título basura nunca sustituye a nada; lo del
  * usuario no se toca. Los campos que se conservan guardan su procedencia.
  */
-export function noEmpeorar(previa: MetadatosDocumento, nueva: MetadatosDocumento): MetadatosDocumento {
+export function noEmpeorar(previa: MetadatosDocumento, nueva: MetadatosDocumento, opciones: { otraIdentidad?: boolean } = {}): MetadatosDocumento {
   const salida: MetadatosDocumento = { ...nueva, autores: nueva.autores ?? [] };
   const procedencia: NonNullable<MetadatosDocumento['procedencia']> = { ...(nueva.procedencia ?? {}) };
   const sustituidos = new Set<Campo>();
@@ -696,8 +738,13 @@ export function noEmpeorar(previa: MetadatosDocumento, nueva: MetadatosDocumento
     const viejo = previa[campo];
     if (vacio(viejo)) continue;
     const pv = previa.procedencia?.[campo];
+    // Otra identidad con pruebas fuertes: los campos de identidad son los nuevos (o ninguno), salvo los del usuario.
+    if (opciones.otraIdentidad && IDENTIDAD.includes(campo) && pv?.fuente !== 'usuario') continue;
     // Un tipo genérico («document») no es un dato: cualquier tipo concreto con pruebas lo mejora.
-    const generico = campo === 'tipoCSL' && viejo === 'document';
+    // Un canal como único «autor» («3Blue1Brown») tampoco: una persona con nombre lo mejora (y el canal pasa a editorial).
+    const soloCanales = campo === 'autores' && (viejo as Autor[]).every((a) => !a.nombre && esCanal(a.apellidos));
+    const generico = (campo === 'tipoCSL' && viejo === 'document') || soloCanales;
+    if (soloCanales && vacio(salida.editorial) && !vacio(nueva.autores)) { salida.editorial = (viejo as Autor[])[0]!.apellidos; procedencia.editorial = pv ?? { fuente: 'lectura', confianza: CONFIANZA_PREVIA }; }
     const cv = pv?.fuente === 'usuario' ? Infinity : generico ? 0.5 : pv?.confianza ?? CONFIANZA_PREVIA;
     const nuevo = nueva[campo];
     const pn = nueva.procedencia?.[campo];
@@ -709,6 +756,7 @@ export function noEmpeorar(previa: MetadatosDocumento, nueva: MetadatosDocumento
   }
   // El subtítulo va con su título: si el título cambió por uno más fiable y no trae subtítulo, el viejo sobra.
   if (sustituidos.has('titulo') && vacio(nueva.subtitulo) && previa.procedencia?.subtitulo?.fuente !== 'usuario') { delete salida.subtitulo; delete procedencia.subtitulo; }
+  repararPersonas(salida, procedencia);
   // Coherencia tras mezclar: con año, sobra la horquilla de «s. f.»; la obra no puede ser posterior a la edición.
   if (salida.anio !== undefined && salida.sinFecha && procedencia.sinFecha?.fuente !== 'usuario') { delete salida.sinFecha; delete procedencia.sinFecha; }
   if (salida.anioOriginal !== undefined && salida.anio !== undefined && salida.anioOriginal > salida.anio) {
