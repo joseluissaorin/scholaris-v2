@@ -1,0 +1,26 @@
+{
+  "name": "@scholaris/imprenta",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@scholaris/nucleo": "workspace:*",
+    "fflate": "^0.8.3",
+    "mammoth": "^1.13.0",
+    "mp4box": "^2.4.1",
+    "pdfjs-dist": "^6.4.299",
+    "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "@napi-rs/canvas": "^1.0.10"
+  }
+}
