@@ -374,3 +374,14 @@ describe('rendimiento', () => {
     expect(mbs).toBeGreaterThan(5);
   });
 });
+
+describe('epocaDeDocumento', () => {
+  it('año antiguo, código antiguo o señales en el texto', async () => {
+    const { epocaDeDocumento } = await import('../src/index.js');
+    expect(epocaDeDocumento('Texto moderno sin nada raro.', 'es', 1618)).toBe('antigua');
+    expect(epocaDeDocumento([LOPE.vientos, LOPE.roldan, LOPE.assi], 'es', 1990)).toBe('antigua');
+    expect(epocaDeDocumento(['Texto moderno sin nada raro.'], 'es', 1990)).toBe('moderna');
+    expect(epocaDeDocumento(['lo que sea'], 'la')).toBe('antigua');
+    expect(epocaDeDocumento(['whatever'], 'en', 1600)).toBe('moderna');
+  });
+});

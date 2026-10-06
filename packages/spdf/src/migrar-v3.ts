@@ -41,6 +41,7 @@ import type {
 import { aRomano, sha256, tiempoACadena } from '@scholaris/nucleo';
 import { deducirFolios, type FolioPagina, type PaginaFolio } from '@scholaris/folios';
 import { abrirBaseCruda, ArchivoSpdf, bytesSqlite, GENERADOR } from './archivo.js';
+import { rellenarTextoBusqueda } from './esquema.js';
 import type { SqlWasm } from './puerto.js';
 import { detectarIdioma, esVacio, limpiarEspacios, limpiarTitulo, normalizarIdioma, parsearAutores } from './limpieza.js';
 import { autoresPlanos } from './repositorio.js';
@@ -97,7 +98,7 @@ const CSL: Record<string, string> = {
 // API
 // ---------------------------------------------------------------------------
 
-/** Bytes de un SPDF v1-v3 (gzip o SQLite) → bytes de un SPDF 4.0 (gzip). */
+/** Bytes de un SPDF v1-v3 (gzip o SQLite) → bytes de un SPDF 4.x actual (gzip). */
 export async function migrarV3aV4(bytesV3: Uint8Array | ArrayBuffer, opciones: OpcionesMigracion = {}): Promise<Uint8Array> {
   const { archivo } = await migrarBaseV3(bytesV3, opciones);
   try {
@@ -120,6 +121,8 @@ export async function migrarBaseV3(bytesV3: Uint8Array | ArrayBuffer, opciones: 
     try {
       await m.ejecutar(crudos);
       archivo.db.exec('COMMIT');
+      // Capa de ortografía modernizada (SPDF 4.1) de los fragmentos migrados.
+      await rellenarTextoBusqueda(archivo.sql);
     } catch (e) {
       archivo.db.exec('ROLLBACK');
       throw e;

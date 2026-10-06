@@ -19,6 +19,8 @@ import type {
   ValorSQL,
   Vector,
 } from '@scholaris/nucleo';
+import { textoBusqueda, variantesConsulta } from '@scholaris/normalizacion';
+import { contextoBusqueda, type ContextoBusqueda } from './esquema.js';
 import { bytesAFloat32, float32ABytes } from './vectores.js';
 
 // ---------------------------------------------------------------------------
@@ -245,17 +247,30 @@ export async function leerSecciones(sql: SQL, documento: string): Promise<Seccio
 // Fragmentos
 // ---------------------------------------------------------------------------
 
+/**
+ * Escribe fragmentos. La capa de búsqueda (`texto_busqueda`) se toma del
+ * fragmento si la trae; si no, se calcula con el idioma y la época de su
+ * documento (que conviene escribir antes), mirando los textos de este mismo lote.
+ */
 export async function escribirFragmentos(sql: SQL, fragmentos: readonly Fragmento[]): Promise<void> {
+  const contextos = new Map<string, ContextoBusqueda>();
   for (const f of fragmentos) {
+    if (f.textoBusqueda !== undefined || contextos.has(f.documento)) continue;
+    const muestra = fragmentos.filter((g) => g.documento === f.documento).slice(0, 400).map((g) => g.texto);
+    contextos.set(f.documento, await contextoBusqueda(sql, f.documento, muestra));
+  }
+  for (const f of fragmentos) {
+    const c = contextos.get(f.documento);
+    const busqueda = f.textoBusqueda ?? (c ? textoBusqueda(f.texto, c.idioma, c.epoca) : '');
     // UPSERT (no INSERT OR REPLACE): así los disparadores mantienen el índice FTS al día.
     await sql.ejecutar(
-      `INSERT INTO fragmentos (id, documento, unidad, orden, texto, contexto, seccion, ancla, ancla_fin)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `INSERT INTO fragmentos (id, documento, unidad, orden, texto, contexto, seccion, ancla, ancla_fin, texto_busqueda)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(id) DO UPDATE SET documento = excluded.documento, unidad = excluded.unidad, orden = excluded.orden,
          texto = excluded.texto, contexto = excluded.contexto, seccion = excluded.seccion,
-         ancla = excluded.ancla, ancla_fin = excluded.ancla_fin`,
+         ancla = excluded.ancla, ancla_fin = excluded.ancla_fin, texto_busqueda = excluded.texto_busqueda`,
       f.id, f.documento, f.unidad, f.orden, f.texto, f.contexto ?? '', json(f.seccion ?? []), json(f.ancla),
-      f.anclaFin ? json(f.anclaFin) : null,
+      f.anclaFin ? json(f.anclaFin) : null, busqueda,
     );
   }
 }
@@ -289,6 +304,9 @@ export async function leerFragmento(sql: SQL, id: string): Promise<Fragmento | n
 // Búsqueda léxica (FTS5)
 // ---------------------------------------------------------------------------
 
+/** Peso BM25 de la columna normalizada frente al texto fiel (1.0). */
+export const PESO_NORMALIZADA = 0.9;
+
 export interface ResultadoLexico {
   fragmento: Fragmento;
   /** BM25 cambiado de signo: más alto es mejor. */
@@ -298,29 +316,51 @@ export interface ResultadoLexico {
 }
 
 /**
+ * Variantes de ortografía antigua de una palabra o frase, restringidas a la
+ * columna `texto_busqueda` (SPDF 4.1): `texto_busqueda : ("onra" OR …)`.
+ * '' si no hay ninguna.
+ */
+export function filtroNormalizado(termino: string): string {
+  const vs = variantesConsulta(termino);
+  if (!vs.length) return '';
+  return `texto_busqueda : (${vs.map((v) => `"${v}"`).join(' OR ')})`;
+}
+
+/**
  * Convierte texto libre en una consulta FTS5 segura: cada palabra entre
  * comillas (así «AND», «NEAR» o un guion no se interpretan como operadores).
+ *
+ * Con `normalizada` (por defecto), cada palabra casa también con sus variantes
+ * de ortografía antigua en la capa de búsqueda: «honra» encuentra «honrra»,
+ * «así» encuentra «aſsi». La frase literal se sigue buscando en el texto fiel.
  */
-export function consultaFts(textoLibre: string, modo: 'todas' | 'alguna' | 'frase' = 'alguna'): string {
+export function consultaFts(textoLibre: string, modo: 'todas' | 'alguna' | 'frase' = 'alguna', normalizada = true): string {
   const palabras = textoLibre.normalize('NFC').match(/[\p{L}\p{N}]+/gu) ?? [];
   if (!palabras.length) return '';
-  const citadas = palabras.map((p) => `"${p}"`);
-  if (modo === 'frase') return `"${palabras.join(' ')}"`;
+  if (modo === 'frase') {
+    const frase = `"${palabras.join(' ')}"`;
+    const extra = normalizada ? filtroNormalizado(palabras.join(' ')) : '';
+    return extra ? `${frase} OR ${extra}` : frase;
+  }
+  const citadas = palabras.map((p) => {
+    const extra = normalizada ? filtroNormalizado(p) : '';
+    return extra ? `("${p}" OR ${extra})` : `"${p}"`;
+  });
   return citadas.join(modo === 'todas' ? ' AND ' : ' OR ');
 }
 
 export async function buscarTexto(
   sql: SQL,
   consulta: string,
-  opciones: { limite?: number; documentos?: string[]; crudo?: boolean; modo?: 'todas' | 'alguna' | 'frase' } = {},
+  opciones: { limite?: number; documentos?: string[]; crudo?: boolean; modo?: 'todas' | 'alguna' | 'frase'; normalizada?: boolean } = {},
 ): Promise<ResultadoLexico[]> {
-  const q = opciones.crudo ? consulta : consultaFts(consulta, opciones.modo);
+  const q = opciones.crudo ? consulta : consultaFts(consulta, opciones.modo, opciones.normalizada ?? true);
   if (!q) return [];
   const limite = opciones.limite ?? 20;
   const docs = opciones.documentos ?? [];
   const filtro = docs.length ? `AND f.documento IN (${docs.map(() => '?').join(', ')})` : '';
   const filas = await sql.ejecutar<Fila>(
-    `SELECT f.*, bm25(fragmentos_fts, 1.0, 0.4, 0.6) AS rango,
+    `SELECT f.*, bm25(fragmentos_fts, 1.0, 0.4, 0.6, ${PESO_NORMALIZADA}) AS rango,
             highlight(fragmentos_fts, 0, '[', ']') AS resaltado
        FROM fragmentos_fts JOIN fragmentos f ON f.n = fragmentos_fts.rowid
       WHERE fragmentos_fts MATCH ? ${filtro}

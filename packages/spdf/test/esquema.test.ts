@@ -28,9 +28,9 @@ function puertoNode(db: DatabaseSync, opciones: { sinPragma?: boolean } = {}): S
   return puerto;
 }
 
-describe('esquema v4', () => {
-  it('la constante coincide con esquema/v4.0.sql', () => {
-    const sql = readFileSync(join(import.meta.dirname, '../esquema/v4.0.sql'), 'utf8');
+describe('esquema v4.1', () => {
+  it('la constante coincide con esquema/v4.1.sql', () => {
+    const sql = readFileSync(join(import.meta.dirname, '../esquema/v4.1.sql'), 'utf8');
     expect(ESQUEMA_V4).toBe(sql);
   });
 

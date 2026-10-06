@@ -86,6 +86,24 @@ export function resolverEpoca(texto: string, idioma?: string | null, epoca?: Epo
   return detectarEpoca(texto, idioma);
 }
 
+/**
+ * Época de un documento entero: antigua si el año (de la obra original o de la
+ * edición) es anterior al umbral de la lengua, o si el texto lo delata (el texto
+ * manda sobre un año moderno: un facsímil de 1990 sigue siendo de 1618).
+ * `muestra` puede ser el texto o una lista de fragmentos (se miran ~200 000 caracteres).
+ */
+export function epocaDeDocumento(muestra: string | readonly string[], idioma?: string | null, anio?: number | null): 'antigua' | 'moderna' {
+  const lengua = lenguaDe(idioma);
+  if (lengua === 'la') return 'antigua';
+  if (!memorias[lengua]) return 'moderna';
+  if (codigoAntiguo(idioma)) return 'antigua';
+  if (typeof anio === 'number' && Number.isFinite(anio) && anio > 0 && anio < UMBRAL_MODERNO[lengua]) return 'antigua';
+  let texto = '';
+  if (typeof muestra === 'string') texto = muestra.slice(0, 200_000);
+  else for (const t of muestra) { texto += `${t}\n`; if (texto.length > 200_000) break; }
+  return detectarEpoca(texto, idioma);
+}
+
 // ---------------------------------------------------------------------------
 // Normalización
 // ---------------------------------------------------------------------------

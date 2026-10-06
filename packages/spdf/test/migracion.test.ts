@@ -12,6 +12,7 @@ import type { AnclaPagina, AnclaTiempo } from '@scholaris/nucleo';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { abrirSpdf, type ArchivoSpdf } from '../src/archivo.js';
 import { migrarBaseV3, migrarV3aV4, type InformeMigracion } from '../src/migrar-v3.js';
+import { VERSION_SPDF } from '../src/esquema.js';
 
 const DIR = join(import.meta.dirname, '../../../bench/datos/spdf-v3');
 const ficheros = existsSync(DIR) ? readdirSync(DIR).filter((f) => f.endsWith('.spdf')).sort() : [];
@@ -188,7 +189,7 @@ describe.skipIf(!ficheros.length)('migración v3 → v4 con los SPDF reales', ()
   it('abrirSpdf migra al vuelo un v3 y migrarV3aV4 es determinista en los identificadores', async () => {
     const bytes = readFileSync(join(DIR, 'scanned_ocr_test.spdf'));
     const a = await abrirSpdf(bytes);
-    expect(await a.version()).toBe('4.0');
+    expect(await a.version()).toBe(VERSION_SPDF);
     expect(await a.leerClave('migrado_de')).toBe('spdf 2.1');
     const id1 = (await a.leerDocumento())!.id;
     a.cerrar();

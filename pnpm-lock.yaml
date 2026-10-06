@@ -450,6 +450,9 @@ importers:
       '@scholaris/folios':
         specifier: workspace:*
         version: link:../folios
+      '@scholaris/normalizacion':
+        specifier: workspace:*
+        version: link:../normalizacion
       '@scholaris/nucleo':
         specifier: workspace:*
         version: link:../nucleo

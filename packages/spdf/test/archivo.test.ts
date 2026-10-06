@@ -3,6 +3,7 @@ import { gunzipSync } from 'fflate';
 import { describe, expect, it } from 'vitest';
 import { abrirSpdf, ArchivoSpdf, crearSpdf, esGzip, esSqlite } from '../src/archivo.js';
 import { consultaFts } from '../src/repositorio.js';
+import { VERSION_SPDF } from '../src/esquema.js';
 import { bytesAFloat32, float32ABytes } from '../src/vectores.js';
 
 const doc: Documento = {
@@ -49,12 +50,12 @@ async function lleno(): Promise<ArchivoSpdf> {
 }
 
 describe('ArchivoSpdf', () => {
-  it('crea un SPDF 4.0 vacío', async () => {
+  it('crea un SPDF 4.1 vacío', async () => {
     const a = await crearSpdf();
-    expect(await a.version()).toBe('4.0');
+    expect(await a.version()).toBe(VERSION_SPDF);
     expect(await a.documentos()).toEqual([]);
     const [v] = await a.sql.ejecutar<{ user_version: number }>('PRAGMA user_version');
-    expect(v?.user_version).toBe(400);
+    expect(v?.user_version).toBe(410);
     a.cerrar();
   });
 
@@ -168,7 +169,10 @@ describe('FTS5', () => {
   });
 
   it('consultaFts neutraliza los operadores', () => {
-    expect(consultaFts('AND NEAR - "hola"')).toBe('"AND" OR "NEAR" OR "hola"');
+    expect(consultaFts('AND NEAR - "hola"', 'alguna', false)).toBe('"AND" OR "NEAR" OR "hola"');
+    for (const q of [consultaFts('AND NEAR - "hola"'), consultaFts('"NEAR(a b)" OR x*', 'todas'), consultaFts('a"b', 'frase')]) {
+      expect(q).not.toMatch(/NEAR\(|\*/);
+    }
     expect(consultaFts('   ')).toBe('');
   });
 

@@ -207,6 +207,12 @@ export interface Fragmento {
   ancla: Ancla;
   /** Fragmento que cruza dos unidades: la cita imprime el rango. */
   anclaFin?: Ancla;
+  /**
+   * Capa de ortografía modernizada (SPDF 4.1), SOLO para buscar: «aſsi» → «asi».
+   * '' si no aporta nada. Si falta al escribir, el repositorio la calcula con el
+   * idioma y el año del documento. Nunca se cita ni se muestra.
+   */
+  textoBusqueda?: string;
 }
 
 export interface Figura {

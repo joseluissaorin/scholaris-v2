@@ -1,15 +1,20 @@
 /**
- * El esquema SPDF 4.0 como cadena, para poder aplicarlo en cualquier plataforma
- * (navegador, Workers, Node) sin leer ficheros. `esquema/v4.0.sql` es una copia
- * legible; una prueba comprueba que ambos coinciden.
+ * El esquema SPDF 4.1 como cadena, para poder aplicarlo en cualquier plataforma
+ * (navegador, Workers, Node) sin leer ficheros. `esquema/v4.1.sql` es una copia
+ * legible; una prueba comprueba que ambos coinciden. `esquema/v4.0.sql` queda
+ * como referencia histórica (las pruebas de migración lo usan).
+ *
+ * 4.1: `fragmentos.texto_busqueda`, la capa de ortografía modernizada
+ * (@scholaris/normalizacion), indexada en FTS5 junto al texto fiel.
  */
 
-import type { SQL } from "@scholaris/nucleo";
+import type { SQL, ValorSQL } from "@scholaris/nucleo";
+import { epocaDeDocumento, lenguaDe, textoBusqueda, type Epoca } from "@scholaris/normalizacion";
 
-export const VERSION_SPDF = "4.0";
-export const USER_VERSION_SPDF = 400;
+export const VERSION_SPDF = "4.1";
+export const USER_VERSION_SPDF = 410;
 
-export const ESQUEMA_V4 = `-- SPDF 4.0: un documento leído y citable, de cualquier cosa.
+export const ESQUEMA_V4 = `-- SPDF 4.1: un documento leído y citable, de cualquier cosa.
 --
 -- Un .spdf es una base SQLite comprimida con gzip. Este esquema es también el de
 -- la «estantería» (el Durable Object de cada usuario): allí conviven muchos
@@ -21,11 +26,13 @@ export const ESQUEMA_V4 = `-- SPDF 4.0: un documento leído y citable, de cualqu
 --   3. Todo es reconstruible desde el original + las unidades leídas: los
 --      vectores y los contextos son derivados y se pueden recalcular.
 --   4. Procedencia: qué lector leyó cada unidad y con qué confianza.
+--   5. El texto fiel no se toca: la búsqueda en grafía moderna va por una
+--      columna sombra (fragmentos.texto_busqueda, desde la 4.1).
 --
 -- Este fichero es una copia legible de «ESQUEMA_V4» (packages/spdf/src/esquema.ts),
 -- que es la fuente de verdad; una prueba comprueba que coinciden. «aplicarEsquema»
 -- ejecuta las sentencias una a una sobre cualquier puerto SQL (sqlite-wasm,
--- Durable Object, better-sqlite3), y fija «PRAGMA user_version = 400» solo donde
+-- Durable Object, better-sqlite3), y fija «PRAGMA user_version = 410» solo donde
 -- la plataforma lo permite: la versión vive además en la tabla «spdf».
 
 -- Clave/valor del fichero: spdf_version, creado, generador, huella_original…
@@ -102,26 +109,32 @@ CREATE TABLE IF NOT EXISTS fragmentos (
   contexto    TEXT NOT NULL DEFAULT '',
   seccion     TEXT,                    -- JSON string[]
   ancla       TEXT NOT NULL,           -- JSON Ancla
-  ancla_fin   TEXT                     -- JSON Ancla, si el fragmento cruza unidades
+  ancla_fin   TEXT,                    -- JSON Ancla, si el fragmento cruza unidades
+  -- Capa de ortografía modernizada, SOLO para buscar («aſsi» → «asi»). NULL:
+  -- aún sin calcular (se rellena al abrir); '': no aporta nada (texto moderno).
+  texto_busqueda TEXT
 );
 CREATE INDEX IF NOT EXISTS fragmentos_doc ON fragmentos(documento, orden);
 CREATE INDEX IF NOT EXISTS fragmentos_unidad ON fragmentos(unidad);
+CREATE INDEX IF NOT EXISTS fragmentos_sin_busqueda ON fragmentos(n) WHERE texto_busqueda IS NULL;
 
--- Búsqueda léxica (BM25). Indexa texto + contexto + títulos de sección.
+-- Búsqueda léxica (BM25). Indexa texto + contexto + títulos de sección + la
+-- capa normalizada. El texto fiel sigue en la columna 0 (resaltado, frases
+-- literales); texto_busqueda va la última para no mover los pesos de bm25().
 CREATE VIRTUAL TABLE IF NOT EXISTS fragmentos_fts USING fts5(
-  texto, contexto, seccion,
+  texto, contexto, seccion, texto_busqueda,
   content='fragmentos', content_rowid='n',
   tokenize='unicode61 remove_diacritics 2'
 );
 CREATE TRIGGER IF NOT EXISTS fragmentos_ai AFTER INSERT ON fragmentos BEGIN
-  INSERT INTO fragmentos_fts(rowid, texto, contexto, seccion) VALUES (new.n, new.texto, new.contexto, new.seccion);
+  INSERT INTO fragmentos_fts(rowid, texto, contexto, seccion, texto_busqueda) VALUES (new.n, new.texto, new.contexto, new.seccion, new.texto_busqueda);
 END;
 CREATE TRIGGER IF NOT EXISTS fragmentos_ad AFTER DELETE ON fragmentos BEGIN
-  INSERT INTO fragmentos_fts(fragmentos_fts, rowid, texto, contexto, seccion) VALUES ('delete', old.n, old.texto, old.contexto, old.seccion);
+  INSERT INTO fragmentos_fts(fragmentos_fts, rowid, texto, contexto, seccion, texto_busqueda) VALUES ('delete', old.n, old.texto, old.contexto, old.seccion, old.texto_busqueda);
 END;
 CREATE TRIGGER IF NOT EXISTS fragmentos_au AFTER UPDATE ON fragmentos BEGIN
-  INSERT INTO fragmentos_fts(fragmentos_fts, rowid, texto, contexto, seccion) VALUES ('delete', old.n, old.texto, old.contexto, old.seccion);
-  INSERT INTO fragmentos_fts(rowid, texto, contexto, seccion) VALUES (new.n, new.texto, new.contexto, new.seccion);
+  INSERT INTO fragmentos_fts(fragmentos_fts, rowid, texto, contexto, seccion, texto_busqueda) VALUES ('delete', old.n, old.texto, old.contexto, old.seccion, old.texto_busqueda);
+  INSERT INTO fragmentos_fts(rowid, texto, contexto, seccion, texto_busqueda) VALUES (new.n, new.texto, new.contexto, new.seccion, new.texto_busqueda);
 END;
 
 CREATE TABLE IF NOT EXISTS figuras (
@@ -243,14 +256,132 @@ export function partirSentencias(guion: string): string[] {
   return sentencias;
 }
 
+// ---------------------------------------------------------------------------
+// Migración 4.0 → 4.1 (capa de ortografía modernizada)
+// ---------------------------------------------------------------------------
+
+const DISPARADORES_FTS = ['fragmentos_ai', 'fragmentos_ad', 'fragmentos_au'];
+
 /**
- * Crea (o completa) el esquema v4 sobre cualquier puerto SQL. Es idempotente:
- * todas las sentencias llevan IF NOT EXISTS. Las plataformas que no permiten
- * PRAGMA user_version (Durable Objects) se conforman con la tabla `spdf`.
+ * Prepara una base 4.0 para el esquema 4.1: el índice FTS5 no admite ALTER, así
+ * que se quitan sus disparadores y la tabla virtual, se añade la columna y se
+ * deja la marca «fts_pendiente»; `aplicarEsquema` los vuelve a crear, rellena la
+ * columna y reconstruye el índice. Cada paso se puede repetir: si algo se corta
+ * a medias, la siguiente apertura termina el trabajo.
  */
-export async function aplicarEsquema(sql: SQL, opciones: { generador?: string } = {}): Promise<void> {
+async function prepararMigracion41(sql: SQL): Promise<boolean> {
+  const filas = await sql.ejecutar<{ name: string; sql: string | null }>(
+    "SELECT name, sql FROM sqlite_master WHERE name IN ('fragmentos', 'fragmentos_fts', 'spdf')",
+  );
+  const fragmentos = filas.find((f) => f.name === 'fragmentos');
+  if (!fragmentos) return false; // base nueva: el guion lo crea todo
+  const fts = filas.find((f) => f.name === 'fragmentos_fts');
+  const ftsAlDia = !!fts?.sql && fts.sql.includes('texto_busqueda');
+  const conColumna = (fragmentos.sql ?? '').includes('texto_busqueda');
+  let pendiente = false;
+  if (filas.some((f) => f.name === 'spdf')) {
+    const [m] = await sql.ejecutar<{ valor: string }>("SELECT valor FROM spdf WHERE clave = 'fts_pendiente'");
+    pendiente = m?.valor === '1';
+  }
+  if (ftsAlDia && conColumna) return pendiente;
+  await sql.ejecutar("CREATE TABLE IF NOT EXISTS spdf (clave TEXT PRIMARY KEY, valor TEXT NOT NULL)");
+  await sql.ejecutar("INSERT INTO spdf(clave, valor) VALUES ('fts_pendiente', '1') ON CONFLICT(clave) DO UPDATE SET valor = excluded.valor");
+  if (!ftsAlDia) {
+    for (const d of DISPARADORES_FTS) await sql.ejecutar(`DROP TRIGGER IF EXISTS ${d}`);
+    await sql.ejecutar('DROP TABLE IF EXISTS fragmentos_fts');
+  }
+  if (!conColumna) await sql.ejecutar('ALTER TABLE fragmentos ADD COLUMN texto_busqueda TEXT');
+  return true;
+}
+
+/** Idioma y época de un documento, para calcular su capa de búsqueda. */
+export interface ContextoBusqueda {
+  idioma: string | null;
+  epoca: Epoca;
+}
+
+/**
+ * Idioma y época de un documento de la base: el idioma de `documentos` (o de sus
+ * metadatos), el año de la obra original o de la edición y, si hace falta, las
+ * señales de su propio texto (`muestra`, o los primeros fragmentos guardados).
+ */
+export async function contextoBusqueda(sql: SQL, documento: string, muestra?: readonly string[]): Promise<ContextoBusqueda> {
+  const [d] = await sql.ejecutar<{ idioma: string | null; anio: number | null; metadatos: string | null }>(
+    'SELECT idioma, anio, metadatos FROM documentos WHERE id = ?', documento,
+  );
+  let idioma = d?.idioma ?? null;
+  let anio: number | null = d?.anio ?? null;
+  if (d?.metadatos) {
+    try {
+      const m = JSON.parse(d.metadatos) as { idioma?: string; anio?: number; anioOriginal?: number };
+      idioma ??= m.idioma ?? null;
+      anio = m.anioOriginal ?? anio ?? m.anio ?? null;
+    } catch { /* metadatos ilegibles: se sigue con las columnas */ }
+  }
+  const lengua = lenguaDe(idioma);
+  if (lengua === 'otra') return { idioma, epoca: 'moderna' };
+  if (lengua === 'la') return { idioma, epoca: 'antigua' };
+  let textos = muestra;
+  if (!textos?.length) {
+    textos = (await sql.ejecutar<{ texto: string }>('SELECT texto FROM fragmentos WHERE documento = ? ORDER BY orden LIMIT 400', documento)).map((f) => f.texto);
+  }
+  return { idioma, epoca: epocaDeDocumento(textos, idioma, anio) };
+}
+
+/**
+ * Calcula `texto_busqueda` de los fragmentos que aún no la tienen (NULL): los de
+ * una base recién migrada de 4.0 y los que alguien insertó con SQL a mano. Va por
+ * lotes y en orden de `n`. Devuelve cuántos fragmentos ha rellenado.
+ */
+export async function rellenarTextoBusqueda(sql: SQL, opciones: { lote?: number; documento?: string } = {}): Promise<number> {
+  const lote = opciones.lote ?? 500;
+  const contextos = new Map<string, ContextoBusqueda>();
+  let ultimo = Number.MIN_SAFE_INTEGER;
+  let total = 0;
+  const filtro = opciones.documento ? ' AND documento = ?' : '';
+  for (;;) {
+    const params: ValorSQL[] = [ultimo, ...(opciones.documento ? [opciones.documento] : []), lote];
+    const filas = await sql.ejecutar<{ n: number; documento: string; texto: string }>(
+      `SELECT n, documento, texto FROM fragmentos WHERE texto_busqueda IS NULL AND n > ?${filtro} ORDER BY n LIMIT ?`,
+      ...params,
+    );
+    if (!filas.length) break;
+    for (const f of filas) if (!contextos.has(f.documento)) contextos.set(f.documento, await contextoBusqueda(sql, f.documento));
+    await sql.transaccion(async (t) => {
+      for (const f of filas) {
+        const c = contextos.get(f.documento) as ContextoBusqueda;
+        await t.ejecutar('UPDATE fragmentos SET texto_busqueda = ? WHERE n = ?', textoBusqueda(f.texto ?? '', c.idioma, c.epoca), f.n);
+      }
+    });
+    ultimo = Number((filas[filas.length - 1] as { n: number }).n);
+    total += filas.length;
+    if (filas.length < lote) break;
+  }
+  return total;
+}
+
+/**
+ * Crea (o completa) el esquema SPDF 4.1 sobre cualquier puerto SQL, y migra una
+ * base 4.0 si la encuentra. Es idempotente: todas las sentencias llevan IF NOT
+ * EXISTS y la migración mira antes qué falta. Las plataformas que no permiten
+ * PRAGMA user_version (Durable Objects) se conforman con la tabla `spdf`.
+ *
+ * Al terminar, rellena la capa de búsqueda de los fragmentos que no la tengan
+ * (`rellenar: false` lo evita; el índice parcial lo hace barato cuando no hay nada).
+ */
+export async function aplicarEsquema(sql: SQL, opciones: { generador?: string; rellenar?: boolean } = {}): Promise<void> {
+  const reconstruir = await prepararMigracion41(sql);
+  // Con los disparadores quitados, rellenar la columna no toca el índice: va rápido.
+  if (reconstruir && opciones.rellenar !== false) await rellenarTextoBusqueda(sql);
   for (const sentencia of partirSentencias(ESQUEMA_V4)) {
     await sql.ejecutar(sentencia);
+  }
+  if (reconstruir) {
+    await sql.ejecutar("INSERT INTO fragmentos_fts(fragmentos_fts) VALUES ('rebuild')");
+    await sql.ejecutar("DELETE FROM spdf WHERE clave = 'fts_pendiente'");
+  } else if (opciones.rellenar !== false) {
+    // Fragmentos insertados a mano sin capa: los disparadores ya mantienen el índice.
+    await rellenarTextoBusqueda(sql);
   }
   try {
     await sql.ejecutar(`PRAGMA user_version = ${USER_VERSION_SPDF}`);

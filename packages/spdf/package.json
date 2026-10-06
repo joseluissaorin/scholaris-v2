@@ -8,7 +8,8 @@
   "exports": {
     ".": "./src/index.ts",
     "./workers": "./src/workers.ts",
-    "./esquema/v4.0.sql": "./esquema/v4.0.sql"
+    "./esquema/v4.0.sql": "./esquema/v4.0.sql",
+    "./esquema/v4.1.sql": "./esquema/v4.1.sql"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
@@ -16,6 +17,7 @@
   },
   "dependencies": {
     "@scholaris/folios": "workspace:*",
+    "@scholaris/normalizacion": "workspace:*",
     "@scholaris/nucleo": "workspace:*",
     "@sqlite.org/sqlite-wasm": "3.53.4-build2",
     "fflate": "^0.8.3"
