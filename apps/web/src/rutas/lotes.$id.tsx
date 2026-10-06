@@ -106,7 +106,8 @@ function PaginaLote() {
           {conduciendo(id) ? <p className="mt-2 text-[0.75rem] text-coffee-400">Esta pestaña está subiendo los archivos: déjala abierta hasta que no quede nada en cola.</p> : null}
         </Tarjeta>
 
-        {faltan.length && l.estado !== 'cancelado' ? (
+        {/* Solo si la cola está parada: otra pestaña o el SDK pueden estar subiendo. */}
+        {faltan.length && !enCurso && l.estado === 'en_marcha' ? (
           <div
             onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); setEncima(true); }}
             onDragLeave={() => setEncima(false)}

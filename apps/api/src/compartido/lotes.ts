@@ -195,7 +195,7 @@ export async function crearLote(p: PuertosUsuario, b: NuevoLote): Promise<Detall
         `INSERT INTO pl_lote_elementos (lote, n, clase, nombre, ruta, mime, bytes, huella, url, tipo, paginas, minutos, metadatos, estado, documento, intentos, actualizado)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)`,
         id, i + 1, e.clase, e.nombre, e.ruta ?? null, e.mime ?? null, e.bytes ?? null, e.huella ?? null, e.clase === 'url' ? (e.url ?? e.nombre) : null,
-        e.tipo ?? null, e.paginas ?? null, e.minutos ?? null, e.metadatos ? JSON.stringify(e.metadatos) : null,
+        e.tipo ?? (e.clase === 'spdf' ? null : tipoDe(e)), e.paginas ?? null, e.minutos ?? null, e.metadatos ? JSON.stringify(e.metadatos) : null,
         d ? 'duplicado' : 'pendiente', d?.documento || null, t,
       );
     }
