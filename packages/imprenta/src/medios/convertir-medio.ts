@@ -102,7 +102,10 @@ export async function convertirMedio(ctx: Contexto, archivo: ArchivoEntrada, d: 
   const audio = (async () => {
     if (!fuentePcm) { tareasReserva.push('decodificar_audio'); return; }
     const t = performance.now();
-    duracionAudio = await trocearPcm(fuentePcm.bloques, op.tramo, op.solape, async (pcm, t0, t1, propioDesde, propioHasta) => {
+    // Se codifica un tramo mientras se decodifica el siguiente (hasta 3 a la vez).
+    const enVuelo = new Set<Promise<void>>();
+    let contador = 0;
+    const codificar = async (n: number, pcm: Float32Array, t0: number, t1: number, propioDesde: number, propioHasta: number) => {
       ctx.comprobar();
       let cod = await plataforma.codificarAudio(pcm, formato);
       if (!cod && formato === 'opus') {
@@ -112,14 +115,23 @@ export async function convertirMedio(ctx: Contexto, archivo: ArchivoEntrada, d: 
       }
       if (!cod) throw new Error('No se pudo codificar el audio');
       mime = cod.mime;
-      const n = tramos.length + 1;
-      const ext = formato === 'opus' ? 'ogg' : 'wav';
-      const parte = await ctx.parte(`audio/${num4(n)}.${ext}`, 'audio', cod.mime, cod.bytes, { unidad: n, t0, t1 });
+      const ext = cod.mime === 'audio/wav' ? 'wav' : 'ogg';
+      const parte = await ctx.parte(`audio/${num4(n)}.${ext}`, 'audio', cod.mime, cod.bytes, { unidad: n, t0: r3(t0), t1: r3(t1) });
       const tramo: TramoAudio = { n, t0: r3(t0), t1: r3(t1), propioDesde: r3(propioDesde), propioHasta: r3(propioHasta), parte };
       tramos.push(tramo);
       await ctx.emitir({ tipo: 'tramo_audio', tramo });
       await ctx.emitir({ tipo: 'progreso', fase: 'audio', hechas: Math.round(t1), total: duracionPrevista ? Math.round(duracionPrevista) : null });
+    };
+    let fallo: unknown = null;
+    duracionAudio = await trocearPcm(fuentePcm.bloques, op.tramo, op.solape, async (pcm, t0, t1, propioDesde, propioHasta) => {
+      if (fallo) throw fallo;
+      while (enVuelo.size >= 3) await Promise.race(enVuelo);
+      const p: Promise<void> = codificar(++contador, pcm, t0, t1, propioDesde, propioHasta).catch((e) => { fallo = e; }).finally(() => enVuelo.delete(p));
+      enVuelo.add(p);
     });
+    await Promise.all(enVuelo);
+    if (fallo) throw fallo;
+    tramos.sort((a, b) => a.n - b.n);
     ctx.tiempos.audio = Math.round(performance.now() - t);
   })();
 
