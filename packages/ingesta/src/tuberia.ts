@@ -111,7 +111,7 @@ export interface EstadoTanda {
   tanda: number;
   unidades: UnidadLeida[];
   /** Fragmentos provisionales escritos: id, texto, sección y si ya llevan contexto y vector. */
-  fragmentos: Array<{ id: string; texto: string; seccion: string[]; contexto: string; vector: boolean }>;
+  fragmentos: Array<{ id: string; texto: string; seccion: string[]; contexto: string; vector: boolean; /** El Redactor ya falló o se atascó con este fragmento: no se reintenta. */ fallo?: boolean }>;
   /** Medios: las palabras del tramo (los hablantes se resuelven al consolidar). */
   palabras?: PalabraTranscrita[];
   idioma?: string;
@@ -347,11 +347,13 @@ export async function indexarTanda(
   // 3. Contexto y vectores (no en medios: ahí se rehace todo al consolidar, con los hablantes).
   let nVectores = 0;
   const conContexto = new Set<string>();
+  const fallidos = new Set<string>();
   // Los metadatos pueden llegar después que la tanda: se esperan aquí, ya con el texto buscable.
   const meta = medio ? null : await Promise.resolve(extras.metadatos ?? null).catch(() => null);
   if (!medio) {
     if (meta && !ctx.opciones.sinContexto && fragmentos.length) {
-      const r = await pasoContexto(fragmentos, meta, puertos.inteligencia.redactor, { reloj, limiteMs: 12_000 });
+      const r = await pasoContexto(fragmentos, meta, puertos.inteligencia.redactor, { reloj, limiteMs: 10_000 });
+      for (const f of fragmentos) if (!r.contextos[f.id]) fallidos.add(f.id);
       for (const f of fragmentos) if (r.contextos[f.id]) { f.contexto = r.contextos[f.id] as string; conContexto.add(f.id); }
       procedencia.push(r.procedencia);
       await escribir(sql, (tx) => spdf.escribirFragmentos(tx, fragmentos.map((f) => aFilaFragmento(documento, f, idU))));
@@ -374,7 +376,7 @@ export async function indexarTanda(
   const estado: EstadoTanda = {
     tanda: t.id,
     unidades,
-    fragmentos: fragmentos.map((f) => ({ id: f.id, texto: f.texto, seccion: f.seccion, contexto: f.contexto, vector: vectorizados.has(f.id) })),
+    fragmentos: fragmentos.map((f) => ({ id: f.id, texto: f.texto, seccion: f.seccion, contexto: f.contexto, vector: vectorizados.has(f.id), ...(fallidos.has(f.id) ? { fallo: true } : {}) })),
     ...(lectura.palabras ? { palabras: lectura.palabras } : {}),
     ...(lectura.idioma ? { idioma: lectura.idioma } : {}),
     procedencia,
@@ -561,7 +563,9 @@ export async function consolidar(
       f.id = p.id;
       f.contexto = p.contexto;
       const mismaSeccion = p.seccion.join('›') === f.seccion.join('›');
-      if (!p.contexto) pendientesContexto.push(f);
+      // Si el Redactor ya falló con él en la tanda, no se vuelve a intentar: línea extractiva.
+      if (!p.contexto && p.fallo) f.contexto = contextoExtractivo(f, meta as MetadatosDocumento);
+      else if (!p.contexto) pendientesContexto.push(f);
       if (!p.vector || !p.contexto || !mismaSeccion) pendientesVector.add(f.id);
       else reaprovechados++;
     } else {
