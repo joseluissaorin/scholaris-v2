@@ -85,3 +85,13 @@ describe('estructura con índice', () => {
     expect(fr.find((f) => f.texto.includes('leftover'))?.seccion).toEqual(['Preface']);
   });
 });
+
+describe('anclas de bloques', () => {
+  it('el ancla de sección apunta al primer párrafo, no al título', () => {
+    const base = (orden: number, texto: string, parrafo: number) => ({ orden, fisica: orden + 1, texto, notas: [], cabecera: '', pie: '', folioVisto: null, titulos: [], figuras: [], vacia: false, lector: 'md', confianza: 1, ancla: { tipo: 'seccion' as const, ruta: ['Vigilar'], parrafo } });
+    const us = [base(0, '# Vigilar', 0), base(1, 'Primer párrafo del libro.', 1), base(2, 'Segundo.', 2)];
+    const { secciones } = pasoEstructura(us, undefined);
+    const fr = trocear(us, secciones);
+    expect(fr[0]?.ancla).toEqual({ tipo: 'seccion', ruta: ['Vigilar'], parrafo: 1 });
+  });
+});

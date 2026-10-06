@@ -23,7 +23,7 @@ export interface OpcionesTroceado {
 }
 
 /** Una frase con la unidad donde empieza y donde acaba. */
-interface Frase { texto: string; u0: number; u1: number; p0: number }
+interface Frase { texto: string; u0: number; u1: number; p0: number; titulo?: boolean }
 /** Un párrafo lógico (puede cruzar página). */
 interface Parrafo { frases: Frase[]; titulo: boolean; verso: boolean; u0: number; p0: number }
 
@@ -69,7 +69,7 @@ function corriente(unidades: UnidadLeida[], secciones: Seccion[]): Array<{ secci
       const grupo = grupos.at(-1) as (typeof grupos)[number];
       const titulo = esTituloMarkdown(texto);
       if (titulo) {
-        grupo.parrafos.push({ frases: [{ texto: titulo.texto, u0: u.orden, u1: u.orden, p0: i }], titulo: true, verso: false, u0: u.orden, p0: i });
+        grupo.parrafos.push({ frases: [{ texto: titulo.texto, u0: u.orden, u1: u.orden, p0: i, titulo: true }], titulo: true, verso: false, u0: u.orden, p0: i });
         anterior = null;
         return;
       }
@@ -191,8 +191,10 @@ export function trocear(unidades: UnidadLeida[], secciones: Seccion[], opciones:
       const texto = g.partes.join('\n\n').trim();
       // Un fragmento que es solo un título no aporta nada.
       if (!texto || g.partes.every((x) => x.startsWith('## '))) continue;
-      const primera = g.frases[0] as Frase;
-      const u0 = Math.min(...g.frases.map((f) => f.u0));
+      // El ancla es la del primer texto, no la del título que lo encabeza.
+      const cuerpo = g.frases.filter((f) => !f.titulo);
+      const primera = (cuerpo[0] ?? g.frases[0]) as Frase;
+      const u0 = Math.min(...(cuerpo.length ? cuerpo : g.frases).map((f) => f.u0));
       const u1 = Math.max(...g.frases.map((f) => f.u1));
       const ancla = anclaDe(u0, primera.p0);
       const fr: FragmentoPlano = { id: nuevoId('fr'), orden: 0, unidad: u0, texto, contexto: '', seccion: ruta, seccionId, ancla, tokens: contarTokens(texto) };

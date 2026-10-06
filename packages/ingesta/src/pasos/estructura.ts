@@ -63,26 +63,38 @@ export function construirSecciones(titulos: Titulo[], totalUnidades: number): Se
   return secciones;
 }
 
-/** Ancla las entradas del índice al párrafo que mejor coincide en su página (o la siguiente). */
+/** Quita la numeración de un título («5.3 Optimizer» → «Optimizer», «IV. The Heavens» → «The Heavens»). */
+const sinNumero = (t: string) => t.replace(/^\s*(chapter|cap[ií]tulo|part|parte|libro|book)?\s*([\dIVXLC]+[.)]?)+(\s*[.:—–-])?\s+/i, '').trim();
+
+/** Ancla las entradas del índice al párrafo que mejor coincide en su página (o la siguiente), sin volver atrás. */
 export function anclarIndice(indice: EntradaIndice[], unidades: UnidadLeida[]): Titulo[] {
   const porFisica = new Map(unidades.map((u) => [u.fisica, u]));
   const salida: Titulo[] = [];
+  let ultimo = { unidad: -1, parrafo: -1 };
+  const despues = (u: number, p: number) => u > ultimo.unidad || (u === ultimo.unidad && p > ultimo.parrafo);
   for (const e of indice) {
     if (e.fisica === null) continue;
+    const titulo = sinNumero(e.titulo) || e.titulo;
     let mejor: Titulo | null = null, puntos = 0;
-    for (const f of [e.fisica, e.fisica + 1]) {
+    for (const [f, limite] of [[e.fisica, 400], [e.fisica + 1, 6]] as const) {
       const u = porFisica.get(f);
       if (!u) continue;
-      parrafosDeUnidad(u).slice(0, 12).forEach((p, i) => {
-        const limpio = esTituloMarkdown(p)?.texto ?? p.slice(0, 200);
-        const s = similitud(limpio, e.titulo) + (esTituloMarkdown(p) ? 0.1 : 0);
+      parrafosDeUnidad(u).slice(0, limite).forEach((p, i) => {
+        if (!despues(u.orden, i)) return;
+        const md = esTituloMarkdown(p);
+        const limpio = sinNumero(md?.texto ?? p.slice(0, 300));
+        // El título puede ir pegado al principio del párrafo («5.3 Optimizer We used…»).
+        const s = Math.max(similitud(limpio, titulo), similitud(limpio.slice(0, titulo.length + 2), titulo) - 0.05) + (md || p.length < 120 ? 0.1 : 0);
         if (s > puntos) { puntos = s; mejor = { unidad: u.orden, parrafo: i, nivel: e.nivel, texto: e.titulo }; }
       });
-      if (puntos >= 0.75) break;
+      if (puntos >= 0.7) break;
     }
     const u = porFisica.get(e.fisica);
-    if (mejor && puntos >= 0.6) salida.push(mejor);
-    else if (u) salida.push({ unidad: u.orden, parrafo: 0, nivel: e.nivel, texto: e.titulo });
+    let t: Titulo | null = mejor && puntos >= 0.6 ? mejor : u ? { unidad: u.orden, parrafo: 0, nivel: e.nivel, texto: e.titulo } : null;
+    if (!t) continue;
+    if (!despues(t.unidad, t.parrafo)) t = { ...t, unidad: ultimo.unidad, parrafo: ultimo.parrafo };
+    ultimo = { unidad: t.unidad, parrafo: t.parrafo };
+    salida.push(t);
   }
   return salida;
 }

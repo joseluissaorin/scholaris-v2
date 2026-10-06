@@ -15,6 +15,8 @@ export interface OpcionesLectura {
   /** Cada vez que un pliego termina (para ir enseñando páginas). */
   alLeer?: (unidades: UnidadLeida[]) => void;
   reloj?: () => number;
+  /** Cobertura de la cola de latencia (compartida por todos los pliegos de un documento). */
+  cobertura?: Cobertura;
 }
 
 /** Resultado de un pliego: serializable, lo que devuelve un paso de Workflow. */
@@ -23,6 +25,36 @@ export interface ResultadoPliego {
   paginas: UnidadLeida[];
   procedencia: Procedencia;
   avisos: string[];
+}
+
+/**
+ * Llamadas cubiertas: si una llamada tarda bastante más que la mediana de las ya
+ * terminadas, se lanza una segunda idéntica y gana la primera que responda. La
+ * cola larga de latencia de las APIs (3 s de mediana, 80 s de máximo) es lo que
+ * marca el tiempo de reloj de un libro entero; cubrirla cuesta poco.
+ */
+export class Cobertura {
+  private latencias: number[] = [];
+  constructor(private readonly minimoMs = 12_000, private readonly factor = 2.2, private readonly reloj: () => number = Date.now) {}
+  umbral(): number {
+    if (this.latencias.length < 3) return this.minimoMs * 1.5;
+    const s = [...this.latencias].sort((a, b) => a - b);
+    return Math.max(this.minimoMs, (s[Math.floor(s.length / 2)] as number) * this.factor);
+  }
+  anotar(ms: number) { this.latencias.push(ms); if (this.latencias.length > 200) this.latencias.shift(); }
+  cubiertas = 0;
+  async llamar<T>(fn: () => Promise<T>): Promise<T> {
+    const t0 = this.reloj();
+    return new Promise<T>((resolver, rechazar) => {
+      let hecho = false, fallos = 0, lanzadas = 1;
+      const intento = () => fn().then(
+        (v) => { if (!hecho) { hecho = true; clearTimeout(temporizador); this.anotar(this.reloj() - t0); resolver(v); } },
+        (e) => { if (++fallos >= lanzadas && !hecho) { hecho = true; clearTimeout(temporizador); rechazar(e); } },
+      );
+      const temporizador = setTimeout(() => { if (!hecho) { lanzadas++; this.cubiertas++; void intento(); } }, this.umbral());
+      void intento();
+    });
+  }
 }
 
 function conLimite<T>(p: Promise<T>, ms: number, que: string): Promise<T> {
@@ -124,7 +156,10 @@ export async function leerPliego(
     try {
       const entrada = await entradaPara(desde, hasta, pliego.envio);
       paginas = await reintentar(
-        () => conLimite(lector.leerPliego({ ...entrada, ...(opciones.pista ? { pista: opciones.pista } : {}) }), opciones.limiteMs ?? 240_000, lector.nombre),
+        () => {
+          const llamada = () => conLimite(lector.leerPliego({ ...entrada, ...(opciones.pista ? { pista: opciones.pista } : {}) }), opciones.limiteMs ?? 240_000, lector.nombre);
+          return opciones.cobertura && nivel === 0 ? opciones.cobertura.llamar(llamada) : llamada();
+        },
         { intentos: 2, base: 1500 },
       );
       paginas = aAbsoluta(paginas, desde, hasta);
@@ -209,8 +244,9 @@ export async function leerPaginas(
       procedencia.push({ fase: 'lectura', proveedor: 'capa-pdf', ms: reloj() - t0, detalle: { paginas: capa.length } });
     }
   }
+  const cobertura = opciones.cobertura ?? new Cobertura(12_000, 2.2, reloj);
   const resultados = await enParalelo(plan.pliegos, plan.concurrencia, async (pl) => {
-    const r = await leerPliego(pl, paquete, fuente, lectores, opciones);
+    const r = await leerPliego(pl, paquete, fuente, lectores, { ...opciones, cobertura });
     opciones.alLeer?.(r.paginas);
     return r;
   });
@@ -221,5 +257,6 @@ export async function leerPaginas(
   }
   unidades.sort((a, b) => a.fisica - b.fisica);
   unidades.forEach((u, i) => { u.orden = i; });
+  if (cobertura.cubiertas) procedencia.push({ fase: 'lectura', proveedor: 'cobertura', ms: 0, detalle: { cubiertas: cobertura.cubiertas, umbralMs: Math.round(cobertura.umbral()) } });
   return { unidades, procedencia, avisos };
 }

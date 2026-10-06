@@ -259,6 +259,10 @@ export function coincidencia(lectura: Partial<MetadatosDocumento>, ext: Partial<
   const autor = apL.size && apE.length ? (apE.some((a) => apL.has(a)) ? 1 : 0) : 0.5;
   const anio = lectura.anio && ext.anio ? (Math.abs(lectura.anio - ext.anio) <= 1 ? 1 : 0.3) : 0.5;
   if (autor === 0 && apL.size && apE.length) return 0;
+  // Un artículo no cambia de año: si el registro dice otro, es otra cosa (o una copia basura
+  // con DOI propio, que las hay a miles). En libros, una reedición sí puede cambiarlo.
+  const libro = lectura.tipoCSL === 'book' || lectura.tipoCSL === 'chapter' || Boolean(lectura.isbn);
+  if (lectura.anio && ext.anio && Math.abs(lectura.anio - ext.anio) > 1 && !libro) return 0;
   return st * 0.6 + autor * 0.3 + anio * 0.1;
 }
 
