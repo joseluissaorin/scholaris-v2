@@ -312,7 +312,9 @@ export function fundirRangos(citas: CitaPropuesta[]): CitaPropuesta[] {
     };
     for (let i = 1; i < grupo.length; i++) {
       const prev = racha[racha.length - 1]!, c = grupo[i]!;
-      if ((c.ancla as { fisica: number }).fisica - ((prev.anclaFin ?? prev.ancla) as { fisica: number }).fisica <= 3) racha.push(c);
+      // Solo páginas consecutivas, cada una con un pasaje verificado: un hueco no se cubre con un rango
+      // («pp. 10-13» citaría páginas que nadie ha comprobado); esas van como citas separadas.
+      if ((c.ancla as { fisica: number }).fisica - ((prev.anclaFin ?? prev.ancla) as { fisica: number }).fisica <= 1) racha.push(c);
       else { cerrar(); racha = [c]; }
     }
     cerrar();

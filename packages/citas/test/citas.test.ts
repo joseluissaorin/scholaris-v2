@@ -462,4 +462,14 @@ describe('fundir rangos de citas', () => {
     expect((r[0]!.ancla as AnclaPagina).fisica).toBe(25);
     expect((r[0]!.anclaFin as AnclaPagina).fisica).toBe(26);
   });
+
+  it('no une páginas con un hueco sin comprobar: van como citas separadas', () => {
+    const cita = (fisica: number, respaldo: number) => ({
+      id: `c${fisica}`, documento: 'doc-lewis', fragmento: `f${fisica}`, ancla: pag(fisica, String(fisica)), relacion: 'APOYO_DIRECTO', respaldo,
+      pasaje: `pasaje ${fisica}`, estado: 'aceptada',
+    }) as unknown as Parameters<typeof fundirRangos>[0][number];
+    const r = fundirRangos([cita(10, 0.8), cita(11, 0.7), cita(13, 0.9)]);
+    expect(r).toHaveLength(2);
+    expect(r.map((c) => [(c.ancla as AnclaPagina).fisica, (c.anclaFin as AnclaPagina | undefined)?.fisica])).toEqual([[10, 11], [13, undefined]]);
+  });
 });

@@ -16,7 +16,7 @@ Los números salen de `bench/calidad/RESULTADOS.md` (183 consultas, 8 879 juicio
 - **Ingesta: la línea de contexto** pesa 0,35 en BM25 y va dentro del vector del fragmento; no la he podido medir sin reingerir. No hay motivo para quitarla.
 - **Proveedores: Jev con 10 pasajes por petición** (en paralelo) en vez de 24 ahorra unos 70 ms por llamada suelta con la misma calidad (`crearJev(...).reordenador({ pasajesPorPeticion: 10 })` en `crearInteligencia`). No lo he tocado porque el paquete no es mío.
 - **Proveedores: reordenadores de Workers AI.** bge-m3 (0,770) y bge-reranker-base (0,758) son peores que no reordenar (0,771) en esta biblioteca; no conviene usarlos como reserva de Jev. Mejor sin reordenar si Jev falla.
-- **Citas: `fundirRangos` funde citas a ≤ 3 páginas de distancia**, así que «pp. 10-13» puede incluir páginas que nadie ha comprobado. Arreglé que el rango se quedara en la primera página cuando el mejor pasaje era el último (citaba una página equivocada); la distancia de 3 la dejo a quien lleve citas (con 1 se citaría solo lo contiguo).
+- **Citas: `fundirRangos`** solo une páginas consecutivas con un pasaje verificado cada una; con un hueco van como citas separadas («pp. 10-11», «p. 13»). Arreglado también que el rango se quedara en la primera página cuando el mejor pasaje era el último. Banco de citas: precisión 95,0 %, exhaustividad 96,7 %, 0 inventadas.
 - **Folios**: la sobrecubierta de Lewis sale como «dj A», «dj B», «dj C» y las guardas en blanco del final del Casamiento (págs. físicas 39-43) reciben folios deducidos 33-37. Ambas deberían ser `null`. Son los 8 fallos de 64 en `folios.json`.
 
 ## Latencia
