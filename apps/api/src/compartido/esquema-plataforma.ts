@@ -40,6 +40,12 @@ export const ESQUEMA_PLATAFORMA = [
 /** Aplica los tres esquemas (SPDF, funciones, plataforma). Idempotente. */
 export async function prepararEstanteria(sql: SQL): Promise<void> {
   await aplicarEsquema(sql, { generador: 'scholaris-plataforma' });
-  await aplicarEsquemaFunciones(sql);
+  // Un fallo en el esquema de las funciones no puede dejar sin biblioteca a nadie:
+  // se registra y la estantería sigue (las funciones afectadas fallarán solas).
+  try {
+    await aplicarEsquemaFunciones(sql);
+  } catch (e) {
+    console.error(JSON.stringify({ nivel: 'error', que: 'esquema_funciones', error: (e as Error).message }));
+  }
   for (const s of ESQUEMA_PLATAFORMA) await sql.ejecutar(s);
 }

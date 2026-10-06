@@ -21,7 +21,9 @@ const seg = () => `${((Date.now() - t0) / 1000).toFixed(1)} s`;
 
 const bytes = readFileSync(fichero);
 const huella = createHash('sha256').update(bytes).digest('hex');
-const s = await api.subidas.crear({ nombre: basename(fichero), mime: 'application/pdf', bytes: bytes.byteLength, huella });
+const MIMES: Record<string, string> = { pdf: 'application/pdf', mp3: 'audio/mpeg', mp4: 'video/mp4', m4a: 'audio/mp4', wav: 'audio/wav', pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation' };
+const mime = MIMES[fichero.split('.').pop()!.toLowerCase()] ?? 'application/octet-stream';
+const s = await api.subidas.crear({ nombre: basename(fichero), mime, bytes: bytes.byteLength, huella });
 if (s.duplicado) {
   console.log(`Ya estaba: ${s.duplicado}`);
 } else {
@@ -33,10 +35,12 @@ if (s.duplicado) {
   const b = await api.tiempoReal.billete(ing.tarea);
   const ws = new WebSocket(b.url.startsWith('/') ? base.replace(/^http/, 'ws') + b.url : b.url);
   const latido = setInterval(() => ws.readyState === 1 && ws.send(JSON.stringify({ tipo: 'ping', t: Date.now() })), 30_000);
+  let primera = false;
   const fin = new Promise<EventoTiempoReal>((res) => {
     ws.on('message', (m) => {
       const e = JSON.parse(String(m)) as EventoTiempoReal;
       if (e.tipo === 'progreso') process.stdout.write(`\r[${seg()}] ${e.progreso.fase.padEnd(10)} ${(e.progreso.total * 100).toFixed(0).padStart(3)} % ${e.progreso.mensaje ?? ''}`.padEnd(100));
+      if (e.tipo === 'unidades' && !primera) { primera = true; console.log(`\n[${seg()}] primeras unidades legibles (${e.desde}-${e.hasta})`); }
       if (e.tipo === 'fin') res(e);
     });
   });

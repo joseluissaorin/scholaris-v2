@@ -519,6 +519,7 @@ export async function componer(ctx: ContextoMotor, params: ParamsIngesta, info: 
     ...(metadatosUsuario ? { metadatosUsuario: metadatosUsuario as never } : {}),
     onProgreso: (p) => {
       const ahora = Date.now();
+      if (p.fase !== faseAnterior) console.log(JSON.stringify({ que: 'componer', documento: params.documento, fase: p.fase, ms: p.transcurrido }));
       // Un aviso por fase y, dentro de cada fase, uno cada segundo y medio como mucho.
       if (p.fase !== faseAnterior || ahora - ultimo > 1500 || p.fase === 'listo') {
         faseAnterior = p.fase;

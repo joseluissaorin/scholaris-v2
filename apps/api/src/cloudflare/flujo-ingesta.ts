@@ -129,7 +129,10 @@ export class FlujoIngesta extends WorkflowEntrypoint<Env, ParamsIngesta> {
       const metadatosUsuario = await step.do('metadatos-usuario', async () => (await estanteria.metadatosSubida(p.documento)) ?? null);
 
       // El resto de fases, con las lecturas ya grabadas (no se repite ninguna).
-      const resumen = await step.do('componer', { retries: { limit: 3, delay: '30 seconds', backoff: 'exponential' }, timeout: '60 minutes' }, async () => {
+      // Plazo a la medida del documento: si algo se cuelga, el reintento llega pronto
+      // (la lectura ya está grabada, así que reintentar cuesta segundos).
+      const plazo = Math.min(3600, 90 + 2 * info.unidades + 30 * info.tramos.length);
+      const resumen = await step.do('componer', { retries: { limit: 4, delay: '5 seconds', backoff: 'exponential' }, timeout: `${plazo} seconds` }, async () => {
         const ctx = await this.contexto(p);
         return componer(ctx, p, info, metadatosUsuario as Record<string, unknown> | null);
       });
