@@ -2,11 +2,12 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { Filtros, TipoEntrada } from '@scholaris/nucleo';
-import type { EventoRespuesta, ResultadoVista } from '@scholaris/contrato';
+import type { EventoRespuesta, OrigenPasaje, ResultadoConjunto, ResultadoVista } from '@scholaris/contrato';
 import { avisar, Boton, Campo, Chip, Composicion, cx, EsqueletoTexto, Folio, Icono, MenuContenido, MenuDisparador, MenuElemento, MenuRaiz, Rotulo, Teclas, Vacio } from '@scholaris/ui';
 import { api } from '../datos/api';
 import { q } from '../datos/consultas';
 import { Resultado } from '../componentes/busqueda/resultado';
+import { ResultadoAjeno } from '../componentes/busqueda/resultado-ajeno';
 import { ResultadosFiguras } from '../componentes/inspector/busqueda-figuras';
 import { Lienzo } from '../componentes/comunes/cabecera';
 import { anclaABusqueda } from '../lib/anclas';
@@ -20,7 +21,9 @@ import { Cifra } from '../movimiento/cifra';
 import { NotaMargen } from '../bocetos/nota-margen';
 
 type Modo = 'buscar' | 'preguntar';
-interface BusquedaBuscar { q?: string; modo?: Modo; grupo?: string; col?: string; doc?: string; cruzada?: boolean; desde?: number; hasta?: number; figuras?: boolean }
+/** Dónde: lo mío (por defecto), las colecciones que sigo, o todo a la vez. */
+type Alcance = 'seguidas' | 'todo';
+interface BusquedaBuscar { q?: string; modo?: Modo; grupo?: string; col?: string; doc?: string; cruzada?: boolean; desde?: number; hasta?: number; figuras?: boolean; alcance?: Alcance }
 
 const GRUPOS: Array<{ id: string; nombre: string; tipos: TipoEntrada[] }> = [
   { id: 'libros', nombre: 'Libros y artículos', tipos: ['pdf', 'epub', 'pdf_escaneado', 'fotos'] },
@@ -40,6 +43,7 @@ export const Route = createFileRoute('/buscar/')({
     desde: Number.isFinite(Number(s.desde)) && s.desde ? Number(s.desde) : undefined,
     hasta: Number.isFinite(Number(s.hasta)) && s.hasta ? Number(s.hasta) : undefined,
     figuras: s.figuras === true || s.figuras === 'true' ? true : undefined,
+    alcance: s.alcance === 'seguidas' || s.alcance === 'todo' ? s.alcance : undefined,
   }),
   component: PaginaBuscar,
 });
@@ -77,8 +81,17 @@ function PaginaBuscar() {
     placeholderData: keepPreviousData,
     staleTime: 120_000,
   });
-  const datos = b.cruzada ? cruzada : normal;
-  const resultados = datos.data?.resultados ?? [];
+  // En lo que sigo (o en todo): la búsqueda conjunta, y cada pasaje dice de dónde sale.
+  const seguidas = bibliotecas.filter((x) => x.permiso !== 'propietario');
+  const conjunta = useQuery({
+    queryKey: ['conjunta', consulta, filtros, b.alcance],
+    queryFn: () => api().busqueda.conjunta({ consulta, filtros, k: 30, alcance: b.alcance ?? 'todo' }),
+    enabled: modo === 'buscar' && !!b.alcance && !b.cruzada && !b.figuras && consulta.length > 1,
+    placeholderData: keepPreviousData,
+    staleTime: 60_000,
+  });
+  const datos = b.alcance && !b.cruzada ? conjunta : b.cruzada ? cruzada : normal;
+  const resultados = (datos.data?.resultados ?? []) as Array<ResultadoVista & { origen?: OrigenPasaje }>;
   const preliminar = !!(datos.data as { preliminar?: boolean } | undefined)?.preliminar;
   const lista = useRef<HTMLDivElement>(null);
   // Del orden preliminar al definitivo: cada pasaje viaja a su sitio (los nuevos ya entran en cascada solos).
@@ -132,10 +145,18 @@ function PaginaBuscar() {
             <MenuDisparador asChild><Chip icono="biblioteca" activo={!!b.col}>{bibliotecas.find((x) => x.id === b.col)?.nombre ?? 'Colección'}</Chip></MenuDisparador>
             <MenuContenido alinear="start">
               <MenuElemento icono={!b.col ? 'hecho' : undefined} alElegir={() => fijar({ col: undefined })}>Toda la biblioteca</MenuElemento>
-              {bibliotecas.map((x) => <MenuElemento key={x.id} icono={b.col === x.id ? 'hecho' : undefined} alElegir={() => fijar({ col: x.id })}>{x.nombre}</MenuElemento>)}
+              {bibliotecas.filter((x) => x.permiso === 'propietario').map((x) => <MenuElemento key={x.id} icono={b.col === x.id ? 'hecho' : undefined} alElegir={() => fijar({ col: x.id })}>{x.nombre}</MenuElemento>)}
             </MenuContenido>
           </MenuRaiz>
           <Anios desde={b.desde} hasta={b.hasta} alCambiar={(d, h) => fijar({ desde: d, hasta: h })} />
+          {seguidas.length ? (
+            <div role="radiogroup" aria-label="Dónde buscar" className="flex shrink-0 rounded-full border border-cream-400 bg-cream-200/70 p-0.5 shadow-[var(--hundido)]">
+              {([[undefined, 'Lo mío'], ['seguidas', 'Lo que sigo'], ['todo', 'Todo']] as const).map(([v, t]) => (
+                <button key={t} type="button" role="radio" aria-checked={b.alcance === v} onClick={() => fijar({ alcance: v, cruzada: undefined })}
+                  className={cx('rounded-full px-3 py-1 text-[0.75rem] font-medium transition-colors', b.alcance === v ? 'bg-cream-50 text-coffee-800 shadow-[var(--relieve)]' : 'text-coffee-500 hover:text-coffee-800')}>{t}</button>
+              ))}
+            </div>
+          ) : null}
           <Chip icono="idiomas" activo={!!b.cruzada} onClick={() => fijar({ cruzada: b.cruzada ? undefined : true })}>En todas las lenguas</Chip>
           <Chip icono="imagen" activo={!!b.figuras} onClick={() => fijar({ figuras: b.figuras ? undefined : true })}>Figuras e imágenes</Chip>
         </div>
@@ -163,7 +184,7 @@ function PaginaBuscar() {
               <Boton variante="linea" tam="p" icono="chispa" className="ml-auto" onClick={() => { fijar({ modo: 'preguntar' }); setPregunta(consulta); }}>Preguntar sobre esto</Boton>
             </div>
             <div ref={lista} className={cx('transition-opacity', datos.isPlaceholderData && 'opacity-60')}>
-              {resultados.map((r, i) => <div key={r.fragmento.id} data-flip={r.fragmento.id}><Resultado r={r} consulta={consulta} indice={i} /></div>)}
+              {resultados.map((r, i) => <div key={`${r.origen?.biblioteca ?? ''}${r.fragmento.id}`} data-flip={r.fragmento.id}>{r.origen && !r.origen.propia ? <ResultadoAjeno r={r as ResultadoConjunto} /> : <Resultado r={r} consulta={consulta} indice={i} />}</div>)}
             </div>
           </>
         )}
