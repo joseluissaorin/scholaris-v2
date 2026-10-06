@@ -113,6 +113,8 @@ export interface MetadatosDocumento {
   autores: Autor[];
   editores?: Autor[];
   traductores?: Autor[];
+  /** En entrevistas y programas: quien pregunta (los autores son los entrevistados). */
+  entrevistadores?: Autor[];
   anio?: number;
   /** Año de la edición original, si difiere (clave para la lógica temporal). */
   anioOriginal?: number;
@@ -150,7 +152,7 @@ export interface MetadatosDocumento {
 /** De dónde sale un campo de la ficha. */
 export type FuenteMetadato =
   | 'lectura' | 'crossref' | 'openalex' | 'usuario' | 'epub' | 'pdf'
-  | 'colofon' | 'openlibrary' | 'wikidata' | 'wikipedia' | 'googlebooks' | 'arxiv' | 'datacite' | 'impresores';
+  | 'colofon' | 'openlibrary' | 'wikidata' | 'wikipedia' | 'googlebooks' | 'arxiv' | 'datacite' | 'impresores' | 'rtve';
 
 export type EstadoDocumento = 'pendiente' | 'procesando' | 'listo' | 'error';
 
