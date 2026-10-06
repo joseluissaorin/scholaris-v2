@@ -39,7 +39,7 @@ import { anclarIndice, construirSecciones, pasoEstructura, quitarTitulillos, typ
 import { trocear, fragmentosDeMedio, type OpcionesTroceado } from './pasos/fragmentos.js';
 import { pasoMetadatos, refinarConLibroEntero } from './pasos/metadatos.js';
 import { contextoExtractivo, pasoContexto } from './pasos/contexto.js';
-import { pasoFiguras, type FiguraConAncla } from './pasos/figuras.js';
+import { anclaGuardada, pasoFiguras, type FiguraConAncla } from './pasos/figuras.js';
 import { textoVectorizable, vectorizar, type PiezaVector } from './pasos/vectores.js';
 import { atribuirHablantes } from './pasos/hablantes.js';
 import { aplicarReemplazos, revisarTranscripcion, type CambioTranscripcion } from './pasos/revision.js';
@@ -689,7 +689,7 @@ export async function consolidar(
   }
   await escribir(sql, (tx) => spdf.escribirFiguras(tx, fig.figuras.map((g) => ({
     id: g.id, documento, unidad: idUnidad(g.unidad), imagen: g.imagen ?? g.parte ?? '',
-    ...(g.pie ? { pie: g.pie } : {}), ...(g.descripcion ? { descripcion: g.descripcion } : {}), ancla: g.ancla,
+    ...(g.pie ? { pie: g.pie } : {}), ...(g.descripcion ? { descripcion: g.descripcion } : {}), ancla: anclaGuardada(g),
   }))));
   marca('vectores', tm);
 

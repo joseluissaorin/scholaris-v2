@@ -17,6 +17,7 @@
  */
 
 import type { Filtros, Resultado } from '@scholaris/nucleo';
+import type { FiguraResultado } from './contenido.js';
 
 export type ModoBusqueda = 'hibrida' | 'lexica' | 'densa' | 'visual';
 
@@ -42,6 +43,8 @@ export interface ResultadoVista extends Resultado {
   citaCorta: string;
   miniaturaUrl?: string;
   explicacion?: string;
+  /** Si el resultado sale de una figura o de un fotograma (vía visual): cuál, con su imagen y su descripción. */
+  figura?: FiguraResultado;
 }
 
 export interface RespuestaBusqueda {

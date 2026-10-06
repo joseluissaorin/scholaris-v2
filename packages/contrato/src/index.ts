@@ -6,6 +6,7 @@ export * from './comun.js';
 export * from './cuenta.js';
 export * from './subidas.js';
 export * from './documentos.js';
+export * from './contenido.js';
 export * from './bibliotecas.js';
 export * from './busqueda.js';
 export * from './citas.js';

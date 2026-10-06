@@ -14,6 +14,21 @@ export interface FiguraConAncla extends FiguraPlana {
   /** Parte binaria de la que sale (página o fotograma). */
   parte?: string;
   t?: number;
+  /** Fotogramas: elegido por cambio de escena (no por muestreo periódico). */
+  escena?: boolean;
+}
+
+/**
+ * El ancla que se guarda en `figuras.ancla`: la de la página o el instante, más
+ * lo que la tabla no tiene en columnas propias y la interfaz necesita: la
+ * `region` de la figura dentro de la página (0-1; la imagen guardada es la
+ * página entera) y, en los fotogramas, si son un cambio de `escena`. Son
+ * claves de más en el JSON: quien no las conoce las ignora y la cita no cambia.
+ */
+export function anclaGuardada(f: FiguraConAncla): Ancla {
+  if (f.region && f.ancla.tipo !== 'tiempo') return { ...f.ancla, region: f.region } as Ancla;
+  if (f.escena && f.ancla.tipo === 'tiempo') return { ...f.ancla, escena: true } as Ancla;
+  return f.ancla;
 }
 
 const RE_PIE = /^\s*(?:\*\*|_)?((?:fig(?:ure|ura)?|table|tabla|cuadro|l[aá]mina|plate|ilustraci[oó]n|illustration|gr[aá]fico|chart|diagrama|map[a]?|abb(?:ildung)?|tableau)\.?\s*[\dIVXivx]+[a-z]?(?:[.:\-–—]|\s)\s*.*)$/i;
@@ -61,7 +76,7 @@ export function reunirFiguras(paquete: PaqueteConversion, unidades: UnidadLeida[
     const tramos = unidades.filter((u) => u.t0 !== undefined);
     for (const f of paquete.contenido.video.fotogramas) {
       const u = tramos.find((x) => f.t >= (x.t0 as number) && f.t <= (x.t1 as number)) ?? tramos.reduce<UnidadLeida | undefined>((m, x) => (!m || Math.abs((x.t0 as number) - f.t) < Math.abs((m.t0 as number) - f.t) ? x : m), undefined);
-      figuras.push({ id: nuevoId('fg'), unidad: u?.orden ?? 0, fisica: u?.fisica ?? 1, t: f.t, parte: f.parte, imagen: f.parte, ancla: { tipo: 'tiempo', t0: f.t, t1: f.t, ...(u?.hablante ? { hablante: u.hablante } : {}) } });
+      figuras.push({ id: nuevoId('fg'), unidad: u?.orden ?? 0, fisica: u?.fisica ?? 1, t: f.t, parte: f.parte, imagen: f.parte, ...(f.motivo === 'escena' ? { escena: true } : {}), ancla: { tipo: 'tiempo', t0: f.t, t1: f.t, ...(u?.hablante ? { hablante: u.hablante } : {}) } });
     }
   }
   return figuras;

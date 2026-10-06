@@ -20,6 +20,7 @@ import type {
   ParcheMetadatos, PedirPartesImportacion, RehacerFolios,
   Reprocesar, ResumenDocumento, SeccionVista, UnidadVista, VolcadoDocumento,
 } from './documentos.js';
+import type { ContenidoDocumento, FiguraEncontrada, FragmentoInspeccion, MapaVectores, UnidadInspeccion } from './contenido.js';
 import type { AnadirDocumentos, Biblioteca, Compartir, Miembro, NuevaBiblioteca } from './bibliotecas.js';
 import type {
   Buscar, BuscarMultilingue, EventoBusquedaEnDos, EventoRespuesta, Responder, RespuestaBusqueda, RespuestaMultilingue, ResultadoVista, Similares,
@@ -192,6 +193,17 @@ export function crearCliente(opciones: OpcionesCliente) {
       importarPartes: (p: PedirPartesImportacion) => post<UrlsPartes>('/documentos/importar/partes', p),
       importarCompletar: (p: CompletarPartesImportacion) => post<Ok>('/documentos/importar/completar', p),
       cita: (id: string, p: { estilo?: string; idioma?: string } = {}) => get<CitaDocumento>(`/documentos/${e(id)}/cita`, p),
+      /** Todo lo que contiene el .spdf, resumido (ver contenido.ts). */
+      contenido: (id: string) => get<ContenidoDocumento>(`/documentos/${e(id)}/contenido`),
+      unidadesInspeccion: (id: string, desde: number, hasta: number) => get<UnidadInspeccion[]>(`/documentos/${e(id)}/contenido/unidades`, { desde, hasta }),
+      fragmentosInspeccion: (id: string, p: { unidad?: number } & ParamsPagina = {}) => get<Pagina<FragmentoInspeccion>>(`/documentos/${e(id)}/contenido/fragmentos`, p),
+      mapaVectores: (id: string, p: { espacio?: string; max?: number } = {}) => get<MapaVectores>(`/documentos/${e(id)}/contenido/mapa`, p),
+    },
+
+    /** Figuras e imágenes de toda la biblioteca (láminas, diagramas, fotogramas). */
+    figuras: {
+      buscar: (p: { q?: string; documento?: string; tipo?: string; limite?: number } = {}) => get<FiguraEncontrada[]>('/figuras', p),
+      parecidas: (id: string, k = 12) => get<FiguraEncontrada[]>(`/figuras/${e(id)}/parecidas`, { k }),
     },
 
     bibliotecas: {

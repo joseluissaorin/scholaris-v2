@@ -202,6 +202,12 @@ export interface FiguraVista {
   descripcion?: string;
   ancla: Ancla;
   etiqueta: string;
+  /** Dónde está dentro de la página (0-1), si la ingesta lo guardó; `imagenUrl` es entonces la página entera. */
+  region?: { x: number; y: number; w: number; h: number };
+  /** Fotogramas de vídeo: el segundo. */
+  t?: number;
+  /** Fotogramas: es un cambio de escena (no un muestreo periódico). */
+  escena?: boolean;
 }
 
 /**
