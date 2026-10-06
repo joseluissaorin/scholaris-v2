@@ -244,7 +244,14 @@ export function evaluarPagina(p: PaginaLeida, opciones: { maxBasura?: number; mi
   if (p.vacia) return { aceptable: true };
   if (p.confianza < minConfianza) return { aceptable: false, motivo: `confianza ${p.confianza.toFixed(2)}` };
   const todo = [p.texto, ...p.notas].join('\n');
-  if (todo.trim().length < minCaracteres && p.figuras.length === 0) return { aceptable: false, motivo: 'sin texto en una página no vacía' };
+  const largo = todo.trim().length + p.cabecera.trim().length + p.pie.trim().length;
+  // Sin nada de texto y sin figuras: si el modelo está seguro, es una página en blanco mal marcada
+  // (portadas, guardas); si duda, se repite con el siguiente lector.
+  if (largo === 0 && p.figuras.length === 0) {
+    return p.confianza >= 0.8 ? { aceptable: true } : { aceptable: false, motivo: 'sin texto en una página no vacía' };
+  }
+  // Un texto corto («I», «PARTE PRIMERA») es legítimo: solo se miran basura y bucles si hay de qué.
+  if (todo.trim().length < minCaracteres) return { aceptable: true };
   const basura = proporcionBasura(todo);
   if (basura > maxBasura) return { aceptable: false, motivo: `basura ${(basura * 100).toFixed(0)} %` };
   if (hayBucle(todo)) return { aceptable: false, motivo: 'bucle de repetición' };

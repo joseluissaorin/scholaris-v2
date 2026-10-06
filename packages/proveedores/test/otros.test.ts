@@ -213,7 +213,7 @@ describe('cascada de lectores', () => {
   };
 
   it('solo pasa al siguiente las páginas que no superan la calidad, y anota quién leyó cada una', async () => {
-    const a = lectorFijo('a', (f) => ({ texto: f === 3 ? '' : `Página ${f} leída con buen texto.` }));
+    const a = lectorFijo('a', (f) => (f === 3 ? { texto: '', confianza: 0.5 } : { texto: `Página ${f} leída con buen texto.` }));
     const b = lectorFijo('b', (f) => ({ texto: `Página ${f} releída por b.` }));
     const avisos: string[] = [];
     const pags = (await cascadaLectores([a, b], { alPasar: (i) => avisos.push(`${i.lector}:${i.paginas.join(',')}`) }).leerPliego({ imagenes: IMG(4), primeraFisica: 1 })) as PaginaConLector[];
@@ -251,7 +251,7 @@ describe('crearInteligencia', () => {
     });
     const usos: string[] = [];
     const intel = crearInteligencia({ GEMINI_API_KEY: 'G', TYPESAFE_API_KEY: 'T', OPENROUTER_API_KEY: 'O', CLOUDFLARE_ACCOUNT_ID: 'C', CLOUDFLARE_API_TOKEN: 'X' }, { fetch, onUso: (u) => usos.push(u.proveedor) });
-    expect(intel.lector.nombre).toContain('cascada(gemini:gemini-3.5-flash-lite → gemini:gemini-3.8-flash → openrouter:mistral-ocr+');
+    expect(intel.lector.nombre).toContain('cascada(gemini:gemini-3.8-flash → gemini:gemini-3.5-flash-lite → openrouter:mistral-ocr+');
     expect(intel.embebedor.espacio.id).toBe('gemini-embedding-2@1536');
     expect(intel.transcriptor.nombre).toBe('workers-ai:@cf/openai/whisper-large-v3-turbo | gemini:gemini-3.5-transcribe');
     expect(intel.juez.nombre).toBe('jev:jev-latest');

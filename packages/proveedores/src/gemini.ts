@@ -22,9 +22,10 @@ import { ESQUEMA_PAGINAS, instruccionesLector, normalizarPaginas, type OpcionesT
 import { ErrorPliego, leerPartiendo, type EntradaPliego } from './pliego.js';
 
 export const MODELOS_GEMINI = {
-  /** Lector por defecto (elegido con el banco, ver RESULTADOS.md). */
-  lector: 'gemini-3.5-flash-lite',
-  /** Lector de calidad para reintentos. */
+  /** Lector por defecto: el de menos errores (CER 0,007 en el Casamiento, frente a 0,021 de Flash-Lite y 0,073 de la tubería antigua). */
+  lector: 'gemini-3.8-flash',
+  /** Lector rápido y barato: casi 3 veces más rápido en un libro entero; perfecto para PDF digitales (F1 0,98 igual que Flash). */
+  lectorRapido: 'gemini-3.5-flash-lite',
   lectorAlto: 'gemini-3.8-flash',
   redactorRapido: 'gemini-3.5-flash-lite',
   redactorAlto: 'gemini-3.8-flash',
@@ -87,7 +88,11 @@ export interface OpcionesLectorGemini extends OpcionesTranscripcion {
   /** Resolución con la que el modelo ve cada página. «media» (560 tokens/página) satura la calidad de OCR según Google. */
   resolucion?: Resolucion;
   pensamiento?: NivelPensamiento;
-  /** Páginas máximas por llamada; si llega un pliego mayor, se parte. */
+  /**
+   * Páginas máximas por llamada; si llega un pliego mayor, se parte y las partes van en paralelo.
+   * Por defecto 1: la salida se genera en serie (~100-200 tokens/s), así que una página por llamada
+   * con muchas llamadas a la vez es lo más rápido, y con Flash-Lite además lo más fiel (ver RESULTADOS.md).
+   */
   maxPaginas?: number;
   maxTokensSalida?: number;
 }
@@ -117,7 +122,7 @@ export interface OpcionesTranscriptorGemini {
 export function crearGemini(config: ConfigGemini): ClienteGemini {
   const base = (config.baseUrl ?? 'https://generativelanguage.googleapis.com').replace(/\/+$/, '');
   const { contador, apuntar } = apuntador(config);
-  const limitar = limitador(config.concurrencia ?? 16);
+  const limitar = limitador(config.concurrencia ?? 48);
   const cabeceras = { 'x-goog-api-key': config.clave, ...(config.cabeceras ?? {}) };
   /** Modelos que han rechazado un nivel de pensamiento → el que aceptan. */
   /** «modelo:nivel pedido» → nivel que el modelo acepta de verdad. */
@@ -211,7 +216,7 @@ export function crearGemini(config: ConfigGemini): ClienteGemini {
     return {
       nombre,
       modelo,
-      leerPliego: (entrada) => leerPartiendo(entrada, leerUno, o.maxPaginas ? { maxPaginas: o.maxPaginas } : {}),
+      leerPliego: (entrada) => leerPartiendo(entrada, leerUno, { maxPaginas: o.maxPaginas ?? 1 }),
     };
   }
 

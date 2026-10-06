@@ -4,7 +4,8 @@
  * monta; lo que falta se sustituye por la siguiente opción razonable.
  *
  * Por defecto:
- * - lector: cascada Gemini Flash-Lite → Gemini Flash → OpenRouter (Mistral OCR) → Workers AI
+ * - lector: cascada Gemini 3.8 Flash → Gemini Flash-Lite → OpenRouter (Mistral OCR) → Workers AI (Llama 4 Scout),
+ *   una página por llamada y muchas a la vez (`calidadLector: 'rapida'` pone Flash-Lite delante)
  * - embebedor: Gemini Embedding 2 @1536 (+ Qwen3-VL de InferBox como espacio extra si hay INFERBOX_URL)
  * - transcriptor: Whisper large-v3-turbo de Workers AI; Gemini 3.5 Transcribe si se piden hablantes o si Whisper falla
  * - reordenador y juez: Jev
@@ -51,6 +52,11 @@ export interface OpcionesInteligencia {
   concurrencia?: number;
   /** Aviso cuando la cascada de lectores pasa páginas al siguiente. */
   alPasarLector?: OpcionesCascada['alPasar'];
+  /**
+   * «alta» (por defecto): Gemini 3.8 Flash primero (el más fiel). «rapida»: Flash-Lite primero
+   * (casi 3 veces más rápido, mismo resultado en PDF digitales). La otra queda de reserva.
+   */
+  calidadLector?: 'alta' | 'rapida';
   /** Usar InferBox para el embebedor extra (por defecto, sí si hay URL). */
   inferboxExtra?: boolean;
 }
@@ -77,9 +83,10 @@ export function crearInteligencia(env: EntornoInteligencia, opciones: OpcionesIn
   // Lector: cascada.
   const lectores: Lector[] = [];
   if (gemini) {
-    const principal = s(env.GEMINI_LECTOR_MODELO) ?? MODELOS_GEMINI.lector;
-    lectores.push(gemini.lector({ modelo: principal }));
-    if (principal !== MODELOS_GEMINI.lectorAlto) lectores.push(gemini.lector({ modelo: MODELOS_GEMINI.lectorAlto }));
+    const rapida = opciones.calidadLector === 'rapida';
+    const principal = s(env.GEMINI_LECTOR_MODELO) ?? (rapida ? MODELOS_GEMINI.lectorRapido : MODELOS_GEMINI.lector);
+    const reserva = principal === MODELOS_GEMINI.lector ? MODELOS_GEMINI.lectorRapido : MODELOS_GEMINI.lector;
+    lectores.push(gemini.lector({ modelo: principal }), gemini.lector({ modelo: reserva }));
   }
   if (openrouter) lectores.push(openrouter.lector({ motor: 'mistral-ocr' }));
   if (workers) lectores.push(workers.lector());

@@ -13,7 +13,7 @@ describe('Gemini · lector', () => {
     });
     const usos: number[] = [];
     const g = crearGemini({ clave: 'K', fetch, onUso: (u) => usos.push(u.usd ?? -1) });
-    const pags = await g.lector({ modelo: 'gemini-3.5-flash-lite' }).leerPliego({ imagenes: IMG(3), primeraFisica: 5, pista: 'comedia' });
+    const pags = await g.lector({ modelo: 'gemini-3.5-flash-lite', maxPaginas: 8 }).leerPliego({ imagenes: IMG(3), primeraFisica: 5, pista: 'comedia' });
     expect(pags.map((p) => p.fisica)).toEqual([5, 6, 7]);
     expect(pags[0]?.folio).toBe('-1');
     expect(llamadas).toHaveLength(1);
@@ -31,11 +31,22 @@ describe('Gemini · lector', () => {
     expect(g.contador.total().paginas).toBe(3);
   });
 
+  it('por defecto lee una página por llamada, todas en paralelo, con Gemini 3.8 Flash', async () => {
+    const { fetch, llamadas } = fetchFalso((ll) => {
+      const m = JSON.stringify(ll.cuerpo).match(/páginas físicas (\d+)/);
+      return respuestaGemini(paginasJSON(Number(m?.[1]), 1));
+    });
+    const pags = await crearGemini({ clave: 'K', fetch }).lector().leerPliego({ imagenes: IMG(4), primeraFisica: 11 });
+    expect(pags.map((p) => p.fisica)).toEqual([11, 12, 13, 14]);
+    expect(llamadas).toHaveLength(4);
+    expect(llamadas.every((l) => l.url.includes('gemini-3.8-flash:generateContent'))).toBe(true);
+  });
+
   it('manda el PDF en línea y pasa por AI Gateway con baseUrl', async () => {
     const pdf = await pdfDePaginas(2);
     const { fetch, llamadas } = fetchFalso(() => respuestaGemini(paginasJSON(1, 2)));
     const g = crearGemini({ clave: 'K', fetch, baseUrl: 'https://gateway.ai.cloudflare.com/v1/C/G/google-ai-studio/' });
-    const pags = await g.lector().leerPliego({ pdf, primeraFisica: 1 });
+    const pags = await g.lector({ maxPaginas: 2 }).leerPliego({ pdf, primeraFisica: 1 });
     expect(pags).toHaveLength(2);
     expect(llamadas[0]?.url).toMatch(/^https:\/\/gateway\.ai\.cloudflare\.com\/v1\/C\/G\/google-ai-studio\/v1beta\/models\//);
     const parte = (llamadas[0]?.cuerpo as Cuerpo).contents[0]?.parts[0] as { inline_data: { mime_type: string } };
@@ -50,7 +61,7 @@ describe('Gemini · lector', () => {
       const desde = texto.includes('físicas 3 a 4') ? 3 : 1;
       return respuestaGemini(paginasJSON(desde, 2));
     });
-    const pags = await crearGemini({ clave: 'K', fetch }).lector().leerPliego({ pdf, primeraFisica: 1 });
+    const pags = await crearGemini({ clave: 'K', fetch }).lector({ maxPaginas: 4 }).leerPliego({ pdf, primeraFisica: 1 });
     expect(llamadas).toHaveLength(3);
     expect(pags.map((p) => p.fisica)).toEqual([1, 2, 3, 4]);
     expect(pags.every((p) => p.confianza > 0.5)).toBe(true);

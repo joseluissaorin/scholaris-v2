@@ -15,5 +15,8 @@
   "dependencies": {
     "@scholaris/nucleo": "workspace:*",
     "pdf-lib": "^1.17.1"
+  },
+  "devDependencies": {
+    "undici": "^8.11.2"
   }
 }

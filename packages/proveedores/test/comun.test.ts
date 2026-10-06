@@ -110,7 +110,10 @@ describe('lectura', () => {
   it('el control de calidad rechaza basura, bucles y páginas vacías que no lo son', () => {
     const base = paginaFaltante(1);
     expect(evaluarPagina({ ...base, confianza: 0.9, texto: 'Texto normal y corriente, con su puntuación.' }).aceptable).toBe(true);
-    expect(evaluarPagina({ ...base, confianza: 0.9, texto: '' }).aceptable).toBe(false);
+    expect(evaluarPagina({ ...base, confianza: 0.5, texto: '' }).aceptable).toBe(false);
+    // Sin texto pero el modelo está seguro: página en blanco mal marcada (portadas, guardas).
+    expect(evaluarPagina({ ...base, confianza: 0.9, texto: '' }).aceptable).toBe(true);
+    expect(evaluarPagina({ ...base, confianza: 0.9, texto: 'I' }).aceptable).toBe(true);
     expect(evaluarPagina({ ...base, confianza: 0.9, texto: '', vacia: true }).aceptable).toBe(true);
     expect(evaluarPagina({ ...base, confianza: 0.9, texto: '▓▒░▓▒░ ▓▒░▓▒░ ▓▒░ texto ▓▒░▓▒░▓▒░' }).aceptable).toBe(false);
     expect(evaluarPagina({ ...base, confianza: 0.9, texto: 'la la la '.repeat(60) }).aceptable).toBe(false);

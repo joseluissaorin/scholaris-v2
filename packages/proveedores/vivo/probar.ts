@@ -11,6 +11,7 @@
  * Los resultados quedan en vivo/resultados/*.{json,md}.
  */
 import { readFileSync, existsSync, readdirSync } from 'node:fs';
+import { Agent, setGlobalDispatcher } from 'undici';
 import { execFileSync } from 'node:child_process';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -21,6 +22,11 @@ import {
   ContadorUso, pliegosPdf, cortarPdf, type UsoProveedor,
 } from '../src/index.js';
 import { AQUI, ORIGINALES, SALIDA, secreto, tokenWrangler, leerBytes, guardar, cer, f1Palabras, tabla } from './comun-vivo.js';
+
+// El fetch de Node 26 (undici) encola las peticiones simultáneas a un mismo origen
+// (lo descubrió el agente de ingesta): sin esto, las latencias en paralelo salen infladas.
+// En Workers no pasa. apps/local debe hacer lo mismo al arrancar.
+setGlobalDispatcher(new Agent({ connections: 256, pipelining: 1 }));
 
 const TRABAJO = process.env.PROVWORK ?? '/tmp/provwork';
 const CUENTA_CF = 'f22c7a728ddc8e41cefd2644f8fb7632';
