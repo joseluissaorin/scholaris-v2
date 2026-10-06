@@ -363,3 +363,38 @@ describe('imágenes de página', () => {
     expect((await api(`/documentos/${a.cuerpo.documento}`, { token: t })).estado).toBe(404);
   });
 });
+
+describe('OAuth del servidor MCP', () => {
+  it('registro, autorización con Clerk, token y llamada a /mcp', async () => {
+    const O = 'https://scholaris.prueba';
+    const meta = await (await SELF.fetch(`${O}/.well-known/oauth-authorization-server`)).json() as { authorization_endpoint: string; token_endpoint: string; registration_endpoint: string };
+    expect(meta.authorization_endpoint).toBe(`${O}/oauth/autorizar`);
+    const reg = await (await SELF.fetch(meta.registration_endpoint, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ client_name: 'Cliente MCP de prueba', redirect_uris: ['http://localhost:9999/vuelta'], token_endpoint_auth_method: 'none' }) })).json() as { client_id: string };
+    expect(reg.client_id).toBeTruthy();
+
+    const verificador = 'v'.repeat(50);
+    const reto = btoa(String.fromCharCode(...new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verificador))))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    const consulta = `?response_type=code&client_id=${reg.client_id}&redirect_uri=${encodeURIComponent('http://localhost:9999/vuelta')}&scope=mcp&state=xyz&code_challenge=${reto}&code_challenge_method=S256&resource=${encodeURIComponent(`${O}/mcp`)}`;
+    const pagina = await SELF.fetch(`${O}/oauth/autorizar${consulta}`);
+    expect(pagina.status).toBe(200);
+    expect(await pagina.text()).toContain('Cliente MCP de prueba');
+
+    const t = await token('user_oauth', { fea: 'u:scholaris' });
+    const fin = await (await SELF.fetch(`${O}/oauth/autorizar/completar`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ consulta, token: t }) })).json() as { redirectTo: string };
+    const codigo = new URL(fin.redirectTo).searchParams.get('code')!;
+    expect(new URL(fin.redirectTo).searchParams.get('state')).toBe('xyz');
+
+    const tok = await (await SELF.fetch(meta.token_endpoint, { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ grant_type: 'authorization_code', code: codigo, redirect_uri: 'http://localhost:9999/vuelta', client_id: reg.client_id, code_verifier: verificador, resource: `${O}/mcp` }) })).json() as { access_token: string };
+    expect(tok.access_token).toBeTruthy();
+
+    const llamar = (bearer: string) => SELF.fetch(`${O}/mcp`, { method: 'POST', headers: { authorization: `Bearer ${bearer}`, 'content-type': 'application/json', accept: 'application/json, text/event-stream' }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list' }) });
+    const r = await llamar(tok.access_token);
+    expect(r.status).toBe(200);
+    expect(((await r.json()) as { result: { tools: unknown[] } }).result.tools).toHaveLength(4);
+    expect((await llamar('token-inventado')).status).toBe(401);
+    // Sin token: 401 con la pista del recurso protegido (descubrimiento del cliente MCP).
+    const sin = await SELF.fetch(`${O}/mcp`, { method: 'POST', body: '{}' });
+    expect(sin.status).toBe(401);
+    expect(sin.headers.get('www-authenticate') ?? '').toContain('resource_metadata');
+  });
+});

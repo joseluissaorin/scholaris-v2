@@ -22,6 +22,8 @@ export interface Env {
   BUCKET: R2Bucket;
   VECTORES?: VectorizeIndex;
   COLA: Queue<MensajeCola>;
+  /** Tokens y clientes OAuth del servidor MCP (workers-oauth-provider). */
+  OAUTH_KV?: KVNamespace;
   AI?: Ai;
   ASSETS?: Fetcher;
 

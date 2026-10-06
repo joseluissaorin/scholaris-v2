@@ -73,6 +73,20 @@ if (texto.includes('REPLACE_D1_ID')) {
 } else console.log('D1 ya configurada');
 
 // ---------------------------------------------------------------------------
+paso('KV de OAuth');
+if (texto.includes('REPLACE_KV_ID')) {
+  let id = /"?id"?\s*[:=]\s*"([0-9a-f]{32})"/.exec(wrangler(['kv', 'namespace', 'create', 'scholaris-oauth'], { puedeFallar: true }))?.[1];
+  if (!id) {
+    const lista = wrangler(['kv', 'namespace', 'list']);
+    id = JSON.parse(lista.slice(lista.indexOf('['))).find((n) => n.title.includes('scholaris-oauth'))?.id;
+  }
+  if (!id) throw new Error('No he podido obtener el id del KV de OAuth');
+  texto = texto.replace('REPLACE_KV_ID', id);
+  writeFileSync(config, texto);
+  console.log(`KV scholaris-oauth: ${id}`);
+} else console.log('KV de OAuth ya configurado');
+
+// ---------------------------------------------------------------------------
 paso('R2');
 if (!wrangler(['r2', 'bucket', 'list']).includes(`name:           ${BUCKET}\n`)) wrangler(['r2', 'bucket', 'create', BUCKET]);
 else console.log(`Bucket ${BUCKET} ya existe`);

@@ -18,7 +18,7 @@
     "directory": "../../apps/web/dist",
     "binding": "ASSETS",
     "not_found_handling": "single-page-application",
-    "run_worker_first": ["/api/*", "/mcp"]
+    "run_worker_first": ["/api/*", "/mcp", "/oauth/*", "/.well-known/*"]
   },
 
   "durable_objects": {
@@ -52,6 +52,11 @@
 
   "d1_databases": [
     { "binding": "DB", "database_name": "scholaris", "database_id": "0d1ff2db-2d72-4ead-bf7c-34f7db7caed6" }
+  ],
+
+  // Clientes y tokens OAuth del servidor MCP.
+  "kv_namespaces": [
+    { "binding": "OAUTH_KV", "id": "a1d29a5cb7354775825a78963bc6871b" }
   ],
 
   "r2_buckets": [

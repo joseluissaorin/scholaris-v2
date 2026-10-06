@@ -15,6 +15,7 @@ import type { UsuarioSesion } from '../puertos.js';
 import type { Env } from './env.js';
 import type { MensajeCola } from './cola.js';
 import { almacenDesdeEnv, configDesdeEnv, cuentasDesdeEnv, origenDe } from './puertos-cf.js';
+import { conOAuth } from './oauth.js';
 
 export { Estanteria } from './estanteria-do.js';
 export { Tarea } from './tarea-do.js';
@@ -64,7 +65,8 @@ function plataforma(env: Env, peticion: Request): Plataforma {
 
 const esPagina = (ruta: string) => !/\.[a-z0-9]+$/i.test(ruta.split('/').pop() ?? '');
 
-export default {
+/** API, web y MCP sin OAuth (el proveedor OAuth lo envuelve más abajo). */
+const normal: ExportedHandler<Env> = {
   async fetch(peticion: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(peticion.url);
     const esApi = url.pathname.startsWith(`${PREFIJO_API}/`) || url.pathname === PREFIJO_API || url.pathname === '/mcp';
@@ -79,6 +81,12 @@ export default {
     }
     return r;
   },
+};
+
+const conAutorizacion = conOAuth(normal, (env, u, p) => env.ESTANTERIA.getByName(u.id).atender(u, p));
+
+export default {
+  fetch: (peticion: Request, env: Env, ctx: ExecutionContext) => conAutorizacion.fetch(peticion, env, ctx),
 
   async queue(lote: MessageBatch<MensajeCola>, env: Env): Promise<void> {
     for (const m of lote.messages) {
