@@ -44,7 +44,7 @@ export function latexAUnicode(s: string): string {
     const base = letra === 'i' && /^[`'^"~=]$/.test(acento) ? 'i' : letra;
     return (base + (ACENTOS[acento] ?? '')).normalize('NFC');
   });
-  t = t.replace(/\\(ss|ae|AE|oe|OE|aa|AA|o|O|l|L|i|j|textendash|textemdash|textquoteleft|textquoteright|textquotedblleft|textquotedblright|guillemotleft|guillemotright|S|P|dag|ddag|copyright|textregistered|ldots|dots|textellipsis|textsection|textbackslash|textasciitilde|textasciicircum|textunderscore|textbar)\b(?:\{\})?\s?/g, (_m, c: string) => ESPECIALES[c] ?? '');
+  t = t.replace(/\\(ss|ae|AE|oe|OE|aa|AA|o|O|l|L|i|j|textendash|textemdash|textquoteleft|textquoteright|textquotedblleft|textquotedblright|guillemotleft|guillemotright|S|P|dag|ddag|copyright|textregistered|ldots|dots|textellipsis|textsection|textbackslash|textasciitilde|textasciicircum|textunderscore|textbar)\b(?:\{\}|\s)?/g, (_m, c: string) => ESPECIALES[c] ?? '');
   // Formato: \emph{x}, \textit{x}… → x
   for (let i = 0; i < 3; i++) t = t.replace(/\\(?:emph|textit|textbf|textsc|textrm|textsf|texttt|mkbibquote|enquote|url|mbox|textup|textnormal)\s*\{([^{}]*)\}/g, '$1');
   t = t.replace(/\\([&%$#_{}])/g, '$1')
@@ -54,7 +54,7 @@ export function latexAUnicode(s: string): string {
     .replace(/\\,|\\ /g, ' ')
     .replace(/\\[a-zA-Z]+\s*/g, '') // órdenes desconocidas
     .replace(/[{}]/g, '')
-    .replace(/\s+/g, ' ')
+    .replace(/[ \t\r\n]+/g, ' ')
     .trim();
   return t.normalize('NFC');
 }
@@ -265,7 +265,7 @@ export function importarBibtex(texto: string): ImportacionBibtex {
     } catch (e) {
       errores.push({ ...(clave ? { clave } : {}), mensaje: `@${tipo}: ${(e as Error).message}` });
       // Salta a la siguiente entrada.
-      const sig = l.s.indexOf('\n@', l.i);
+      const sig = l.s.indexOf('\n@', arroba + 1);
       l.i = sig === -1 ? l.s.length : sig + 1;
     }
   }
