@@ -1,5 +1,30 @@
 # Scholaris para Python
 
+## Lo más sencillo: subo, busco, pregunto, cito
+
+```bash
+pip install scholaris            # solo requests
+```
+
+Crea una clave en Scholaris (Ajustes → Claves de API) y:
+
+```python
+from scholaris.api import Scholaris
+
+s = Scholaris("sch_…")                       # o la variable SCHOLARIS_CLAVE
+doc = s.subir("articulo.pdf")                 # también una URL: web, PDF, YouTube, pódcast
+for p in s.buscar("atención escalada", k=3):
+    print(p["cita"], p["texto"][:80], p["enlace"])   # «(Vaswani et al., 2017, p. 4)»
+print(s.preguntar("¿Qué es la atención multicabeza?")["respuesta"])   # Markdown con notas [^n]
+print(s.citar("La atención sustituye a la recurrencia.")["texto"])
+print(s.verificar("El Transformer prescinde de la recurrencia.")["veredicto"])
+print(s.texto(doc["id"], desde="23", hasta="25", markdown=True))       # páginas por su folio impreso
+```
+
+Es la API pública v1 (`/api/v1`); la guía con todos los verbos está en `/api`
+de tu instancia. Contra la versión local: `Scholaris(base="http://localhost:8787")`.
+Los errores son `ErrorScholaris`, con `codigo`, `mensaje` (español) y `message` (inglés).
+
 ## v2: SPDF 4.0 sin conexión y la API de Scholaris
 
 ```bash
