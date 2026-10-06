@@ -3,7 +3,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import type { AnclaPagina } from '@scholaris/nucleo';
 import {
   aBibtex, aCSLJSON, aItemCSL, aRIS, analizarTemporal, autocitar, bibliografia, citaDocumento, combinarRPr, detectarAfirmacionNegativa, dividirAfirmaciones, dividirParrafos,
-  extraerAnios, extraerTexto, importarBibtex, insertarCitasDocx, insertarCitasTexto, latexAUnicode, leerDocx, listarEstilos, MotorCitas, nombreBibtex,
+  extraerAnios, extraerTexto, fundirRangos, importarBibtex, insertarCitasDocx, insertarCitasTexto, latexAUnicode, leerDocx, listarEstilos, MotorCitas, nombreBibtex,
   puntoDeInsercion, terminosClaveAusentes, verificarAfirmacion, type DocumentoCitable, type ResultadoAutocita,
 } from '../src/index.js';
 import { bienFormado, DOCS, doc, docxDePrueba, montar } from './apoyo.js';
@@ -93,9 +93,14 @@ describe('autocita', () => {
     for (const c of todas) {
       const f = frags.get(c.fragmento);
       expect(f, c.fragmento).toBeDefined();
-      expect(c.pasaje).toBe(f!.texto);
+      // Las citas de páginas cercanas se funden («pp. 3-4»): el pasaje contiene el del fragmento y el rango lo cubre.
+      expect(c.pasaje).toContain(f!.texto);
       expect(c.documento).toBe(f!.documento);
-      expect(c.ancla).toEqual(f!.ancla);
+      if (c.anclaFin) {
+        const fis = (a: unknown) => (a as AnclaPagina).fisica;
+        expect(fis(c.ancla)).toBeLessThanOrEqual(fis(f!.ancla));
+        expect(fis(c.anclaFin)).toBeGreaterThanOrEqual(fis(f!.anclaFin ?? f!.ancla));
+      } else expect(c.ancla).toEqual(f!.ancla);
     }
     expect(r.estadisticas.inventadas).toBeGreaterThan(0);
     expect(r.avisos.join(' ')).toMatch(/no correspondían a ningún candidato/);
@@ -154,7 +159,9 @@ describe('autocita', () => {
 
   it('juez por lotes: una llamada por cada 8 pares', () => {
     const juzgadas = r.afirmaciones.flatMap((a) => a.citas).filter((c) => c.relaciones).length;
-    expect(r.estadisticas.llamadasJuez).toBe(Math.ceil(juzgadas / 8));
+    // Se juzga antes de fundir rangos: puede haber más pares juzgados que citas finales.
+    expect(r.estadisticas.llamadasJuez).toBeGreaterThanOrEqual(Math.ceil(juzgadas / 8));
+    expect(r.estadisticas.llamadasJuez).toBeLessThanOrEqual(Math.ceil(juzgadas / 8) + 1);
     expect(eventos[0]).toBe('segmentacion');
     expect(eventos.at(-1)).toBe('listo');
   });
@@ -440,5 +447,19 @@ describe('importación BibTeX', () => {
     expect(nombreBibtex('de la Fontaine, Jean')).toEqual({ nombre: 'Jean', apellidos: 'de la Fontaine' });
     expect(nombreBibtex('Jean de la Fontaine')).toEqual({ nombre: 'Jean', apellidos: 'de la Fontaine' });
     expect(nombreBibtex('King, Jr., Martin Luther')).toEqual({ nombre: 'Martin Luther', apellidos: 'King, Jr.' });
+  });
+});
+
+describe('fundir rangos de citas', () => {
+  it('si el mejor pasaje es el último, el rango llega hasta su página', () => {
+    const cita = (fisica: number, respaldo: number) => ({
+      id: `c${fisica}`, documento: 'doc-lewis', fragmento: `f${fisica}`, ancla: pag(fisica, String(fisica - 6)), relacion: 'APOYO_DIRECTO', respaldo,
+      pasaje: `pasaje ${fisica}`, estado: 'aceptada',
+    }) as unknown as Parameters<typeof fundirRangos>[0][number];
+    const r = fundirRangos([cita(25, 0.6), cita(26, 0.9)]);
+    expect(r).toHaveLength(1);
+    expect(r[0]!.fragmento).toBe('f26');
+    expect((r[0]!.ancla as AnclaPagina).fisica).toBe(25);
+    expect((r[0]!.anclaFin as AnclaPagina).fisica).toBe(26);
   });
 });

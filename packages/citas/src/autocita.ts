@@ -301,8 +301,10 @@ export function fundirRangos(citas: CitaPropuesta[]): CitaPropuesta[] {
       if (racha.length >= 2) {
         const mejor = racha.reduce((a, b) => (b.respaldo > a.respaldo ? b : a));
         const ultimo = racha[racha.length - 1]!;
-        mejor.ancla = racha[0]!.ancla;
+        // El final se lee ANTES de mover el ancla: si el mejor es el último, su ancla se pisa
+        // y la cita se quedaba en la primera página sin la del pasaje (banco de calidad, c030 y c041).
         const fin = ultimo.anclaFin ?? ultimo.ancla;
+        mejor.ancla = racha[0]!.ancla;
         if ((fin as { fisica: number }).fisica !== (mejor.ancla as { fisica: number }).fisica) mejor.anclaFin = fin;
         mejor.pasaje = racha.map((c) => c.pasaje).join(' […] ');
         for (const c of racha) if (c !== mejor) fuera.add(c);
