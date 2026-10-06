@@ -1,0 +1,301 @@
+import { useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { createFileRoute, useNavigate } from '@tanstack/react-router';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useWindowVirtualizer } from '@tanstack/react-virtual';
+import type { TipoEntrada } from '@scholaris/nucleo';
+import type { Biblioteca, ResumenDocumento } from '@scholaris/contrato';
+import {
+  avisar, Boton, Campo, Chip, cx, Dialogo, Esqueleto, Icono, MenuContenido, MenuDisparador, MenuElemento, MenuRaiz, Rotulo, Teclas, Vacio,
+} from '@scholaris/ui';
+import { q } from '../datos/consultas';
+import { api } from '../datos/api';
+import { useIngestas } from '../datos/ingesta';
+import { disparar, ponerBibliotecaActiva } from '../lib/acciones';
+import { Cabecera } from '../componentes/comunes/cabecera';
+import { FichaDocumento, FilaDocumento, puntoColeccion } from '../componentes/biblioteca/documento';
+import { TarjetaIngesta } from '../componentes/biblioteca/ingesta';
+import { TECLA_MOD } from '../componentes/marco/navegacion';
+
+const GRUPOS: Array<{ id: string; nombre: string; tipos: TipoEntrada[] }> = [
+  { id: 'libros', nombre: 'Libros y artículos', tipos: ['pdf', 'epub'] },
+  { id: 'escaneos', nombre: 'Escaneos y fotos', tipos: ['pdf_escaneado', 'fotos', 'imagen'] },
+  { id: 'medios', nombre: 'Audio y vídeo', tipos: ['audio', 'video'] },
+  { id: 'textos', nombre: 'Textos y web', tipos: ['documento', 'web'] },
+  { id: 'otros', nombre: 'Diapositivas y hojas', tipos: ['presentacion', 'hoja'] },
+];
+
+type Orden = 'recientes' | 'titulo' | 'autor' | 'anio';
+const ORDENES: Record<Orden, string> = { recientes: 'Añadidos hace poco', titulo: 'Título', autor: 'Autor', anio: 'Año de la obra' };
+
+interface BusquedaBiblioteca { q?: string; grupo?: string; col?: string; orden?: Orden; vista?: 'rejilla' | 'lista' }
+
+export const Route = createFileRoute('/')({
+  validateSearch: (s: Record<string, unknown>): BusquedaBiblioteca => ({
+    q: typeof s.q === 'string' && s.q ? s.q : undefined,
+    grupo: typeof s.grupo === 'string' ? s.grupo : undefined,
+    col: typeof s.col === 'string' ? s.col : undefined,
+    orden: (['recientes', 'titulo', 'autor', 'anio'] as const).includes(s.orden as Orden) ? (s.orden as Orden) : undefined,
+    vista: s.vista === 'lista' ? 'lista' : undefined,
+  }),
+  loader: ({ context }) => {
+    void context.consultas.prefetchQuery(q.bibliotecas());
+    return context.consultas.ensureQueryData(q.documentos());
+  },
+  component: PaginaBiblioteca,
+});
+
+const normal = (s: string) => s.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase();
+
+function ordenar(lista: ResumenDocumento[], orden: Orden) {
+  const c = new Intl.Collator('es', { sensitivity: 'base', numeric: true });
+  const apellido = (d: ResumenDocumento) => d.autores.split(',')[0]?.trim().split(' ').at(-1) ?? '';
+  switch (orden) {
+    case 'titulo': return [...lista].sort((a, b) => c.compare(a.titulo, b.titulo));
+    case 'autor': return [...lista].sort((a, b) => c.compare(apellido(a), apellido(b)) || c.compare(a.titulo, b.titulo));
+    case 'anio': return [...lista].sort((a, b) => (a.anio ?? 9999) - (b.anio ?? 9999));
+    default: return [...lista].sort((a, b) => b.creado.localeCompare(a.creado));
+  }
+}
+
+function PaginaBiblioteca() {
+  const busqueda = Route.useSearch();
+  const navegar = useNavigate({ from: '/' });
+  const { data, isPending } = useQuery(q.documentos());
+  const { data: bibliotecas = [] } = useQuery(q.bibliotecas());
+  const ingestas = useIngestas();
+  const [texto, setTexto] = useState(busqueda.q ?? '');
+  const diferido = useDeferredValue(texto);
+  const [nueva, setNueva] = useState(false);
+  const orden = busqueda.orden ?? 'recientes';
+  const vista = busqueda.vista ?? 'rejilla';
+
+  const fijar = (cambio: Partial<BusquedaBiblioteca>) => void navegar({ search: (s) => ({ ...s, ...cambio }), replace: true });
+
+  // Las subidas van a la colección que se está mirando.
+  useEffect(() => { ponerBibliotecaActiva(busqueda.col); return () => ponerBibliotecaActiva(undefined); }, [busqueda.col]);
+  // El filtro de texto se refleja en la URL sin bloquear la escritura.
+  useEffect(() => { const h = setTimeout(() => fijar({ q: texto || undefined }), 300); return () => clearTimeout(h); }, [texto]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const todos = data?.elementos ?? [];
+  const enMesa = new Set(ingestas.map((i) => i.documento).filter(Boolean));
+  const visibles = useMemo(() => {
+    let l = todos.filter((d) => !enMesa.has(d.id) || d.estado === 'listo');
+    const g = GRUPOS.find((x) => x.id === busqueda.grupo);
+    if (g) l = l.filter((d) => g.tipos.includes(d.tipo));
+    if (busqueda.col) l = l.filter((d) => d.bibliotecas.includes(busqueda.col!));
+    const t = normal(diferido.trim());
+    if (t) l = l.filter((d) => normal(`${d.titulo} ${d.autores} ${d.anio ?? ''}`).includes(t));
+    return ordenar(l, orden);
+  }, [todos, busqueda.grupo, busqueda.col, diferido, orden, ingestas]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const recuento = (g: (typeof GRUPOS)[number]) => todos.filter((d) => g.tipos.includes(d.tipo)).length;
+  const coleccion = bibliotecas.find((b) => b.id === busqueda.col);
+  const vacia = !isPending && !todos.length && !ingestas.length;
+
+  return (
+    <>
+      <Cabecera numero="01" antetitulo={coleccion ? `Colección · ${coleccion.documentos} documentos` : `Tu biblioteca · ${todos.length} documentos`} titulo={coleccion?.nombre ?? 'Biblioteca'} forma="cuarto">
+        {!vacia ? (
+          <div className="flex flex-col gap-4">
+            <div className="flex flex-wrap items-center gap-2">
+              <Campo
+                icono="filtro"
+                placeholder="Filtrar por título, autor o año"
+                value={texto}
+                onChange={(e) => setTexto(e.target.value)}
+                className="w-full max-w-sm"
+                aria-label="Filtrar la biblioteca"
+                sufijo={texto ? <button type="button" aria-label="Borrar el filtro" onClick={() => setTexto('')} className="grid h-7 w-7 place-items-center rounded-s text-apagado hover:text-tinta"><Icono nombre="cerrar" tam={14} /></button> : undefined}
+              />
+              <div className="ml-auto flex items-center gap-1">
+                <MenuRaiz>
+                  <MenuDisparador asChild>
+                    <Boton variante="fantasma" tam="m" icono="ordenar">{ORDENES[orden]}</Boton>
+                  </MenuDisparador>
+                  <MenuContenido>
+                    {(Object.keys(ORDENES) as Orden[]).map((o) => (
+                      <MenuElemento key={o} icono={o === orden ? 'hecho' : undefined} alElegir={() => fijar({ orden: o === 'recientes' ? undefined : o })}>{ORDENES[o]}</MenuElemento>
+                    ))}
+                  </MenuContenido>
+                </MenuRaiz>
+                <div role="group" aria-label="Vista" className="flex rounded-s border border-filete-fuerte p-0.5">
+                  <button type="button" aria-pressed={vista === 'rejilla'} aria-label="Rejilla" onClick={() => fijar({ vista: undefined })} className={cx('grid h-8 w-8 place-items-center rounded-[2px]', vista === 'rejilla' ? 'bg-tinta text-sobre-tinta' : 'text-tinta-2 hover:text-tinta')}><Icono nombre="cuadricula" tam={15} /></button>
+                  <button type="button" aria-pressed={vista === 'lista'} aria-label="Lista" onClick={() => fijar({ vista: 'lista' })} className={cx('grid h-8 w-8 place-items-center rounded-[2px]', vista === 'lista' ? 'bg-tinta text-sobre-tinta' : 'text-tinta-2 hover:text-tinta')}><Icono nombre="lista" tam={15} /></button>
+                </div>
+              </div>
+            </div>
+            <div className="sin-barra -mx-5 flex gap-2 overflow-x-auto px-5 md:mx-0 md:flex-wrap md:px-0">
+              <Chip activo={!busqueda.grupo} onClick={() => fijar({ grupo: undefined })}>Todo</Chip>
+              {GRUPOS.map((g) => { const n = recuento(g); return n ? <Chip key={g.id} activo={busqueda.grupo === g.id} recuento={n} onClick={() => fijar({ grupo: busqueda.grupo === g.id ? undefined : g.id })}>{g.nombre}</Chip> : null; })}
+            </div>
+          </div>
+        ) : null}
+      </Cabecera>
+
+      <div className="px-5 pb-16 md:px-12">
+        {/* Colecciones */}
+        {!vacia ? (
+          <div className="sin-barra -mx-5 mb-8 flex items-center gap-2 overflow-x-auto border-y border-filete px-5 py-3 md:mx-0 md:px-0">
+            <Rotulo className="mr-2 shrink-0">Colecciones</Rotulo>
+            <Chip activo={!busqueda.col} onClick={() => fijar({ col: undefined })}>Toda la biblioteca</Chip>
+            {bibliotecas.map((b) => (
+              <Chip key={b.id} activo={busqueda.col === b.id} recuento={b.documentos} onClick={() => fijar({ col: busqueda.col === b.id ? undefined : b.id })}>
+                <span className="flex items-center gap-1.5"><span className={cx('h-2 w-2 rounded-full', puntoColeccion(b.color))} />{b.nombre}{b.compartida ? <Icono nombre="idiomas" tam={12} titulo="Compartida" /> : null}</span>
+              </Chip>
+            ))}
+            <Chip icono="mas" onClick={() => setNueva(true)}>Nueva</Chip>
+          </div>
+        ) : null}
+
+        {/* La mesa de entrada */}
+        {ingestas.length ? (
+          <section aria-label="En la imprenta" className="mb-10">
+            <div className="mb-3 flex items-baseline gap-3">
+              <h2 className="text-[1.375rem] italic tracking-[-0.01em]">En la imprenta</h2>
+              <Rotulo>{ingestas.filter((i) => i.etapa !== 'listo').length} en curso · las páginas se pueden leer en cuanto aparecen</Rotulo>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+              {ingestas.map((i) => <TarjetaIngesta key={i.id} i={i} />)}
+            </div>
+          </section>
+        ) : null}
+
+        {isPending ? (
+          <div className="grid grid-cols-2 gap-x-5 gap-y-8 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 2xl:grid-cols-6">
+            {Array.from({ length: 12 }, (_, i) => <div key={i}><Esqueleto className="aspect-[3/4]" /><Esqueleto className="mt-3 h-4 w-4/5" /><Esqueleto className="mt-2 h-3 w-1/2" /></div>)}
+          </div>
+        ) : vacia ? (
+          <BibliotecaVacia />
+        ) : !visibles.length ? (
+          <Vacio forma="triangulo" titulo="Nada coincide con el filtro." accion={<Boton variante="linea" onClick={() => { setTexto(''); fijar({ grupo: undefined, col: undefined, q: undefined }); }}>Quitar los filtros</Boton>}>
+            {diferido ? <>Ningún título ni autor contiene «{diferido}». Para buscar dentro de los textos, usa <strong>Buscar</strong>.</> : 'Prueba con otra colección o tipo.'}
+          </Vacio>
+        ) : vista === 'lista' ? (
+          <ListaVirtual docs={visibles} bibliotecas={bibliotecas} />
+        ) : (
+          <RejillaVirtual docs={visibles} bibliotecas={bibliotecas} />
+        )}
+      </div>
+
+      <NuevaColeccion abierta={nueva} alCambiar={setNueva} />
+    </>
+  );
+}
+
+function columnasPara(ancho: number) {
+  return ancho >= 1500 ? 7 : ancho >= 1180 ? 6 : ancho >= 960 ? 5 : ancho >= 720 ? 4 : ancho >= 460 ? 3 : 2;
+}
+
+/** Rejilla virtualizada por filas: mil documentos cuestan lo mismo que veinte. */
+function RejillaVirtual({ docs, bibliotecas }: { docs: ResumenDocumento[]; bibliotecas: Biblioteca[] }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [ancho, setAncho] = useState(0);
+  const [margen, setMargen] = useState(0);
+  useLayoutEffect(() => {
+    const el = ref.current!;
+    const medir = () => { setAncho(el.clientWidth); setMargen(el.getBoundingClientRect().top + window.scrollY); };
+    medir();
+    const ro = new ResizeObserver(medir);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  const cols = columnasPara(ancho || 1200);
+  const hueco = 20;
+  const anchoFicha = ((ancho || 1200) - hueco * (cols - 1)) / cols;
+  const filas = Math.ceil(docs.length / cols);
+  const v = useWindowVirtualizer({ count: filas, estimateSize: () => anchoFicha * (4 / 3) + 104, overscan: 3, scrollMargin: margen });
+
+  return (
+    <div ref={ref} className="relative" style={{ height: v.getTotalSize() }}>
+      {v.getVirtualItems().map((fila) => (
+        <div
+          key={fila.key}
+          data-index={fila.index}
+          ref={v.measureElement}
+          className="absolute inset-x-0 grid pb-8"
+          style={{ transform: `translateY(${fila.start - v.options.scrollMargin}px)`, gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`, columnGap: hueco }}
+        >
+          {docs.slice(fila.index * cols, fila.index * cols + cols).map((d, k) => <FichaDocumento key={d.id} doc={d} bibliotecas={bibliotecas} indice={fila.index * cols + k} />)}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function ListaVirtual({ docs, bibliotecas }: { docs: ResumenDocumento[]; bibliotecas: Biblioteca[] }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [margen, setMargen] = useState(0);
+  useLayoutEffect(() => { setMargen((ref.current?.getBoundingClientRect().top ?? 0) + window.scrollY); }, []);
+  const v = useWindowVirtualizer({ count: docs.length, estimateSize: () => 64, overscan: 10, scrollMargin: margen });
+  return (
+    <div>
+      <div className="hidden grid-cols-[2.5rem_minmax(0,3fr)_minmax(0,2fr)_6rem_9rem_auto] gap-4 border-b border-tinta px-1 pb-2 sm:grid">
+        <span /><Rotulo>Título</Rotulo><Rotulo>Autoría</Rotulo><Rotulo>Año</Rotulo><Rotulo>Tipo</Rotulo><span className="w-8" />
+      </div>
+      <div ref={ref} className="relative" style={{ height: v.getTotalSize() }}>
+        {v.getVirtualItems().map((f) => (
+          <div key={f.key} className="absolute inset-x-0" style={{ transform: `translateY(${f.start - v.options.scrollMargin}px)` }}>
+            <FilaDocumento doc={docs[f.index]!} bibliotecas={bibliotecas} />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function BibliotecaVacia() {
+  return (
+    <div className="relative grid gap-10 overflow-hidden rounded-m border-2 border-dashed border-filete-fuerte p-8 md:grid-cols-[1.2fr_1fr] md:p-14">
+      <div>
+        <p className="rotulo text-rojo">Empieza por aquí</p>
+        <h2 className="titular mt-3 text-[clamp(2.5rem,6vw,4.5rem)]">Suelta cualquier cosa en esta ventana.</h2>
+        <p className="mt-5 max-w-md text-[1.0625rem] text-tinta-2">Un PDF, un libro escaneado, las fotos de un capítulo, la grabación de una clase, un DOCX, un enlace. Lo leemos y cada cita apuntará a la página impresa o al segundo exacto.</p>
+        <div className="mt-8 flex flex-wrap gap-2">
+          <Boton variante="rojo" tam="g" icono="subir" onClick={() => disparar('archivos')}>Elegir archivos</Boton>
+          <Boton variante="linea" tam="g" icono="enlace" onClick={() => disparar('enlace')}>Pegar un enlace</Boton>
+        </div>
+        <p className="mt-4 text-[0.8125rem] text-apagado">También puedes pegar con <Teclas>{TECLA_MOD} V</Teclas> en cualquier parte.</p>
+      </div>
+      <ul className="grid grid-cols-2 content-center gap-3 text-[0.9375rem]">
+        {[['documento', 'PDF y escaneos', 'p. 145'], ['camara', 'Fotos de un libro', 'p. 23'], ['audio', 'Audio', '12:04'], ['video', 'Vídeo', '1:02:41'], ['lector', 'EPUB y DOCX', 'cap. 3, párr. 2'], ['diapositiva', 'Diapositivas', 'diap. 7']].map(([i, n, f]) => (
+          <li key={n} className="flex flex-col gap-2 rounded-s border border-filete bg-hoja p-3">
+            <Icono nombre={i as 'documento'} tam={20} className="text-tinta-2" />
+            <span>{n}</span>
+            <span className="border-l-2 border-rojo pl-1.5 font-mono text-[0.75rem]">{f}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function NuevaColeccion({ abierta, alCambiar }: { abierta: boolean; alCambiar: (v: boolean) => void }) {
+  const qc = useQueryClient();
+  const navegar = useNavigate({ from: '/' });
+  const [nombre, setNombre] = useState('');
+  const [color, setColor] = useState('rojo');
+  async function crear() {
+    if (!nombre.trim()) return;
+    alCambiar(false);
+    try {
+      const b = await api().bibliotecas.crear({ nombre: nombre.trim(), color });
+      qc.setQueryData<Biblioteca[]>(['bibliotecas'], (l) => [...(l ?? []), b]);
+      void navegar({ search: (s) => ({ ...s, col: b.id }) });
+      avisar(`Colección «${b.nombre}» creada. Lo que añadas ahora irá a ella.`, { tono: 'exito' });
+    } catch { avisar('No se pudo crear la colección.', { tono: 'error' }); }
+    setNombre('');
+  }
+  return (
+    <Dialogo abierto={abierta} alCambiar={alCambiar} titulo="Nueva colección" descripcion="Agrupa documentos por proyecto, curso o seminario. Un documento puede estar en varias."
+      pie={<><Boton variante="fantasma" onClick={() => alCambiar(false)}>Cancelar</Boton><Boton variante="tinta" disabled={!nombre.trim()} onClick={() => void crear()}>Crear</Boton></>}>
+      <form onSubmit={(e) => { e.preventDefault(); void crear(); }} className="flex flex-col gap-4">
+        <Campo autoFocus placeholder="Por ejemplo: TFG, Seminario de Blanco…" value={nombre} onChange={(e) => setNombre(e.target.value)} aria-label="Nombre de la colección" />
+        <div role="radiogroup" aria-label="Color" className="flex gap-2">
+          {['rojo', 'azul', 'amarillo', 'tinta'].map((c) => (
+            <button key={c} type="button" role="radio" aria-checked={color === c} aria-label={c} onClick={() => setColor(c)} className={cx('h-8 w-8 rounded-full ring-offset-2 ring-offset-hoja', puntoColeccion(c), color === c && 'ring-2 ring-tinta')} />
+          ))}
+        </div>
+      </form>
+    </Dialogo>
+  );
+}

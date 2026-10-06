@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Scholaris</title>
+    <meta name="description" content="Tu biblioteca, leída y citable. Cualquier archivo se vuelve buscable y cada cita apunta a la página impresa o al segundo exacto." />
+    <meta name="theme-color" content="#F3EEE3" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#1B1612" media="(prefers-color-scheme: dark)" />
+    <link rel="icon" href="/monograma.svg" type="image/svg+xml" />
+    <script>
+      // Tema antes del primer pintado: sin parpadeo ni salto.
+      (function () {
+        try {
+          var t = localStorage.getItem('scholaris.tema') || 'sistema';
+          var oscuro = t === 'oscuro' || (t === 'sistema' && matchMedia('(prefers-color-scheme: dark)').matches);
+          if (oscuro) document.documentElement.classList.add('oscuro');
+          var d = localStorage.getItem('scholaris.densidad');
+          if (d && d !== 'normal') document.documentElement.dataset.densidad = d;
+          var l = localStorage.getItem('scholaris.lectura');
+          if (l) document.documentElement.style.setProperty('--tam-lectura', Number(l) / 16 + 'rem');
+        } catch (e) {}
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="raiz"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

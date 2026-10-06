@@ -1,0 +1,179 @@
+/*
+ * Scholaris · sistema visual «Imprenta».
+ *
+ * Papel cálido, tinta de café, tres tintas Bauhaus (rojo, azul, amarillo) que
+ * nunca se mezclan en la misma pieza más de lo necesario. Georgia para leer y
+ * para mandar; monoespaciada para los datos (folios, marcas de tiempo, cifras).
+ * Este fichero lo importa la web antes de Tailwind; los colores se exponen como
+ * utilidades (`bg-papel`, `text-tinta`, `border-filete`, `text-rojo`…).
+ */
+
+@custom-variant dark (&:where(.oscuro, .oscuro *));
+
+@theme inline {
+  --color-papel: var(--s-papel);
+  --color-hoja: var(--s-hoja);
+  --color-hondo: var(--s-hondo);
+  --color-filete: var(--s-filete);
+  --color-filete-fuerte: var(--s-filete-fuerte);
+  --color-tinta: var(--s-tinta);
+  --color-tinta-2: var(--s-tinta-2);
+  --color-apagado: var(--s-apagado);
+  --color-rojo: var(--s-rojo);
+  --color-rojo-suave: var(--s-rojo-suave);
+  --color-azul: var(--s-azul);
+  --color-azul-suave: var(--s-azul-suave);
+  --color-amarillo: var(--s-amarillo);
+  --color-amarillo-suave: var(--s-amarillo-suave);
+  --color-verde: var(--s-verde);
+  --color-sobre-tinta: var(--s-sobre-tinta);
+
+  --font-serif: Georgia, 'Iowan Old Style', 'Palatino Linotype', 'Times New Roman', serif;
+  --font-mono: ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, Consolas, monospace;
+  --font-sans: var(--font-serif);
+
+  --radius-s: 3px;
+  --radius-m: 6px;
+  --radius-l: 10px;
+
+  --shadow-hoja: 0 1px 0 var(--s-filete), 0 12px 28px -18px rgb(34 22 15 / 0.35);
+  --shadow-flota: 0 1px 0 var(--s-filete), 0 24px 60px -24px rgb(34 22 15 / 0.45);
+
+  --ease-imprenta: cubic-bezier(0.2, 0.7, 0.1, 1);
+}
+
+:root {
+  color-scheme: light;
+  --s-papel: #f3eee3;
+  --s-hoja: #faf7f0;
+  --s-hondo: #e9e2d2;
+  --s-filete: #d9cfbd;
+  --s-filete-fuerte: #b9aa92;
+  --s-tinta: #22160f;
+  --s-tinta-2: #4f3c2f;
+  --s-apagado: #75614f;
+  --s-rojo: #b8321c;
+  --s-rojo-suave: #f2d9cf;
+  --s-azul: #23457a;
+  --s-azul-suave: #d8e0ec;
+  --s-amarillo: #e2a52a;
+  --s-amarillo-suave: #f6e6bd;
+  --s-verde: #4f6f33;
+  --s-sobre-tinta: #f6f1e6;
+  --s-grano-opacidad: 0.05;
+}
+
+.oscuro {
+  color-scheme: dark;
+  --s-papel: #1a1511;
+  --s-hoja: #231c17;
+  --s-hondo: #120e0b;
+  --s-filete: #3b3029;
+  --s-filete-fuerte: #5b4b3f;
+  --s-tinta: #efe6d6;
+  --s-tinta-2: #cbbba6;
+  --s-apagado: #a39079;
+  --s-rojo: #e7644a;
+  --s-rojo-suave: #43231b;
+  --s-azul: #8fa9dc;
+  --s-azul-suave: #1f2a3d;
+  --s-amarillo: #ecbb52;
+  --s-amarillo-suave: #3a2f17;
+  --s-verde: #9bbd78;
+  --s-sobre-tinta: #1a1511;
+  --s-grano-opacidad: 0.07;
+}
+
+@layer base {
+  html {
+    background: var(--s-papel);
+    color: var(--s-tinta);
+    font-family: var(--font-serif);
+    font-size: 100%;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    font-kerning: normal;
+    font-variant-numeric: oldstyle-nums proportional-nums;
+    -webkit-tap-highlight-color: transparent;
+  }
+  html[data-densidad='compacta'] { font-size: 93.75%; }
+  html[data-densidad='amplia'] { font-size: 106.25%; }
+
+  body {
+    min-height: 100dvh;
+    /* Grano de imprenta: ruido SVG, sin peticiones. */
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .13 0 0 0 0 .09 0 0 0 0 .06 0 0 0 .9 0'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");
+    background-size: 160px;
+    background-blend-mode: multiply;
+    background-color: var(--s-papel);
+  }
+  .oscuro body { background-blend-mode: screen; }
+
+  ::selection { background: var(--s-amarillo-suave); color: var(--s-tinta); }
+
+  :focus-visible {
+    outline: 2px solid var(--s-rojo);
+    outline-offset: 2px;
+    border-radius: 2px;
+  }
+
+  .tnum { font-variant-numeric: lining-nums tabular-nums; }
+}
+
+@layer utilities {
+  .rotulo {
+    font-family: var(--font-mono);
+    font-size: 0.6875rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    font-variant-numeric: tabular-nums;
+  }
+  .titular {
+    font-family: var(--font-serif);
+    font-weight: 400;
+    letter-spacing: -0.035em;
+    line-height: 0.92;
+  }
+  .lectura {
+    font-family: var(--font-serif);
+    font-size: var(--tam-lectura, 1.0625rem);
+    line-height: 1.62;
+    hyphens: auto;
+    hanging-punctuation: first;
+  }
+  .sin-barra { scrollbar-width: none; }
+  .sin-barra::-webkit-scrollbar { display: none; }
+}
+
+/* Animaciones: cortas, de imprenta (aparecen como una hoja que cae), y nulas si se piden. */
+@keyframes s-entra { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@keyframes s-aparece { from { opacity: 0; } to { opacity: 1; } }
+@keyframes s-dialogo { from { opacity: 0; transform: translateY(-8px) scale(0.985); } to { opacity: 1; transform: none; } }
+@keyframes s-pulso { 0%, 100% { opacity: 0.55; } 50% { opacity: 1; } }
+@keyframes s-barrido { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+@keyframes s-tostada { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+@keyframes s-gira { to { transform: rotate(360deg); } }
+
+.anim-entra { animation: s-entra 0.32s var(--ease-imprenta) both; }
+.anim-aparece { animation: s-aparece 0.18s ease-out both; }
+.anim-dialogo { animation: s-dialogo 0.18s var(--ease-imprenta) both; }
+.anim-tostada { animation: s-tostada 0.22s var(--ease-imprenta) both; }
+.anim-pulso { animation: s-pulso 1.6s ease-in-out infinite; }
+.anim-gira { animation: s-gira 9s linear infinite; }
+
+.esqueleto {
+  background: linear-gradient(90deg, var(--s-hondo) 0%, var(--s-filete) 45%, var(--s-hondo) 90%);
+  background-size: 300% 100%;
+  animation: s-barrido 1.6s linear infinite;
+  border-radius: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+  .esqueleto { animation: none; }
+}

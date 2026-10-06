@@ -1,0 +1,50 @@
+@import 'tailwindcss';
+@import '@scholaris/ui/tema.css';
+@source '../../../packages/ui/src';
+
+/* Coincidencias de búsqueda: subrayado amarillo de lápiz, no fondo chillón. */
+mark {
+  background: linear-gradient(transparent 58%, var(--s-amarillo-suave) 58%, var(--s-amarillo-suave) 92%, transparent 92%);
+  color: inherit;
+  padding: 0 0.04em;
+}
+.oscuro mark { background: linear-gradient(transparent 55%, color-mix(in oklab, var(--s-amarillo) 38%, transparent) 55%); }
+
+/* Texto leído en Markdown ligero. */
+.prosa p + p { margin-top: 0.85em; text-indent: 1.4em; }
+.prosa h2, .prosa h3 { font-weight: 400; letter-spacing: -0.015em; line-height: 1.15; margin: 0.2em 0 0.7em; }
+.prosa h2 { font-size: 1.45em; }
+.prosa h3 { font-size: 1.2em; font-style: italic; }
+.prosa ul { list-style: none; padding: 0; }
+.prosa li { position: relative; padding-left: 1.1em; margin: 0.35em 0; }
+.prosa li::before { content: ''; position: absolute; left: 0; top: 0.62em; width: 0.42em; height: 0.42em; background: var(--s-rojo); }
+.prosa table { width: 100%; border-collapse: collapse; font-size: 0.86em; font-variant-numeric: tabular-nums lining-nums; }
+.prosa th, .prosa td { border-bottom: 1px solid var(--s-filete); padding: 0.4em 0.6em; text-align: left; }
+.prosa th { font-family: var(--font-mono); font-size: 0.78em; text-transform: uppercase; letter-spacing: 0.06em; color: var(--s-apagado); font-weight: 400; }
+
+/* Facsímil: la página como objeto impreso cuando no hay imagen. */
+.facsimil {
+  background: #fbf8f1;
+  color: #2a1d14;
+  box-shadow: 0 1px 0 var(--s-filete), 0 18px 40px -26px rgb(34 22 15 / 0.55);
+  font-size: clamp(7px, 1.25cqi, 13px);
+  container-type: inline-size;
+}
+.oscuro .facsimil { background: #e9e1d1; color: #2a1d14; }
+
+/* El lector: el folio se queda pegado arriba mientras su página está a la vista. */
+.folio-pegado { position: sticky; top: 0.75rem; }
+
+/* Karaoke: la palabra que suena. */
+.palabra { border-radius: 2px; transition: background-color 0.12s, color 0.12s; cursor: pointer; }
+.palabra:hover { background: var(--s-hondo); }
+.palabra[data-ahora='true'] { background: var(--s-tinta); color: var(--s-papel); }
+.palabra[data-dicha='true'] { color: var(--s-tinta); }
+.tramo-futuro .palabra { color: var(--s-tinta-2); }
+
+/* Contenido diferido sin coste mientras no se ve. */
+.diferido { content-visibility: auto; contain-intrinsic-size: auto 320px; }
+
+@media (pointer: coarse) {
+  .tactil-grande { min-height: 44px; min-width: 44px; }
+}
