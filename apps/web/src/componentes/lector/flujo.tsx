@@ -137,15 +137,17 @@ const Fila = memo(function Fila({ docId, orden, modo, texto, apaisada, resaltar,
   }
 
   const folio = u?.ancla.tipo === 'pagina' ? u.ancla : null;
+  // Los documentos migrados de la v1 solo guardan la vista previa de cada página: mejor eso que el facsímil.
+  const imagenPagina = u?.imagenUrl ?? u?.miniaturaUrl;
   const pagina = (
     <div className={cx('relative', modo === 'pagina' && 'mx-auto w-full max-w-[46rem]')}>
       {pendiente ? (
         <div className={cx('grid w-full place-items-center rounded-md border border-dashed border-filete-fuerte bg-hondo/40', apaisada ? 'aspect-[16/9]' : 'aspect-[1/1.414]')}>
           <span className="flex items-center gap-2 text-[0.875rem] text-apagado"><span className="h-1.5 w-1.5 rounded-full bg-rojo anim-pulso" />Leyendo esta página…</span>
         </div>
-      ) : u?.imagenUrl && !imagenRota ? (
+      ) : imagenPagina && !imagenRota ? (
         <div className="relative">
-          <img src={u.imagenUrl} alt={altPagina(u.etiqueta, figuras)} loading="lazy" decoding="async" onError={() => setImagenRota(true)} onLoad={(e) => setAspectoImagen(e.currentTarget.naturalWidth / e.currentTarget.naturalHeight)} className={cx('w-full rounded-md bg-white object-contain shadow-hoja', apaisada ? 'aspect-[16/9]' : 'aspect-[1/1.414]')} />
+          <img src={imagenPagina} alt={altPagina(u?.etiqueta ?? '', figuras)} loading="lazy" decoding="async" onError={() => setImagenRota(true)} onLoad={(e) => setAspectoImagen(e.currentTarget.naturalWidth / e.currentTarget.naturalHeight)} className={cx('w-full rounded-md bg-white object-contain shadow-hoja', apaisada ? 'aspect-[16/9]' : 'aspect-[1/1.414]')} />
           <MarcasFiguras documento={docId} figuras={figuras} aspecto={aspectoImagen ? { imagen: aspectoImagen, caja: apaisada ? 16 / 9 : 1 / 1.414 } : undefined} todas={todas.filter((f) => f.ancla.tipo !== 'tiempo')} alIr={() => undefined} />
         </div>
       ) : u ? (
