@@ -62,4 +62,4 @@ Los dos puertos los pone la plataforma: `crearWorkersAI(...).lector()` si hay `C
 - `todas`.
 - `ninguna`.
 
-Pendiente de lo que mida el banco de calidad (`bench/calidad`).
+Confirmado por el banco de calidad (`bench/calidad`, 183 consultas). En las consultas sobre Attention, El perseguidor y Lewis, añadir la vía visual con peso 0,3 baja el nDCG@10 de 0,751 a 0,723 sin reordenador y lo deja igual con Jev (0,833 sin ella, 0,832 con ella). Sobre las 183, quitarla de la fusión sube de 0,643 a 0,658. La vista solo aporta en las consultas visuales, y el buscador ya solo la usa para esas.

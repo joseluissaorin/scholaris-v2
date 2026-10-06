@@ -53,7 +53,7 @@ Los tiempos son de ingesta, sin la imprenta (en la nube, la imprenta la hace el 
 
 **Contexto bloqueado.** Gemini bloquea por `PROHIBITED_CONTENT` un grupo de El perseguidor, el de las escenas de heroína, y la reserva de OpenRouter tardaba 25-41 s. Ahora cada grupo tiene un tope (10 s en la tanda, 20 s al consolidar) y lo que no llega lleva una línea de contexto extractiva (título, autor, año, sección y página). Lo que falló en una tanda ya no se reintenta.
 
-**Vector de imagen de página.** Ya no se calcula en las páginas digitales de solo texto, a la espera del banco de calidad. El perseguidor pasa de 124 a 87 vectores y Attention de 57 a 49. Las piezas idénticas (páginas en blanco o repetidas) se vectorizan una sola vez, y solo se describen figuras reales: fuera los adornos de menos del 1 % de la página y las «figuras» que son la página entera.
+**Vector de imagen de página.** Ya no se calcula en las páginas digitales de solo texto, y el banco de calidad lo confirma: en las consultas de texto, la vía visual sobre esas páginas no aporta nada (nDCG@10 de 0,751 sin ella frente a 0,723 con ella, sin reordenador; 0,833 frente a 0,832 con Jev). El perseguidor pasa de 124 a 87 vectores y Attention de 57 a 49. Las piezas idénticas (páginas en blanco o repetidas) se vectorizan una sola vez, y solo se describen figuras reales: fuera los adornos de menos del 1 % de la página y las «figuras» que son la página entera.
 
 **Modo económico** (`--modo economico`, con la Batch API de Gemini, que entrega en JSONL). Probado con el Casamiento:
 
