@@ -28,5 +28,5 @@ export {
 } from './tuberia.js';
 export { Cobertura } from './cobertura.js';
 export { planificar as planificarTandas, tandasDePaginas } from './planificar.js';
-export { revisarTranscripcion, cribarFrases, alinear, sustituir, reescuchar, nombresPropios, type CambioTranscripcion } from './pasos/revision.js';
+export { revisarTranscripcion, aplicarReemplazos, cribarFrases, alinear, sustituir, reescuchar, nombresPropios, type CambioTranscripcion } from './pasos/revision.js';
 export { fichasDe, palabrasCompactas } from './pasos/medios.js';

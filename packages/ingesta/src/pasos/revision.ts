@@ -29,6 +29,29 @@ export interface CambioTranscripcion {
   motivo: string;
 }
 
+/** Palabras [desde, hasta) sustituidas por `nuevas` (con sus instantes). */
+export interface Reemplazo { desde: number; hasta: number; nuevas: PalabraTranscrita[] }
+
+/**
+ * Aplica los reemplazos sobre unas palabras con los MISMOS índices que las que se
+ * revisaron (por ejemplo, ya con los hablantes con nombre): las nuevas toman el
+ * hablante de la primera palabra que sustituyen. Así revisión y atribución de
+ * hablantes pueden ir a la vez.
+ */
+export function aplicarReemplazos(palabras: PalabraTranscrita[], reemplazos: Reemplazo[]): PalabraTranscrita[] {
+  const por = new Map(reemplazos.map((r) => [r.desde, r]));
+  const salida: PalabraTranscrita[] = [];
+  for (let i = 0; i < palabras.length;) {
+    const r = por.get(i);
+    if (r) {
+      const h = palabras[i]?.hablante;
+      salida.push(...r.nuevas.map((w) => ({ ...w, ...(h ? { hablante: h } : {}) })));
+      i = r.hasta;
+    } else { salida.push(palabras[i] as PalabraTranscrita); i++; }
+  }
+  return salida;
+}
+
 export interface OpcionesRevision {
   /** Frases por ventana de cribado. */
   ventana?: number;
@@ -191,7 +214,7 @@ export async function revisarTranscripcion(
   meta: MetadatosDocumento,
   redactor: Redactor,
   opciones: OpcionesRevision = {},
-): Promise<{ palabras: PalabraTranscrita[]; cambios: CambioTranscripcion[]; procedencia: Procedencia }> {
+): Promise<{ palabras: PalabraTranscrita[]; reemplazos: Reemplazo[]; cambios: CambioTranscripcion[]; procedencia: Procedencia }> {
   const reloj = opciones.reloj ?? Date.now;
   const t = reloj();
   const frases = frasesIndexadas(palabras);
@@ -229,18 +252,11 @@ export async function revisarTranscripcion(
       }
     } catch { fallidos++; }
   });
-  const salida: PalabraTranscrita[] = [];
-  const cambios: CambioTranscripcion[] = [];
-  for (let i = 0; i < palabras.length;) {
-    const r = reemplazos.get(i);
-    if (r) {
-      salida.push(...r.nuevas);
-      cambios.push({ t0: r.frase.t0, t1: r.frase.t1, ...(r.frase.etiqueta ? { hablante: r.frase.etiqueta } : {}), antes: r.frase.texto, despues: r.despues, motivo: sospechosas.get(r.frase.n) ?? '' });
-      i = r.hasta;
-    } else { salida.push(palabras[i] as PalabraTranscrita); i++; }
-  }
+  const lista: Reemplazo[] = [...reemplazos].sort((x, y) => x[0] - y[0]).map(([desde, r]) => ({ desde, hasta: r.hasta, nuevas: r.nuevas }));
+  const cambios: CambioTranscripcion[] = [...reemplazos].sort((x, y) => x[0] - y[0]).map(([, r]) => ({ t0: r.frase.t0, t1: r.frase.t1, ...(r.frase.etiqueta ? { hablante: r.frase.etiqueta } : {}), antes: r.frase.texto, despues: r.despues, motivo: sospechosas.get(r.frase.n) ?? '' }));
   return {
-    palabras: salida,
+    palabras: aplicarReemplazos(palabras, lista),
+    reemplazos: lista,
     cambios,
     procedencia: { fase: 'lectura', proveedor: `revision:${redactor.nombre}`, ms: reloj() - t, detalle: { frases: frases.length, sospechosas: sospechosas.size, tramos: porTramo.size, reescuchados, fallidos, cambios: cambios.length } },
   };

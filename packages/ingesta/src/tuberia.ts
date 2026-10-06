@@ -42,7 +42,7 @@ import { contextoExtractivo, pasoContexto } from './pasos/contexto.js';
 import { pasoFiguras, type FiguraConAncla } from './pasos/figuras.js';
 import { textoVectorizable, vectorizar, type PiezaVector } from './pasos/vectores.js';
 import { atribuirHablantes } from './pasos/hablantes.js';
-import { revisarTranscripcion, type CambioTranscripcion } from './pasos/revision.js';
+import { aplicarReemplazos, revisarTranscripcion, type CambioTranscripcion } from './pasos/revision.js';
 import { entradasIndice } from './pasos/indexado.js';
 
 // ---------------------------------------------------------------------------
@@ -513,28 +513,26 @@ export async function consolidar(
   }
   marca('metadatos', tm);
 
-  // Segunda escucha de lo que suena a error de reconocimiento (medios).
-  if (medio && ctx.opciones.revisarTranscripcion !== false && palabras.length) {
+  // Medios: segunda escucha de lo que suena a error de reconocimiento y hablantes con nombre,
+  // a la vez (la revisión sustituye frases por índice de palabra; las palabras nuevas
+  // toman el hablante de las que sustituyen).
+  if (medio && palabras.length) {
     tm = reloj();
-    const r = await revisarTranscripcion(palabras, plan.tramos, puertos.fuente, meta, ia.redactor, { reloj, concurrencia: 24 }).catch(() => null);
-    if (r) {
-      procedencia.push(r.procedencia);
-      if (r.cambios.length) {
-        palabras = r.palabras;
-        unidades = segmentarTranscripcion(palabras, ctx.opciones.tramosMedio).map((u, i) => ({ ...u, orden: i }));
-        cambiosTranscripcion = r.cambios;
-      }
+    const revision = ctx.opciones.revisarTranscripcion !== false
+      ? revisarTranscripcion(palabras, plan.tramos, puertos.fuente, meta, ia.redactor, { reloj, concurrencia: 24 }).catch(() => null)
+      : Promise.resolve(null);
+    const hablantes = ctx.opciones.atribuirHablantes !== false
+      ? atribuirHablantes(palabras, meta, ia.redactor, { reloj, concurrencia: plan.concurrencia }).catch(() => null)
+      : Promise.resolve(null);
+    const [rev, hab] = await Promise.all([revision, hablantes]);
+    let ws = hab && hab.reparto.length ? hab.palabras : palabras;
+    if (hab) procedencia.push(hab.procedencia);
+    if (rev) {
+      procedencia.push(rev.procedencia);
+      if (rev.reemplazos.length) { ws = aplicarReemplazos(ws, rev.reemplazos); cambiosTranscripcion = rev.cambios; }
     }
-    marca('revision', tm);
-  }
-
-  // Hablantes con nombre (medios).
-  if (medio && ctx.opciones.atribuirHablantes !== false && palabras.length) {
-    tm = reloj();
-    const r = await atribuirHablantes(palabras, meta, ia.redactor, { reloj, concurrencia: plan.concurrencia });
-    procedencia.push(r.procedencia);
-    if (r.reparto.length) unidades = segmentarTranscripcion(r.palabras, ctx.opciones.tramosMedio).map((u, i) => ({ ...u, orden: i }));
-    marca('hablantes', tm);
+    if (ws !== palabras) { palabras = ws; unidades = segmentarTranscripcion(palabras, ctx.opciones.tramosMedio).map((u, i) => ({ ...u, orden: i })); }
+    marca('revisionYHablantes', tm);
   }
 
   // Folios definitivos, titulillos y secciones del documento entero.
