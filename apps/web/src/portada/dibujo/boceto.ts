@@ -86,6 +86,8 @@ export interface Dibujo {
   duracion?: number;
   /** Desregistro de la capa de color, como dos pasadas de imprenta. */
   desregistro?: Punto;
+  /** Encuadre [x, y, ancho, alto] si solo se enseña una parte de la hoja. */
+  caja?: readonly [number, number, number, number];
 }
 
 /* ------------------------------------------------------------------ */
@@ -174,13 +176,13 @@ function piezasDeTrazo(t: Trazo, semilla: number): Pieza[] {
       continue;
     }
     const g = t.g * (k ? 0.62 : 1);
-    const forma = simplificar(contorno(poli, g, entre(azar, 0, 1), t.cerrado), 0.18);
+    const forma = simplificar(contorno(poli, g, entre(azar, 0, 1), t.cerrado), 0.3);
     const capa = t.tinta === 'tinta' || t.tinta === 'papel' ? 'tinta' : 'color';
     piezas.push({
       capa,
       largo,
       svg: `<path d="${caminoCerrado(forma)}" fill="${fill(t.tinta)}"${k ? ' opacity=".8"' : ''}/>`,
-      centro: { d: caminoAbierto(simplificar(poli, 0.4)), ancho: g * 1.9 + 3, largo },
+      centro: { d: caminoAbierto(simplificar(poli, 0.8)), ancho: g * 1.9 + 3, largo },
     });
   }
   return piezas;
@@ -237,6 +239,8 @@ export interface OpcionesSvg {
   /** Decorativo: sin título ni descripción para lectores de pantalla. */
   decorativo?: boolean;
   lengua?: Lengua;
+  /** Para usar el mismo dibujo dos veces en una página sin que se pisen las máscaras. */
+  sufijo?: string;
 }
 
 /**
@@ -297,9 +301,10 @@ export function aSvg(dibujo: Dibujo, opciones: OpcionesSvg = {}): string {
     }
   }
 
-  const id = dibujo.id.replace(/[^a-z0-9-]/gi, '-');
+  const id = (dibujo.id + (opciones.sufijo ? `-${opciones.sufijo}` : '')).replace(/[^a-z0-9-]/gi, '-');
   const [dx, dy] = dibujo.desregistro ?? [0.9, -0.7];
-  const caja = `x="0" y="0" width="${dibujo.ancho}" height="${dibujo.alto}"`;
+  const [cx, cy, cw, ch] = dibujo.caja ?? [0, 0, dibujo.ancho, dibujo.alto];
+  const caja = `x="${cx}" y="${cy}" width="${cw}" height="${ch}"`;
   const etiquetas = opciones.decorativo
     ? ' aria-hidden="true" focusable="false"'
     : ` role="img" aria-labelledby="t-${id} d-${id}"`;
@@ -307,7 +312,7 @@ export function aSvg(dibujo: Dibujo, opciones: OpcionesSvg = {}): string {
   const mascara = (nombre: string, trazos: string[]) =>
     trazos.length ? `<mask id="${nombre}" maskUnits="userSpaceOnUse" ${caja}><g fill="none" stroke="#fff" stroke-linecap="round" stroke-linejoin="round">${trazos.join('')}</g></mask>` : '';
   return [
-    `<svg class="dibujo${opciones.clase ? ` ${opciones.clase}` : ''}" viewBox="0 0 ${dibujo.ancho} ${dibujo.alto}" width="${dibujo.ancho}" height="${dibujo.alto}"${etiquetas} data-dibujo="${id}">`,
+    `<svg class="dibujo${opciones.clase ? ` ${opciones.clase}` : ''}" viewBox="${cx} ${cy} ${cw} ${ch}" width="${cw}" height="${ch}"${etiquetas} data-dibujo="${id}">`,
     textos,
     `<defs>${mascara(`mt-${id}`, mascaraTinta)}${mascara(`mc-${id}`, mascaraColor)}</defs>`,
     capas.lapiz.length ? `<g class="c-la" fill="none" stroke="var(--d-lapiz)" stroke-linecap="round">${capas.lapiz.join('')}</g>` : '',

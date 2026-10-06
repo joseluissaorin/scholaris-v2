@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { createFileRoute } from '@tanstack/react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { avisar, Boton, Campo, Dialogo, Filete, Interruptor } from '@scholaris/ui';
+import { avisar, Boton, Campo, Dialogo, Interruptor } from '@scholaris/ui';
 import { api } from '../datos/api';
 import { q } from '../datos/consultas';
 import { Lienzo } from '../componentes/comunes/cabecera';
@@ -14,8 +14,8 @@ export const Route = createFileRoute('/ajustes/privacidad')({
 
 function Fila({ titulo, children, accion }: { titulo: string; children: React.ReactNode; accion: React.ReactNode }) {
   return (
-    <div className="flex flex-col gap-3 border-b border-filete py-5 sm:flex-row sm:items-center sm:gap-8">
-      <div className="min-w-0 flex-1"><h3 className="text-[1.125rem]">{titulo}</h3><p className="mt-1 text-[0.9375rem] text-tinta-2">{children}</p></div>
+    <div className="flex flex-col gap-3 border-b border-cream-200 py-5 last:border-0 sm:flex-row sm:items-center sm:gap-8">
+      <div className="min-w-0 flex-1"><h3 className="text-[0.9375rem] font-semibold">{titulo}</h3><p className="mt-1 text-[0.8125rem] text-coffee-500">{children}</p></div>
       <div className="shrink-0">{accion}</div>
     </div>
   );
@@ -55,8 +55,8 @@ function Privacidad() {
 
   return (
     <Lienzo ancho="estrecho">
-      <p className="max-w-2xl text-[1.0625rem] text-tinta-2">Tus documentos son tuyos. No entrenamos modelos con ellos y los proveedores que leen tus páginas lo hacen sin retenerlas. Si trabajas con material sensible, la versión local procesa todo en tu ordenador.</p>
-      <div className="mt-6 border-t border-tinta">
+      <p className="mb-5 max-w-2xl text-[0.875rem] text-coffee-600">Tus documentos son tuyos. No entrenamos modelos con ellos y los proveedores que leen tus páginas lo hacen sin retenerlas. Si trabajas con material sensible, la versión local procesa todo en tu ordenador.</p>
+      <div className="rounded-2xl border border-cream-400 bg-cream-50 px-5 shadow-[var(--levantado)] sm:px-6">
         <Fila titulo="Guardar el historial de búsquedas" accion={<Interruptor activo={!!grabacion?.activa} alCambiar={(v) => void grabar(v)} etiqueta="Guardar el historial" />}>
           Sirve para repetir búsquedas, fijarlas y para que las perspectivas sepan qué te falta. Puedes pausarlo cuando quieras.
         </Fila>
@@ -64,8 +64,8 @@ function Privacidad() {
           Un archivo con tus documentos en SPDF, tu historial, tus cuadernos y tus ajustes. Los SPDF se abren sin Scholaris.
         </Fila>
       </div>
-      <Filete className="mt-12">Zona de borrado</Filete>
-      <div className="mt-2">
+      <h2 className="rotulo mb-2 mt-8 text-[0.75rem] text-rojo">Zona de borrado</h2>
+      <div className="rounded-2xl border border-rojo/30 bg-cream-50 px-5 shadow-[var(--levantado)] sm:px-6">
         <Fila titulo="Borrar el historial" accion={<Boton variante="linea" onClick={() => setDialogo('historial')}>Borrar historial…</Boton>}>Todas las búsquedas y preguntas guardadas.</Fila>
         <Fila titulo="Borrar todo" accion={<Boton variante="rojo" onClick={() => setDialogo('todo')}>Borrar todo…</Boton>}>Documentos, historial, cuadernos, vigilantes. La cuenta sigue abierta.</Fila>
       </div>

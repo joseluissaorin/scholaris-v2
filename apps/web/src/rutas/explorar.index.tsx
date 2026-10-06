@@ -134,7 +134,7 @@ function Lamina({ mapa, elegido, alElegir }: { mapa: MapaConceptos; elegido: num
   }, [mapa, tam, elegido]);
 
   return (
-    <div ref={caja} className="relative aspect-[16/11] w-full overflow-hidden rounded-m border border-filete bg-hoja md:aspect-[16/10]">
+    <div ref={caja} className="relative aspect-[16/11] w-full overflow-hidden rounded-2xl border border-cream-400 bg-cream-50 shadow-[var(--levantado)] md:aspect-[16/10]">
       {/* Retícula de imprenta: se nota que existe. */}
       <div aria-hidden className="absolute inset-0 opacity-60" style={{ backgroundImage: 'linear-gradient(var(--s-hondo) 1px, transparent 1px), linear-gradient(90deg, var(--s-hondo) 1px, transparent 1px)', backgroundSize: '10% 10%' }} />
       <canvas ref={lienzo} className="absolute inset-0 h-full w-full" onClick={() => alElegir(null)} aria-hidden />
@@ -161,7 +161,7 @@ function Grupo({ grupo, color, alCerrar }: { grupo: GrupoMapa; color: string; al
       <ul className="mt-4 flex flex-col gap-3">
         {isPending ? [0, 1, 2].map((i) => <EsqueletoTexto key={i} lineas={3} />) : data?.miembros.map((m) => (
           <li key={m.id}>
-            <Link to="/lector/$id" params={{ id: m.documento }} className="block rounded-s border border-filete bg-hoja p-3 hover:border-filete-fuerte">
+            <Link to="/lector/$id" params={{ id: m.documento }} className="block rounded-xl border border-cream-400 bg-cream-50 shadow-[var(--levantado)] p-3 hover:border-filete-fuerte">
               <div className="flex items-center gap-2"><span className="min-w-0 flex-1 truncate text-[0.8125rem]">{m.titulo}</span>{m.etiqueta ? <Folio>{m.etiqueta}</Folio> : null}</div>
               {m.texto ? <p className="mt-1.5 line-clamp-3 text-[0.875rem] text-tinta-2">{m.texto}</p> : null}
             </Link>

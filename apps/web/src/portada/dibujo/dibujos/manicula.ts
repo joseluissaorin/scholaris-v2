@@ -4,7 +4,7 @@
  * contestar. Dibujada a mano, punto a punto, de izquierda (la manga, que entra
  * por el borde) a derecha (la yema del dedo).
  */
-import { type Dibujo, tinta, lapiz, rojo, sombra, nota, plano, circulo } from '../boceto';
+import { type Dibujo, tinta, lapiz, sombra, nota, plano, disco, circulo } from '../boceto';
 
 export const manicula: Dibujo = {
   id: 'manicula',
@@ -70,4 +70,24 @@ export const manicula: Dibujo = {
     nota(470, 160, ['señala;\nno contesta', 'it points;\nit doesn\'t answer'], { tam: 22, giro: -4, tinta: 'lapiz' }),
     lapiz([[468, 146], [442, 120]], { g: 0.8, recto: false }),
   ],
+};
+
+/** La manecilla del margen: la misma mano, sin lápiz ni notas, encuadrada en el puño y el dedo. */
+export const manecilla: Dibujo = {
+  ...manicula,
+  id: 'manecilla',
+  duracion: 1.6,
+  caja: [70, 44, 380, 184],
+  elementos: manicula.elementos.filter((e) => e.tipo !== 'nota' && !(e.tipo === 'trazo' && e.tinta === 'lapiz')),
+};
+
+/** El sol rojo de la portada: un círculo plano, recortado a mano. */
+export const sol: Dibujo = {
+  id: 'sol',
+  ancho: 400,
+  alto: 400,
+  duracion: 0.8,
+  titulo: { es: 'Un círculo rojo', en: 'A red circle' },
+  descripcion: { es: 'Un gran círculo rojo plano, a la manera de la Bauhaus.', en: 'A large flat red circle, in the manner of the Bauhaus.' },
+  elementos: [disco([200, 200], 196, 'rojo')],
 };

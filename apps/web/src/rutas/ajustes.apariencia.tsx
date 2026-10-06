@@ -2,10 +2,10 @@ import { useState } from 'react';
 import { createFileRoute } from '@tanstack/react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { Ajustes } from '@scholaris/contrato';
-import { avisar, cx, Filete, Rotulo, Selector } from '@scholaris/ui';
+import { avisar, cx, Rotulo, Selector } from '@scholaris/ui';
 import { api } from '../datos/api';
 import { q } from '../datos/consultas';
-import { Lienzo } from '../componentes/comunes/cabecera';
+import { Lienzo, Seccion } from '../componentes/comunes/cabecera';
 import { ponerPreferencia, ponerTema, preferencia, useTema, type Tema } from '../lib/acciones';
 
 export const Route = createFileRoute('/ajustes/apariencia')({ component: Apariencia });
@@ -34,22 +34,24 @@ function Apariencia() {
 
   return (
     <Lienzo ancho="estrecho">
-      <Filete>Tema</Filete>
-      <div role="radiogroup" aria-label="Tema" className="mt-4 grid grid-cols-3 gap-3">
+      <div className="space-y-5">
+      <Seccion icono="sol" titulo="Tema" descripcion="Papel claro, tinta oscura o lo que diga el sistema.">
+      <div role="radiogroup" aria-label="Tema" className="grid grid-cols-3 gap-3">
         {TEMAS.map((t) => (
           <button key={t.id} type="button" role="radio" aria-checked={tema === t.id} onClick={() => { ponerTema(t.id); void api().ajustes.preferencias({ tema: t.id }).catch(() => undefined); }}
-            className={cx('group overflow-hidden rounded-m border text-left', tema === t.id ? 'border-tinta ring-2 ring-tinta ring-offset-2 ring-offset-papel' : 'border-filete hover:border-filete-fuerte')}>
+            className={cx('group overflow-hidden rounded-xl border text-left transition-[box-shadow,transform]', tema === t.id ? 'border-coffee-500 shadow-[var(--relieve-alto)] ring-2 ring-coffee-500/30' : 'border-cream-400 shadow-[var(--relieve)] hover:-translate-y-px')}>
             <div className="relative h-24" style={{ background: t.papel }}>
-              <span className="absolute left-3 top-3 text-[1.75rem]" style={{ color: t.tinta, fontFamily: 'Georgia, serif' }}>Aa</span>
+              <span className="absolute left-3 top-3 text-[1.5rem] font-bold" style={{ color: t.tinta }}>Aa</span>
               <span className="absolute -bottom-6 -right-6 h-16 w-16 rounded-full bg-rojo" />
             </div>
-            <p className="px-3 py-2 text-[0.9375rem]">{t.nombre}</p>
+            <p className="bg-cream-50 px-3 py-2 text-[0.8125rem] font-medium">{t.nombre}</p>
           </button>
         ))}
       </div>
 
-      <Filete className="mt-12">Lectura</Filete>
-      <div className="mt-4 grid gap-8 sm:grid-cols-2">
+      </Seccion>
+      <Seccion icono="lector" titulo="Lectura">
+      <div className="grid gap-8 sm:grid-cols-2">
         <div>
           <label htmlFor="tam" className="rotulo flex justify-between text-tinta-2"><span>Tamaño del texto en el lector</span><span className="tnum text-tinta">{lectura} px</span></label>
           <input id="tam" type="range" min={15} max={22} value={lectura} onChange={(e) => cambiarLectura(Number(e.target.value))} className="mt-3 w-full accent-[var(--s-rojo)]" />
@@ -57,21 +59,24 @@ function Apariencia() {
         </div>
         <div>
           <Rotulo className="text-tinta-2">Densidad de la interfaz</Rotulo>
-          <div role="radiogroup" aria-label="Densidad" className="mt-3 flex rounded-s border border-filete-fuerte p-0.5">
+          <div role="radiogroup" aria-label="Densidad" className="mt-3 flex rounded-xl border border-cream-400 bg-cream-200/70 p-1 shadow-[var(--hundido)]">
             {[['compacta', 'Compacta'], ['normal', 'Normal'], ['amplia', 'Amplia']].map(([d, n]) => (
-              <button key={d} type="button" role="radio" aria-checked={densidad === d} onClick={() => cambiarDensidad(d!)} className={cx('h-9 flex-1 rounded-md text-[0.875rem]', densidad === d ? 'bg-tinta text-sobre-tinta' : 'text-tinta-2 hover:text-tinta')}>{n}</button>
+              <button key={d} type="button" role="radio" aria-checked={densidad === d} onClick={() => cambiarDensidad(d!)} className={cx('h-9 flex-1 rounded-md text-[0.875rem]', densidad === d ? 'bg-cream-50 font-semibold text-coffee-800 shadow-[var(--relieve)]' : 'font-medium text-coffee-500 hover:text-coffee-800')}>{n}</button>
             ))}
           </div>
         </div>
       </div>
 
-      <Filete className="mt-12">Citas</Filete>
-      <div className="mt-4 max-w-sm">
+      </Seccion>
+      <Seccion icono="citar" titulo="Citas">
+      <div className="max-w-sm">
         <label htmlFor="estilo-defecto" className="rotulo text-tinta-2">Estilo por defecto</label>
         <Selector id="estilo-defecto" className="mt-2" value={ajustes?.preferencias.estiloCita ?? preferencia('estilo', 'apa')} onChange={(e) => void estiloCita(e.target.value)}>
           {(estilos ?? []).map((e) => <option key={e.id} value={e.id}>{e.titulo}</option>)}
         </Selector>
         <p className="mt-2 text-[0.8125rem] text-apagado">Se usa al citar desde el lector, en la autocita y al copiar referencias.</p>
+      </div>
+      </Seccion>
       </div>
     </Lienzo>
   );

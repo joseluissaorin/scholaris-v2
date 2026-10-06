@@ -64,7 +64,7 @@ function Grafo() {
       <p className="mt-1 max-w-2xl text-tinta-2">El tamaño es cuántas veces lo citan tus documentos; el grosor de la línea, cuántas veces aparece la cita.</p>
       <div className="mt-6 grid gap-8 xl:grid-cols-[minmax(0,1fr)_22rem]">
         {isPending ? <Esqueleto className="aspect-[16/10]" /> : !data?.nodos.length ? <Vacio forma="triangulo" titulo="Sin citas que enlazar todavía." accion={<Boton variante="linea" icono="rayo" cargando={reconstruyendo} onClick={() => void reconstruir()}>Buscar citas entre mis documentos</Boton>}>El grafo aparece cuando tus documentos se citan entre sí. Se rehace solo al añadir documentos; también puedes pedirlo ahora.</Vacio> : (
-          <svg viewBox="0 0 1000 620" className="w-full rounded-m border border-filete bg-hoja" role="img" aria-label="Grafo de citas">
+          <svg viewBox="0 0 1000 620" className="w-full rounded-2xl border border-cream-400 bg-cream-50 shadow-[var(--levantado)]" role="img" aria-label="Grafo de citas">
             <defs><marker id="punta" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="11" markerHeight="11" markerUnits="userSpaceOnUse" orient="auto"><path d="M0 0L10 5L0 10z" fill="var(--s-tinta-2)" /></marker></defs>
             {data.aristas.map((e, i) => {
               const a = pos!.get(e.desde), b = pos!.get(e.hacia);

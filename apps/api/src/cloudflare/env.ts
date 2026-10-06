@@ -10,11 +10,13 @@ import type { Limitador } from './limitador-do.js';
 import type { ParamsIngesta } from '../puertos.js';
 import type { MensajeCola } from './cola.js';
 import type { Conversor } from './conversor.js';
+import type { Trabajador } from './trabajador-do.js';
 
 export interface Env {
   ESTANTERIA: DurableObjectNamespace<Estanteria>;
   TAREA: DurableObjectNamespace<Tarea>;
   LIMITADOR: DurableObjectNamespace<Limitador>;
+  TRABAJADOR: DurableObjectNamespace<Trabajador>;
   INGESTA: Workflow<ParamsIngesta>;
   /** Contenedor de conversión (opcional; ver deploy/contenedor). */
   CONVERSOR?: DurableObjectNamespace<Conversor>;

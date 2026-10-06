@@ -101,7 +101,7 @@ function Vigilantes() {
           <p className="mt-1 text-[0.9375rem] text-tinta-2">{pendientes.length ? `${pendientes.length} sin ver.` : 'Estás al día.'}</p>
           <ol className="mt-6 flex flex-col gap-3">
             {alertas.map((a) => (
-              <li key={a.id} className={cx('relative rounded-m border p-4', a.vista ? 'border-filete' : 'border-tinta bg-hoja')}>
+              <li key={a.id} className={cx('relative rounded-m border p-4', a.vista ? 'border-cream-300 bg-cream-100/70' : 'border-cream-400 bg-cream-50 shadow-[var(--levantado)]')}>
                 {!a.vista ? <span className="absolute -left-[5px] top-5 h-2.5 w-2.5 rounded-full bg-amarillo ring-2 ring-papel" /> : null}
                 <Rotulo>{a.nombreVigilante} · {haceCuanto(a.creada)}{a.disparadaPor === 'ingesta' ? ' · al añadir' : ''}</Rotulo>
                 {a.cambio ? <p className="mt-2 text-[0.9375rem]">{a.cambio}</p> : null}

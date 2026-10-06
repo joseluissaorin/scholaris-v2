@@ -126,9 +126,9 @@ function Lector() {
           <IrA etiqueta={etiquetaActual} total={medio ? tiempoACadena(doc.duracion ?? 0) : String(Math.max(doc.unidades, ingesta?.unidades ?? 0))} alIr={irA} medio={medio} />
 
           {paginado ? (
-            <div role="group" aria-label="Modo de lectura" className="hidden rounded-s border border-filete-fuerte p-0.5 md:flex">
+            <div role="group" aria-label="Modo de lectura" className="hidden rounded-xl border border-cream-400 bg-cream-200/70 p-1 shadow-[var(--hundido)] md:flex">
               {(['pagina', 'ambas', 'texto'] as const).map((m) => (
-                <button key={m} type="button" aria-pressed={modo === m} onClick={() => { setModo(m); ponerPreferencia('modo', m); }} className={cx('h-8 rounded-md px-2.5 text-[0.8125rem]', modo === m ? 'bg-tinta text-sobre-tinta' : 'text-tinta-2 hover:text-tinta')}>
+                <button key={m} type="button" aria-pressed={modo === m} onClick={() => { setModo(m); ponerPreferencia('modo', m); }} className={cx('h-8 rounded-md px-2.5 text-[0.8125rem]', modo === m ? 'bg-cream-50 font-semibold text-coffee-800 shadow-[var(--relieve)]' : 'font-medium text-coffee-500 hover:text-coffee-800')}>
                   {m === 'pagina' ? 'Página' : m === 'ambas' ? 'Página y texto' : 'Texto'}
                 </button>
               ))}

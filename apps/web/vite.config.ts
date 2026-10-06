@@ -2,6 +2,7 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import { tanstackRouter } from '@tanstack/router-plugin/vite';
+import { portada } from './src/portada/vite-portada';
 
 // La API (apps/api en wrangler dev o apps/local) escucha en 8787 durante el desarrollo.
 const API = process.env.SCHOLARIS_API ?? 'http://localhost:8787';
@@ -12,6 +13,8 @@ export default defineConfig({
     tanstackRouter({ target: 'react', autoCodeSplitting: true, routesDirectory: './src/rutas', generatedRouteTree: './src/arbol-rutas.gen.ts', quoteStyle: 'single' }),
     react(),
     tailwindcss(),
+    // La portada pública (/acerca, /en): HTML estático, prerenderizado al construir.
+    portada(),
   ],
   server: {
     port: 5180,

@@ -3,7 +3,7 @@ import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { Filtros, TipoEntrada } from '@scholaris/nucleo';
 import type { EventoRespuesta, ResultadoVista } from '@scholaris/contrato';
-import { avisar, Boton, Campo, Chip, cx, EsqueletoTexto, Folio, Icono, MenuContenido, MenuDisparador, MenuElemento, MenuRaiz, Rotulo, Teclas, Vacio } from '@scholaris/ui';
+import { avisar, Boton, Campo, Chip, Composicion, cx, EsqueletoTexto, Folio, Icono, MenuContenido, MenuDisparador, MenuElemento, MenuRaiz, Rotulo, Teclas, Vacio } from '@scholaris/ui';
 import { api } from '../datos/api';
 import { q } from '../datos/consultas';
 import { Resultado } from '../componentes/busqueda/resultado';
@@ -85,10 +85,10 @@ function PaginaBuscar() {
   return (
     <Lienzo ancho="normal">
       <div className="max-w-4xl">
-        <div role="radiogroup" aria-label="Modo" className="mb-3 inline-flex rounded-s border border-filete-fuerte p-0.5">
+        <div role="radiogroup" aria-label="Modo" className="mb-3 inline-flex rounded-xl border border-cream-400 bg-cream-200/70 p-1 shadow-[var(--hundido)]">
           {(['buscar', 'preguntar'] as const).map((m) => (
             <button key={m} type="button" role="radio" aria-checked={modo === m} onClick={() => { fijar({ modo: m === 'buscar' ? undefined : m }); caja.current?.focus(); }}
-              className={cx('flex h-9 items-center gap-2 rounded-md px-3.5 text-[0.9375rem]', modo === m ? 'bg-tinta text-sobre-tinta' : 'text-tinta-2 hover:text-tinta')}>
+              className={cx('flex h-9 items-center gap-2 rounded-md px-3.5 text-[0.8125rem]', modo === m ? 'bg-cream-50 font-semibold text-coffee-800 shadow-[var(--relieve)]' : 'font-medium text-coffee-500 hover:text-coffee-800')}>
               <Icono nombre={m === 'buscar' ? 'buscar' : 'chispa'} tam={15} />{m === 'buscar' ? 'Buscar pasajes' : 'Preguntar'}
             </button>
           ))}
@@ -138,11 +138,11 @@ function PaginaBuscar() {
           </Vacio>
         ) : (
           <>
-            <div className={cx('flex flex-wrap items-baseline gap-x-4 gap-y-1 border-b border-tinta pb-2 transition-opacity', datos.isPlaceholderData && 'opacity-60')}>
-              <p className="text-[0.9375rem]"><span className="tnum">{resultados.length}</span> pasajes</p>
+            <div className={cx('mb-4 flex flex-wrap items-baseline gap-x-4 gap-y-1 transition-opacity', datos.isPlaceholderData && 'opacity-60')}>
+              <h2 className="rotulo text-[0.75rem] text-coffee-700"><span className="tnum">{resultados.length}</span> pasajes</h2>
               <Rotulo>{datos.data?.ms ? `${datos.data.ms} ms` : ''}{datos.data?.intencion ? ` · consulta ${datos.data.intencion}` : ''}</Rotulo>
               {titulo?.length ? <Rotulo className="truncate">También en: {titulo.map((t) => `${t.idioma} «${t.consulta}»`).join(' · ')}</Rotulo> : null}
-              <button type="button" onClick={() => { fijar({ modo: 'preguntar' }); setPregunta(consulta); }} className="ml-auto flex items-center gap-1.5 text-[0.875rem] underline decoration-rojo decoration-2 underline-offset-4"><Icono nombre="chispa" tam={14} />Preguntar sobre esto</button>
+              <Boton variante="linea" tam="p" icono="chispa" className="ml-auto" onClick={() => { fijar({ modo: 'preguntar' }); setPregunta(consulta); }}>Preguntar sobre esto</Boton>
             </div>
             <div className={cx('transition-opacity', datos.isPlaceholderData && 'opacity-60')}>
               {resultados.map((r, i) => <Resultado key={r.fragmento.id} r={r} consulta={consulta} indice={i} />)}
@@ -192,7 +192,7 @@ function Inicio({ modo, alElegir }: { modo: Modo; alElegir: (t: string) => void 
         <Rotulo>{modo === 'preguntar' ? 'Preguntas de ejemplo' : 'Prueba con'}</Rotulo>
         <ul className="mt-3 flex flex-col gap-1">
           {ejemplos.map((e) => (
-            <li key={e}><button type="button" onClick={() => alElegir(e)} className="group flex w-full items-center gap-3 rounded-s py-2 text-left text-[1.0625rem] hover:bg-hondo md:-ml-2 md:px-2">
+            <li key={e}><button type="button" onClick={() => alElegir(e)} className="group flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-[0.9375rem] text-coffee-700 transition-[background,box-shadow] hover:bg-cream-50 hover:shadow-[var(--relieve)]">
               <Icono nombre={modo === 'preguntar' ? 'chispa' : 'buscar'} tam={16} className="shrink-0 text-apagado" />
               <span className="">{e}</span>
               <Icono nombre="derecha" tam={15} className="ml-auto opacity-0 group-hover:opacity-60" />
@@ -208,9 +208,9 @@ function Inicio({ modo, alElegir }: { modo: Modo; alElegir: (t: string) => void 
       {recientes.length ? (
         <div>
           <div className="flex items-baseline justify-between"><Rotulo>Hace poco</Rotulo><Link to="/buscar/historial" className="text-[0.8125rem] text-tinta-2 underline-offset-4 hover:underline">Todo el historial</Link></div>
-          <ul className="mt-3 flex flex-col">
+          <ul className="mt-3 flex flex-col overflow-hidden rounded-xl border border-cream-300 bg-cream-50 shadow-[var(--shadow-soft)]">
             {recientes.map((e) => (
-              <li key={e.id}><button type="button" onClick={() => alElegir(e.consulta)} className="flex w-full items-baseline gap-3 border-b border-filete py-2.5 text-left hover:bg-hondo/60">
+              <li key={e.id}><button type="button" onClick={() => alElegir(e.consulta)} className="flex w-full items-baseline gap-3 border-b border-cream-200 px-4 py-2.5 text-left text-[0.875rem] hover:bg-[#fffdf8]">
                 {e.fijado ? <Icono nombre="fijar" tam={13} className="shrink-0 text-rojo" /> : null}
                 <span className="min-w-0 flex-1 truncate">{e.consulta}</span>
                 <span className="shrink-0 text-[0.75rem] text-apagado">{haceCuanto(e.cuando)}</span>
@@ -269,10 +269,11 @@ function Respuesta({ pregunta, filtros }: { pregunta: string; filtros: Filtros }
 
   return (
     <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_20rem]">
-      <section aria-live="polite" aria-busy={estado !== 'hecho'}>
-        <p className="rotulo text-apagado">Pregunta</p>
-        <h2 className="mt-1 text-[1.625rem] leading-tight tracking-[-0.015em]">{pregunta}</h2>
-        <div className="mt-6 border-l-[3px] border-tinta pl-5">
+      <section aria-live="polite" aria-busy={estado !== 'hecho'} className="relative self-start overflow-hidden rounded-2xl border border-cream-400 bg-cream-50 p-5 shadow-[var(--levantado)] sm:p-6">
+        <Composicion estilo="kandinsky" className="pointer-events-none absolute -right-6 -top-4 h-24 w-36 opacity-90" />
+        <p className="rotulo relative text-coffee-400">Pregunta</p>
+        <h2 className="relative mt-1 max-w-[85%] text-[1.25rem] font-semibold leading-snug text-coffee-800">{pregunta}</h2>
+        <div className="relative mt-5 border-l-[3px] border-azul pl-5">
           {estado === 'pensando' ? (
             <div><p className="mb-3 flex items-center gap-2 text-[0.875rem] text-tinta-2"><span className="h-2 w-2 rounded-full bg-rojo anim-pulso" />{fuentes.length ? `Leyendo ${fuentes.length} pasajes…` : 'Buscando en tu biblioteca…'}</p><EsqueletoTexto lineas={4} /></div>
           ) : estado === 'error' ? (
@@ -288,9 +289,9 @@ function Respuesta({ pregunta, filtros }: { pregunta: string; filtros: Filtros }
                 if (!f) return <sup key={i} className="font-mono text-[0.7em] text-apagado">[{n}]</sup>;
                 return (
                   <Link key={i} to="/lector/$id" params={{ id: f.documento.id }} search={anclaABusqueda(f.fragmento.ancla, { q: pregunta })}
-                    className="mx-0.5 inline-flex -translate-y-[0.15em] items-baseline gap-1 rounded-s border border-filete-fuerte bg-hoja px-1.5 align-baseline font-mono text-[0.7em] text-tinta no-underline hover:border-tinta"
+                    className="mx-0.5 inline-flex -translate-y-[0.12em] items-baseline gap-1 rounded-md border border-cream-400 bg-cream-100 px-1.5 align-baseline font-mono text-[0.68em] text-coffee-700 no-underline shadow-[var(--relieve)] hover:-translate-y-[0.2em] hover:border-cream-500"
                     title={`${f.documento.metadatos.titulo}, ${c?.etiqueta ?? f.etiqueta}`}>
-                    <span className="text-rojo">{n}</span>{etiquetaCorta(f.fragmento.ancla, c?.etiqueta ?? f.etiqueta)}
+                    <span className="font-bold text-azul">{n}</span>{etiquetaCorta(f.fragmento.ancla, c?.etiqueta ?? f.etiqueta)}
                   </Link>
                 );
               })}
@@ -299,8 +300,8 @@ function Respuesta({ pregunta, filtros }: { pregunta: string; filtros: Filtros }
           )}
         </div>
         {estado === 'hecho' ? (
-          <div className="mt-5 flex flex-wrap items-center gap-3 pl-5">
-            {fin?.confianza ? <span className={cx('rotulo rounded-full px-2 py-1', fin.confianza === 'alta' ? 'bg-amarillo text-tinta' : fin.confianza === 'media' ? 'bg-hondo text-tinta' : 'bg-rojo-suave text-rojo')}>Confianza {fin.confianza}</span> : null}
+          <div className="relative mt-5 flex flex-wrap items-center gap-3 border-t border-cream-200 pt-4">
+            {fin?.confianza ? <span className={cx('rounded-lg px-2 py-1 text-[0.6875rem] font-semibold uppercase tracking-[0.04em] shadow-[var(--relieve)]', fin.confianza === 'alta' ? 'bg-amarillo text-coffee-800' : fin.confianza === 'media' ? 'bg-cream-200 text-coffee-700' : 'bg-rojo-suave text-rojo')}>Confianza {fin.confianza}</span> : null}
             <Rotulo>{citas.size} citas verificadas · {fin ? `${numero(fin.ms / 1000, { maximumFractionDigits: 1 })} s` : ''}</Rotulo>
             <Boton variante="fantasma" tam="p" icono="copiar" onClick={() => void copiar()}>Copiar con citas</Boton>
           </div>
@@ -313,9 +314,9 @@ function Respuesta({ pregunta, filtros }: { pregunta: string; filtros: Filtros }
             const n = [...citas.values()].find((c) => c.fragmento === f.fragmento.id)?.n;
             return (
               <li key={f.fragmento.id} className={cx('anim-entra', !n && estado === 'hecho' && 'opacity-55')} style={{ animationDelay: `${i * 40}ms` }}>
-                <Link to="/lector/$id" params={{ id: f.documento.id }} search={anclaABusqueda(f.fragmento.ancla, { q: pregunta })} className="group block rounded-s border border-filete bg-hoja p-3 hover:border-filete-fuerte">
+                <Link to="/lector/$id" params={{ id: f.documento.id }} search={anclaABusqueda(f.fragmento.ancla, { q: pregunta })} className="group block rounded-xl border border-cream-400 bg-cream-50 p-3 shadow-[var(--levantado)] transition-[transform,box-shadow] hover:-translate-y-0.5 hover:shadow-[var(--levantado-alto)]">
                   <div className="flex items-center gap-2">
-                    {n ? <span className="grid h-5 w-5 place-items-center rounded-full bg-tinta font-mono text-[0.6875rem] text-sobre-tinta">{n}</span> : null}
+                    {n ? <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-azul text-[0.6875rem] font-bold text-cream-50">{n}</span> : null}
                     <span className="min-w-0 flex-1 truncate text-[0.8125rem]">{f.documento.metadatos.titulo}</span>
                     <Folio className="shrink-0">{etiquetaCorta(f.fragmento.ancla, f.etiqueta)}</Folio>
                   </div>

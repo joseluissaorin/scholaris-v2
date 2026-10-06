@@ -20,7 +20,7 @@ import { cuerpoDominante, leerCapaPagina, ejecutarIngesta, leerPliego, planifica
 import type { PaqueteConversion } from '@scholaris/imprenta';
 import { abrirCortador, type CortadorPdf } from '@scholaris/imprenta';
 import type { Documento, IndiceVectorial, Inteligencia, Lector, PaginaLeida, Progreso, SQL, Transcripcion, Transcriptor, Vector } from '@scholaris/nucleo';
-import { bytesAVector, sha256 } from '@scholaris/nucleo';
+import { bytesAVector, enParalelo, sha256 } from '@scholaris/nucleo';
 import { leerDocumento } from '@scholaris/spdf';
 import type { AlmacenAmpliado, ParamsIngesta } from '../puertos.js';
 import { convertirEnServidor, ErrorReserva } from './reserva.js';
@@ -75,7 +75,7 @@ export interface InfoPlan {
 }
 
 /** Las mismas opciones de plan en todos los pasos: el plan debe salir idéntico. */
-const OPCIONES_PLAN = {} as const;
+const OPCIONES_PLAN = { paginasPorPliego: 2 } as const; // pliegos cortos: la salida del lector manda en la latencia
 
 export { ErrorReserva };
 
@@ -388,9 +388,7 @@ export async function preparar(ctx: ContextoMotor, params: ParamsIngesta): Promi
   const ligero = `${params.prefijo}trabajo/paquete.ligero.json`;
   await ctx.almacen.poner(ligero, JSON.stringify(paquete), 'application/json');
   const plan = planificar(paquete, OPCIONES_PLAN);
-  for (const pl of plan.pliegos) {
-    await ctx.almacen.poner(`${params.prefijo}trabajo/pliegos/${pl.id}.json`, JSON.stringify({ pliego: pl, paquete: miniPaquete(paquete, pl.desde, pl.hasta) }), 'application/json');
-  }
+  await enParalelo(plan.pliegos, 16, (pl) => ctx.almacen.poner(`${params.prefijo}trabajo/pliegos/${pl.id}.json`, JSON.stringify({ pliego: pl, paquete: miniPaquete(paquete, pl.desde, pl.hasta) }), 'application/json'));
   // El total se conoce ya; las páginas con capa de texto se pueden enseñar desde ahora.
   await ctx.sql.ejecutar('UPDATE documentos SET unidades = ? WHERE id = ?', plan.unidades, params.documento);
   // Mientras se lee, mejor el título y los autores del propio fichero que el nombre del archivo.

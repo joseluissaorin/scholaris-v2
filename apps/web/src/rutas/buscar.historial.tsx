@@ -56,7 +56,7 @@ function Historial() {
         : grupos.map(([g, es]) => (
           <section key={g} className="mt-8">
             <Rotulo>{g}</Rotulo>
-            <ul className="mt-2 border-t border-tinta">
+            <ul className="mt-2 border-t border-cream-400">
               {es.map((e) => (
                 <li key={e.id} className="group flex items-center gap-3 border-b border-filete py-3">
                   <Icono nombre={e.tipo === 'respuesta' ? 'chispa' : 'buscar'} tam={16} className="shrink-0 text-apagado" />

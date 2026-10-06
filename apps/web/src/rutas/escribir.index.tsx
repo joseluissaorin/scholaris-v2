@@ -9,6 +9,7 @@ import {
 import { api } from '../datos/api';
 import { q } from '../datos/consultas';
 import { Lienzo } from '../componentes/comunes/cabecera';
+import { numero } from '../lib/numero';
 import { anclaABusqueda } from '../lib/anclas';
 import { anclaACita, etiquetaCorta } from '../lib/formato';
 import { textoLimpio } from '../lib/texto';
@@ -83,39 +84,48 @@ function Editor({ alListo }: { alListo: (id: string) => void }) {
     } catch (e) { avisar(e instanceof Error ? e.message : 'No se pudo empezar.', { tono: 'error' }); setEnviando(false); }
   }
 
+  const palabras = texto.trim() ? texto.trim().split(/\s+/).length : 0;
   return (
-    <Lienzo>
-      <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_19rem]">
-        <div>
-          <h2 className="text-[1.125rem] font-semibold text-coffee-800">Pega tu texto. Cada afirmación recibirá su cita verificada.</h2>
-          <p className="mt-2 max-w-2xl text-tinta-2">Buscamos en tu biblioteca el pasaje que respalda cada frase, un juez comprueba que de verdad la respalda y la cita sale con su página impresa o su minuto. Si no hay respaldo, no hay cita.</p>
-          <div className="relative mt-6">
-            <AreaTexto value={texto} onChange={(e) => setTexto(e.target.value)} placeholder="Escribe o pega aquí tu borrador. Separa los párrafos con una línea en blanco." aria-label="Texto a citar" className="lectura min-h-[22rem] resize-y bg-hoja p-5" />
-            {extrayendo ? <div className="absolute inset-0 grid place-items-center rounded-s bg-hoja/80"><span className="flex items-center gap-2 text-tinta-2"><span className="h-2 w-2 rounded-full bg-rojo anim-pulso" />Leyendo el archivo…</span></div> : null}
-          </div>
-          <div className="mt-3 flex flex-wrap items-center gap-2">
-            <input ref={archivo} type="file" hidden accept=".docx,.pdf,.txt,.md,.odt,.rtf" onChange={(e) => { const f = e.target.files?.[0]; if (f) void extraer(f); e.target.value = ''; }} />
-            <Boton variante="linea" icono="subir" onClick={() => archivo.current?.click()}>Abrir DOCX, PDF o TXT</Boton>
-            {!texto ? <Boton variante="fantasma" onClick={() => setTexto(EJEMPLO)}>Probar con un ejemplo</Boton> : <Boton variante="fantasma" onClick={() => { setTexto(''); setOriginal(null); }}>Vaciar</Boton>}
-            {original && original.texto === texto ? <span className="flex items-center gap-1.5 text-[0.8125rem] text-tinta-2"><Icono nombre="documento" tam={14} />{original.nombre} · se conserva su formato</span> : null}
-            <Rotulo className="ml-auto">{parrafos} párrafos · {texto.trim() ? texto.trim().split(/\s+/).length : 0} palabras</Rotulo>
+    <Lienzo className="space-y-5">
+      {/* La barra de opciones de siempre */}
+      <div className="flex flex-wrap items-center gap-x-5 gap-y-3 rounded-2xl border border-cream-400 bg-cream-50 px-4 py-3 shadow-[var(--levantado)]">
+        <label className="flex items-center gap-2 text-[0.8125rem] text-coffee-600">
+          <Icono nombre="citar" tam={15} className="text-coffee-400" />
+          <span className="sr-only">Estilo de cita</span>
+          <Selector id="estilo" className="w-56" value={estilo} onChange={(e) => setEstilo(e.target.value)}>
+            {(estilos ?? [{ id: 'apa', titulo: 'APA 7.ª edición' }]).map((e) => <option key={e.id} value={e.id}>{e.titulo}</option>)}
+          </Selector>
+        </label>
+        <span className="hidden h-6 w-px bg-cream-300 sm:block" />
+        <label htmlFor="umbral" className="flex items-center gap-3 text-[0.8125rem] text-coffee-600">
+          <span>Respaldo mínimo</span>
+          <input id="umbral" type="range" min={0.5} max={0.95} step={0.05} value={umbral} onChange={(e) => setUmbral(Number(e.target.value))} className="w-28 accent-[var(--s-coffee-700)]" />
+          <span className="dato w-9 text-coffee-800">{Math.round(umbral * 100)} %</span>
+        </label>
+        <span className="ml-auto text-[0.75rem] text-coffee-400">Cualquier estilo CSL · por debajo del umbral no se propone cita</span>
+      </div>
+
+      <div>
+        <div className="mb-2.5 flex items-center justify-between">
+          <h2 className="rotulo text-[0.75rem] text-coffee-700">Tu documento</h2>
+          <div className="flex rounded-xl border border-cream-400 bg-cream-200/70 p-1 shadow-[var(--hundido)]">
+            <span className="flex h-7 items-center rounded-lg bg-cream-50 px-3 text-[0.75rem] font-semibold text-coffee-800 shadow-[var(--relieve)]">Pegar texto</span>
+            <button type="button" onClick={() => archivo.current?.click()} className="flex h-7 items-center rounded-lg px-3 text-[0.75rem] font-medium text-coffee-500 hover:text-coffee-800">Abrir archivo</button>
           </div>
         </div>
-        <aside className="flex flex-col gap-6 lg:pt-[4.5rem]">
-          <div>
-            <label htmlFor="estilo" className="rotulo text-tinta-2">Estilo de cita</label>
-            <Selector id="estilo" className="mt-2" value={estilo} onChange={(e) => setEstilo(e.target.value)}>
-              {(estilos ?? [{ id: 'apa', titulo: 'APA 7.ª edición' }]).map((e) => <option key={e.id} value={e.id}>{e.titulo}</option>)}
-            </Selector>
-            <p className="mt-1.5 text-[0.8125rem] text-apagado">Cualquier estilo del repositorio CSL.</p>
+        <div className="relative overflow-hidden rounded-2xl border border-cream-400 bg-cream-50 shadow-[var(--levantado)]">
+          <textarea value={texto} onChange={(e) => setTexto(e.target.value)} placeholder="Pega aquí tu texto. Escribe de memoria: Scholaris encontrará y verificará cada cita en tu biblioteca. Separa los párrafos con una línea en blanco." aria-label="Texto a citar"
+            className="lectura block min-h-[22rem] w-full resize-y border-0 bg-transparent p-5 text-coffee-800 outline-none placeholder:font-sans placeholder:text-[0.875rem] placeholder:text-coffee-300" />
+          {extrayendo ? <div className="absolute inset-0 grid place-items-center bg-cream-50/80"><span className="flex items-center gap-2 text-[0.875rem] text-coffee-600"><span className="h-2 w-2 rounded-full bg-rojo anim-pulso" />Leyendo el archivo…</span></div> : null}
+          <div className="flex flex-wrap items-center gap-3 border-t border-cream-300 bg-cream-100/70 px-4 py-3">
+            <input ref={archivo} type="file" hidden accept=".docx,.pdf,.txt,.md,.odt,.rtf" onChange={(e) => { const f = e.target.files?.[0]; if (f) void extraer(f); e.target.value = ''; }} />
+            <span className="dato text-coffee-500">{numero(texto.length)} caracteres · {parrafos} párrafos · {palabras} palabras</span>
+            {original && original.texto === texto ? <span className="flex items-center gap-1.5 text-[0.75rem] text-coffee-600"><Icono nombre="documento" tam={13} />{original.nombre} · se conserva su formato</span> : null}
+            <span className="flex-1" />
+            {!texto ? <Boton variante="fantasma" tam="p" onClick={() => setTexto(EJEMPLO)}>Probar con un ejemplo</Boton> : <Boton variante="fantasma" tam="p" onClick={() => { setTexto(''); setOriginal(null); }}>Vaciar</Boton>}
+            <Boton variante="tinta" icono="citar" cargando={enviando} disabled={!texto.trim()} onClick={() => void enviar()}>Analizar y citar</Boton>
           </div>
-          <div>
-            <label htmlFor="umbral" className="rotulo flex justify-between text-tinta-2"><span>Respaldo mínimo</span><span className="tnum text-tinta">{Math.round(umbral * 100)} %</span></label>
-            <input id="umbral" type="range" min={0.5} max={0.95} step={0.05} value={umbral} onChange={(e) => setUmbral(Number(e.target.value))} className="mt-3 w-full accent-[var(--s-rojo)]" />
-            <p className="mt-1.5 text-[0.8125rem] text-apagado">Por debajo, la cita no se propone.</p>
-          </div>
-          <Boton variante="rojo" tam="g" icono="citar" cargando={enviando} disabled={!texto.trim()} onClick={() => void enviar()}>Buscar las citas</Boton>
-        </aside>
+        </div>
       </div>
     </Lienzo>
   );
@@ -190,9 +200,9 @@ function Revision({ id, alNuevo }: { id: string; alNuevo: () => void }) {
 
   return (
     <Lienzo>
-      <div className="sticky top-[6.5rem] z-10 -mx-5 mb-6 flex flex-wrap items-center gap-2 border-b border-filete bg-papel/95 px-5 py-3 backdrop-blur md:top-12 md:-mx-12 md:px-12">
-        <p className="text-[0.9375rem]"><span className="tnum">{propuestas.length}</span> citas propuestas · <span className="tnum">{aceptadas}</span> aceptadas</p>
-        <Rotulo className="hidden md:inline">{data.estilo}</Rotulo>
+      <div className="sticky top-16 z-10 mb-6 flex flex-wrap items-center gap-2 rounded-2xl border border-cream-400 bg-cream-50/95 px-4 py-2.5 shadow-[var(--levantado)] backdrop-blur lg:top-3">
+        <p className="text-[0.875rem] font-medium"><span className="tnum">{propuestas.length}</span> citas propuestas · <span className="tnum">{aceptadas}</span> aceptadas</p>
+        <span className="dato hidden text-coffee-400 md:inline">{data.estilo}</span>
         <div className="ml-auto flex flex-wrap items-center gap-1">
           <Boton variante="fantasma" tam="p" icono="hecho" onClick={() => void decidir(propuestas.filter((p) => !p.decision && p.cita.respaldo >= 0.85).map((p) => p.id), 'aceptada')}>Aceptar las de respaldo ≥ 85 %</Boton>
           <MenuRaiz>
@@ -210,12 +220,12 @@ function Revision({ id, alNuevo }: { id: string; alNuevo: () => void }) {
       </div>
 
       <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_24rem]">
-        <article className="lectura max-w-[44rem] text-[1.125rem] leading-[1.75]">
+        <article className="lectura rounded-2xl border border-cream-400 bg-cream-50 p-6 text-[1.0625rem] leading-[1.75] shadow-[var(--levantado)] sm:p-8">
           {data.parrafos.map((p, i) => <ParrafoCitado key={i} texto={p} propuestas={propuestas.filter((x) => x.parrafo === i)} activa={actual?.id} alElegir={setActiva} />)}
           {aceptadas ? (
-            <section className="mt-12 border-t border-tinta pt-4">
-              <Rotulo>Bibliografía</Rotulo>
-              <ul className="mt-3 flex flex-col gap-2 text-[0.9375rem]">{data.bibliografia.map((b) => <li key={b} className="pl-6 -indent-6">{b}</li>)}</ul>
+            <section className="mt-10 border-t border-cream-300 pt-4 font-sans">
+              <h3 className="rotulo text-[0.75rem] text-coffee-700">Bibliografía</h3>
+              <ul className="mt-3 flex flex-col gap-2 text-[0.875rem]">{data.bibliografia.map((b) => <li key={b} className="pl-6 -indent-6">{b}</li>)}</ul>
             </section>
           ) : null}
         </article>
@@ -249,9 +259,9 @@ function ParrafoCitado({ texto, propuestas, activa, alElegir }: { texto: string;
     <p className="mb-6">
       {trozos.map((x, k) => x.p ? (
         <button key={k} id={`cita-${x.p.id}`} type="button" onClick={() => alElegir(x.p!.id)} aria-pressed={activa === x.p.id}
-          className={cx('mx-1 inline rounded-[3px] px-1.5 py-0.5 align-baseline font-mono text-[0.72em] transition-colors',
-            x.p.decision === 'aceptada' ? 'bg-tinta text-sobre-tinta' : x.p.decision === 'rechazada' ? 'text-apagado line-through decoration-rojo' : 'border border-dashed border-tinta-2 bg-amarillo-suave text-tinta',
-            activa === x.p.id && 'ring-2 ring-rojo ring-offset-2 ring-offset-papel')}>
+          className={cx('mx-1 inline rounded-md px-1.5 py-0.5 align-baseline font-mono text-[0.7em] transition-[background,box-shadow]',
+            x.p.decision === 'aceptada' ? 'border border-[#1a0f0a] bg-coffee-800 text-cream-50 shadow-[var(--relieve-oscuro)]' : x.p.decision === 'rechazada' ? 'text-apagado line-through decoration-rojo' : 'border border-[#d9a03b] bg-amarillo-suave text-coffee-800 shadow-[var(--relieve)]',
+            activa === x.p.id && 'ring-2 ring-azul ring-offset-2 ring-offset-cream-50')}>
           {x.p.textoCita}
         </button>
       ) : <span key={k}>{x.t}</span>)}
@@ -275,16 +285,16 @@ function Propuesta({ p, alDecidir }: { p: PropuestaCita; alDecidir: (d: 'aceptad
   const { data: doc } = useQuery(q.documento(p.cita.documento));
   return (
     <Tarjeta className="overflow-hidden">
-      <div className="border-b border-filete p-4">
+      <div className="border-b border-cream-300 bg-cream-100/60 p-4">
         <Rotulo>Afirmación</Rotulo>
-        <p className="mt-1">«{p.afirmacion}»</p>
+        <p className="mt-1 text-[0.875rem]">«{p.afirmacion}»</p>
       </div>
       <div className="p-4">
         <div className="flex items-center gap-2">
-          <span className={cx('rotulo rounded-full px-2 py-1', r.tono === 'bien' ? 'bg-amarillo text-tinta' : r.tono === 'medio' ? 'bg-hondo text-tinta' : 'bg-rojo text-[#fbf5ec]')}>{r.texto}</span>
+          <span className={cx('rounded-lg px-2 py-1 text-[0.6875rem] font-semibold uppercase tracking-[0.04em] shadow-[var(--relieve)]', r.tono === 'bien' ? 'bg-amarillo text-coffee-800' : r.tono === 'medio' ? 'bg-cream-200 text-coffee-700' : 'bg-rojo text-[#fdf8f1]')}>{r.texto}</span>
           <span className="tnum ml-auto font-mono text-[0.8125rem]">{Math.round(p.cita.respaldo * 100)} %</span>
         </div>
-        <div className="mt-2 h-[3px] bg-hondo"><div className="h-full bg-tinta" style={{ width: `${p.cita.respaldo * 100}%` }} /></div>
+        <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-cream-200 shadow-[var(--hundido)]"><div className="h-full rounded-full bg-coffee-700" style={{ width: `${p.cita.respaldo * 100}%` }} /></div>
         <Pasaje texto={textoLimpio(p.cita.pasaje)} />
         <div className="mt-3 flex items-center gap-2 text-[0.8125rem] text-tinta-2">
           <Folio className="shrink-0">{etiquetaCorta(p.cita.ancla, anclaACita(p.cita.ancla, p.cita.anclaFin))}</Folio>
@@ -293,7 +303,7 @@ function Propuesta({ p, alDecidir }: { p: PropuestaCita; alDecidir: (d: 'aceptad
         </div>
         <p className="mt-3 font-mono text-[0.8125rem]">{p.textoCita}</p>
       </div>
-      <div className="flex gap-2 border-t border-filete p-3">
+      <div className="flex gap-2 border-t border-cream-300 bg-cream-100/60 p-3">
         <Boton variante={p.decision === 'aceptada' ? 'tinta' : 'linea'} className="flex-1" icono="hecho" onClick={() => alDecidir('aceptada')}>Aceptar</Boton>
         <Boton variante={p.decision === 'rechazada' ? 'rojo' : 'fantasma'} className="flex-1" icono="cerrar" onClick={() => alDecidir('rechazada')}>Rechazar</Boton>
       </div>

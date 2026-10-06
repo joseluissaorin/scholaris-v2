@@ -26,12 +26,14 @@
       { "name": "ESTANTERIA", "class_name": "Estanteria" },
       { "name": "TAREA", "class_name": "Tarea" },
       { "name": "LIMITADOR", "class_name": "Limitador" },
-      { "name": "CONVERSOR", "class_name": "Conversor" }
+      { "name": "CONVERSOR", "class_name": "Conversor" },
+      { "name": "TRABAJADOR", "class_name": "Trabajador" }
     ]
   },
   "migrations": [
     { "tag": "v1", "new_sqlite_classes": ["Estanteria", "Tarea", "Limitador"] },
-    { "tag": "v2", "new_sqlite_classes": ["Conversor"] }
+    { "tag": "v2", "new_sqlite_classes": ["Conversor"] },
+    { "tag": "v3", "new_sqlite_classes": ["Trabajador"] }
   ],
 
   // Conversor del servidor (imprenta de Node + ffmpeg + LibreOffice) en un
@@ -41,7 +43,7 @@
     {
       "class_name": "Conversor",
       "image": "registry.cloudflare.com/f22c7a728ddc8e41cefd2644f8fb7632/scholaris-conversor:20261006e",
-      "instance_type": "standard-1",
+      "instance_type": "standard-4",
       "max_instances": 3
     }
   ],

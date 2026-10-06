@@ -30,7 +30,7 @@ function Cuadernos() {
           <ul className="mt-2 flex gap-2 overflow-x-auto lg:flex-col lg:overflow-visible">
             {isPending ? [0, 1].map((i) => <Esqueleto key={i} className="h-16 w-full" />) : cuadernos?.map((x) => (
               <li key={x.id} className="shrink-0">
-                <Link to="/escribir/cuadernos" search={{ c: x.id }} className={cx('block rounded-s border px-3 py-2.5', activo?.id === x.id ? 'border-tinta bg-hoja' : 'border-filete hover:border-filete-fuerte')}>
+                <Link to="/escribir/cuadernos" search={{ c: x.id }} className={cx('block rounded-s border px-3 py-2.5', activo?.id === x.id ? 'border-cream-500 bg-cream-50 shadow-[var(--levantado)]' : 'border-filete hover:border-filete-fuerte')}>
                   <p className={cx('truncate text-[1rem]', activo?.id === x.id && '')}>{x.titulo}</p>
                   <Rotulo>{x.tarjetas} tarjetas · {haceCuanto(x.actualizado)}</Rotulo>
                 </Link>

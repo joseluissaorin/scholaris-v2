@@ -22,6 +22,7 @@ export { Tarea } from './tarea-do.js';
 export { Limitador } from './limitador-do.js';
 export { FlujoIngesta } from './flujo-ingesta.js';
 export { Conversor } from './conversor.js';
+export { Trabajador } from './trabajador-do.js';
 
 prepararMotorWorkers();
 

@@ -11,9 +11,10 @@ import { createHash } from 'node:crypto';
 import WebSocket from 'ws';
 import { crearCliente, subirFichero, type EventoTiempoReal } from '@scholaris/contrato';
 
-const base = process.argv[2] ?? 'http://localhost:8790';
-const fichero = process.argv[3] ?? '../../bench/datos/originales/attention_2017.pdf';
-const consulta = process.argv[4] ?? 'scaled dot-product attention';
+const base = process.argv.slice(2).filter((a) => !a.startsWith('--'))[0] ?? 'http://localhost:8790';
+const posicionales = process.argv.slice(2).filter((a) => !a.startsWith('--'));
+const fichero = posicionales[1] ?? '../../bench/datos/originales/attention_2017.pdf';
+const consulta = process.argv.slice(2).filter((a) => !a.startsWith('--'))[2] ?? 'scaled dot-product attention';
 const token = process.env.SCHOLARIS_TOKEN ?? process.env.TOKEN;
 const api = crearCliente({ base, token });
 const t0 = Date.now();
@@ -29,7 +30,22 @@ if (s.duplicado) {
 } else {
   await subirFichero(api, s.subida, s.original, new Blob([bytes]), (n, total) => process.stdout.write(`\rsubido ${Math.round((100 * n) / total)} %`));
   console.log(`\n[${seg()}] original subido (${s.documento})`);
-  const ing = await api.subidas.ingestar(s.subida, {});
+  let ing;
+  if (process.argv.includes('--navegador')) {
+    // Como la web: la imprenta convierte aquí y se suben las partes y el paquete.
+    const { convertir, recolectar } = await import('@scholaris/imprenta/node');
+    const r = await recolectar(convertir({ nombre: basename(fichero), mime, bytes: new Uint8Array(bytes) }));
+    console.log(`[${seg()}] convertido: ${r.paquete.unidades} unidades, ${r.datos.size} partes`);
+    const recursos = [...r.datos.keys()].map((id) => ({ ruta: id, mime: r.paquete.partes.find((x) => x.id === id)?.mime ?? 'application/octet-stream' }));
+    for (let i = 0; i < recursos.length; i += 500) {
+      const firmados = await api.subidas.recursos(s.subida, { recursos: recursos.slice(i, i + 500) });
+      await Promise.all(firmados.recursos.map((f) => fetch(f.subida.url!, { method: 'PUT', body: r.datos.get(f.ruta) as BodyInit, headers: f.subida.cabeceras })));
+    }
+    const p = await api.subidas.recursos(s.subida, { recursos: [{ ruta: 'paquete.json', mime: 'application/json' }] });
+    await fetch(p.recursos[0]!.subida.url!, { method: 'PUT', body: JSON.stringify(r.paquete), headers: { 'content-type': 'application/json' } });
+    console.log(`[${seg()}] partes subidas`);
+    ing = await api.subidas.ingestar(s.subida, { paquete: 'paquete.json' });
+  } else ing = await api.subidas.ingestar(s.subida, {});
   console.log(`[${seg()}] tarea ${ing.tarea}`);
 
   const b = await api.tiempoReal.billete(ing.tarea);

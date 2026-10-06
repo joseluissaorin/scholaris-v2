@@ -5,7 +5,7 @@ import type { Ajustes, AlcanceClave, ClaveApi, ClaveApiCreada, ProveedorClave } 
 import { avisar, Boton, Campo, conDeshacer, cx, Dialogo, Esqueleto, Etiquetado, Filete, Icono, Interruptor, Rotulo, Selector } from '@scholaris/ui';
 import { api } from '../datos/api';
 import { q } from '../datos/consultas';
-import { Lienzo } from '../componentes/comunes/cabecera';
+import { Lienzo, Seccion } from '../componentes/comunes/cabecera';
 import { haceCuanto } from '../lib/formato';
 
 export const Route = createFileRoute('/ajustes/claves')({
@@ -45,40 +45,37 @@ function Claves() {
   }
 
   return (
-    <Lienzo ancho="estrecho">
-      <section>
-        <div className="flex flex-wrap items-end justify-between gap-4">
-          <div>
-            <h2 className="text-[1.125rem] font-semibold text-coffee-800">Claves de API</h2>
-            <p className="mt-1 max-w-xl text-tinta-2">Para usar tu biblioteca desde el SDK de Python o desde cualquier agente por MCP (Claude, por ejemplo), con citas verificadas.</p>
+    <Lienzo ancho="estrecho" className="space-y-5">
+      <Seccion icono="llave" titulo="Claves de API" descripcion="Para usar tu biblioteca desde el SDK de Python o desde cualquier agente por MCP (Claude, por ejemplo), con citas verificadas."
+        accion={<Boton variante="tinta" tam="p" icono="mas" onClick={() => setCrear(true)}>Nueva clave</Boton>}>
+        {isPending ? <Esqueleto className="h-14" /> : !claves?.length ? (
+          <div className="rounded-xl border border-dashed border-cream-500 bg-cream-100/60 px-4 py-6 text-center shadow-[var(--hundido)]">
+            <p className="text-[0.875rem] font-medium text-coffee-700">Aún no hay claves de API</p>
+            <p className="mt-1 text-[0.8125rem] text-coffee-500">Crea una para que los agentes hablen con tu Scholaris.</p>
           </div>
-          <Boton variante="tinta" icono="mas" onClick={() => setCrear(true)}>Nueva clave</Boton>
-        </div>
-        <ul className="mt-6 border-t border-tinta">
-          {isPending ? <Esqueleto className="mt-3 h-14" /> : !claves?.length ? <li className="py-6 text-apagado">Aún no tienes claves.</li> : claves.map((k) => (
-            <li key={k.id} className="flex flex-wrap items-center gap-x-4 gap-y-1 border-b border-filete py-3.5">
-              <Icono nombre="llave" tam={17} className="text-apagado" />
-              <div className="min-w-0 flex-1">
-                <p>{k.nombre}</p>
-                <Rotulo>{k.alcances.map((a) => ALCANCES[a]).join(' · ')} · creada {haceCuanto(k.creada)}{k.ultimoUso ? ` · usada ${haceCuanto(k.ultimoUso)}` : ' · sin usar'}</Rotulo>
-              </div>
-              <code className="hidden font-mono text-[0.8125rem] text-tinta-2 sm:inline">{k.prefijo}…</code>
-              <Boton variante="fantasma" tam="p" className="!text-rojo" onClick={() => revocar(k)}>Revocar</Boton>
-            </li>
-          ))}
-        </ul>
-      </section>
+        ) : (
+          <ul className="overflow-hidden rounded-xl border border-cream-300 bg-cream-100/50">
+            {claves.map((k) => (
+              <li key={k.id} className="flex flex-wrap items-center gap-x-4 gap-y-1 border-b border-cream-200 px-4 py-3 last:border-0">
+                <Icono nombre="llave" tam={16} className="text-coffee-400" />
+                <div className="min-w-0 flex-1">
+                  <p className="text-[0.875rem] font-medium">{k.nombre}</p>
+                  <p className="text-[0.75rem] text-coffee-400">{k.alcances.map((a) => ALCANCES[a]).join(' · ')} · creada {haceCuanto(k.creada)}{k.ultimoUso ? ` · usada ${haceCuanto(k.ultimoUso)}` : ' · sin usar'}</p>
+                </div>
+                <code className="dato hidden text-coffee-500 sm:inline">{k.prefijo}…</code>
+                <Boton variante="fantasma" tam="p" className="!text-rojo" onClick={() => revocar(k)}>Revocar</Boton>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Seccion>
 
-      <section className="mt-14">
-        <Filete>Claves propias</Filete>
-        <div className="mt-5 flex items-start justify-between gap-6">
-          <p className="max-w-xl text-tinta-2">Si pones tu clave de un proveedor, las llamadas a ese proveedor van a tu cuenta y no gastan tu plan. Se guardan cifradas; nunca volvemos a enseñarlas.</p>
-          <label className="flex shrink-0 items-center gap-3 text-[0.9375rem]">Usarlas<Interruptor activo={!!ajustes?.preferencias.usarClavesPropias} alCambiar={(v) => void usarPropias(v)} etiqueta="Usar mis claves cuando las haya" /></label>
-        </div>
-        <ul className="mt-5 grid gap-3 sm:grid-cols-2">
+      <Seccion icono="ajustes" titulo="Claves propias" descripcion="Si pones tu clave de un proveedor, las llamadas a ese proveedor van a tu cuenta y no gastan tu plan. Se guardan cifradas; nunca volvemos a enseñarlas."
+        accion={<label className="flex shrink-0 items-center gap-2.5 text-[0.8125rem] font-medium text-coffee-700">Usarlas<Interruptor activo={!!ajustes?.preferencias.usarClavesPropias} alCambiar={(v) => void usarPropias(v)} etiqueta="Usar mis claves cuando las haya" /></label>}>
+        <ul className="grid gap-3 sm:grid-cols-2">
           {PROVEEDORES.map((p) => <Proveedor key={p.id} p={p} guardada={ajustes?.claves.find((c) => c.proveedor === p.id)} />)}
         </ul>
-      </section>
+      </Seccion>
 
       <NuevaClave abierta={crear} alCambiar={setCrear} alCrear={(k) => { setCreada(k); void qc.invalidateQueries({ queryKey: ['claves'] }); }} />
       <Dialogo abierto={!!creada} alCambiar={(v) => !v && setCreada(null)} titulo="Tu clave nueva" descripcion="Cópiala ahora: es la única vez que se enseña entera." ancho="g"
@@ -94,14 +91,14 @@ function SecretoCreado({ k }: { k: ClaveApiCreada }) {
   const copiar = async (t: string, que: string) => { try { await navigator.clipboard.writeText(t); avisar(`${que} copiada.`, { tono: 'exito' }); } catch { avisar('No se pudo copiar.', { tono: 'error' }); } };
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex items-center gap-2 rounded-s border border-tinta bg-papel p-3">
+      <div className="flex items-center gap-2 rounded-xl border border-cream-400 bg-cream-100 p-3 shadow-[var(--hundido)]">
         <code className="min-w-0 flex-1 break-all font-mono text-[0.875rem]">{k.secreto}</code>
         <Boton variante="tinta" tam="p" icono="copiar" onClick={() => void copiar(k.secreto, 'Clave')}>Copiar</Boton>
       </div>
       {k.alcances.includes('mcp') ? (
         <div>
-          <div className="flex items-center justify-between"><Rotulo>Configuración MCP</Rotulo><Boton variante="fantasma" tam="p" icono="copiar" onClick={() => void copiar(mcp, 'Configuración')}>Copiar</Boton></div>
-          <pre className="mt-2 overflow-x-auto rounded-s bg-tinta p-3 font-mono text-[0.75rem] leading-relaxed text-sobre-tinta">{mcp}</pre>
+          <div className="flex items-center justify-between"><span className="text-[0.8125rem] font-medium text-coffee-700">Configuración MCP</span><Boton variante="fantasma" tam="p" icono="copiar" onClick={() => void copiar(mcp, 'Configuración')}>Copiar</Boton></div>
+          <pre className="mt-2 overflow-x-auto rounded-xl bg-[#2c1810] p-4 font-mono text-[0.75rem] leading-relaxed text-[#faf7f0] shadow-[var(--hundido)]">{mcp}</pre>
         </div>
       ) : null}
     </div>
@@ -126,7 +123,7 @@ function NuevaClave({ abierta, alCambiar, alCrear }: { abierta: boolean; alCambi
           <legend className="rotulo text-tinta-2">Permisos</legend>
           <div className="mt-2 flex flex-wrap gap-2">
             {(Object.keys(ALCANCES) as AlcanceClave[]).map((a) => (
-              <label key={a} className={cx('flex h-9 cursor-pointer items-center gap-2 rounded-full border px-3 text-[0.875rem]', alcances.includes(a) ? 'border-tinta bg-tinta text-sobre-tinta' : 'border-filete-fuerte')}>
+              <label key={a} className={cx('flex h-8 cursor-pointer items-center gap-2 rounded-lg border px-3 text-[0.8125rem] font-medium transition-[background,box-shadow]', alcances.includes(a) ? 'border-[#1a0f0a] bg-coffee-800 text-cream-50 shadow-[inset_0_1px_3px_rgb(0_0_0/0.35)]' : 'border-cream-400 bg-cream-50 text-coffee-600 shadow-[var(--relieve)]')}>
                 <input type="checkbox" className="sr-only" checked={alcances.includes(a)} onChange={(e) => setAlcances(e.target.checked ? [...alcances, a] : alcances.filter((x) => x !== a))} />
                 {ALCANCES[a]}
               </label>
@@ -151,10 +148,10 @@ function Proveedor({ p, guardada }: { p: (typeof PROVEEDORES)[number]; guardada?
     try { qc.setQueryData(['ajustes'], await api().ajustes.borrarClave(p.id)); avisar(`Clave de ${p.nombre} quitada.`); } catch { avisar('No se pudo quitar.', { tono: 'error' }); }
   }
   return (
-    <li className={cx('rounded-m border p-4', guardada ? 'border-tinta bg-hoja' : 'border-filete')}>
+    <li className={cx('rounded-xl border p-4 transition-shadow', guardada ? 'border-cream-500 bg-cream-50 shadow-[var(--relieve-alto)]' : 'border-cream-300 bg-cream-100/70 shadow-[var(--hundido)]')}>
       <div className="flex items-start gap-2">
-        <div className="min-w-0 flex-1"><p>{p.nombre}</p><p className="text-[0.8125rem] text-tinta-2">{p.uso}</p></div>
-        {guardada ? <span className="rotulo rounded-full bg-amarillo px-2 py-0.5 text-tinta">•••• {guardada.final}</span> : null}
+        <div className="min-w-0 flex-1"><p className="text-[0.875rem] font-semibold">{p.nombre}</p><p className="text-[0.75rem] text-coffee-500">{p.uso}</p></div>
+        {guardada ? <span className="dato rounded-md bg-amarillo px-1.5 py-0.5 text-coffee-800 shadow-[var(--relieve)]">•••• {guardada.final}</span> : null}
       </div>
       {editando ? (
         <form className="mt-3 flex gap-2" onSubmit={(e) => { e.preventDefault(); if (valor.trim()) void guardar(); }}>

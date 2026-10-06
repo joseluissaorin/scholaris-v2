@@ -87,7 +87,7 @@ export function Ficha({ doc }: { doc: DetalleDocumento }) {
         </p>
       ) : null}
       {!m.anio && sf ? (
-        <p className="rounded-s border border-filete bg-hoja px-3 py-2 text-[0.875rem]">
+        <p className="rounded-xl border border-cream-400 bg-cream-50 shadow-[var(--levantado)] px-3 py-2 text-[0.875rem]">
           <span className="font-mono">s. f.</span>{sf.desde || sf.hasta ? <> (h. {sf.desde ?? '…'}{sf.hasta && sf.hasta !== sf.desde ? `-${sf.hasta}` : ''}{sf.fundamento ? `, según ${sf.fundamento}` : ''})</> : sf.fundamento ? <> ({sf.fundamento})</> : null}
           <span className="mt-1 block text-[0.8125rem] text-apagado">Sin año impreso. La horquilla es orientativa y no se usa al citar.</span>
         </p>

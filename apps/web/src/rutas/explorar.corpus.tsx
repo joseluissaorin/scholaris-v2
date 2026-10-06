@@ -19,13 +19,13 @@ const IDIOMA: Record<string, string> = { es: 'Español', en: 'Inglés', fr: 'Fra
 function Barras({ datos, etiqueta }: { datos: Array<[string, number]>; etiqueta: string }) {
   const max = Math.max(1, ...datos.map(([, n]) => n));
   return (
-    <figure>
-      <figcaption><Rotulo>{etiqueta}</Rotulo></figcaption>
+    <figure className="rounded-2xl border border-cream-400 bg-cream-50 p-5 shadow-[var(--levantado)]">
+      <figcaption><Rotulo className="text-coffee-700">{etiqueta}</Rotulo></figcaption>
       <ul className="mt-3 flex flex-col gap-2">
         {datos.map(([k, n]) => (
-          <li key={k} className="grid grid-cols-[8rem_minmax(0,1fr)_2.5rem] items-center gap-3 text-[0.875rem]">
-            <span className="truncate">{k}</span>
-            <span className="h-3 bg-hondo"><span className="block h-full bg-tinta" style={{ width: `${(n / max) * 100}%` }} /></span>
+          <li key={k} className="grid grid-cols-[6.5rem_minmax(0,1fr)_2rem] items-center gap-3 text-[0.8125rem]">
+            <span className="truncate text-coffee-700">{k}</span>
+            <span className="h-2.5 overflow-hidden rounded-full bg-cream-200 shadow-[var(--hundido)]"><span className="block h-full rounded-full bg-coffee-700" style={{ width: `${(n / max) * 100}%` }} /></span>
             <span className="tnum text-right font-mono text-[0.8125rem]">{n}</span>
           </li>
         ))}
@@ -61,7 +61,7 @@ function Corpus() {
           </div>
         ))}
       </dl>
-      <div className="mt-10 grid gap-12 md:grid-cols-3">
+      <div className="mt-6 grid gap-5 md:grid-cols-3">
         <Barras etiqueta="Por tipo" datos={Object.entries(data.porTipo).sort((a, b) => b[1] - a[1]).map(([k, n]) => [NOMBRE_TIPO[k as TipoEntrada] ?? k, n])} />
         <Barras etiqueta="Por década de la obra" datos={Object.entries(data.porDecada).sort((a, b) => Number(a[0]) - Number(b[0])).map(([k, n]) => [`${k}-${String(Number(k) + 9).slice(2)}`, n])} />
         <Barras etiqueta="Por idioma" datos={Object.entries(data.porIdioma).sort((a, b) => b[1] - a[1]).map(([k, n]) => [IDIOMA[k] ?? k, n])} />

@@ -103,15 +103,16 @@ export class FlujoIngesta extends WorkflowEntrypoint<Env, ParamsIngesta> {
         await ctx.emitir(progreso('lectura', hechos / Math.max(1, total), 0.03 + 0.22 * (hechos / Math.max(1, total)), `${hechos} de ${total}`));
       };
       // Como mucho OLEADA pasos a la vez: los pasos en paralelo de una instancia comparten aislamiento (128 MB).
-      const OLEADA = 12;
+      const OLEADA = 24;
       const pasosLectura: Array<() => Promise<unknown>> = [
         // La primera página, sola y la primera: se ve en unos segundos.
-        ...(info.modo === 'paginas' && info.pliegos.length ? [() => step.do('primera-pagina', { retries: { limit: 2, delay: '2 seconds' }, timeout: '2 minutes' }, async () => leerPrimeraPagina(await this.contexto(p), p, info).catch(() => 0))] : []),
+        ...(info.modo === 'paginas' && info.pliegos.length ? [() => step.do('primera-pagina', { retries: { limit: 2, delay: '2 seconds' }, timeout: '2 minutes' }, async () => this.env.TRABAJADOR.getByName(`${p.tarea}:primera`).primeraPagina(p, info).catch(() => 0))] : []),
         ...info.pliegos.map((id) => () => step.do(`pliego-${id}`, { retries: REINTENTOS, timeout: '6 minutes' }, async () => {
           const t0 = Date.now();
           const ctx = await this.contexto(p);
           const t1 = Date.now();
-          const n = await leerUnPliego(ctx, p, info, id);
+          // La lectura, en su propio trabajador (su propio cupo de conexiones).
+          const n = await this.env.TRABAJADOR.getByName(`${p.tarea}:p${id}`).pliego(p, info, id);
           const t2 = Date.now();
           await avisar(ctx);
           console.log(JSON.stringify({ que: 'paso', paso: `pliego-${id}`, contexto: t1 - t0, leer: t2 - t1, avisar: Date.now() - t2 }));
@@ -119,7 +120,7 @@ export class FlujoIngesta extends WorkflowEntrypoint<Env, ParamsIngesta> {
         })),
         ...info.tramos.map((n) => () => step.do(`tramo-${n}`, { retries: REINTENTOS, timeout: '12 minutes' }, async () => {
           const ctx = await this.contexto(p);
-          const palabras = await transcribirUnTramo(ctx, p, info, n);
+          const palabras = await this.env.TRABAJADOR.getByName(`${p.tarea}:t${n}`).tramo(p, info, n);
           await avisar(ctx);
           return palabras;
         })),

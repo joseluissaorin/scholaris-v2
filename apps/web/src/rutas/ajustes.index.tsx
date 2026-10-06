@@ -2,11 +2,11 @@ import { lazy, Suspense, useState } from 'react';
 import { createFileRoute } from '@tanstack/react-router';
 import { useQuery } from '@tanstack/react-query';
 import type { Cuota } from '@scholaris/contrato';
-import { avisar, Boton, Campo, cx, Dialogo, Esqueleto, Filete, Rotulo, Tarjeta } from '@scholaris/ui';
+import { avisar, Boton, Campo, cx, Dialogo, Esqueleto } from '@scholaris/ui';
 import { modoIngesta, ponerModoIngesta, type ModoIngesta } from '../datos/ingesta';
 import { api, esSimulado } from '../datos/api';
 import { q } from '../datos/consultas';
-import { Lienzo } from '../componentes/comunes/cabecera';
+import { Lienzo, Seccion } from '../componentes/comunes/cabecera';
 import { useSesion } from '../sesion';
 import { bytes } from '../lib/formato';
 import { numero } from '../lib/numero';
@@ -22,8 +22,8 @@ function Medidor({ nombre, cuota, formato = (n: number) => numero(n) }: { nombre
   const pct = cuota.limite ? Math.min(1, cuota.usados / cuota.limite) : 0;
   return (
     <div>
-      <div className="flex items-baseline justify-between gap-2"><span className="text-[0.9375rem]">{nombre}</span><span className="tnum font-mono text-[0.8125rem] text-tinta-2">{formato(cuota.usados)}{cuota.limite ? ` de ${formato(cuota.limite)}` : ' · sin límite'}</span></div>
-      <div className="mt-2 h-[3px] bg-hondo"><div className={pct > 0.9 ? 'h-full bg-rojo' : 'h-full bg-tinta'} style={{ width: `${cuota.limite ? pct * 100 : 100}%`, opacity: cuota.limite ? 1 : 0.15 }} /></div>
+      <div className="flex items-baseline justify-between gap-2"><span className="text-[0.8125rem] font-medium text-coffee-700">{nombre}</span><span className="dato text-coffee-500">{formato(cuota.usados)}{cuota.limite ? ` de ${formato(cuota.limite)}` : ' · sin límite'}</span></div>
+      <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-cream-200 shadow-[var(--hundido)]"><div className={pct > 0.9 ? 'h-full rounded-full bg-rojo' : 'h-full rounded-full bg-coffee-700'} style={{ width: `${cuota.limite ? pct * 100 : 100}%`, opacity: cuota.limite ? 1 : 0.15 }} /></div>
     </div>
   );
 }
@@ -35,12 +35,12 @@ function ModoIngestaAjuste() {
     ['economico', 'Económico', 'Se procesa por lotes: listo en unas horas, a mitad de precio. Bien para bibliotecas enteras.'],
   ];
   return (
-    <div role="radiogroup" aria-label="Modo de lectura" className="mt-4 grid gap-3 sm:grid-cols-2">
+    <div role="radiogroup" aria-label="Modo de lectura" className="grid gap-3 sm:grid-cols-2">
       {opciones.map(([m, n, d]) => (
         <button key={m} type="button" role="radio" aria-checked={modo === m} onClick={() => { ponerModoIngesta(m); setModo(m); }}
-          className={cx('rounded-m border p-4 text-left', modo === m ? 'border-tinta bg-hoja' : 'border-filete hover:border-filete-fuerte')}>
-          <span className="flex items-center gap-2 text-[1.0625rem]">{modo === m ? <span className="h-2.5 w-2.5 rounded-full bg-rojo" /> : <span className="h-2.5 w-2.5 rounded-full border border-filete-fuerte" />}{n}</span>
-          <span className="mt-1 block text-[0.875rem] text-tinta-2">{d}</span>
+          className={cx('rounded-xl border p-4 text-left transition-[box-shadow,transform]', modo === m ? 'border-coffee-500 bg-cream-50 shadow-[var(--relieve-alto)]' : 'border-cream-400 bg-cream-100 shadow-[var(--hundido)] hover:bg-cream-50')}>
+          <span className="flex items-center gap-2 text-[0.9375rem] font-semibold">{modo === m ? <span className="h-2.5 w-2.5 rounded-full bg-rojo" /> : <span className="h-2.5 w-2.5 rounded-full border border-cream-500" />}{n}</span>
+          <span className="mt-1 block text-[0.8125rem] text-coffee-500">{d}</span>
         </button>
       ))}
     </div>
@@ -60,49 +60,37 @@ function Cuenta() {
 
   if (isPending || !yo) return <Lienzo ancho="estrecho"><Esqueleto className="h-40" /></Lienzo>;
   return (
-    <Lienzo ancho="estrecho">
-      <section className="flex flex-wrap items-center gap-5">
-        {yo.usuario.imagen ? <img src={yo.usuario.imagen} alt="" className="h-16 w-16 rounded-full" /> : <span className="grid h-16 w-16 place-items-center rounded-full bg-tinta text-[1.75rem] text-sobre-tinta">{yo.usuario.nombre.charAt(0)}</span>}
-        <div className="min-w-0 flex-1">
-          <h2 className="text-[1.75rem] leading-tight">{yo.usuario.nombre}</h2>
-          <p className="text-tinta-2">{yo.usuario.correo}</p>
+    <Lienzo ancho="estrecho" className="space-y-5">
+      <Seccion icono="ajustes" titulo={yo.usuario.nombre} descripcion={yo.usuario.correo}
+        accion={sesion.abrirPerfil ? <Boton variante="linea" tam="p" onClick={sesion.abrirPerfil}>Correo y contraseña</Boton> : undefined}>
+        {yo.via === 'local' ? (
+          <p className="rounded-xl bg-cream-200/60 px-4 py-3 text-[0.8125rem] text-coffee-600 shadow-[var(--hundido)]">{esSimulado() ? 'Estás viendo Scholaris con una biblioteca de ejemplo. Nada de lo que hagas sale de este navegador.' : 'Versión local: un solo usuario, sin cuenta y sin límites de plan. Tus datos viven en este ordenador.'}</p>
+        ) : null}
+      </Seccion>
+
+      <Seccion icono="rayo" titulo="Facturación y uso" descripcion={`Plan actual: ${yo.plan === 'pro' ? 'Pro' : 'Gratuito'}`}
+        accion={<span className={cx('rounded-lg px-2 py-0.5 text-[0.6875rem] font-semibold shadow-[var(--relieve)]', yo.plan === 'pro' ? 'bg-amarillo text-coffee-800' : 'bg-cream-200 text-coffee-700')}>{yo.plan === 'pro' ? 'Pro' : 'Gratuito'}</span>}>
+        <div className="grid gap-5 sm:grid-cols-2">
+          <Medidor nombre="Páginas leídas este mes" cuota={yo.cuotas.paginasMes} />
+          <Medidor nombre="Documentos" cuota={yo.cuotas.documentos} />
+          <Medidor nombre="Autocitas este mes" cuota={yo.cuotas.autocitasMes} />
+          <Medidor nombre="Almacenamiento" cuota={yo.cuotas.bytes} formato={bytes} />
         </div>
-        {sesion.abrirPerfil ? <Boton variante="linea" onClick={sesion.abrirPerfil}>Correo y contraseña</Boton> : null}
-      </section>
+      </Seccion>
 
-      {yo.via === 'local' ? (
-        <Tarjeta className="mt-8 p-5">
-          <Rotulo>{esSimulado() ? 'Demostración' : 'Versión local'}</Rotulo>
-          <p className="mt-2">{esSimulado() ? 'Estás viendo Scholaris con una biblioteca de ejemplo. Nada de lo que hagas sale de este navegador.' : 'Un solo usuario, sin cuenta y sin límites de plan. Tus datos viven en este ordenador.'}</p>
-        </Tarjeta>
-      ) : null}
-
-      <Filete className="mt-10">Plan {yo.plan === 'pro' ? 'Pro' : 'gratuito'}</Filete>
-      <div className="mt-5 grid gap-5 sm:grid-cols-2">
-        <Medidor nombre="Páginas leídas este mes" cuota={yo.cuotas.paginasMes} />
-        <Medidor nombre="Documentos" cuota={yo.cuotas.documentos} />
-        <Medidor nombre="Autocitas este mes" cuota={yo.cuotas.autocitasMes} />
-        <Medidor nombre="Almacenamiento" cuota={yo.cuotas.bytes} formato={bytes} />
-      </div>
-
-      <section className="mt-12">
-        <Filete>Lectura de documentos</Filete>
+      <Seccion icono="documento" titulo="Lectura de documentos" descripcion="Cómo se leen los archivos que añades. Se puede cambiar también al añadirlos.">
         <ModoIngestaAjuste />
-      </section>
+      </Seccion>
 
       {sesion.modo === 'clerk' ? (
-        <section className="mt-12">
-          <Filete>Planes</Filete>
-          <div className="mt-6"><Suspense fallback={<Esqueleto className="h-72" />}><Precios /></Suspense></div>
-        </section>
+        <Seccion icono="marcador" titulo="Planes">
+          <Suspense fallback={<Esqueleto className="h-72" />}><Precios /></Suspense>
+        </Seccion>
       ) : null}
 
       {sesion.modo === 'clerk' ? (
-        <section className="mt-16 rounded-m border border-rojo/60 p-5">
-          <h3 className="text-[1.125rem]">Borrar la cuenta</h3>
-          <p className="mt-1 text-[0.9375rem] text-tinta-2">Se borran tus documentos, tus búsquedas, tus cuadernos y tus claves. No se puede deshacer.</p>
-          <Boton className="mt-4" variante="linea" onClick={() => setBorrar(true)}>Borrar mi cuenta…</Boton>
-        </section>
+        <Seccion icono="aviso" titulo="Borrar la cuenta" descripcion="Se borran tus documentos, tus búsquedas, tus cuadernos y tus claves. No se puede deshacer." className="border-rojo/40"
+          accion={<Boton variante="linea" tam="p" className="!text-rojo" onClick={() => setBorrar(true)}>Borrar mi cuenta…</Boton>} />
       ) : null}
 
       <Dialogo abierto={borrar} alCambiar={setBorrar} titulo="¿Borrar la cuenta entera?" descripcion="Esto no se puede deshacer. Escribe BORRAR para confirmarlo."

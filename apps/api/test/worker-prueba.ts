@@ -4,4 +4,4 @@ import { inteligenciaFalsa } from './falsos.js';
 
 establecerFabricaInteligencia(() => inteligenciaFalsa());
 
-export { default, Estanteria, Tarea, Limitador, FlujoIngesta } from '../src/cloudflare/worker.js';
+export { default, Estanteria, Tarea, Limitador, FlujoIngesta, Trabajador } from '../src/cloudflare/worker.js';

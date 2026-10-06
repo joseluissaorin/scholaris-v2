@@ -102,10 +102,10 @@ export default function Paleta({ abierta, alCambiar }: { abierta: boolean; alCam
   return (
     <Dialog.Root open={abierta} onOpenChange={(v) => (v ? alCambiar(true) : cerrar())}>
       <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-50 bg-[rgb(26_21_17/0.42)] backdrop-blur-[2px] anim-aparece" />
+        <Dialog.Overlay className="fixed inset-0 z-50 bg-[rgb(26_15_10/0.55)] backdrop-blur-sm anim-aparece" />
         <Dialog.Content
           aria-describedby={undefined}
-          className="fixed left-1/2 top-[8vh] z-50 flex max-h-[min(36rem,80dvh)] w-[calc(100vw-1rem)] max-w-2xl -translate-x-1/2 flex-col overflow-hidden rounded-m border border-filete-fuerte bg-hoja shadow-flota anim-dialogo"
+          className="fixed left-1/2 top-[8vh] z-50 flex max-h-[min(36rem,80dvh)] w-[calc(100vw-1rem)] max-w-2xl -translate-x-1/2 flex-col overflow-hidden rounded-2xl border border-cream-400 bg-cream-100 shadow-[var(--levantado-alto)] anim-dialogo"
           onKeyDown={(e) => {
             if (e.key === 'ArrowDown') { e.preventDefault(); setActiva((a) => Math.min(opciones.length - 1, a + 1)); }
             else if (e.key === 'ArrowUp') { e.preventDefault(); setActiva((a) => Math.max(0, a - 1)); }
@@ -113,14 +113,14 @@ export default function Paleta({ abierta, alCambiar }: { abierta: boolean; alCam
           }}
         >
           <Dialog.Title className="sr-only">Buscar en todo</Dialog.Title>
-          <div className="flex items-center gap-3 border-b border-filete px-4">
+          <div className="m-2 flex items-center gap-3 rounded-xl border border-cream-400 bg-cream-50 px-4 shadow-[var(--hundido)]">
             <Icono nombre="buscar" tam={20} className="text-apagado" />
             <input
               autoFocus
               value={texto}
               onChange={(e) => setTexto(e.target.value)}
               placeholder="Busca un pasaje, un libro, una acción…"
-              className="h-14 flex-1 bg-transparent text-[1.1875rem] text-tinta outline-none placeholder:text-apagado/80"
+              className="h-12 flex-1 bg-transparent text-[1rem] text-coffee-800 outline-none placeholder:text-coffee-300"
               role="combobox"
               aria-expanded
               aria-controls="paleta-lista"
@@ -132,7 +132,7 @@ export default function Paleta({ abierta, alCambiar }: { abierta: boolean; alCam
           <div ref={lista} id="paleta-lista" role="listbox" aria-label="Resultados" className="flex-1 overflow-y-auto overscroll-contain p-2">
             {grupos.map(([grupo, ops]) => (
               <div key={grupo} role="group" aria-label={grupo} className="mb-1">
-                <p className="rotulo px-2.5 pb-1 pt-2.5 text-apagado">{grupo}</p>
+                <p className="rotulo px-2.5 pb-1 pt-2.5 text-coffee-400">{grupo}</p>
                 {ops.map((o) => (
                   <div
                     key={o.id}
@@ -142,21 +142,21 @@ export default function Paleta({ abierta, alCambiar }: { abierta: boolean; alCam
                     aria-selected={o.i === activa}
                     onMouseMove={() => setActiva(o.i)}
                     onClick={o.hacer}
-                    className={cx('flex cursor-default items-start gap-3 rounded-s px-2.5 py-2', o.i === activa ? 'bg-tinta text-sobre-tinta' : 'text-tinta')}
+                    className={cx('flex cursor-default items-start gap-3 rounded-s px-2.5 py-2', o.i === activa ? 'bg-cream-50 text-coffee-800 shadow-[var(--relieve)]' : 'text-coffee-700')}
                   >
                     <Icono nombre={o.icono} tam={17} className="mt-0.5 shrink-0 opacity-80" />
                     <div className="min-w-0 flex-1">
-                      <div className="line-clamp-2 text-[0.9375rem] leading-snug">{o.titulo}</div>
-                      {o.detalle ? <div className={cx('mt-0.5 truncate text-[0.8125rem]', o.i === activa ? 'opacity-75' : 'text-apagado')}>{o.detalle}</div> : null}
+                      <div className="line-clamp-2 text-[0.875rem] font-medium leading-snug">{o.titulo}</div>
+                      {o.detalle ? <div className="mt-0.5 truncate text-[0.75rem] text-coffee-400">{o.detalle}</div> : null}
                     </div>
-                    {o.folio ? <Folio className={o.i === activa ? 'text-sobre-tinta' : undefined}>{o.folio}</Folio> : null}
+                    {o.folio ? <Folio>{o.folio}</Folio> : null}
                   </div>
                 ))}
               </div>
             ))}
             {!opciones.length ? <p className="px-3 py-8 text-center text-apagado">Nada por aquí. Prueba con otras palabras.</p> : null}
           </div>
-          <div className="hidden items-center gap-4 border-t border-filete px-4 py-2 text-[0.75rem] text-apagado sm:flex">
+          <div className="hidden items-center gap-4 border-t border-cream-300 bg-cream-200/50 px-4 py-2 text-[0.75rem] text-coffee-400 sm:flex">
             <span><Teclas>↑</Teclas> <Teclas>↓</Teclas> moverse</span>
             <span><Teclas>↵</Teclas> abrir</span>
             <span className="ml-auto">Los pasajes abren el lector en su página exacta.</span>
