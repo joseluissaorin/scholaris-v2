@@ -10,6 +10,7 @@ import { Resultado } from '../componentes/busqueda/resultado';
 import { Lienzo } from '../componentes/comunes/cabecera';
 import { anclaABusqueda } from '../lib/anclas';
 import { etiquetaCorta, haceCuanto } from '../lib/formato';
+import { useFlip } from '../lib/flip';
 import { textoLimpio } from '../lib/texto';
 import { numero } from '../lib/numero';
 
@@ -72,6 +73,9 @@ function PaginaBuscar() {
   });
   const datos = b.cruzada ? cruzada : normal;
   const resultados = datos.data?.resultados ?? [];
+  const preliminar = !!(datos.data as { preliminar?: boolean } | undefined)?.preliminar;
+  const lista = useRef<HTMLDivElement>(null);
+  useFlip(lista, resultados.map((r) => r.fragmento.id).join('|'));
 
   function enviar() {
     const t = texto.trim();
@@ -140,12 +144,12 @@ function PaginaBuscar() {
           <>
             <div className={cx('mb-4 flex flex-wrap items-baseline gap-x-4 gap-y-1 transition-opacity', datos.isPlaceholderData && 'opacity-60')}>
               <h2 className="rotulo text-[0.75rem] text-coffee-700"><span className="tnum">{resultados.length}</span> pasajes</h2>
-              <Rotulo>{datos.data?.ms ? `${datos.data.ms} ms` : ''}{datos.data?.intencion ? ` · consulta ${datos.data.intencion}` : ''}</Rotulo>
+              <Rotulo>{preliminar ? <span className="inline-flex items-center gap-1.5"><span className="h-1.5 w-1.5 rounded-full bg-azul anim-pulso" />afinando el orden…</span> : <>{datos.data?.ms ? `${datos.data.ms} ms` : ''}{datos.data?.intencion ? ` · consulta ${datos.data.intencion}` : ''}</>}</Rotulo>
               {titulo?.length ? <Rotulo className="truncate">También en: {titulo.map((t) => `${t.idioma} «${t.consulta}»`).join(' · ')}</Rotulo> : null}
               <Boton variante="linea" tam="p" icono="chispa" className="ml-auto" onClick={() => { fijar({ modo: 'preguntar' }); setPregunta(consulta); }}>Preguntar sobre esto</Boton>
             </div>
-            <div className={cx('transition-opacity', datos.isPlaceholderData && 'opacity-60')}>
-              {resultados.map((r, i) => <Resultado key={r.fragmento.id} r={r} consulta={consulta} indice={i} />)}
+            <div ref={lista} className={cx('transition-opacity', datos.isPlaceholderData && 'opacity-60')}>
+              {resultados.map((r, i) => <div key={r.fragmento.id} data-flip={r.fragmento.id}><Resultado r={r} consulta={consulta} indice={i} /></div>)}
             </div>
           </>
         )}

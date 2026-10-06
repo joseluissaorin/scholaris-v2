@@ -5,7 +5,7 @@
  */
 import { QueryClient, queryOptions, keepPreviousData } from '@tanstack/react-query';
 import type { Filtros } from '@scholaris/nucleo';
-import type { FiltrosDocumentos, TipoEntidad } from '@scholaris/contrato';
+import type { FiltrosDocumentos, RespuestaBusqueda, TipoEntidad } from '@scholaris/contrato';
 import { api } from './api';
 
 export const clienteConsultas = new QueryClient({
@@ -36,9 +36,26 @@ export const q = {
   figuras: (id: string) => queryOptions({ queryKey: ['figuras', id], queryFn: async () => (await api().documentos.figuras(id)).map((f) => ({ ...f, unidad: f.unidad + 1 })), staleTime: 5 * 60_000 }),
   original: (id: string) => queryOptions({ queryKey: ['original', id], queryFn: () => api().documentos.original(id), staleTime: 50 * 60_000 }),
   bibliotecas: () => queryOptions({ queryKey: ['bibliotecas'], queryFn: () => api().bibliotecas.listar() }),
+  /*
+   * Búsqueda en dos tiempos: el orden preliminar (~350 ms) se escribe en la caché
+   * en cuanto llega, marcado `preliminar`, y la respuesta final lo sustituye. Las
+   * tarjetas se recolocan por id (FLIP) sin vaciar la lista. Si la API no habla
+   * en dos tiempos, se cae a la búsqueda de una sola vez.
+   */
   busqueda: (consulta: string, filtros: Filtros) => queryOptions({
     queryKey: ['busqueda', consulta, filtros],
-    queryFn: () => api().busqueda.buscar({ consulta, filtros, k: 30 }),
+    queryFn: async ({ signal }): Promise<RespuestaBusqueda & { preliminar?: boolean }> => {
+      const clave = ['busqueda', consulta, filtros];
+      try {
+        return await api().busqueda.buscarProgresivo({ consulta, filtros, k: 30 }, (resultados) => {
+          if (signal.aborted) return;
+          clienteConsultas.setQueryData(clave, { resultados, ms: 0, preliminar: true });
+        });
+      } catch (e) {
+        if (signal.aborted) throw e;
+        return api().busqueda.buscar({ consulta, filtros, k: 30 });
+      }
+    },
     enabled: consulta.trim().length > 1,
     staleTime: 2 * 60_000,
     placeholderData: keepPreviousData,

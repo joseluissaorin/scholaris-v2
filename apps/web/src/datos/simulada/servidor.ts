@@ -463,7 +463,20 @@ ruta('POST', '/bibliotecas/:id/documentos', (m, c) => { for (const id of c.docum
 ruta('DELETE', '/bibliotecas/:id/documentos/:doc', (m) => { const d = docs.get(m[2]!); if (d) d.bibliotecas = d.bibliotecas.filter((b) => b !== m[1]); return json(bibliotecas.find((b) => b.id === m[1])); });
 ruta('DELETE', '/bibliotecas/:id', (m) => { const i = bibliotecas.findIndex((b) => b.id === m[1]); if (i >= 0) bibliotecas.splice(i, 1); return ok(); });
 
-ruta('POST', '/busqueda', async (_m, c: Buscar) => { const t = Date.now(); const r = buscarEn(c.consulta, c.filtros, c.k ?? 20); await espera(90 + Math.random() * 120); return json({ resultados: r, intencion: 'conceptual', ms: Date.now() - t + 40 }, 0); });
+ruta('POST', '/busqueda', async (_m, c: Buscar & { __sse?: boolean }) => {
+  if (c.__sse) {
+    // Como la API: primero el orden de la fusión (aquí, algo desordenado) y luego el definitivo.
+    const t = Date.now();
+    const r = buscarEn(c.consulta, c.filtros, c.k ?? 20);
+    const pre = [...r];
+    for (let i = 0; i + 2 < pre.length; i += 3) [pre[i], pre[i + 2]] = [pre[i + 2]!, pre[i]!];
+    return sse((async function* () {
+      await espera(120);
+      yield { tipo: 'preliminar', resultados: pre, ms: Date.now() - t };
+      await espera(650);
+      yield { tipo: 'final', respuesta: { resultados: r, intencion: 'conceptual', ms: Date.now() - t } };
+    })());
+  } const t = Date.now(); const r = buscarEn(c.consulta, c.filtros, c.k ?? 20); await espera(90 + Math.random() * 120); return json({ resultados: r, intencion: 'conceptual', ms: Date.now() - t + 40 }, 0); });
 ruta('POST', '/busqueda/similares', (_m, c) => {
   const [doc, orden] = String(c.fragmento ?? '').replace(/^f-/, '').split(/-(\d+)-\d+$/);
   const d = doc ? docs.get(doc) : undefined;
@@ -703,6 +716,8 @@ export async function fetchSimulado(entrada: RequestInfo | URL, init: RequestIni
   const metodo = (init.method ?? 'GET').toUpperCase();
   let cuerpo: unknown;
   if (typeof init.body === 'string') { try { cuerpo = JSON.parse(init.body); } catch { cuerpo = init.body; } }
+  const aceptar = new Headers(init.headers).get('accept') ?? '';
+  if (aceptar.includes('text/event-stream') && cuerpo && typeof cuerpo === 'object') (cuerpo as { __sse?: boolean }).__sse = true;
   for (const [m, re, fn] of rutas) {
     if (m !== metodo) continue;
     const coincide = camino.match(re);

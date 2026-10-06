@@ -14,6 +14,7 @@ import { disparar, ponerTema, recientes, esOscuro } from '../../lib/acciones';
 import { etiquetaCorta, ICONO_TIPO, NOMBRE_TIPO } from '../../lib/formato';
 import { anclaABusqueda } from '../../lib/anclas';
 import { Resaltado } from '../../lib/resaltado';
+import { useFlip } from '../../lib/flip';
 
 interface Opcion {
   id: string;
@@ -89,6 +90,7 @@ export default function Paleta({ abierta, alCambiar }: { abierta: boolean; alCam
   }, [diferido, docs, pasajes.data]);
 
   useEffect(() => setActiva(0), [diferido]);
+  useFlip(lista, opciones.map((o) => o.id).join('|'));
   useEffect(() => {
     lista.current?.querySelector(`[data-indice="${activa}"]`)?.scrollIntoView({ block: 'nearest' });
   }, [activa]);
@@ -136,6 +138,7 @@ export default function Paleta({ abierta, alCambiar }: { abierta: boolean; alCam
                 {ops.map((o) => (
                   <div
                     key={o.id}
+                    data-flip={o.id}
                     id={`paleta-${o.i}`}
                     data-indice={o.i}
                     role="option"
