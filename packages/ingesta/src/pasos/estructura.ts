@@ -103,7 +103,8 @@ export function pasoEstructura(
     // Si el índice solo tiene un nivel, los títulos del texto que caen dentro aportan el segundo.
     const niveles = new Set(util.map((e) => e.nivel));
     if (niveles.size === 1) {
-      const delTexto = titulosDelTexto(unidades).filter((x) => !titulos.some((y) => similitud(x.texto, y.texto) > 0.8 || (x.unidad === y.unidad && x.parrafo === y.parrafo)));
+      const primero = titulos.reduce((m, y) => (y.unidad < m.unidad || (y.unidad === m.unidad && y.parrafo < m.parrafo) ? y : m), titulos[0] as Titulo);
+      const delTexto = titulosDelTexto(unidades).filter((x) => primero && (x.unidad > primero.unidad || (x.unidad === primero.unidad && x.parrafo > primero.parrafo))).filter((x) => !titulos.some((y) => similitud(x.texto, y.texto) > 0.8 || (x.unidad === y.unidad && x.parrafo === y.parrafo)));
       const base = Math.max(...niveles);
       if (delTexto.length && delTexto.length < unidades.length * 1.5) {
         const minNivel = Math.min(...delTexto.map((x) => x.nivel));
