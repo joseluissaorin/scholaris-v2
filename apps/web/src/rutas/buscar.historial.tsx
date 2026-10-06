@@ -7,6 +7,7 @@ import { api } from '../datos/api';
 import { q } from '../datos/consultas';
 import { Lienzo } from '../componentes/comunes/cabecera';
 import { haceCuanto } from '../lib/formato';
+import { Boceto } from '../bocetos/boceto';
 
 export const Route = createFileRoute('/buscar/historial')({
   loader: ({ context }) => context.consultas.ensureQueryData(q.historial()),
@@ -52,7 +53,7 @@ function Historial() {
         <Chip icono="fijar" activo={fijados} onClick={() => setFijados(!fijados)}>Solo fijadas</Chip>
       </div>
       {isPending ? <div className="mt-8 flex flex-col gap-2">{Array.from({ length: 6 }, (_, i) => <Esqueleto key={i} className="h-14" />)}</div>
-        : !lista.length ? <Vacio className="mt-8" forma="cuadrado" titulo={texto || fijados ? 'Nada coincide.' : 'Aún no has buscado nada.'}>{texto || fijados ? 'Prueba con otro filtro.' : 'Lo que busques y preguntes aparecerá aquí para repetirlo, fijarlo o borrarlo.'}</Vacio>
+        : !lista.length ? <Vacio className="mt-8" forma="cuadrado" titulo={texto || fijados ? 'Nada coincide.' : 'Aún no has buscado nada.'} dibujo={<Boceto nombre="lupa" decorativo />}>{texto || fijados ? 'Prueba con otro filtro.' : 'Lo que busques y preguntes aparecerá aquí para repetirlo, fijarlo o borrarlo.'}</Vacio>
         : grupos.map(([g, es]) => (
           <section key={g} className="mt-8">
             <Rotulo>{g}</Rotulo>

@@ -14,6 +14,8 @@ import { useFlip } from '../lib/flip';
 import { AccesoReferencia } from '../componentes/comunes/boton-referencia';
 import { textoLimpio } from '../lib/texto';
 import { numero } from '../lib/numero';
+import { Boceto } from '../bocetos/boceto';
+import { Cifra } from '../movimiento/cifra';
 
 type Modo = 'buscar' | 'preguntar';
 interface BusquedaBuscar { q?: string; modo?: Modo; grupo?: string; col?: string; doc?: string; cruzada?: boolean; desde?: number; hasta?: number }
@@ -76,7 +78,8 @@ function PaginaBuscar() {
   const resultados = datos.data?.resultados ?? [];
   const preliminar = !!(datos.data as { preliminar?: boolean } | undefined)?.preliminar;
   const lista = useRef<HTMLDivElement>(null);
-  useFlip(lista, resultados.map((r) => r.fragmento.id).join('|'));
+  // Del orden preliminar al definitivo: cada pasaje viaja a su sitio (los nuevos ya entran en cascada solos).
+  useFlip(lista, resultados.map((r) => r.fragmento.id).join('|'), { entrada: false });
 
   function enviar() {
     const t = texto.trim();
@@ -138,13 +141,13 @@ function PaginaBuscar() {
         ) : datos.isPending ? (
           <div className="flex flex-col gap-8">{[0, 1, 2, 3].map((i) => <div key={i} className="grid gap-6 md:grid-cols-[7rem_1fr]"><div className="esqueleto h-5 w-16" /><EsqueletoTexto lineas={3} /></div>)}</div>
         ) : !resultados.length ? (
-          <Vacio forma="triangulo" titulo={`Nada sobre «${consulta}».`} accion={<><Boton variante="linea" icono="chispa" onClick={() => { fijar({ modo: 'preguntar' }); setPregunta(consulta); }}>Preguntar en su lugar</Boton>{!b.cruzada ? <Boton variante="fantasma" icono="idiomas" onClick={() => fijar({ cruzada: true })}>Buscar en todas las lenguas</Boton> : null}</>}>
+          <Vacio forma="triangulo" titulo={`Nada sobre «${consulta}».`} dibujo={<Boceto nombre="lupa" decorativo />} accion={<><Boton variante="linea" icono="chispa" onClick={() => { fijar({ modo: 'preguntar' }); setPregunta(consulta); }}>Preguntar en su lugar</Boton>{!b.cruzada ? <Boton variante="fantasma" icono="idiomas" onClick={() => fijar({ cruzada: true })}>Buscar en todas las lenguas</Boton> : null}</>}>
             Prueba con otras palabras, quita filtros o pregunta con una frase completa: la búsqueda entiende ideas, no solo palabras.
           </Vacio>
         ) : (
           <>
             <div className={cx('mb-4 flex flex-wrap items-baseline gap-x-4 gap-y-1 transition-opacity', datos.isPlaceholderData && 'opacity-60')}>
-              <h2 className="rotulo text-[0.75rem] text-coffee-700"><span className="tnum">{resultados.length}</span> pasajes</h2>
+              <h2 className="rotulo text-[0.75rem] text-coffee-700"><Cifra valor={resultados.length} /> pasajes</h2>
               <Rotulo>{preliminar ? <span className="inline-flex items-center gap-1.5"><span className="h-1.5 w-1.5 rounded-full bg-azul anim-pulso" />afinando el orden…</span> : <>{datos.data?.ms ? `${datos.data.ms} ms` : ''}{datos.data?.intencion ? ` · consulta ${datos.data.intencion}` : ''}</>}</Rotulo>
               {titulo?.length ? <Rotulo className="truncate">También en: {titulo.map((t) => `${t.idioma} «${t.consulta}»`).join(' · ')}</Rotulo> : null}
               <Boton variante="linea" tam="p" icono="chispa" className="ml-auto" onClick={() => { fijar({ modo: 'preguntar' }); setPregunta(consulta); }}>Preguntar sobre esto</Boton>
@@ -275,7 +278,8 @@ function Respuesta({ pregunta, filtros }: { pregunta: string; filtros: Filtros }
   return (
     <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_20rem]">
       <section aria-live="polite" aria-busy={estado !== 'hecho'} className="relative self-start overflow-hidden rounded-2xl border border-cream-400 bg-cream-50 p-5 shadow-[var(--levantado)] sm:p-6">
-        <Composicion estilo="kandinsky" className="pointer-events-none absolute -right-6 -top-4 h-24 w-36 opacity-90" />
+        {/* Mientras piensa y escribe, la composición gira despacio sobre su centro. */}
+        <Composicion estilo="kandinsky" className={cx('pointer-events-none absolute -right-6 -top-4 h-24 w-36 opacity-90', estado !== 'hecho' && estado !== 'error' && 'compo-pensando')} />
         <p className="rotulo relative text-coffee-400">Pregunta</p>
         <h2 className="relative mt-1 max-w-[85%] text-[1.25rem] font-semibold leading-snug text-coffee-800">{pregunta}</h2>
         <div className="relative mt-5 border-l-[3px] border-azul pl-5">
@@ -293,14 +297,16 @@ function Respuesta({ pregunta, filtros }: { pregunta: string; filtros: Filtros }
                 const c = citas.get(n);
                 if (!f) return <sup key={i} className="font-mono text-[0.7em] text-apagado">[{n}]</sup>;
                 return (
+                  // Cada cita se estampa en el texto cuando llega, como un sello.
                   <Link key={i} to="/lector/$id" params={{ id: f.documento.id }} search={anclaABusqueda(f.fragmento.ancla, { q: pregunta })}
-                    className="mx-0.5 inline-flex -translate-y-[0.12em] items-baseline gap-1 rounded-md border border-cream-400 bg-cream-100 px-1.5 align-baseline font-mono text-[0.68em] text-coffee-700 no-underline shadow-[var(--relieve)] hover:-translate-y-[0.2em] hover:border-cream-500"
+                    className="tactil anim-sello mx-0.5 inline-flex -translate-y-[0.12em] items-baseline gap-1 rounded-md border border-cream-400 bg-cream-100 px-1.5 align-baseline font-mono text-[0.68em] text-coffee-700 no-underline shadow-[var(--relieve)] hover:-translate-y-[0.2em] hover:border-cream-500"
                     title={`${f.documento.metadatos.titulo}, ${c?.etiqueta ?? f.etiqueta}`}>
                     <span className="font-bold text-azul">{n}</span>{etiquetaCorta(f.fragmento.ancla, c?.etiqueta ?? f.etiqueta)}
                   </Link>
                 );
               })}
-              {estado === 'escribiendo' ? <span className="ml-0.5 inline-block h-[1em] w-[0.5ch] translate-y-[0.15em] bg-tinta anim-pulso" aria-hidden /> : null}
+              {/* La pluma: una gota de tinta que va delante de lo que se escribe. */}
+              {estado === 'escribiendo' ? <span className="gota-tinta" aria-hidden /> : null}
             </p>
           )}
         </div>
@@ -318,10 +324,10 @@ function Respuesta({ pregunta, filtros }: { pregunta: string; filtros: Filtros }
           {fuentes.length ? fuentes.slice(0, 8).map((f, i) => {
             const n = [...citas.values()].find((c) => c.fragmento === f.fragmento.id)?.n;
             return (
-              <li key={f.fragmento.id} className={cx('anim-entra', !n && estado === 'hecho' && 'opacity-55')} style={{ animationDelay: `${i * 40}ms` }}>
-                <Link to="/lector/$id" params={{ id: f.documento.id }} search={anclaABusqueda(f.fragmento.ancla, { q: pregunta })} className="group block rounded-xl border border-cream-400 bg-cream-50 p-3 shadow-[var(--levantado)] transition-[transform,box-shadow] hover:-translate-y-0.5 hover:shadow-[var(--levantado-alto)]">
+              <li key={f.fragmento.id} className={cx('anim-sube transition-opacity duration-500', !n && estado === 'hecho' && 'opacity-55')} style={{ animationDelay: `calc(${i} * var(--escalon) * 1.6)` }}>
+                <Link to="/lector/$id" params={{ id: f.documento.id }} search={anclaABusqueda(f.fragmento.ancla, { q: pregunta })} className="levanta group block rounded-xl border border-cream-400 bg-cream-50 p-3 shadow-[var(--levantado)]">
                   <div className="flex items-center gap-2">
-                    {n ? <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-azul text-[0.6875rem] font-bold text-cream-50">{n}</span> : null}
+                    {n ? <span key={n} className="anim-sello grid h-5 w-5 shrink-0 place-items-center rounded-full bg-azul text-[0.6875rem] font-bold text-cream-50">{n}</span> : null}
                     <span className="min-w-0 flex-1 truncate text-[0.8125rem]">{f.documento.metadatos.titulo}</span>
                     <Folio className="shrink-0">{etiquetaCorta(f.fragmento.ancla, f.etiqueta)}</Folio>
                     <AccesoReferencia documento={f.documento.id} className="-my-1 -mr-1.5 h-7 px-1.5" />

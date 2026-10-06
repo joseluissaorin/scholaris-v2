@@ -9,6 +9,7 @@ import { anclaABusqueda } from '../../lib/anclas';
 import { Resaltado } from '../../lib/resaltado';
 import { AccesoReferencia } from '../comunes/boton-referencia';
 import { autoresCorto, etiquetaCorta, ICONO_TIPO } from '../../lib/formato';
+import { prepararViaje } from '../../movimiento/transiciones';
 
 const VIA: Record<string, string> = { lexica: 'léxica', densa: 'semántica', visual: 'visual' };
 
@@ -42,14 +43,16 @@ export const Resultado = memo(function Resultado({ r, consulta, indice, compacto
   }
 
   return (
-    <article className={cx('group relative mb-3 grid grid-cols-[minmax(0,1fr)] gap-3 rounded-2xl border border-cream-400 bg-cream-50 p-4 shadow-[var(--levantado)] transition-[transform,box-shadow] duration-200 anim-entra hover:-translate-y-0.5 hover:shadow-[var(--levantado-alto)] md:grid-cols-[6.5rem_minmax(0,1fr)] md:gap-5 md:p-5', compacto && 'mb-2 shadow-[var(--shadow-soft)] md:p-4')} style={{ animationDelay: `${Math.min(indice, 8) * 25}ms` }}>
+    // Entra en cascada, se levanta al pasar y, al abrirlo, crece hasta ser el lector (View Transitions).
+    <article className={cx('levanta group relative mb-3 grid grid-cols-[minmax(0,1fr)] gap-3 rounded-2xl border border-cream-400 bg-cream-50 p-4 shadow-[var(--levantado)] anim-sube md:grid-cols-[6.5rem_minmax(0,1fr)] md:gap-5 md:p-5', compacto && 'mb-2 shadow-[var(--shadow-soft)] md:p-4')} style={{ animationDelay: `calc(${Math.min(indice, 10)} * var(--escalon) * 1.4)` }}>
       <div className="flex items-center gap-3 md:flex-col md:items-start md:gap-2">
         <Folio grande>{etiquetaCorta(r.fragmento.ancla, r.etiqueta)}</Folio>
         <span className="hidden text-[0.6875rem] text-coffee-400 md:block">{r.vias.map((v) => VIA[v] ?? v).join(' · ')}</span>
       </div>
       <div className="min-w-0">
-        <Link {...destino} className="block">
-          <p className="lectura text-coffee-800">
+        <Link {...destino} className="block" onClick={(e) => prepararViaje(e.currentTarget.closest('article'), 'lectura')}>
+          {/* Las coincidencias se subrayan con lápiz amarillo, de izquierda a derecha, cuando el pasaje ya está. */}
+          <p className="lectura entra-marca text-coffee-800" style={{ ['--retraso-marca' as string]: `${Math.min(indice, 10) * 48 + 280}ms` }}>
             <Resaltado html={r.resaltado ?? r.fragmento.texto} />
           </p>
         </Link>

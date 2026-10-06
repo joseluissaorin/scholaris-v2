@@ -5,7 +5,7 @@ import { useWindowVirtualizer } from '@tanstack/react-virtual';
 import type { TipoEntrada } from '@scholaris/nucleo';
 import type { Biblioteca, ResumenDocumento } from '@scholaris/contrato';
 import {
-  avisar, Boton, Campo, Chip, Composicion, cx, Dialogo, Esqueleto, Folio, Icono, MenuContenido, MenuDisparador, MenuElemento, MenuRaiz, Rotulo, Tarjeta, Teclas, Vacio,
+  avisar, Boton, Campo, Chip, cx, Dialogo, Esqueleto, Folio, Icono, MenuContenido, MenuDisparador, MenuElemento, MenuRaiz, Rotulo, Tarjeta, Teclas, Vacio,
 } from '@scholaris/ui';
 import { q } from '../datos/consultas';
 import { api } from '../datos/api';
@@ -20,6 +20,7 @@ import { IconoTipo } from '../componentes/comunes/icono-tipo';
 import { limpiarSeleccion, ponerSeleccion, useSeleccion } from '../lib/seleccion';
 import { copiarBibliografia, descargarBibliografia } from '../lib/referencia';
 import { bytes } from '../lib/formato';
+import { Boceto } from '../bocetos/boceto';
 
 const Compartir = lazy(() => import('../componentes/biblioteca/compartir'));
 
@@ -192,7 +193,7 @@ function PaginaBiblioteca() {
             ) : vacia ? (
               <BibliotecaVacia />
             ) : !visibles.length ? (
-              <Vacio estilo="kandinsky" titulo="Nada coincide con el filtro." accion={<Boton variante="linea" onClick={() => { setTexto(''); fijar({ grupo: undefined, col: undefined, q: undefined }); }}>Quitar los filtros</Boton>}>
+              <Vacio estilo="kandinsky" titulo="Nada coincide con el filtro." dibujo={<Boceto nombre="lupa" decorativo />} accion={<Boton variante="linea" onClick={() => { setTexto(''); fijar({ grupo: undefined, col: undefined, q: undefined }); }}>Quitar los filtros</Boton>}>
                 {diferido ? <>Ningún título ni autor contiene «{diferido}». Para buscar dentro de los textos, usa <strong>Buscar</strong>.</> : 'Prueba con otra colección o tipo.'}
               </Vacio>
             ) : vista === 'lista' ? (
@@ -342,7 +343,8 @@ function BibliotecaVacia() {
   return (
     <div className="relative grid gap-8 overflow-hidden rounded-2xl border-2 border-dashed border-cream-500 bg-cream-200/50 p-8 shadow-[var(--hundido)] md:grid-cols-[1.1fr_1fr] md:p-12">
       <div>
-        <Composicion estilo="malevich" className="mb-6 h-24 w-36" />
+        {/* Primera vez: la balda vacía, dibujada a mano, que espera los libros. */}
+        <Boceto nombre="estante" decorativo className="mb-4 w-72 max-w-full" />
         <h2 className="text-[1.5rem] font-bold tracking-[-0.01em] text-coffee-800">Suelta cualquier cosa en esta ventana.</h2>
         <p className="mt-3 max-w-md text-[0.9375rem] text-coffee-600">Un PDF, un libro escaneado, las fotos de un capítulo, la grabación de una clase, un DOCX, un enlace. Lo leemos y cada cita apuntará a la página impresa o al segundo exacto.</p>
         <div className="mt-6 flex flex-wrap gap-2">
@@ -351,10 +353,10 @@ function BibliotecaVacia() {
         </div>
         <p className="mt-4 text-[0.8125rem] text-apagado">También puedes pegar con <Teclas>{TECLA_MOD}</Teclas> <Teclas>V</Teclas> en cualquier parte.</p>
       </div>
-      <ul className="grid grid-cols-2 content-center gap-3">
-        {[['documento', 'PDF y escaneos', 'p. 145'], ['camara', 'Fotos de un libro', 'p. 23'], ['audio', 'Audio', '12:04'], ['video', 'Vídeo', '1:02:41'], ['lector', 'EPUB y DOCX', 'cap. 3, párr. 2'], ['diapositiva', 'Diapositivas', 'diap. 7']].map(([i, n, f]) => (
-          <li key={n}>
-            <Tarjeta className="flex flex-col gap-2 p-3.5">
+      <ul className="cascada grid grid-cols-2 content-center gap-3">
+        {[['documento', 'PDF y escaneos', 'p. 145'], ['camara', 'Fotos de un libro', 'p. 23'], ['audio', 'Audio', '12:04'], ['video', 'Vídeo', '1:02:41'], ['lector', 'EPUB y DOCX', 'cap. 3, párr. 2'], ['diapositiva', 'Diapositivas', 'diap. 7']].map(([i, n, f], k) => (
+          <li key={n} style={{ ['--i' as string]: k + 3 }}>
+            <Tarjeta viva className="flex flex-col gap-2 p-3.5">
               <IconoTipo nombre={i as 'documento'} />
               <span className="text-[0.875rem] font-medium">{n}</span>
               <Folio className="self-start">{f}</Folio>
@@ -362,6 +364,8 @@ function BibliotecaVacia() {
           </li>
         ))}
       </ul>
+      {/* Cómo va esto, en tres viñetas a mano: suelta, lee, cita. */}
+      <Boceto nombre="primeros-pasos" espera={0.6} className="mx-auto w-full max-w-2xl md:col-span-2" />
     </div>
   );
 }

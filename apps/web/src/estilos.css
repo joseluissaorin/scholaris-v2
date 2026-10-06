@@ -186,3 +186,42 @@ html[data-transicion] .backdrop-blur, html[data-transicion] .backdrop-blur-sm { 
 [data-cargando='true'] .logo-vivo { animation: s-lee 1.1s ease-in-out infinite; }
 /* La marca amarilla del lugar activo: una sola, que se desliza de un lugar a otro. */
 .marca-activa { transition: transform var(--dur-levantar) var(--muelle-soltar), height var(--dur-media) var(--muelle-asentar), opacity var(--dur-breve) ease-out; }
+
+/* La zona de soltar: el papel rojo sube del borde, el sol amarillo asoma, el triángulo cae girando, el texto se asienta. */
+@keyframes s-soltar { from { opacity: 0; transform: scale(1.03); } to { opacity: 1; transform: none; } }
+@keyframes s-soltar-sol { from { transform: translate(18%, 22%) scale(0.85); } to { transform: none; } }
+@keyframes s-soltar-tri { from { transform: translate(-30%, -20%) rotate(-28deg); } to { transform: none; } }
+@keyframes s-respira { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(8px); } }
+.soltar { animation: s-soltar 0.22s ease-out both; }
+.soltar-sol { animation: s-soltar-sol 0.7s var(--muelle-levantar) both; }
+.soltar-tri { animation: s-soltar-tri 0.75s var(--muelle-soltar) both; }
+.soltar-texto { animation: s-sube 0.5s var(--muelle-asentar) 0.08s both; }
+/* La mano, cuando ya está dibujada, señala con insistencia: sube y baja despacio. */
+.soltar-mano { animation: s-respira 1.6s ease-in-out 1.4s infinite; }
+
+/* Notas al margen (src/bocetos/nota-margen.tsx): se dibujan, se quedan, se desvanecen. */
+.nota-margen { position: absolute; display: block; width: 7.5rem; cursor: default; }
+.nota-margen-va { animation: s-desvanece 0.5s ease-in both; }
+
+/* Buscar · las coincidencias se entintan: el subrayado amarillo corre de izquierda a derecha (una vez; solo pinta un fondo pequeño). */
+@keyframes s-marca { from { background-size: 0% 100%; } to { background-size: 100% 100%; } }
+@media (prefers-reduced-motion: no-preference) {
+  .entra-marca mark { background-repeat: no-repeat; animation: s-marca 0.55s var(--ease-tinta) var(--retraso-marca, 0.3s) both; }
+}
+/* Preguntar · la gota de tinta que va delante del texto que se escribe. */
+.gota-tinta {
+  display: inline-block; width: 0.42em; height: 0.62em; margin-left: 0.12em; vertical-align: -0.02em;
+  background: var(--s-coffee-800); border-radius: 50% 50% 50% 50% / 62% 62% 38% 38%;
+  transform-origin: 50% 100%; animation: s-gota 0.9s ease-in-out infinite;
+}
+/* La composición de la respuesta, pensando: sus círculos giran despacio. */
+@keyframes s-pensando { to { rotate: 360deg; } }
+.compo-pensando > circle { transform-box: view-box; transform-origin: 63% 50%; animation: s-pensando 14s linear infinite; }
+.compo-pensando > line:first-of-type { transform-box: fill-box; transform-origin: center; animation: s-pensando 40s linear infinite reverse; }
+
+/* Escribir · la cita rechazada se dobla hacia atrás, se queda un instante de canto y vuelve tachada. */
+@keyframes s-dobla { 0% { transform: none; } 45% { opacity: 0.25; transform: perspective(300px) rotateX(80deg) translateY(-2px); } 100% { transform: none; } }
+.anim-dobla { animation: s-dobla 0.5s var(--ease-tinta) both; transform-origin: 50% 0; }
+/* Una barra que se llena de tinta al aparecer. */
+@keyframes s-llena { from { transform: scaleX(0); } }
+.anim-llena { animation: s-llena 0.8s var(--muelle-asentar) 0.15s both; }

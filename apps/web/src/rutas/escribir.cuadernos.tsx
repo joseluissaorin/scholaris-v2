@@ -8,6 +8,7 @@ import { q } from '../datos/consultas';
 import { Lienzo } from '../componentes/comunes/cabecera';
 import { haceCuanto } from '../lib/formato';
 import { textoLimpio } from '../lib/texto';
+import { Boceto } from '../bocetos/boceto';
 
 export const Route = createFileRoute('/escribir/cuadernos')({
   validateSearch: (s: Record<string, unknown>): { c?: string } => ({ c: typeof s.c === 'string' ? s.c : undefined }),
@@ -39,7 +40,7 @@ function Cuadernos() {
           </ul>
         </nav>
         {activo ? <DetalleCuaderno key={activo.id} cuaderno={activo} /> : !isPending ? (
-          <Vacio forma="cuadrado" titulo="Un cuaderno para cada idea." accion={<Boton variante="tinta" icono="mas" onClick={() => setNuevo(true)}>Crear un cuaderno</Boton>}>
+          <Vacio forma="cuadrado" titulo="Un cuaderno para cada idea." dibujo={<Boceto nombre="tintero" decorativo />} accion={<Boton variante="tinta" icono="mas" onClick={() => setNuevo(true)}>Crear un cuaderno</Boton>}>
             Guarda pasajes desde el lector o desde la búsqueda, añade tus notas y pide una síntesis con citas que se comprueban solas.
           </Vacio>
         ) : null}

@@ -7,6 +7,7 @@ import { api } from '../datos/api';
 import { q } from '../datos/consultas';
 import { Lienzo } from '../componentes/comunes/cabecera';
 import { haceCuanto } from '../lib/formato';
+import { Boceto } from '../bocetos/boceto';
 
 const MODOS: Record<ModoVigilante, string> = { al_ingerir: 'Cada vez que añado algo', diario: 'Una vez al día', semanal: 'Una vez a la semana', manual: 'Solo cuando lo pida' };
 
@@ -64,7 +65,7 @@ function Vigilantes() {
           </div>
           <ul className="mt-6 flex flex-col gap-3">
             {isPending ? [0, 1, 2].map((i) => <Esqueleto key={i} className="h-28" />) : !vigilantes?.length ? (
-              <Vacio forma="circulo" titulo="Ninguna pregunta de guardia." accion={<Boton variante="tinta" icono="mas" onClick={() => setEditar({ modo: 'al_ingerir', alertas: true })}>Crear el primero</Boton>}>
+              <Vacio forma="circulo" titulo="Ninguna pregunta de guardia." dibujo={<Boceto nombre="manecilla" decorativo />} accion={<Boton variante="tinta" icono="mas" onClick={() => setEditar({ modo: 'al_ingerir', alertas: true })}>Crear el primero</Boton>}>
                 Por ejemplo: «abyección en cartas y archivos personales». Cada libro nuevo se mira con esa pregunta.
               </Vacio>
             ) : vigilantes.map((v) => (

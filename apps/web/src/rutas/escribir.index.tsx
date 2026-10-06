@@ -14,6 +14,7 @@ import { anclaABusqueda } from '../lib/anclas';
 import { anclaACita, etiquetaCorta } from '../lib/formato';
 import { textoLimpio } from '../lib/texto';
 import { preferencia, ponerPreferencia } from '../lib/acciones';
+import { Cifra } from '../movimiento/cifra';
 
 export const Route = createFileRoute('/escribir/')({
   validateSearch: (s: Record<string, unknown>): { a?: string } => ({ a: typeof s.a === 'string' ? s.a : undefined }),
@@ -201,7 +202,7 @@ function Revision({ id, alNuevo }: { id: string; alNuevo: () => void }) {
   return (
     <Lienzo>
       <div className="sticky top-16 z-10 mb-6 flex flex-wrap items-center gap-2 rounded-2xl border border-cream-400 bg-cream-50/95 px-4 py-2.5 shadow-[var(--levantado)] backdrop-blur lg:top-3">
-        <p className="text-[0.875rem] font-medium"><span className="tnum">{propuestas.length}</span> citas propuestas · <span className="tnum">{aceptadas}</span> aceptadas</p>
+        <p className="text-[0.875rem] font-medium"><Cifra valor={propuestas.length} /> citas propuestas · <Cifra valor={aceptadas} duracion={380} /> aceptadas</p>
         <span className="dato hidden text-coffee-400 md:inline">{data.estilo}</span>
         <div className="ml-auto flex flex-wrap items-center gap-1">
           <Boton variante="fantasma" tam="p" icono="hecho" onClick={() => void decidir(propuestas.filter((p) => !p.decision && p.cita.respaldo >= 0.85).map((p) => p.id), 'aceptada')}>Aceptar las de respaldo ≥ 85 %</Boton>
@@ -230,7 +231,7 @@ function Revision({ id, alNuevo }: { id: string; alNuevo: () => void }) {
           ) : null}
         </article>
         <aside className="lg:sticky lg:top-[11rem] lg:self-start">
-          {actual ? <Propuesta p={actual} alDecidir={(d) => { void decidir([actual.id], d); siguiente(1); }} /> : <p className="text-apagado">Ninguna afirmación del texto tiene respaldo suficiente en tu biblioteca.</p>}
+          {actual ? <Propuesta key={actual.id} p={actual} alDecidir={(d) => { void decidir([actual.id], d); siguiente(1); }} /> : <p className="text-apagado">Ninguna afirmación del texto tiene respaldo suficiente en tu biblioteca.</p>}
           <p className="mt-4 hidden text-[0.8125rem] text-apagado lg:block"><Teclas>J</Teclas> <Teclas>K</Teclas> moverse · <Teclas>A</Teclas> aceptar · <Teclas>R</Teclas> rechazar</p>
         </aside>
       </div>
@@ -262,7 +263,8 @@ function ParrafoCitado({ texto, propuestas, activa, alElegir }: { texto: string;
           className={cx('mx-1 inline rounded-md px-1.5 py-0.5 align-baseline font-mono text-[0.7em] transition-[background,box-shadow]',
             x.p.decision === 'aceptada' ? 'border border-[#1a0f0a] bg-coffee-800 text-cream-50 shadow-[var(--relieve-oscuro)]' : x.p.decision === 'rechazada' ? 'text-apagado line-through decoration-rojo' : 'border border-[#d9a03b] bg-amarillo-suave text-coffee-800 shadow-[var(--relieve)]',
             activa === x.p.id && 'ring-2 ring-azul ring-offset-2 ring-offset-cream-50')}>
-          {x.p.textoCita}
+          {/* Aceptada: se estampa en tinta. Rechazada: se dobla como una tira de papel y se queda tachada. */}
+          <span key={x.p.decision ?? 'propuesta'} className={cx('inline-block', x.p.decision === 'aceptada' ? 'anim-sello' : x.p.decision === 'rechazada' ? 'anim-dobla' : '')}>{x.p.textoCita}</span>
         </button>
       ) : <span key={k}>{x.t}</span>)}
     </p>
@@ -284,7 +286,7 @@ function Propuesta({ p, alDecidir }: { p: PropuestaCita; alDecidir: (d: 'aceptad
   const r = RELACION[p.cita.relacion];
   const { data: doc } = useQuery(q.documento(p.cita.documento));
   return (
-    <Tarjeta className="overflow-hidden">
+    <Tarjeta className="anim-sube overflow-hidden">
       <div className="border-b border-cream-300 bg-cream-100/60 p-4">
         <Rotulo>Afirmación</Rotulo>
         <p className="mt-1 text-[0.875rem]">«{p.afirmacion}»</p>
@@ -294,7 +296,7 @@ function Propuesta({ p, alDecidir }: { p: PropuestaCita; alDecidir: (d: 'aceptad
           <span className={cx('rounded-lg px-2 py-1 text-[0.6875rem] font-semibold uppercase tracking-[0.04em] shadow-[var(--relieve)]', r.tono === 'bien' ? 'bg-amarillo text-coffee-800' : r.tono === 'medio' ? 'bg-cream-200 text-coffee-700' : 'bg-rojo text-[#fdf8f1]')}>{r.texto}</span>
           <span className="tnum ml-auto font-mono text-[0.8125rem]">{Math.round(p.cita.respaldo * 100)} %</span>
         </div>
-        <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-cream-200 shadow-[var(--hundido)]"><div className="h-full rounded-full bg-coffee-700" style={{ width: `${p.cita.respaldo * 100}%` }} /></div>
+        <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-cream-200 shadow-[var(--hundido)]"><div className="anim-llena h-full origin-left rounded-full bg-coffee-700" style={{ width: `${p.cita.respaldo * 100}%` }} /></div>
         <Pasaje texto={textoLimpio(p.cita.pasaje)} />
         <div className="mt-3 flex items-center gap-2 text-[0.8125rem] text-tinta-2">
           <Folio className="shrink-0">{etiquetaCorta(p.cita.ancla, anclaACita(p.cita.ancla, p.cita.anclaFin))}</Folio>

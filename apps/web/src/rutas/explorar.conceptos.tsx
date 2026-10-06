@@ -7,6 +7,7 @@ import { api } from '../datos/api';
 import { q } from '../datos/consultas';
 import { Lienzo } from '../componentes/comunes/cabecera';
 import { haceCuanto } from '../lib/formato';
+import { Boceto } from '../bocetos/boceto';
 
 export const Route = createFileRoute('/explorar/conceptos')({
   loader: ({ context }) => context.consultas.ensureQueryData(q.conceptos()),
@@ -35,7 +36,7 @@ function Conceptos() {
       </div>
       <ul className="mt-8 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {isPending ? [0, 1].map((i) => <Esqueleto key={i} className="h-44" />) : !data?.length ? (
-          <li className="md:col-span-2"><Vacio forma="cuarto" titulo="Ningún concepto en seguimiento." accion={<Boton variante="tinta" onClick={() => setNuevo(true)}>Seguir uno</Boton>}>Por ejemplo, «abyección», con «abject» y «abjection» como variantes.</Vacio></li>
+          <li className="md:col-span-2"><Vacio forma="cuarto" titulo="Ningún concepto en seguimiento." dibujo={<Boceto nombre="manecilla" decorativo />} accion={<Boton variante="tinta" onClick={() => setNuevo(true)}>Seguir uno</Boton>}>Por ejemplo, «abyección», con «abject» y «abjection» como variantes.</Vacio></li>
         ) : data.map((c) => (
           <li key={c.id}>
             <Tarjeta className="flex h-full flex-col p-5">

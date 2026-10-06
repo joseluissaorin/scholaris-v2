@@ -16,6 +16,7 @@ import { anclaABusqueda } from '../lib/anclas';
 import { etiquetaCorta } from '../lib/formato';
 import { GrafoEntidades, FormaEntidad } from '../componentes/entidades/grafo-entidades';
 import { documentos, menciones, NOMBRE_TIPO_ENTIDAD, Pasaje, PLURAL_TIPO_ENTIDAD, PUNTO_TIPO_ENTIDAD } from '../componentes/entidades/comun';
+import { Boceto } from '../bocetos/boceto';
 
 interface BusquedaEntidades { q?: string; tipo?: TipoEntidad; e?: string }
 
@@ -120,7 +121,7 @@ function SinEntidades() {
     }
   }
   return (
-    <Vacio forma="circulo" titulo={enMarcha ? 'Leyendo tu biblioteca en busca de personas y obras…' : 'Aún no hay personas ni obras reconocidas.'}
+    <Vacio forma="circulo" titulo={enMarcha ? 'Leyendo tu biblioteca en busca de personas y obras…' : 'Aún no hay personas ni obras reconocidas.'} dibujo={<Boceto nombre={enMarcha ? 'caracol' : 'constelacion-vacia'} decorativo />}
       accion={enMarcha ? undefined : <Boton variante="tinta" cargando={lanzando} onClick={() => void reconocer()}>Reconocer en toda la biblioteca</Boton>}>
       {enMarcha
         ? `Quedan ${documentos(enMarcha)}. Cada documento nuevo se lee solo al terminar de subirlo.`
@@ -133,7 +134,7 @@ function Ficha({ id, alElegir }: { id: string; alElegir: (id: string) => void })
   const ficha = useQuery(q.entidad(id));
   const vecindario = useQuery(q.vecindario(id));
   if (ficha.isPending) return <div className="flex flex-col gap-4"><Esqueleto className="h-16 w-2/3" /><Esqueleto className="aspect-[16/9]" /><Esqueleto className="h-40" /></div>;
-  if (ficha.isError || !ficha.data) return <Vacio forma="cuadrado" titulo="Esta entidad ya no está.">Puede que se haya unido a otra o que se borrara el documento donde aparecía.</Vacio>;
+  if (ficha.isError || !ficha.data) return <Vacio forma="cuadrado" titulo="Esta entidad ya no está." dibujo={<Boceto nombre="pagina-arrancada" decorativo />}>Puede que se haya unido a otra o que se borrara el documento donde aparecía.</Vacio>;
   const f = ficha.data;
   return (
     <article className="anim-entra flex flex-col gap-6" aria-labelledby="titulo-entidad">

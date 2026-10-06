@@ -338,11 +338,11 @@
  * formas de una composición se mueven un poco cada una a su aire (giran, se
  * desplazan, crecen un pelo), como recortes sueltos sobre la mesa.
  */
-.deriva > :not([transform]) { transform-box: fill-box; transform-origin: center; transition: translate 1.1s var(--muelle-levantar), rotate 1.1s var(--muelle-levantar), scale 1.1s var(--muelle-levantar); }
+.deriva :not(g):not([transform]) { transform-box: fill-box; transform-origin: center; transition: translate 1.1s var(--muelle-levantar), rotate 1.1s var(--muelle-levantar), scale 1.1s var(--muelle-levantar); }
 @media (hover: hover) {
-  .con-deriva:hover .deriva > :not([transform]):nth-child(3n) { rotate: 7deg; translate: 1.5px -1px; }
-  .con-deriva:hover .deriva > :not([transform]):nth-child(3n + 1) { translate: 2.5px -2px; }
-  .con-deriva:hover .deriva > :not([transform]):nth-child(3n + 2) { rotate: -5deg; scale: 1.05; }
+  .con-deriva:hover .deriva :not(g):not([transform]):nth-child(3n) { rotate: 7deg; translate: 1.5px -1px; }
+  .con-deriva:hover .deriva :not(g):not([transform]):nth-child(3n + 1) { translate: 2.5px -2px; }
+  .con-deriva:hover .deriva :not(g):not([transform]):nth-child(3n + 2) { rotate: -5deg; scale: 1.05; }
 }
 
 /* El esqueleto: papel hundido con el grano que pasa por encima, despacio. */
@@ -376,5 +376,5 @@
     scroll-behavior: auto !important;
   }
   .esqueleto::after { animation: none; transform: none; }
-  .con-deriva:hover .deriva > * { translate: none !important; rotate: none !important; scale: none !important; }
+  .con-deriva:hover .deriva * { translate: none !important; rotate: none !important; scale: none !important; }
 }

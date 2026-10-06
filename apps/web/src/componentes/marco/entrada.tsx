@@ -10,6 +10,7 @@ import { ingerirArchivos, ingerirUrl, cancelarIngesta } from '../../datos/ingest
 import { api } from '../../datos/api';
 import { clienteConsultas } from '../../datos/consultas';
 import { alDisparar, disparar, obtenerBibliotecaActiva } from '../../lib/acciones';
+import { BocetoPerezoso } from '../../bocetos/perezoso';
 
 const ES_URL = /^https?:\/\/\S+$/i;
 const DialogoEnlace = lazy(() => import('./dialogo-enlace'));
@@ -45,6 +46,13 @@ export function Entrada() {
     await ingerirUrl(u.trim(), obtenerBibliotecaActiva());
     if (!enBiblioteca) avisar('El enlace va a la imprenta.', { accion: { etiqueta: 'Ver', alPulsar: () => void navegar({ to: '/' }) } });
   }
+
+  // La manícula de la zona de soltar se prepara en un rato ocioso: al arrastrar ya está lista.
+  useEffect(() => {
+    const precargar = () => void import('../../bocetos/boceto').then((m) => m.precargarBoceto('manicula-suelta'));
+    const h = 'requestIdleCallback' in window ? requestIdleCallback(precargar, { timeout: 6000 }) : setTimeout(precargar, 4000);
+    return () => { if ('cancelIdleCallback' in window) cancelIdleCallback(h as number); };
+  }, []);
 
   useEffect(() => {
     const quitar = [
@@ -123,10 +131,12 @@ export function Entrada() {
       <input ref={spdf} type="file" accept=".spdf,application/x-spdf" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) void importarSpdf(f); e.target.value = ''; }} />
 
       {arrastrando ? (
-        <div className="pointer-events-none fixed inset-0 z-[70] overflow-hidden bg-rojo/95 text-[#fbf5ec] anim-aparece" aria-hidden>
-          <FormaBauhaus forma="circulo" color="var(--s-amarillo)" className="absolute -bottom-40 -right-24 h-[34rem] w-[34rem]" />
-          <FormaBauhaus forma="triangulo" color="#22160f" className="absolute -left-16 top-16 h-72 w-72 opacity-90" />
-          <div className="relative flex h-full flex-col justify-end p-8 md:p-16">
+        // Toda la ventana es la zona de soltar: el papel rojo sube, las formas entran de lado y la manícula, a mano, señala dónde.
+        <div className="soltar pointer-events-none fixed inset-0 z-[70] overflow-hidden bg-rojo/95 text-[#fbf5ec]" aria-hidden>
+          <FormaBauhaus forma="circulo" color="var(--s-amarillo)" className="soltar-sol absolute -bottom-40 -right-24 h-[34rem] w-[34rem]" />
+          <FormaBauhaus forma="triangulo" color="#22160f" className="soltar-tri absolute -left-16 top-16 h-72 w-72 opacity-90" />
+          <BocetoPerezoso nombre="manicula-suelta" decorativo dibujar="ya" ritmo={0.7} className="sobre-color soltar-mano absolute right-[12%] top-[8%] hidden w-[min(15rem,30vw)] md:block" />
+          <div className="soltar-texto relative flex h-full flex-col justify-end p-8 md:p-16">
             <p className="rotulo">PDF · escaneos · fotos · audio · vídeo · DOCX · EPUB · diapositivas · hojas</p>
             <p className="mt-4 text-[1.5rem] font-bold tracking-[-0.01em]">Suelta.</p>
             <p className="mt-2 max-w-md text-[1.125rem]">Lo leemos y, en cuanto haya páginas, las verás aparecer.</p>

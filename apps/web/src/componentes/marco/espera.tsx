@@ -1,6 +1,7 @@
 import { Component, type ReactNode } from 'react';
-import { Boton, Composicion, Esqueleto } from '@scholaris/ui';
+import { Boton, Esqueleto } from '@scholaris/ui';
 import { Logo } from './logo';
+import { BocetoPerezoso } from '../../bocetos/perezoso';
 
 /**
  * El armazón mientras arranca: la misma barra café con el logo, la misma
@@ -55,7 +56,8 @@ export class FalloArranque extends Component<{ children: ReactNode; promesa: Pro
     return (
       <main className="relative grid min-h-dvh place-items-center overflow-hidden px-6">
         <div className="relative max-w-lg text-center">
-          <Composicion estilo="malevich" className="mx-auto mb-6 h-28 w-40" />
+          {/* Sin línea: dos latas-teléfono con el hilo cortado, dibujadas a mano. */}
+          <BocetoPerezoso nombre="latas" dibujar="ya" className="mx-auto mb-4 w-[min(22rem,85vw)]" />
           <p className="rotulo text-rojo">Sin conexión con la biblioteca</p>
           <h1 className="mt-2 text-[1.5rem] font-semibold">No encontramos el servidor de Scholaris.</h1>
           <p className="mt-3 text-[0.9375rem] text-coffee-600">Comprueba la conexión o vuelve a intentarlo en un momento. Si usas la versión local, asegúrate de que está en marcha.</p>

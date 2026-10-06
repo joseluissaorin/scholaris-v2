@@ -1,13 +1,15 @@
 import type { ReactNode } from 'react';
 import { Link } from '@tanstack/react-router';
 import { Composicion, cx, Icono, type Estilo, type FormaVacio } from '@scholaris/ui';
+import { Boceto } from '../../bocetos/boceto';
+import type { NombreBoceto } from '../../bocetos/registro';
 
 /** La forma primaria de cada lugar, con la correspondencia de Kandinsky. */
-const FORMA_LUGAR: Record<FormaVacio, { estilo: Estilo; marca: ReactNode }> = {
-  cuarto: { estilo: 'bauhaus', marca: <span className="h-3 w-3 bg-rojo" /> },
-  circulo: { estilo: 'kandinsky', marca: <span className="h-3 w-3 rounded-full bg-azul" /> },
-  triangulo: { estilo: 'kandinsky', marca: <span className="h-0 w-0 border-x-[7px] border-b-[12px] border-x-transparent border-b-amarillo" /> },
-  cuadrado: { estilo: 'malevich', marca: <span className="h-3 w-3 rotate-12 bg-coffee-800" /> },
+const FORMA_LUGAR: Record<FormaVacio, { estilo: Estilo; marca: ReactNode; boceto: NombreBoceto }> = {
+  cuarto: { estilo: 'bauhaus', marca: <span className="h-3 w-3 bg-rojo" />, boceto: 'regla' },
+  circulo: { estilo: 'kandinsky', marca: <span className="h-3 w-3 rounded-full bg-azul" />, boceto: 'compas' },
+  triangulo: { estilo: 'kandinsky', marca: <span className="h-0 w-0 border-x-[7px] border-b-[12px] border-x-transparent border-b-amarillo" />, boceto: 'escuadra' },
+  cuadrado: { estilo: 'malevich', marca: <span className="h-3 w-3 rotate-12 bg-coffee-800" />, boceto: 'transportador' },
 };
 
 /**
@@ -20,15 +22,18 @@ export function Cabecera({ antetitulo, titulo, forma, children, compacta, classN
 }) {
   const f = FORMA_LUGAR[forma];
   return (
-    <header className={cx('mx-auto w-full max-w-6xl px-4 sm:px-6 lg:px-10', compacta ? 'pt-6' : 'pt-6 sm:pt-8', className)}>
+    <header className={cx('con-deriva mx-auto w-full max-w-6xl px-4 sm:px-6 lg:px-10', compacta ? 'pt-6' : 'pt-6 sm:pt-8', className)}>
       <div className="flex items-start gap-6">
         <div className="min-w-0 flex-1">
           <h1 className="flex items-center gap-2.5 text-[1.5rem] font-bold tracking-[-0.01em] text-coffee-800 sm:text-[1.75rem]">
-            <span aria-hidden className="grid h-4 w-4 place-items-center">{f.marca}</span>
+            {/* La forma del lugar se estampa al llegar (key: cada lugar, la suya). */}
+            <span key={forma} aria-hidden className="anim-sello grid h-4 w-4 place-items-center">{f.marca}</span>
             {titulo}
           </h1>
           <p className="mt-1 text-[0.875rem] text-coffee-600">{antetitulo}</p>
         </div>
+        {/* El instrumento con que se construye la forma, dibujado a mano, junto a la composición. */}
+        <Boceto key={f.boceto} nombre={f.boceto} decorativo dibujar="ya" espera={0.15} className="-mt-1 hidden w-[92px] shrink-0 opacity-90 md:block" />
         <Composicion estilo={f.estilo} semilla={forma.length} className="-mt-2 hidden h-[76px] w-[114px] shrink-0 sm:block" />
       </div>
       {children ? <div className="mt-5">{children}</div> : null}
@@ -46,7 +51,7 @@ export function Pestanas({ elementos, etiqueta }: { elementos: Array<{ a: string
             key={e.a}
             to={e.a}
             activeOptions={{ exact: e.exacta ?? false, includeSearch: false }}
-            className="flex h-8 shrink-0 items-center gap-2 rounded-lg px-3 text-[0.8125rem] font-medium text-coffee-600 transition-[background,box-shadow,color] hover:text-coffee-800 data-[status=active]:bg-cream-50 data-[status=active]:text-coffee-800 data-[status=active]:shadow-[var(--relieve)]"
+            className="tactil flex h-8 shrink-0 items-center gap-2 rounded-lg px-3 text-[0.8125rem] font-medium text-coffee-600 hover:text-coffee-800 active:scale-[0.97] data-[status=active]:bg-cream-50 data-[status=active]:text-coffee-800 data-[status=active]:shadow-[var(--relieve)]"
           >
             {e.texto}
             {e.insignia ? <span className="grid h-4 min-w-4 place-items-center rounded-full bg-amarillo px-1 text-[0.625rem] font-bold text-coffee-800">{e.insignia}</span> : null}
@@ -65,7 +70,7 @@ export function Lienzo({ children, className, ancho = 'normal' }: { children: Re
 /** Sección en tarjeta, como los ajustes de siempre: icono, título, una línea y el contenido. */
 export function Seccion({ icono, titulo, descripcion, accion, children, className }: { icono: import('@scholaris/ui').NombreIcono; titulo: ReactNode; descripcion?: ReactNode; accion?: ReactNode; children?: ReactNode; className?: string }) {
   return (
-    <section className={cx('rounded-2xl border border-cream-400 bg-cream-50 p-5 shadow-[var(--levantado)] sm:p-6', className)}>
+    <section className={cx('anim-sube rounded-2xl border border-cream-400 bg-cream-50 p-5 shadow-[var(--levantado)] sm:p-6', className)}>
       <div className="flex items-start gap-3">
         <Icono nombre={icono} tam={18} className="mt-0.5 shrink-0 text-coffee-500" />
         <div className="min-w-0 flex-1">

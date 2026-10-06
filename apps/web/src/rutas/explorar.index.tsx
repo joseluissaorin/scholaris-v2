@@ -9,6 +9,7 @@ import { Lienzo } from '../componentes/comunes/cabecera';
 import { haceCuanto } from '../lib/formato';
 import { esOscuro } from '../lib/acciones';
 import { numero } from '../lib/numero';
+import { Boceto } from '../bocetos/boceto';
 
 export const Route = createFileRoute('/explorar/')({
   loader: ({ context }) => context.consultas.ensureQueryData(q.mapa()),
@@ -75,7 +76,7 @@ function Mapa() {
 
       <div className="mt-6 grid gap-6 xl:grid-cols-[minmax(0,1fr)_24rem]">
         {isPending ? <Esqueleto className="aspect-[16/10]" /> : !data?.puntos.length ? (
-          <Vacio forma="circulo" titulo="Aún no hay mapa." accion={<Boton variante="tinta" onClick={() => void construir()}>Construirlo</Boton>}>Se construye con los pasajes de tu biblioteca; con unos pocos documentos ya se ven temas.</Vacio>
+          <Vacio forma="circulo" titulo="Aún no hay mapa." dibujo={<Boceto nombre="constelacion-vacia" decorativo />} accion={<Boton variante="tinta" onClick={() => void construir()}>Construirlo</Boton>}>Se construye con los pasajes de tu biblioteca; con unos pocos documentos ya se ven temas.</Vacio>
         ) : <Lamina mapa={data} elegido={elegido} alElegir={setElegido} />}
         <aside aria-label="Temas" className="min-w-0">
           {elegido != null && data ? <Grupo grupo={data.grupos[elegido]!} color={TINTAS[elegido % TINTAS.length]!} alCerrar={() => setElegido(null)} /> : (
