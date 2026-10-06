@@ -11,6 +11,7 @@
     "@napi-rs/canvas": "^1.0.10",
     "@scholaris/busqueda": "workspace:^",
     "@scholaris/citas": "workspace:^",
+    "@scholaris/contrato": "workspace:^",
     "@scholaris/folios": "workspace:^",
     "@scholaris/imprenta": "workspace:^",
     "@scholaris/ingesta": "workspace:^",
@@ -20,9 +21,11 @@
     "better-sqlite3": "^13.0.3",
     "sqlite-vec": "^0.1.9",
     "tsx": "^4.23.15",
-    "undici": "^8.11.2"
+    "undici": "^8.11.2",
+    "ws": "^8.22.0"
   },
   "devDependencies": {
-    "@types/better-sqlite3": "^9.6.0"
+    "@types/better-sqlite3": "^9.6.0",
+    "@types/ws": "^8.18.2"
   }
 }
