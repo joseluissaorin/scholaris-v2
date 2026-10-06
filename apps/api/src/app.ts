@@ -35,8 +35,9 @@ import { rutasBusqueda } from './rutas/busqueda.js';
 import { rutasCitas } from './rutas/citas.js';
 import { rutasSpdf } from './rutas/spdf.js';
 import { montarFunciones } from './rutas/funciones.js';
+import { rutasMcp } from './rutas/mcp.js';
 
-export const VERSION = '0.2.0';
+export { VERSION } from './version.js';
 
 // ---------------------------------------------------------------------------
 // App de usuario
@@ -66,6 +67,7 @@ export function crearAppUsuario() {
   rutasBusqueda(sub);
   rutasCitas(sub);
   montarFunciones(sub);
+  rutasMcp(sub);
   return app;
 }
 
@@ -92,8 +94,6 @@ export interface Plataforma {
   atender(usuario: UsuarioSesion, peticion: Request): Promise<Response>;
   /** Abre el WebSocket de tiempo real (ya verificado el billete). */
   tiempoReal(peticion: Request, canal: { usuario: string; tarea?: string }): Promise<Response>;
-  /** Servidor MCP (opcional). */
-  mcp?(peticion: Request, usuario: UsuarioSesion): Promise<Response>;
 }
 
 /** Ruta de los billetes: usuario y tarea opcional, firmados 60 s. */
@@ -218,10 +218,12 @@ export function crearPuerta(pl: Plataforma) {
 
   // MCP (fuera de /api/v2): la autenticación es la misma.
   app.all('/mcp', async (c) => {
-    if (!pl.mcp) return c.json(cuerpoError('no_disponible', 'El servidor MCP no está activado en esta instancia.'), 404);
+    if (!pl.config.mcp) return c.json(cuerpoError('no_disponible', 'El servidor MCP no está activado en esta instancia.'), 404);
     const u = await autenticar(c.req.raw);
     if (u.via === 'clave_api' && !u.alcances?.includes('mcp')) fallo('prohibido', 'Esta clave de API no tiene el alcance «mcp».');
-    return pl.mcp(c.req.raw, u);
+    const url = new URL(c.req.url);
+    url.pathname = `${PREFIJO_API}/mcp`;
+    return pl.atender(u, new Request(url.toString(), c.req.raw));
   });
 
   return app;

@@ -1,0 +1,80 @@
+// Scholaris v2 en Cloudflare: un Worker (API + web), Durable Objects por
+// usuario, un Workflow por documento, D1 para cuentas, R2 para originales y
+// páginas, Vectorize para los vectores y una cola para el trabajo de fondo.
+//
+// `node deploy/cloudflare/bootstrap.mjs` crea lo que falte, rellena los ids
+// marcados y despliega en workers.dev (sin dominios de producción).
+{
+  "$schema": "../../apps/api/node_modules/wrangler/config-schema.json",
+  "name": "scholaris-v2",
+  "main": "../../apps/api/src/cloudflare/worker.ts",
+  "compatibility_date": "2026-09-15",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+  "preview_urls": false,
+
+  // La web (apps/web/dist) con vuelta a index.html; la API pasa antes por el Worker.
+  "assets": {
+    "directory": "../../apps/web/dist",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*", "/mcp"]
+  },
+
+  "durable_objects": {
+    "bindings": [
+      { "name": "ESTANTERIA", "class_name": "Estanteria" },
+      { "name": "TAREA", "class_name": "Tarea" },
+      { "name": "LIMITADOR", "class_name": "Limitador" }
+    ]
+  },
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["Estanteria", "Tarea", "Limitador"] }
+  ],
+
+  "workflows": [
+    { "binding": "INGESTA", "name": "scholaris-ingesta", "class_name": "FlujoIngesta" }
+  ],
+
+  "d1_databases": [
+    { "binding": "DB", "database_name": "scholaris", "database_id": "REPLACE_D1_ID" }
+  ],
+
+  "r2_buckets": [
+    { "binding": "BUCKET", "bucket_name": "scholaris" }
+  ],
+
+  // Índice de Gemini Embedding 2 recortado a 1536 (coseno); un espacio de nombres por usuario.
+  "vectorize": [
+    { "binding": "VECTORES", "index_name": "scholaris-gemini-1536" }
+  ],
+
+  "queues": {
+    "producers": [{ "binding": "COLA", "queue": "scholaris-fondo" }],
+    "consumers": [{ "queue": "scholaris-fondo", "max_batch_size": 10, "max_batch_timeout": 5, "max_retries": 5 }]
+  },
+
+  "ai": { "binding": "AI" },
+
+  // Vigilantes: a diario a las 06:17 UTC (los semanales, los lunes).
+  "triggers": { "crons": ["17 6 * * *"] },
+
+  // CPU por invocación (pasos del Workflow que cortan PDF o arman un .spdf).
+  "limits": { "cpu_ms": 300000 },
+
+  "vars": {
+    "ESPACIO_VECTORIAL": "gemini-embedding-2@1536",
+    "AI_GATEWAY": "scholaris",
+    "CLOUDFLARE_ACCOUNT_ID": "f22c7a728ddc8e41cefd2644f8fb7632",
+    "R2_BUCKET_NAME": "scholaris"
+  },
+
+  "observability": { "enabled": true, "head_sampling_rate": 1 }
+
+  // Secretos (wrangler secret put; el bootstrap los pide o los genera):
+  //   SECRETO              HMAC de URLs firmadas y billetes (se genera)
+  //   CLAVE_MAESTRA        cifrado AES-GCM de las claves propias (se genera)
+  //   GEMINI_API_KEY, OPENROUTER_API_KEY, TYPESAFE_API_KEY
+  //   CLERK_PUBLISHABLE_KEY (también puede ir en vars), CLERK_EMISOR opcional
+  //   R2_ACCESS_KEY_ID / R2_SECRET_ACCESS_KEY (opcional: subida directa a R2 sin pasar por el Worker)
+}

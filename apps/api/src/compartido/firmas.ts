@@ -45,8 +45,8 @@ export function deBase64Url(s: string): Uint8Array<ArrayBuffer> {
 }
 
 /** Firma un conjunto de parámetros (orden alfabético) con caducidad. */
-export async function firmarParametros(secreto: string, params: Record<string, string>, segundos: number): Promise<URLSearchParams> {
-  const p = new URLSearchParams({ ...params, exp: String(Math.floor(Date.now() / 1000) + segundos) });
+export async function firmarParametros(secreto: string, params: Record<string, string>, segundos: number, expAbsoluto?: number): Promise<URLSearchParams> {
+  const p = new URLSearchParams({ ...params, exp: String(expAbsoluto ?? Math.floor(Date.now() / 1000) + segundos) });
   p.sort();
   p.set('sig', await firmar(secreto, p.toString()));
   return p;

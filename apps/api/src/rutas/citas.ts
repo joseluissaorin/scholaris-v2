@@ -162,11 +162,11 @@ export function rutasCitas(app: Hono<Entorno>): void {
       exigir(peticion.subida, 'Esta autocita no salió de un DOCX: expórtala como «md» o «txt».');
       const { bytes } = await textoDeSubida(p, peticion.subida!);
       const salida = await insertarCitasDocx(bytes, aceptadas, docs, { estilo: d.estilo, ...(peticion.idioma ? { idioma: peticion.idioma } : {}) });
-      return new Response(salida as Uint8Array<ArrayBuffer>, { headers: { 'content-type': MIME_DOCX, 'content-disposition': `attachment; filename*=UTF-8''${encodeURIComponent(nombre)}.docx` } });
+      return new Response(salida.docx as Uint8Array<ArrayBuffer>, { headers: { 'content-type': MIME_DOCX, 'content-disposition': `attachment; filename*=UTF-8''${encodeURIComponent(nombre)}.docx` } });
     }
     exigir(formato === 'md' || formato === 'txt' || formato === 'latex', 'Formatos: docx, md, txt, latex.');
     const texto = await insertarCitasTexto(d.texto, aceptadas, docs, { formato: formato === 'txt' ? 'texto' : 'markdown', estilo: d.estilo });
-    return new Response(texto, { headers: { 'content-type': formato === 'txt' ? 'text/plain; charset=utf-8' : 'text/markdown; charset=utf-8', 'content-disposition': `attachment; filename*=UTF-8''${encodeURIComponent(nombre)}.${formato === 'latex' ? 'tex' : formato}` } });
+    return new Response(texto.texto, { headers: { 'content-type': formato === 'txt' ? 'text/plain; charset=utf-8' : 'text/markdown; charset=utf-8', 'content-disposition': `attachment; filename*=UTF-8''${encodeURIComponent(nombre)}.${formato === 'latex' ? 'tex' : formato}` } });
   });
 
   app.post('/citas/extraer-texto', async (c: Ctx) => {
@@ -183,7 +183,7 @@ export function rutasCitas(app: Hono<Entorno>): void {
     exigir(b.afirmacion.length <= 4000, 'La afirmación es demasiado larga.');
     const ia = await p.inteligencia();
     const buscador = await obtenerBuscador(p);
-    return c.json(await verificarAfirmacion(b.afirmacion, { buscador, juez: ia.juez, redactor: ia.redactor }, {
+    return c.json(await verificarAfirmacion(b.afirmacion, { buscador, juez: ia.juez }, {
       ...(b.fragmentos ? { fragmentos: b.fragmentos } : {}), ...(b.filtros ? { filtros: b.filtros } : {}),
       ...(b.anioTexto ? { anioTexto: b.anioTexto } : {}), ...(b.k ? { k: b.k } : {}),
     }));
@@ -219,7 +219,7 @@ export function rutasCitas(app: Hono<Entorno>): void {
       estilo: b.estilo ?? d.estilo, bibliografia: b.bibliografia ?? true,
     });
     const destino = `u/${p.usuario.id}/exportaciones/${d.id}-${Date.now()}.docx`;
-    await p.almacen.poner(destino, salida, MIME_DOCX);
+    await p.almacen.poner(destino, salida.docx, MIME_DOCX);
     return c.json({ url: await p.almacen.urlLectura(destino, { segundos: 3600, descarga: `${d.titulo.slice(0, 60) || 'citado'}.docx`, tipo: MIME_DOCX }) });
   });
 

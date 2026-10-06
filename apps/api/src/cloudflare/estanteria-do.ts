@@ -1,0 +1,129 @@
+/**
+ * Durable Object `Estanteria`: la biblioteca de UN usuario. Su SQLite lleva el
+ * esquema SPDF v4 (muchos documentos), el de las funciones y el de la
+ * plataforma. Las rutas de usuario corren aquí dentro (SQL local y síncrono);
+ * el Workflow de ingesta escribe por RPC.
+ */
+import { DurableObject } from 'cloudflare:workers';
+import type { Progreso, ValorSQL } from '@scholaris/nucleo';
+import { ejecutarVigilantesProgramados } from '@scholaris/funciones';
+import { crearAppUsuario } from '../app.js';
+import type { PuertosUsuario, UsuarioSesion, ParamsIngesta } from '../puertos.js';
+import { prepararEstanteria } from '../compartido/esquema-plataforma.js';
+import { apuntarProgreso, leerTarea } from '../compartido/estanteria.js';
+import { cerrarIngesta, type DatosCierre } from '../compartido/cierre.js';
+import { puertosFunciones } from '../compartido/servicios.js';
+import type { Env } from './env.js';
+import { SqlDO } from './sql.js';
+import { almacenDesdeEnv, configDesdeEnv, cuentasDesdeEnv, emisorDesdeEnv, indiceDesdeEnv, inteligenciaPara, origenDe } from './puertos-cf.js';
+
+const app = crearAppUsuario();
+
+export class Estanteria extends DurableObject<Env> {
+  private readonly base: SqlDO;
+
+  constructor(ctx: DurableObjectState, env: Env) {
+    super(ctx, env);
+    this.base = new SqlDO(ctx.storage);
+    void ctx.blockConcurrencyWhile(async () => {
+      await prepararEstanteria(this.base);
+    });
+  }
+
+  private puertos(usuario: UsuarioSesion, origen: string): PuertosUsuario {
+    const env = this.env;
+    const cuentas = cuentasDesdeEnv(env);
+    const almacen = almacenDesdeEnv(env, origen);
+    let ia: Promise<Awaited<ReturnType<typeof inteligenciaPara>>> | null = null;
+    const inteligencia = () => (ia ??= inteligenciaPara(env, cuentas, usuario.id));
+    const p: PuertosUsuario = {
+      usuario,
+      sql: this.base,
+      almacen,
+      indice: null,
+      inteligencia,
+      emisor: emisorDesdeEnv(env, usuario.id),
+      orquestador: {
+        lanzarIngesta: async (params: ParamsIngesta) => {
+          await env.INGESTA.create({ id: params.tarea, params });
+        },
+        cancelar: async (tarea: string) => {
+          try { await (await env.INGESTA.get(tarea)).terminate(); } catch { /* ya terminada */ }
+        },
+        estado: async (tarea: string) => {
+          try { return (await (await env.INGESTA.get(tarea)).status()).status; } catch { return null; }
+        },
+      },
+      cuentas,
+      config: configDesdeEnv(env, origen),
+      segundoPlano: (pr) => this.ctx.waitUntil(pr.catch((e: unknown) => console.error('segundo plano', e))),
+      vaciarEstanteria: async () => {
+        await this.ctx.storage.deleteAll();
+        await prepararEstanteria(this.base);
+      },
+    };
+    // El índice depende del espacio del embebedor: se resuelve al primer uso.
+    Object.defineProperty(p, 'indice', { get: () => (this.indice ??= env.VECTORES ? indicePerezoso(env, inteligencia) : null), enumerable: true });
+    return p;
+  }
+
+  private indice: ReturnType<typeof indicePerezoso> | null = null;
+
+  /** Atiende una petición HTTP ya autenticada por la puerta. */
+  async atender(usuario: UsuarioSesion, peticion: Request): Promise<Response> {
+    await this.ctx.storage.put('usuario', usuario.id);
+    const p = this.puertos(usuario, origenDe(this.env, peticion));
+    return app.fetch(peticion, { puertos: p }, { waitUntil: (pr: Promise<unknown>) => this.ctx.waitUntil(pr), passThroughOnException() {}, props: {} } as unknown as ExecutionContext);
+  }
+
+  // -------------------------------------------------------------------------
+  // RPC para el Workflow y la cola
+  // -------------------------------------------------------------------------
+
+  async sql(consulta: string, parametros: ValorSQL[]): Promise<Record<string, ValorSQL>[]> {
+    return this.base.ejecutarSync(consulta, parametros);
+  }
+
+  async lote(sentencias: Array<{ consulta: string; parametros: ValorSQL[] }>): Promise<number> {
+    return this.base.lote(sentencias);
+  }
+
+  async progreso(p: Progreso): Promise<boolean> {
+    const t = await leerTarea(this.base, p.tarea);
+    // Si la tarea se canceló, el Workflow lo sabe por aquí y para.
+    if (!t || t.estado === 'cancelada' || t.estado === 'error') return false;
+    await apuntarProgreso(this.base, p);
+    return true;
+  }
+
+  async metadatosSubida(documento: string): Promise<Record<string, unknown> | null> {
+    const [f] = this.base.ejecutarSync<{ metadatos: string | null }>('SELECT metadatos FROM pl_subidas WHERE documento = ? ORDER BY creada DESC LIMIT 1', [documento]);
+    return f?.metadatos ? (JSON.parse(f.metadatos) as Record<string, unknown>) : null;
+  }
+
+  async cerrar(usuario: Pick<UsuarioSesion, 'id' | 'plan'>, datos: DatosCierre): Promise<void> {
+    const u: UsuarioSesion = { id: usuario.id, plan: usuario.plan, correo: '', nombre: '', funciones: [], via: 'clerk' };
+    await cerrarIngesta(this.puertos(u, origenDe(this.env)), datos);
+  }
+
+  /** Cron: vigilantes diarios o semanales del usuario. */
+  async vigilantes(usuario: Pick<UsuarioSesion, 'id' | 'plan'>, modo: 'diario' | 'semanal'): Promise<void> {
+    const u: UsuarioSesion = { id: usuario.id, plan: usuario.plan, correo: '', nombre: '', funciones: [], via: 'clerk' };
+    await ejecutarVigilantesProgramados(await puertosFunciones(this.puertos(u, origenDe(this.env))), modo);
+  }
+}
+
+/** Índice que espera a la inteligencia para saber su espacio (la primera vez). */
+function indicePerezoso(env: Env, inteligencia: () => Promise<Awaited<ReturnType<typeof inteligenciaPara>>>) {
+  let real: ReturnType<typeof indiceDesdeEnv> | undefined;
+  const obtener = async () => (real ??= indiceDesdeEnv(env, await inteligencia()));
+  return {
+    get espacio() {
+      if (!real) throw new Error('Índice aún no inicializado');
+      return real.espacio;
+    },
+    insertar: async (ns: string, e: Parameters<NonNullable<ReturnType<typeof indiceDesdeEnv>>['insertar']>[1]) => (await obtener())!.insertar(ns, e),
+    consultar: async (ns: string, v: Float32Array | number[], o: Parameters<NonNullable<ReturnType<typeof indiceDesdeEnv>>['consultar']>[2]) => (await obtener())!.consultar(ns, v, o),
+    borrar: async (ns: string, ids: string[]) => (await obtener())!.borrar(ns, ids),
+  };
+}
