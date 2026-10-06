@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { createFileRoute, Link } from '@tanstack/react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../datos/api';
@@ -7,17 +7,25 @@ import { avisar, Boton, cx, Esqueleto, Rotulo, Vacio } from '@scholaris/ui';
 import { q } from '../datos/consultas';
 import { Lienzo } from '../componentes/comunes/cabecera';
 import { Boceto } from '../bocetos/boceto';
+import { quieto } from '../movimiento/preferencias';
 
 export const Route = createFileRoute('/explorar/grafo')({
   loader: ({ context }) => context.consultas.ensureQueryData(q.grafo()),
   component: Grafo,
 });
 
-/** Disposición por fuerzas, determinista y corta: con decenas de nodos sobra. */
-function disponer(g: GrafoCitas) {
+type Posiciones = Map<string, { x: number; y: number }>;
+const ITERACIONES = 220;
+
+/** Disposición por fuerzas, determinista y corta: con decenas de nodos sobra. Empieza en corro. */
+function inicio(g: GrafoCitas): Posiciones {
   const n = g.nodos.length;
-  const pos = new Map(g.nodos.map((x, i) => [x.documento, { x: 0.5 + 0.34 * Math.cos((i / n) * Math.PI * 2), y: 0.5 + 0.34 * Math.sin((i / n) * Math.PI * 2) }]));
-  for (let it = 0; it < 220; it++) {
+  return new Map(g.nodos.map((x, i) => [x.documento, { x: 0.5 + 0.34 * Math.cos((i / n) * Math.PI * 2), y: 0.5 + 0.34 * Math.sin((i / n) * Math.PI * 2) }]));
+}
+
+/** `cuantas` iteraciones más sobre `pos` (lo modifica). */
+function disponer(g: GrafoCitas, pos: Posiciones = inicio(g), cuantas = ITERACIONES) {
+  for (let it = 0; it < cuantas; it++) {
     const fuerza = new Map(g.nodos.map((x) => [x.documento, { x: 0, y: 0 }]));
     for (const a of g.nodos) for (const b of g.nodos) {
       if (a === b) continue;
@@ -43,6 +51,32 @@ function disponer(g: GrafoCitas) {
   return pos;
 }
 
+/**
+ * El grafo se asienta a la vista: las fuerzas se resuelven unas pocas
+ * iteraciones por fotograma y los documentos se apartan, se atraen por sus citas
+ * y se quedan quietos en su sitio. Sin movimiento, aparece ya colocado.
+ */
+function useDisposicionViva(data: GrafoCitas | undefined): Posiciones | null {
+  const final = useMemo(() => (data && quieto() ? disponer(data) : null), [data]);
+  const [pos, setPos] = useState<Posiciones | null>(null);
+  useEffect(() => {
+    if (!data || final) return;
+    const p = inicio(data);
+    let hechas = 0, raf = 0;
+    const paso = () => {
+      // Al principio, despacio (se ve el corro abrirse); luego más deprisa hasta asentarse.
+      const n = hechas < 30 ? 2 : 7;
+      disponer(data, p, n);
+      hechas += n;
+      setPos(new Map([...p].map(([k, v]) => [k, { ...v }])));
+      if (hechas < ITERACIONES) raf = requestAnimationFrame(paso);
+    };
+    raf = requestAnimationFrame(paso);
+    return () => cancelAnimationFrame(raf);
+  }, [data, final]);
+  return final ?? pos ?? (data ? inicio(data) : null);
+}
+
 function Grafo() {
   const { data, isPending } = useQuery(q.grafo());
   const { data: huerfanas } = useQuery(q.huerfanas());
@@ -55,7 +89,7 @@ function Grafo() {
     catch { avisar('No se pudo rehacer el grafo.', { tono: 'error' }); }
     setReconstruyendo(false);
   }
-  const pos = useMemo(() => (data ? disponer(data) : null), [data]);
+  const pos = useDisposicionViva(data);
   const vecinos = useMemo(() => new Set(data?.aristas.filter((e) => e.desde === foco || e.hacia === foco).flatMap((e) => [e.desde, e.hacia]) ?? []), [data, foco]);
   const nodo = data?.nodos.find((x) => x.documento === foco);
 

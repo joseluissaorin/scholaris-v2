@@ -21,6 +21,7 @@ import { limpiarSeleccion, ponerSeleccion, useSeleccion } from '../lib/seleccion
 import { copiarBibliografia, descargarBibliografia } from '../lib/referencia';
 import { bytes } from '../lib/formato';
 import { Boceto } from '../bocetos/boceto';
+import { NotaMargen } from '../bocetos/nota-margen';
 
 const Compartir = lazy(() => import('../componentes/biblioteca/compartir'));
 
@@ -206,11 +207,13 @@ function PaginaBiblioteca() {
           {/* La columna de siempre: acciones y colecciones */}
           {!vacia ? (
             <aside className="hidden space-y-6 lg:block">
-              <div>
+              <div className="relative">
+                {/* La primera vez, una nota a mano señala por dónde entra todo. */}
+                <NotaMargen id="biblioteca-acciones" nombre="nota-aqui" className="-top-12 right-0 w-28" espera={1800} />
                 <h2 className="rotulo mb-2.5 text-[0.75rem] text-coffee-700">Acciones</h2>
                 <div className="space-y-0.5">
                   {([['subir', 'Añadir documentos', () => disparar('archivos')], ['enlace', 'Desde un enlace', () => disparar('enlace')], ['pila', 'Importar un .spdf', () => disparar('spdf')], ['buscar', 'Búsqueda semántica', () => disparar('paleta')]] as const).map(([i, t, f]) => (
-                    <button key={t} type="button" onClick={f} className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-[0.8125rem] text-coffee-600 transition-colors hover:bg-cream-200 hover:text-coffee-800">
+                    <button key={t} type="button" onClick={f} className="tactil flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-[0.8125rem] text-coffee-600 hover:translate-x-0.5 hover:bg-cream-200 hover:text-coffee-800 active:scale-[0.98]">
                       <Icono nombre={i} tam={16} className="text-coffee-400" />{t}
                     </button>
                   ))}

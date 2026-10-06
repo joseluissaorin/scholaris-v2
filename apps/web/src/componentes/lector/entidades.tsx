@@ -71,7 +71,7 @@ function MarcaEntidad({ id, texto, documento, datos }: { id: string; texto: stri
       </Popover.Trigger>
       <Popover.Portal>
         <Popover.Content side="top" align="start" sideOffset={6} collisionPadding={12}
-          className="z-50 w-[22rem] max-w-[calc(100vw-1.5rem)] rounded-xl border border-cream-400 bg-cream-50 p-4 text-coffee-800 shadow-[var(--levantado-alto)] outline-none">
+          className="anim-menu z-50 w-[22rem] max-w-[calc(100vw-1.5rem)] rounded-xl border border-cream-400 bg-cream-50 p-4 text-coffee-800 shadow-[var(--levantado-alto)] outline-none">
           <Rotulo>{NOMBRE_TIPO_ENTIDAD[datos.tipo]}</Rotulo>
           <p className="mt-0.5 text-[1.0625rem] font-bold leading-tight">{datos.nombre}</p>
           {datos.descripcion ? <p className="mt-0.5 text-[0.8125rem] text-coffee-600">{datos.descripcion}</p> : null}

@@ -7,6 +7,7 @@ import { api } from '../datos/api';
 import { q } from '../datos/consultas';
 import { Lienzo, Seccion } from '../componentes/comunes/cabecera';
 import { haceCuanto } from '../lib/formato';
+import { Boceto } from '../bocetos/boceto';
 
 export const Route = createFileRoute('/ajustes/claves')({
   loader: ({ context }) => Promise.all([context.consultas.ensureQueryData(q.claves()), context.consultas.ensureQueryData(q.ajustes())]),
@@ -49,14 +50,16 @@ function Claves() {
       <Seccion icono="llave" titulo="Claves de API" descripcion="Para usar tu biblioteca desde el SDK de Python o desde cualquier agente por MCP (Claude, por ejemplo), con citas verificadas."
         accion={<Boton variante="tinta" tam="p" icono="mas" onClick={() => setCrear(true)}>Nueva clave</Boton>}>
         {isPending ? <Esqueleto className="h-14" /> : !claves?.length ? (
-          <div className="rounded-xl border border-dashed border-cream-500 bg-cream-100/60 px-4 py-6 text-center shadow-[var(--hundido)]">
+          <div className="anim-sube rounded-xl border border-dashed border-cream-500 bg-cream-100/60 px-4 py-6 text-center shadow-[var(--hundido)]">
+            {/* La llave antigua con su etiqueta «API», dibujada a mano. */}
+            <Boceto nombre="llave" decorativo className="mx-auto mb-2 w-52 max-w-full" />
             <p className="text-[0.875rem] font-medium text-coffee-700">Aún no hay claves de API</p>
             <p className="mt-1 text-[0.8125rem] text-coffee-500">Crea una para que los agentes hablen con tu Scholaris.</p>
           </div>
         ) : (
-          <ul className="overflow-hidden rounded-xl border border-cream-300 bg-cream-100/50">
-            {claves.map((k) => (
-              <li key={k.id} className="flex flex-wrap items-center gap-x-4 gap-y-1 border-b border-cream-200 px-4 py-3 last:border-0">
+          <ul className="cascada overflow-hidden rounded-xl border border-cream-300 bg-cream-100/50">
+            {claves.map((k, i) => (
+              <li key={k.id} style={{ ['--i' as string]: i }} className="flex flex-wrap items-center gap-x-4 gap-y-1 border-b border-cream-200 px-4 py-3 last:border-0">
                 <Icono nombre="llave" tam={16} className="text-coffee-400" />
                 <div className="min-w-0 flex-1">
                   <p className="text-[0.875rem] font-medium">{k.nombre}</p>

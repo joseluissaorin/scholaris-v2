@@ -9,6 +9,7 @@ import { recuperarTareas } from '../datos/ingesta';
 import { NoEncontrado, ErrorDeRuta } from '../componentes/comunes/errores';
 import { EsperaMarco } from '../componentes/marco/espera';
 import { useHayMini } from '../componentes/reproductor/estado-global';
+import { Arrastrable } from '../movimiento/arrastre';
 
 const Paleta = lazy(() => import('../componentes/marco/paleta'));
 // El reproductor pequeño: solo si algo suena fuera del lector.
@@ -59,7 +60,8 @@ function Marco() {
       <PieMovil />
       <Entrada />
       {paletaCargada ? <Suspense fallback={null}><Paleta abierta={paleta} alCambiar={setPaleta} /></Suspense> : null}
-      {hayMini ? <Suspense fallback={null}><MiniReproductor /></Suspense> : null}
+      {/* El reproductor pequeño se puede coger y lanzar a cualquier esquina (con inercia). */}
+      {hayMini ? <Arrastrable clave="mini"><Suspense fallback={null}><MiniReproductor /></Suspense></Arrastrable> : null}
       <Tostadora />
     </div>
   );

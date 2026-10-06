@@ -225,3 +225,13 @@ html[data-transicion] .backdrop-blur, html[data-transicion] .backdrop-blur-sm { 
 /* Una barra que se llena de tinta al aparecer. */
 @keyframes s-llena { from { transform: scaleX(0); } }
 .anim-llena { animation: s-llena 0.8s var(--muelle-asentar) 0.15s both; }
+
+/* Ingesta · la parada actual del camino de fases late. */
+@keyframes s-late { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.45); } }
+.fase-viva { transform-box: fill-box; transform-origin: center; animation: s-late 1.3s ease-in-out infinite; }
+
+/* Lo que se arrastra (src/movimiento/arrastre.tsx): al cogerlo se levanta un poco. */
+@media (min-width: 640px) {
+  .arrastrable { cursor: grab; touch-action: none; transition: scale var(--dur-levantar) var(--muelle-soltar); }
+  .arrastrable[data-arrastrando] { cursor: grabbing; scale: 1.03; }
+}

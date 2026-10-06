@@ -10,6 +10,7 @@ import { haceCuanto } from '../lib/formato';
 import { esOscuro } from '../lib/acciones';
 import { numero } from '../lib/numero';
 import { Boceto } from '../bocetos/boceto';
+import { quieto } from '../movimiento/preferencias';
 
 export const Route = createFileRoute('/explorar/')({
   loader: ({ context }) => context.consultas.ensureQueryData(q.mapa()),
@@ -114,24 +115,42 @@ function Lamina({ mapa, elegido, alElegir }: { mapa: MapaConceptos; elegido: num
     return () => ro.disconnect();
   }, []);
 
+  // La primera vez, cada grupo florece desde su centro: sus puntos salen del rótulo y se abren a su sitio (en el lienzo, sin tocar el DOM).
+  const florecido = useRef(false);
   useEffect(() => {
     const c = lienzo.current!;
     const dpr = Math.min(2, window.devicePixelRatio || 1);
     c.width = tam.w * dpr; c.height = tam.h * dpr;
     const ctx = c.getContext('2d')!;
     ctx.scale(dpr, dpr);
-    ctx.clearRect(0, 0, tam.w, tam.h);
     const tintas = esOscuro() ? TINTAS_OSCURO : TINTAS;
     const r = tam.w < 600 ? 1.8 : 2.4;
-    for (const p of mapa.puntos) {
-      const apagado = elegido != null && p.grupo !== elegido;
-      ctx.globalAlpha = apagado ? 0.12 : 0.78;
-      ctx.fillStyle = tintas[p.grupo % tintas.length]!;
-      ctx.beginPath();
-      ctx.arc(p.x * tam.w, p.y * tam.h, elegido === p.grupo ? r + 0.8 : r, 0, Math.PI * 2);
-      ctx.fill();
-    }
-    ctx.globalAlpha = 1;
+    const centros = new Map(mapa.grupos.map((g) => [g.indice, g]));
+    const pintar = (t: number) => {
+      ctx.clearRect(0, 0, tam.w, tam.h);
+      for (const p of mapa.puntos) {
+        const apagado = elegido != null && p.grupo !== elegido;
+        // Cada grupo empieza un poco después que el anterior; se abre con un rebote corto.
+        const u = Math.max(0, Math.min(1, (t - (p.grupo % 12) * 0.05) / 0.6));
+        if (u <= 0) continue;
+        const e = 1 + 2.2 * Math.pow(u - 1, 3) + 1.2 * Math.pow(u - 1, 2);
+        const g = centros.get(p.grupo);
+        const x = g ? g.x + (p.x - g.x) * e : p.x, y = g ? g.y + (p.y - g.y) * e : p.y;
+        ctx.globalAlpha = (apagado ? 0.12 : 0.78) * Math.min(1, u * 1.6);
+        ctx.fillStyle = tintas[p.grupo % tintas.length]!;
+        ctx.beginPath();
+        ctx.arc(x * tam.w, y * tam.h, (elegido === p.grupo ? r + 0.8 : r) * Math.min(1, 0.4 + u), 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+    };
+    if (florecido.current || quieto()) { pintar(2); return; }
+    florecido.current = true;
+    let raf = 0;
+    const t0 = performance.now();
+    const paso = (ahora: number) => { const t = (ahora - t0) / 1000; pintar(t); if (t < 1.3) raf = requestAnimationFrame(paso); };
+    raf = requestAnimationFrame(paso);
+    return () => { cancelAnimationFrame(raf); florecido.current = false; };
   }, [mapa, tam, elegido]);
 
   return (
@@ -139,11 +158,11 @@ function Lamina({ mapa, elegido, alElegir }: { mapa: MapaConceptos; elegido: num
       {/* Retícula de imprenta: se nota que existe. */}
       <div aria-hidden className="absolute inset-0 opacity-60" style={{ backgroundImage: 'linear-gradient(var(--s-hondo) 1px, transparent 1px), linear-gradient(90deg, var(--s-hondo) 1px, transparent 1px)', backgroundSize: '10% 10%' }} />
       <canvas ref={lienzo} className="absolute inset-0 h-full w-full" onClick={() => alElegir(null)} aria-hidden />
-      {mapa.grupos.map((g) => (
+      {mapa.grupos.map((g, k) => (
         <button key={g.indice} type="button" onClick={(e) => { e.stopPropagation(); alElegir(elegido === g.indice ? null : g.indice); }}
-          className={cx('absolute -translate-x-1/2 -translate-y-1/2 whitespace-nowrap rounded-s px-2 py-1 text-[0.8125rem] transition-[opacity,background-color] md:text-[0.9375rem]',
+          className={cx('anim-sube absolute -translate-x-1/2 -translate-y-1/2 whitespace-nowrap rounded-s px-2 py-1 text-[0.8125rem] transition-[opacity,background-color] md:text-[0.9375rem]',
             elegido === g.indice ? 'bg-tinta text-sobre-tinta' : 'bg-papel/85 text-tinta hover:bg-tinta hover:text-sobre-tinta', elegido != null && elegido !== g.indice && 'opacity-40')}
-          style={{ left: `${g.x * 100}%`, top: `${g.y * 100}%` }} aria-pressed={elegido === g.indice}>
+          style={{ left: `${g.x * 100}%`, top: `${g.y * 100}%`, animationDelay: `${(k % 12) * 50 + 260}ms` }} aria-pressed={elegido === g.indice}>
           {g.etiqueta ?? `Tema ${g.indice + 1}`}
         </button>
       ))}
@@ -155,13 +174,13 @@ function Lamina({ mapa, elegido, alElegir }: { mapa: MapaConceptos; elegido: num
 function Grupo({ grupo, color, alCerrar }: { grupo: GrupoMapa; color: string; alCerrar: () => void }) {
   const { data, isPending } = useQuery(q.grupo(grupo.indice));
   return (
-    <div className="anim-entra">
+    <div className="anim-sube">
       <button type="button" onClick={alCerrar} className="text-[0.8125rem] text-tinta-2 underline underline-offset-4">← Todos los temas</button>
       <div className="mt-3 flex items-center gap-2"><span className="h-4 w-4" style={{ background: color }} /><h3 className="text-[1.5rem] leading-tight">{grupo.etiqueta}</h3></div>
       <Rotulo className="mt-1 block">{grupo.tamano} pasajes</Rotulo>
-      <ul className="mt-4 flex flex-col gap-3">
-        {isPending ? [0, 1, 2].map((i) => <EsqueletoTexto key={i} lineas={3} />) : data?.miembros.map((m) => (
-          <li key={m.id}>
+      <ul className="cascada mt-4 flex flex-col gap-3">
+        {isPending ? [0, 1, 2].map((i) => <EsqueletoTexto key={i} lineas={3} />) : data?.miembros.map((m, k) => (
+          <li key={m.id} style={{ ['--i' as string]: k }}>
             <Link to="/lector/$id" params={{ id: m.documento }} className="block rounded-xl border border-cream-400 bg-cream-50 shadow-[var(--levantado)] p-3 hover:border-filete-fuerte">
               <div className="flex items-center gap-2"><span className="min-w-0 flex-1 truncate text-[0.8125rem]">{m.titulo}</span>{m.etiqueta ? <Folio>{m.etiqueta}</Folio> : null}</div>
               {m.texto ? <p className="mt-1.5 line-clamp-3 text-[0.875rem] text-tinta-2">{m.texto}</p> : null}

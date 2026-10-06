@@ -44,7 +44,7 @@ export const Resultado = memo(function Resultado({ r, consulta, indice, compacto
 
   return (
     // Entra en cascada, se levanta al pasar y, al abrirlo, crece hasta ser el lector (View Transitions).
-    <article className={cx('levanta group relative mb-3 grid grid-cols-[minmax(0,1fr)] gap-3 rounded-2xl border border-cream-400 bg-cream-50 p-4 shadow-[var(--levantado)] anim-sube md:grid-cols-[6.5rem_minmax(0,1fr)] md:gap-5 md:p-5', compacto && 'mb-2 shadow-[var(--shadow-soft)] md:p-4')} style={{ animationDelay: `calc(${Math.min(indice, 10)} * var(--escalon) * 1.4)` }}>
+    <article className={cx('levanta group relative mb-3 grid grid-cols-[minmax(0,1fr)] gap-3 rounded-2xl border border-cream-400 bg-cream-50 p-4 shadow-[var(--levantado)] anim-sube md:grid-cols-[6.5rem_minmax(0,1fr)] md:gap-5 md:p-5', compacto && 'mb-2 shadow-[var(--shadow-soft)] md:p-4')} style={{ animationDelay: `calc(${Math.min(indice, 10)} * var(--escalon))` }}>
       <div className="flex items-center gap-3 md:flex-col md:items-start md:gap-2">
         <Folio grande>{etiquetaCorta(r.fragmento.ancla, r.etiqueta)}</Folio>
         <span className="hidden text-[0.6875rem] text-coffee-400 md:block">{r.vias.map((v) => VIA[v] ?? v).join(' · ')}</span>

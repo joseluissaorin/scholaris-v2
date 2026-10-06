@@ -16,6 +16,7 @@ import { textoLimpio } from '../lib/texto';
 import { numero } from '../lib/numero';
 import { Boceto } from '../bocetos/boceto';
 import { Cifra } from '../movimiento/cifra';
+import { NotaMargen } from '../bocetos/nota-margen';
 
 type Modo = 'buscar' | 'preguntar';
 interface BusquedaBuscar { q?: string; modo?: Modo; grupo?: string; col?: string; doc?: string; cruzada?: boolean; desde?: number; hasta?: number }
@@ -93,13 +94,17 @@ function PaginaBuscar() {
   return (
     <Lienzo ancho="normal">
       <div className="max-w-4xl">
+        <div className="relative inline-block">
+        {/* La primera vez, «¡ojo!» junto a Preguntar: aquí se responde con citas. */}
+        <NotaMargen id="buscar-preguntar" nombre="nota-ojo" className="-right-32 -top-3 hidden w-28 md:block" espera={1500} />
         <div role="radiogroup" aria-label="Modo" className="mb-3 inline-flex rounded-xl border border-cream-400 bg-cream-200/70 p-1 shadow-[var(--hundido)]">
           {(['buscar', 'preguntar'] as const).map((m) => (
             <button key={m} type="button" role="radio" aria-checked={modo === m} onClick={() => { fijar({ modo: m === 'buscar' ? undefined : m }); caja.current?.focus(); }}
-              className={cx('flex h-9 items-center gap-2 rounded-md px-3.5 text-[0.8125rem]', modo === m ? 'bg-cream-50 font-semibold text-coffee-800 shadow-[var(--relieve)]' : 'font-medium text-coffee-500 hover:text-coffee-800')}>
+              className={cx('tactil flex h-9 items-center gap-2 rounded-md px-3.5 text-[0.8125rem] active:scale-[0.97]', modo === m ? 'bg-cream-50 font-semibold text-coffee-800 shadow-[var(--relieve)]' : 'font-medium text-coffee-500 hover:text-coffee-800')}>
               <Icono nombre={m === 'buscar' ? 'buscar' : 'chispa'} tam={15} />{m === 'buscar' ? 'Buscar pasajes' : 'Preguntar'}
             </button>
           ))}
+        </div>
         </div>
         <form onSubmit={(e) => { e.preventDefault(); enviar(); }}>
           <Campo
