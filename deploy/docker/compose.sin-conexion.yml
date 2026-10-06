@@ -1,0 +1,90 @@
+# Scholaris SIN CONEXIÓN: toda la inteligencia en esta máquina, ninguna clave de nube.
+#
+#   docker compose -f deploy/docker/compose.yml -f deploy/docker/compose.sin-conexion.yml up -d
+#   (con GPU NVIDIA, añade además -f deploy/docker/compose.sin-conexion.gpu.yml)
+#
+# Servicios:
+#   ollama          lector de visión (Qwen2.5-VL 7B), redactor y juez
+#   embeddinggemma  EmbeddingGemma 2: texto, imagen, audio y vídeo en un espacio (768)
+#   whisper         whisper.cpp large-v3-turbo con marcas por palabra
+#   modelos         una sola vez: baja los modelos (la ÚNICA salida a internet, y no es de Scholaris)
+#
+# La primera vez se bajan unos 9 GB de modelos; después puedes desenchufar la red.
+# Scholaris arranca con la guardia de red puesta: si algo intentara salir a
+# internet, se bloquea y se anota en el registro («[sin conexión] bloqueada…»).
+# Los catálogos de metadatos (OpenAlex, Crossref, Open Library, Wikidata) van
+# apagados; SCHOLARIS_CATALOGOS=1 en el .env los abre a sabiendas (sale el
+# título y los autores, nunca el texto).
+#
+# Cifras medidas (Mac M4 Max, Metal; ver packages/proveedores/SIN-CONEXION.md):
+# una página escaneada antigua, ~25 s con Qwen2.5-VL 7B (Gemini: ~2 s);
+# 19 min de audio, 2,5 min de ingesta entera; búsqueda densa nDCG@10 0,72
+# frente a 0,78 con Gemini Embedding 2. Solo CPU es bastante más lento: mira
+# la nota de CPU en ese documento antes de ingerir libros enteros.
+services:
+  scholaris:
+    environment:
+      SCHOLARIS_SIN_CONEXION: "1"
+      INFERENCIA_URL: http://ollama:11434
+      INFERENCIA_SABOR: ollama
+      INFERENCIA_MODELO_LECTOR: ${INFERENCIA_MODELO_LECTOR:-qwen2.5vl:7b}
+      INFERENCIA_EMBEBEDOR_URL: http://embeddinggemma:8812
+      INFERENCIA_TRANSCRIPCION_URL: http://whisper:8080
+      INFERENCIA_CONCURRENCIA: ${INFERENCIA_CONCURRENCIA:-2}
+      # Las claves de nube, aunque estén en el .env, se ignoran en este modo.
+    depends_on:
+      ollama:
+        condition: service_started
+      embeddinggemma:
+        condition: service_healthy
+      whisper:
+        condition: service_started
+
+  ollama:
+    image: ollama/ollama:${OLLAMA_VERSION:-latest}
+    restart: unless-stopped
+    environment:
+      OLLAMA_NUM_PARALLEL: ${OLLAMA_NUM_PARALLEL:-2}
+      OLLAMA_CONTEXT_LENGTH: "16384"
+      OLLAMA_KEEP_ALIVE: 30m
+    volumes:
+      - ollama-modelos:/root/.ollama
+
+  embeddinggemma:
+    build:
+      context: ../inferencia/embeddinggemma2
+    image: scholaris-embeddinggemma2:cpu
+    restart: unless-stopped
+    environment:
+      EMBEDDINGGEMMA_MODALIDADES: texto,imagen,audio,video
+    volumes:
+      - embeddinggemma-modelos:/modelos
+
+  whisper:
+    image: ghcr.io/ggml-org/whisper.cpp:${WHISPER_IMAGEN:-main}
+    restart: unless-stopped
+    entrypoint: ["sh", "-c"]
+    command:
+      - >-
+        test -f /modelos/ggml-large-v3-turbo-q5_0.bin || ./models/download-ggml-model.sh large-v3-turbo-q5_0 /modelos;
+        exec whisper-server -m /modelos/ggml-large-v3-turbo-q5_0.bin --host 0.0.0.0 --port 8080
+        --inference-path /v1/audio/transcriptions --convert
+    volumes:
+      - whisper-modelos:/modelos
+
+  # Una sola vez (y cuando cambies de modelo): docker compose … run --rm modelos
+  modelos:
+    image: ollama/ollama:${OLLAMA_VERSION:-latest}
+    profiles: ["modelos"]
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+    entrypoint: ["sh", "-c"]
+    command:
+      - ollama pull ${INFERENCIA_MODELO_LECTOR:-qwen2.5vl:7b}
+    depends_on:
+      - ollama
+
+volumes:
+  ollama-modelos:
+  embeddinggemma-modelos:
+  whisper-modelos:

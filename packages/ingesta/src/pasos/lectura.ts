@@ -138,9 +138,11 @@ export async function leerPliego(
           // de repetición (determinista), la segunda no lo repite.
           const llamada = (n = 0) => {
             const pista = [opciones.pista, n > 0 ? 'Transcribe cada página una sola vez, sin repetir líneas.' : ''].filter(Boolean).join(' ');
-            return conLimite(lector.leerPliego({ ...entrada, ...(pista ? { pista } : {}) }), opciones.limiteMs ?? Math.max(60_000, (hasta - desde + 1) * 20_000), lector.nombre);
+            const leer = lector.leerPliego({ ...entrada, ...(pista ? { pista } : {}) });
+            // Un lector local hace cola en su propia GPU: sin plazo (la espera no es un fallo).
+            return lector.local ? leer : conLimite(leer, opciones.limiteMs ?? Math.max(60_000, (hasta - desde + 1) * 20_000), lector.nombre);
           };
-          return opciones.cobertura && nivel === 0 ? opciones.cobertura.llamar(llamada) : llamada();
+          return opciones.cobertura && nivel === 0 && !lector.local ? opciones.cobertura.llamar(llamada) : llamada();
         },
         { intentos: 2, base: 1500 },
       );

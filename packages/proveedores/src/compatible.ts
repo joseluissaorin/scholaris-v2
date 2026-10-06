@@ -281,6 +281,7 @@ export function crearOpenAICompatible(config: ConfigCompatible): ClienteCompatib
     };
     return {
       nombre: `${prov}:${modelo}`,
+      local: true,
       async leerPliego(entrada: EntradaPliego) {
         let imagenes = entrada.imagenes;
         if (!imagenes?.length && entrada.pdf) {

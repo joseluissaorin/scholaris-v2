@@ -130,6 +130,12 @@ export interface PaginaLeida {
 export interface Lector {
   readonly nombre: string;
   /**
+   * Lector de un servidor propio (una GPU o una CPU, un inquilino): las páginas
+   * esperan en su cola, así que la ingesta no le pone plazo por llamada ni
+   * lanza llamadas de cobertura, que solo duplicarían la cola.
+   */
+  readonly local?: boolean;
+  /**
    * Lee un pliego: varias páginas a la vez, como PDF o como imágenes. Leer por
    * pliegos es lo que hace la ingesta rápida: una llamada, muchas páginas.
    */

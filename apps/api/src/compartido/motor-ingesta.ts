@@ -208,6 +208,7 @@ function claveLector(raiz: string, nombre: string, h: string) {
 export function lectorConMemoria(lector: Lector, almacen: AlmacenAmpliado, raiz: string): Lector {
   return {
     nombre: lector.nombre,
+    ...(lector.local ? { local: true } : {}),
     async leerPliego(entrada) {
       const clave = claveLector(raiz, lector.nombre, await huellaEntrada(entrada));
       const t0 = Date.now();
