@@ -18,7 +18,7 @@ import {
   type ContadorUso, type OpcionesComunes, type UsoProveedor,
 } from './comun.js';
 import { costeTokens, precioDe } from './precios.js';
-import { ESQUEMA_PAGINAS, instruccionesLector, normalizarPaginas, type OpcionesTranscripcion } from './lectura.js';
+import { ESQUEMA_PAGINAS, hayBucle, instruccionesLector, normalizarPaginas, type OpcionesTranscripcion } from './lectura.js';
 import { ErrorPliego, leerPartiendo, type EntradaPliego } from './pliego.js';
 
 export const MODELOS_GEMINI = {
@@ -94,6 +94,11 @@ export interface OpcionesLectorGemini extends OpcionesTranscripcion {
    * con muchas llamadas a la vez es lo más rápido, y con Flash-Lite además lo más fiel (ver RESULTADOS.md).
    */
   maxPaginas?: number;
+  /**
+   * Tokens de salida por página (por defecto 3.000: una página densa da 700-1.100). Corta pronto
+   * los bucles de repetición de Flash-Lite (antes llegaban a 60-88 s); si una página se corta sin
+   * bucle, se repite una vez con 16.000.
+   */
   maxTokensSalida?: number;
 }
 
@@ -199,13 +204,21 @@ export function crearGemini(config: ConfigGemini): ClienteGemini {
           responseMimeType: 'application/json',
           responseJsonSchema: ESQUEMA_PAGINAS,
           mediaResolution: RESOLUCION[o.resolucion ?? 'media'],
-          maxOutputTokens: o.maxTokensSalida ?? 65_536,
+          maxOutputTokens: Math.min(65_536, (o.maxTokensSalida ?? 3_000) * n + 500),
           thinkingConfig: configPensamiento(o.pensamiento ?? nivelPorDefecto(modelo)),
         },
       };
       // Un pliego de 16 páginas densas puede tardar; el tiempo límite crece con las páginas.
-      const { texto, fin } = await generar(modelo, cuerpo, 'leer', { paginas: n, imagenes: e.imagenes?.length ?? 0 }, Math.max(config.timeoutMs ?? 0, 60_000 + n * 20_000));
-      if (fin === 'MAX_TOKENS') throw new ErrorPliego('gemini', `salida cortada (${n} páginas)`);
+      const plazo = Math.max(config.timeoutMs ?? 0, 60_000 + n * 20_000);
+      let { texto, fin } = await generar(modelo, cuerpo, 'leer', { paginas: n, imagenes: e.imagenes?.length ?? 0 }, plazo);
+      if (fin === 'MAX_TOKENS' && n === 1 && !hayBucle(texto)) {
+        // Página de verdad larga (notas, tablas): una segunda oportunidad con más margen.
+        cuerpo.generationConfig.maxOutputTokens = 16_000;
+        ({ texto, fin } = await generar(modelo, cuerpo, 'leer', { paginas: n, imagenes: e.imagenes?.length ?? 0 }, plazo));
+      }
+      if (fin === 'MAX_TOKENS') {
+        throw new ErrorPliego('gemini', hayBucle(texto) ? `bucle de repetición (${n} página(s))` : `salida cortada (${n} páginas)`);
+      }
       // Gemini corta la salida que reproduce texto protegido (pasa con libros con derechos):
       // la cascada pasa la página al siguiente lector.
       if (fin === 'RECITATION') throw new ErrorPliego('gemini', `bloqueo por recitación (texto con derechos) en ${n} página(s)`);

@@ -42,6 +42,17 @@ describe('Gemini · lector', () => {
     expect(llamadas.every((l) => l.url.includes('gemini-3.8-flash:generateContent'))).toBe(true);
   });
 
+  it('corta los bucles pronto (3.000 tokens por página) y da una segunda oportunidad a las páginas largas', async () => {
+    const bucle = fetchFalso(() => respuestaGemini('{"paginas":[{"fisica":1,"texto":"' + 'y la la la '.repeat(200), { fin: 'MAX_TOKENS' }));
+    await expect(crearGemini({ clave: 'K', fetch: bucle.fetch }).lector().leerPliego({ imagenes: IMG(1), primeraFisica: 1 })).rejects.toThrow(/bucle de repetición/);
+    expect(bucle.llamadas).toHaveLength(1);
+    expect((bucle.llamadas[0]?.cuerpo as Cuerpo).generationConfig.maxOutputTokens).toBe(3500);
+    const larga = fetchFalso((_, n) => (n === 1 ? respuestaGemini('{"paginas":[{"fisica":1,"texto":"Una nota muy larga', { fin: 'MAX_TOKENS' }) : respuestaGemini(paginasJSON(1, 1))));
+    const [p] = await crearGemini({ clave: 'K', fetch: larga.fetch }).lector().leerPliego({ imagenes: IMG(1), primeraFisica: 1 });
+    expect(p?.confianza).toBeGreaterThan(0.5);
+    expect((larga.llamadas[1]?.cuerpo as Cuerpo).generationConfig.maxOutputTokens).toBe(16000);
+  });
+
   it('manda el PDF en línea y pasa por AI Gateway con baseUrl', async () => {
     const pdf = await pdfDePaginas(2);
     const { fetch, llamadas } = fetchFalso(() => respuestaGemini(paginasJSON(1, 2)));
