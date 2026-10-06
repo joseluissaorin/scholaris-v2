@@ -172,3 +172,61 @@ El plan calculaba unos 0,10 $ por leer 300 páginas con Workers AI; esta máquin
 - OpenRouter estaba sin saldo (402) durante las pruebas. El tercer escalón de la cascada no se pudo usar.
 - La red de casa influye. Los tiempos en Workers, que llaman a Google desde la red de Cloudflare, deberían ser más estables.
 - No medí la recuperación (Recall@20, nDCG). Eso es del banco de búsqueda.
+
+## Transcripción: instantes por palabra y segunda escucha
+
+**Instantes exactos por palabra.** Cada unidad de audio o vídeo guarda el instante de cada palabra de su texto en la columna nueva `unidades.palabras` (SPDF 4.1, añadida con una migración idempotente y probada aplicándola dos veces). El formato es `{"v":1,"t0":…,"cs":[inicio,duración,…]}`, en centésimas desde `t0`. Hay una entrada por palabra separada por espacios, sin contar las marcas «**Nombre:**», que es justo como trocea el texto el reproductor. Los instantes se conservan al consolidar, al atribuir hablantes y al corregir frases.
+
+| Entrevista | Unidades con instantes | Bien alineadas | Tamaño |
+|---|---|---|---|
+| Cabral (54 min) | 67 | 67 | 60 KB |
+| Cortázar (2 h) | 155 | 155 | 157 KB |
+
+**Segunda escucha** (`pasos/revision.ts`). Funciona en tres pasos:
+
+1. El Redactor (3.8 Flash) criba la transcripción en ventanas de 60 frases y señala solo los errores probables de reconocimiento. Las muletillas y repeticiones del habla no cuentan como errores.
+2. Cada tramo de audio con frases señaladas se vuelve a escuchar entero con Gemini 3.8 Flash, con la ficha, los hablantes y los nombres propios del documento.
+3. El texto nuevo se alinea palabra a palabra con el antiguo. Solo se sustituyen las frases señaladas, cada palabra hereda el instante exacto de aquella con la que casa, y no se acepta un cambio que pierda más del 15 % del texto.
+
+La segunda escucha y la atribución de hablantes corren a la vez.
+
+El transcriptor de Gemini no admite vocabulario propio cuando se piden instantes por palabra: la API responde 400. Proveedores ya lo quitó.
+
+| | Cabral | Cortázar | Total |
+|---|---|---|---|
+| Frases cribadas | 595 | 890 | 1.485 |
+| Señaladas | 31 | 43 | 74 (5 %) |
+| Tramos reescuchados | 10 | 22 | 32 |
+| Frases cambiadas | 24 | 39 | 63 |
+| Cambios mejores (anotados a mano) | 17 | 28 | **45 (71 %)** |
+| Cambios dudosos (no se puede decidir sin oír el audio) | 6 | 10 | 16 (25 %) |
+| Cambios peores | 1 | 1 | **2 (3 %)** |
+| Coste añadido | +0,12 $ | +0,26 $ | |
+| Tiempo añadido a «listo» | +7 s (38,6 → 45,8 s) | +28 s (52 → 80 s) | |
+
+Ejemplos de mejoras:
+
+- «Un amor decía» → «Unamuno decía»
+- «una frase de Atahualpa que en la Persia del siglo pasado decía» → «Bahá'u'lláh»
+- «los abusos alemanes» → «los obuses alemanes»
+- «en el Sinki» → «en Helsinki»
+- «la alegación argentina» → «la legación argentina»
+- «se llamaba de modo que» → «se llamaba Temperley, de modo que»
+- «en un fardo» → «en lunfardo»
+- «Son son estos» → «son sonetos»
+- «noticias sobre y sobre» → «sobre Keats»
+- «un estado que llaman los franceses que es» → «état second»
+- «Julio Dumas» → «Alejandro Dumas»
+- «la Nuse» → «Lanusse»
+- «John Carter» → «Johnny Carter»
+
+Los dos empeoramientos:
+
+- «que va a ver tu nieto» → «va a haber».
+- «de las ciudades propias de América» pierde «ciudades propias».
+
+«Está no es» (Cortázar, 1:07:18), uno de los ejemplos del aviso, se queda como dudoso. Las dos escuchas oyen frases cortas superpuestas («Están a veces», «Están en la a veces»): son dos personas hablando a la vez sobre unos libros, y sin oír el audio no se puede decir cuál es la buena.
+
+En una muestra al azar de 60 frases del resultado final (30 por entrevista), no quedaba ningún error evidente de reconocimiento. Hay cortes de frase («del Dr.») y fragmentos de habla superpuesta, que son del habla y del troceado, no del reconocimiento. Las muestras anotadas están en `bench/resultados/transcripcion/`.
+
+**Limitación de la medición.** Está anotada leyendo el texto, sin oír el audio. Solo cuenta como mejora un cambio evidente por el sentido, la gramática o un dato comprobable: nombres, lugares, títulos. Todo lo demás va como dudoso.
