@@ -120,7 +120,7 @@ export function detectar(bytes: Uint8Array, nombre: string, mime?: string): Dete
   }
   if (!f) {
     // ¿Texto? Mira si parece HTML o Markdown.
-    const cabeza = new TextDecoder('utf-8', { fatal: false }).decode(b.subarray(0, 2048)).trimStart().toLowerCase();
+    const cabeza = new TextDecoder('utf-8', { fatal: false, ignoreBOM: false }).decode(b.subarray(0, 2048)).trimStart().toLowerCase();
     if (cabeza.startsWith('<!doctype html') || cabeza.startsWith('<html') || cabeza.includes('<body')) f = 'html';
     else f = 'txt';
   }

@@ -10,7 +10,7 @@ export function decodificarTexto(b: Uint8Array): string {
   if (b[0] === 0xff && b[1] === 0xfe) return new TextDecoder('utf-16le').decode(b.subarray(2));
   if (b[0] === 0xfe && b[1] === 0xff) return new TextDecoder('utf-16be').decode(b.subarray(2));
   try {
-    return new TextDecoder('utf-8', { fatal: true }).decode(b).replace(/^﻿/, '');
+    return new TextDecoder('utf-8', { fatal: true, ignoreBOM: false }).decode(b).replace(/^﻿/, '');
   } catch {
     return new TextDecoder('windows-1252').decode(b);
   }
