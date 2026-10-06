@@ -1,0 +1,111 @@
+# Versión: al empujar una etiqueta vX.Y.Z se compilan los ejecutables de
+# escritorio (macOS, Windows y Linux) y la imagen Docker, que va a
+# ghcr.io/joseluissaorin/scholaris, y se crea la versión en GitHub con los
+# ejecutables adjuntos. No necesita más secretos que el GITHUB_TOKEN.
+name: Versión
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  escritorio:
+    name: Ejecutables de escritorio
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - uses: oven-sh/setup-bun@v2
+      - name: Dependencias
+        run: pnpm install --frozen-lockfile
+      - name: Web
+        run: pnpm --filter @scholaris/web build
+      - name: Ejecutables (Bun compila los cinco desde Linux)
+        run: bun run apps/escritorio/build.ts macos-arm64 macos-x64 windows-x64 linux-x64 linux-arm64
+      - name: Empaquetar
+        run: |
+          cd apps/escritorio/dist
+          mkdir -p ../paquetes
+          for f in scholaris-*; do
+            case "$f" in *.map) continue ;; esac
+            if [[ "$f" == *windows* ]]; then
+              zip -j "../paquetes/${f%.exe}.zip" "$f"
+            else
+              chmod +x "$f"
+              tar -czf "../paquetes/$f.tar.gz" "$f"
+            fi
+          done
+          cd ../paquetes && sha256sum * > SHA256SUMS.txt && ls -la
+      - uses: actions/upload-artifact@v4
+        with:
+          name: escritorio
+          path: apps/escritorio/paquetes/*
+
+  docker:
+    name: Imagen Docker
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/joseluissaorin/scholaris
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
+            type=sha
+          labels: |
+            org.opencontainers.image.title=Scholaris
+            org.opencontainers.image.description=Tu biblioteca, leída y citable: la versión local de Scholaris.
+            org.opencontainers.image.licenses=EUPL-1.2
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deploy/docker/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  version:
+    name: Versión en GitHub
+    needs: [escritorio, docker]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: escritorio
+          path: paquetes
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: paquetes/*
+          generate_release_notes: true
+          body: |
+            Ejecutables de escritorio (un solo fichero; los datos van a ~/Scholaris) e imagen Docker:
+
+                docker pull ghcr.io/joseluissaorin/scholaris:latest
+
+            Instrucciones en el README.
