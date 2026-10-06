@@ -91,7 +91,7 @@ interface RespuestaGenerar {
 export interface ClienteGemini {
   readonly contador: ContadorUso;
   lector(o?: OpcionesLectorGemini): Lector & { readonly modelo: string };
-  embebedor(o?: OpcionesEmbebedorGemini): Embebedor;
+  embebedor(o?: OpcionesEmbebedorGemini): EmbebedorGemini;
   redactor(o?: OpcionesRedactorGemini): Redactor;
   transcriptor(o?: OpcionesTranscriptorGemini): Transcriptor;
   /** Modo económico: lectura por la Batch API (50 % del precio, hasta 24 h). */
@@ -126,7 +126,24 @@ export interface OpcionesEmbebedorGemini {
   dims?: number;
   /** Piezas por llamada a batchEmbedContents. */
   lote?: number;
+  /**
+   * Vectores de consulta guardados en memoria (LRU, por texto). Una consulta repetida no
+   * vuelve a la API: 0 ms frente a ~330 ms. Por defecto 2.000; 0 lo apaga.
+   */
+  cacheConsultas?: number;
+  /**
+   * Con `baseUrl` de AI Gateway: segundos de caché del gateway para las consultas
+   * (`cf-aig-cache-ttl`). Medido desde fuera de Cloudflare: acierto 121 ms, fallo +170 ms
+   * sobre la llamada directa; solo compensa con muchas consultas repetidas entre instancias.
+   */
+  cacheGatewaySegundos?: number;
 }
+
+/** Embebedor con extras: abrir la conexión antes de la primera consulta. */
+export type EmbebedorGemini = Embebedor & {
+  /** Abre la conexión TLS con una petición gratuita (la primera consulta en frío tarda ~550 ms; en caliente, ~330). */
+  precalentar(): Promise<void>;
+};
 
 export interface OpcionesRedactorGemini {
   modeloRapido?: string;
@@ -283,7 +300,7 @@ export function crearGemini(config: ConfigGemini): ClienteGemini {
   // Embebedor
   // -------------------------------------------------------------------------
 
-  function embebedor(o: OpcionesEmbebedorGemini = {}): Embebedor {
+  function embebedor(o: OpcionesEmbebedorGemini = {}): EmbebedorGemini {
     const modelo = o.modelo ?? MODELOS_GEMINI.embebedor;
     const dims = o.dims ?? 1536;
     const lote = Math.min(100, o.lote ?? 100);
@@ -305,10 +322,11 @@ export function crearGemini(config: ConfigGemini): ClienteGemini {
       }
     };
 
-    return {
-      espacio,
-      admite: (m: Modalidad) => espacio.modalidades.includes(m),
-      async vectorizar(piezas, tarea) {
+    const maxCache = o.cacheConsultas ?? 2000;
+    const cache = new Map<string, Float32Array>();
+    const cabecerasEmb = o.cacheGatewaySegundos ? { 'cf-aig-cache-ttl': String(o.cacheGatewaySegundos) } : {};
+
+    const crudo = async (piezas: PiezaEmbebible[], tarea: 'documento' | 'consulta'): Promise<Float32Array[]> => {
         if (piezas.length === 0) return [];
         // Lotes por número y por tamaño (las peticiones en línea no deben pasar de ~18 MB).
         const lotes: number[][] = [];
@@ -324,7 +342,7 @@ export function crearGemini(config: ConfigGemini): ClienteGemini {
         await enParalelo(lotes, config.concurrencia ?? 8, async (indices) => {
           const t0 = ahora();
           const r = await limitar(() => pedir<{ embeddings?: Array<{ values: number[] }>; usageMetadata?: { promptTokenCount?: number; promptTokenDetails?: Array<{ modality: string; tokenCount: number }> } }>({
-            proveedor: 'gemini', url: `${base}/v1beta/models/${modelo}:batchEmbedContents`, cabeceras,
+            proveedor: 'gemini', url: `${base}/v1beta/models/${modelo}:batchEmbedContents`, cabeceras: tarea === 'consulta' ? { ...cabeceras, ...cabecerasEmb } : cabeceras,
             cuerpo: { requests: indices.map((i) => ({ model: `models/${modelo}`, content: { parts: [parte(piezas[i] as PiezaEmbebible, tarea)] }, outputDimensionality: dims })) },
           }, config));
           const emb = r.embeddings ?? [];
@@ -338,6 +356,35 @@ export function crearGemini(config: ConfigGemini): ClienteGemini {
           const usd = p ? (tokTexto * p.entrada + Math.max(0, total - tokTexto) * (p.entradaAudio ?? p.entrada)) / 1e6 : undefined;
           apuntar({ proveedor: 'gemini', modelo, operacion: 'vectorizar', tokensEntrada: total, tokensSalida: 0, imagenes, usd, ms: ahora() - t0, estimado: !r.usageMetadata });
         });
+        return salida;
+    };
+
+    return {
+      espacio,
+      admite: (m: Modalidad) => espacio.modalidades.includes(m),
+      async precalentar() {
+        await pedir({ proveedor: 'gemini', url: `${base}/v1beta/models/${modelo}`, cabeceras }, { ...config, intentos: 1, timeoutMs: 10_000 }).catch(() => undefined);
+      },
+      async vectorizar(piezas, tarea) {
+        if (tarea !== 'consulta' || maxCache <= 0) return crudo(piezas, tarea);
+        const salida = new Array<Float32Array>(piezas.length);
+        const faltan: number[] = [];
+        piezas.forEach((p, i) => {
+          const v = p.modalidad === 'texto' ? cache.get(p.texto) : undefined;
+          if (v) { salida[i] = v; cache.delete((p as { texto: string }).texto); cache.set((p as { texto: string }).texto, v); } else faltan.push(i);
+        });
+        if (faltan.length) {
+          const nuevos = await crudo(faltan.map((i) => piezas[i] as PiezaEmbebible), tarea);
+          faltan.forEach((i, k) => {
+            const v = nuevos[k] as Float32Array;
+            salida[i] = v;
+            const p = piezas[i] as PiezaEmbebible;
+            if (p.modalidad === 'texto') {
+              cache.set(p.texto, v);
+              if (cache.size > maxCache) cache.delete(cache.keys().next().value as string);
+            }
+          });
+        }
         return salida;
       },
     };

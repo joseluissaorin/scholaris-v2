@@ -130,14 +130,16 @@ export function crearJev(config: ConfigJev): ClienteJev {
   }
 
   function reordenador(o: { pasajesPorPeticion?: number; instrucciones?: string; criterios?: { si: string; no: string } } = {}): Reordenador {
-    const porPeticion = o.pasajesPorPeticion ?? 24;
+    // 10 por petición, en paralelo: ~70 ms menos que 24 sin perder calidad (banco de calidad, 6-10-2026).
+    const porPeticion = o.pasajesPorPeticion ?? 10;
     // Instrucciones en inglés (idioma principal de Jev); el estado queda en el idioma del usuario.
     const criterios = o.criterios ?? {
       si: 'The passage contains information that directly answers or substantively addresses the query.',
       no: 'The passage is off-topic, only loosely related, or does not help answer the query.',
     };
     return {
-      nombre: `jev:${modelo}`,
+      // El tamaño de lote va en el nombre: cambia las puntuaciones (contexto compartido), así que las cachés no se mezclan.
+      nombre: `jev:${modelo}×${porPeticion}`,
       async reordenar(consulta, textos) {
         if (!textos.length) return [];
         // Lotes por número y por tamaño del estado.

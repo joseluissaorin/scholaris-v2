@@ -132,6 +132,21 @@ describe('Gemini · embebedor', () => {
     expect(((llamadas[1]?.cuerpo as typeof llamadas[0]['cuerpo'] & { requests: Array<{ content: { parts: Array<{ text: string }> } }> }).requests[0]?.content.parts[0]?.text)).toBe('task: search result | query: pregunta');
   });
 
+  it('guarda en memoria los vectores de consulta (no los de documento) y manda la caché del gateway si se pide', async () => {
+    const { fetch, llamadas } = fetchFalso((ll) => (ll.metodo === 'GET' ? { name: 'm' } : { embeddings: (ll.cuerpo as { requests: unknown[] }).requests.map(() => ({ values: [1, 0] })) }));
+    const e = crearGemini({ clave: 'K', fetch }).embebedor({ dims: 2, cacheGatewaySegundos: 3600 });
+    await e.precalentar();
+    expect(llamadas[0]?.url).toBe('https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-2');
+    await e.vectorizar([{ modalidad: 'texto', texto: 'a' }], 'consulta');
+    const [v] = await e.vectorizar([{ modalidad: 'texto', texto: 'a' }, { modalidad: 'texto', texto: 'b' }], 'consulta');
+    await e.vectorizar([{ modalidad: 'texto', texto: 'a' }], 'documento');
+    expect(v?.length).toBe(2);
+    const posts = llamadas.filter((l) => l.metodo === 'POST');
+    expect(posts.map((l) => (l.cuerpo as { requests: unknown[] }).requests.length)).toEqual([1, 1, 1]);
+    expect(posts[0]?.cabeceras['cf-aig-cache-ttl']).toBe('3600');
+    expect(posts[2]?.cabeceras['cf-aig-cache-ttl']).toBeUndefined();
+  });
+
   it('parte en lotes de 100', async () => {
     const { fetch, llamadas } = fetchFalso((ll) => ({ embeddings: (ll.cuerpo as { requests: unknown[] }).requests.map(() => ({ values: [1, 0] })) }));
     const v = await crearGemini({ clave: 'K', fetch }).embebedor({ dims: 2 }).vectorizar(Array.from({ length: 250 }, (_, i) => ({ modalidad: 'texto' as const, texto: `t${i}` })), 'documento');

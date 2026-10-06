@@ -14,7 +14,7 @@ quedan en `vivo/resultados/*.md`. Precios de la API con clave, comprobados ese d
 | Embebedor | `gemini-embedding-2`, 1536 dims | Texto, imagen, PDF y audio en un espacio; 159 fragmentos/s |
 | Redactor | «rapida» `gemini-3.5-flash-lite`, «alta» `gemini-3.8-flash` | Caché explícita del sistema largo: 9.667 de 9.698 tokens servidos de caché |
 | Transcriptor | Whisper large-v3-turbo (Workers AI); `gemini-3.5-transcribe` si se piden hablantes | Whisper: 0,0005 $/min; Gemini: hablantes y palabras, 0,005 $/min |
-| Reordenador y juez | Jev (`jev-latest` = jev-1.13.0) | 0,3-0,4 s por petición con todas las preguntas juntas |
+| Reordenador y juez | Jev (`jev-latest` = jev-1.13.0); reordenador en lotes de 10 pasajes en paralelo | Banco de calidad: nDCG@10 0,889 igual que con 24; reordenación 295 ms frente a 325 |
 
 ## Lector: por qué una página por llamada
 
@@ -148,6 +148,24 @@ pequeños, el resultado llega en 2-4 minutos; Google promete menos de 24 h.
 Embedding 2 no admite `task_type`: la tarea va en el texto
 (`task: search result | query: …` y `title: none | text: …`). El vector a 1536
 llega normalizado; se renormaliza igualmente.
+
+### Latencia del vector de consulta (~330 ms)
+
+| variante | mediana | nota |
+|---|---|---|
+| `batchEmbedContents`, conexión fría | 551 ms (primera) | apertura TLS |
+| `batchEmbedContents` en caliente | 330-345 ms | `server-timing` de Google: ~290 ms |
+| `embedContent` (una sola pieza) | 333 ms | sin diferencia apreciable |
+| 768 dims en vez de 1536 | 342 ms | sin diferencia |
+| AI Gateway sin caché (desde fuera de Cloudflare) | 501 ms | +170 ms |
+| AI Gateway, acierto de caché | 121 ms | `cf-aig-cache-ttl` |
+| caché en memoria del embebedor (consulta repetida) | 0 ms | nueva, LRU de 2.000 |
+
+El tiempo es casi todo cálculo en Google (no hay nivel prioritario para Embedding 2 ni
+endpoint regional en la API de Gemini). Lo que se puede ganar: `precalentar()` al
+arrancar (quita ~200 ms a la primera consulta), la caché en memoria para consultas
+repetidas y, en Workers, la caché del gateway (`cacheGatewaySegundos`) si hay muchas
+repeticiones entre instancias.
 
 ## Redactor (línea de contexto con el libro en el sistema, ~9.700 tokens)
 
