@@ -204,6 +204,7 @@ export async function ingerir(ruta: string, o: OpcionesBanco = {}) {
     primeraBusqueda: busqueda ? await busqueda : null,
   };
   await writeFile(join(SALIDA, `${etiqueta}.informe.json`), JSON.stringify(informe, null, 2));
+  if (r.cambiosTranscripcion?.length) await writeFile(join(SALIDA, `${etiqueta}.cambios.json`), JSON.stringify(r.cambiosTranscripcion, null, 1));
   await mkdir(join(SALIDA, 'historial'), { recursive: true });
   await writeFile(join(SALIDA, 'historial', `${etiqueta}.${new Date().toISOString().replace(/[:.]/g, '-')}.json`), JSON.stringify({ ...informe, procedencia: r.procedencia.filter((p) => p.ms > 5000 || p.fase !== 'lectura') }, null, 2));
   archivo.cerrar();

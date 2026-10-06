@@ -42,7 +42,7 @@ const reloj2 = (t: number) => { const s = Math.round(t); return `${Math.floor(s 
 
 /** 1. Cribado: índices de frase sospechosos, con el motivo. */
 export async function cribarFrases(frases: FraseIndexada[], meta: MetadatosDocumento, redactor: Redactor, opciones: OpcionesRevision = {}): Promise<Map<number, string>> {
-  const tam = opciones.ventana ?? 150;
+  const tam = opciones.ventana ?? 60;
   const ventanas: FraseIndexada[][] = [];
   for (let i = 0; i < frases.length; i += tam) ventanas.push(frases.slice(i, i + tam));
   const nombres = (opciones.nombres ?? []).slice(0, 60).join(', ');
@@ -109,18 +109,22 @@ export function alinear(antiguas: string[], nuevas: string[]): number[] {
  * con ellas, con instantes heredados o interpolados. Devuelve null si el
  * tramo nuevo no se puede casar con seguridad.
  */
-export function sustituir(palabras: PalabraTranscrita[], desde: number, hasta: number, nuevas: string[], casa: number[], baseAntigua: number): PalabraTranscrita[] | null {
+export function sustituir(palabras: PalabraTranscrita[], desde: number, hasta: number, nuevas: string[], casa: number[], baseAntigua: number, usadas: Set<number> = new Set()): PalabraTranscrita[] | null {
   // Nuevas palabras que caen dentro de la frase: las casadas con [desde, hasta) y las insertadas entre ellas.
   const dentro = casa.map((k, j) => ({ j, k: k < 0 ? -1 : k + baseAntigua })).filter((x) => x.k >= desde && x.k < hasta);
   if (!dentro.length) return null;
   const j0 = (dentro[0] as { j: number }).j, j1 = (dentro.at(-1) as { j: number }).j;
   // Insertadas justo antes de la primera o después de la última, si las anteriores/siguientes casadas quedan fuera.
   let a = j0, b = j1;
-  while (a > 0 && casa[a - 1] === -1) a--;
-  while (b < nuevas.length - 1 && casa[b + 1] === -1) b++;
-  const tramo = Array.from({ length: b - a + 1 }, (_, i) => a + i);
+  while (a > 0 && casa[a - 1] === -1 && !usadas.has(a - 1)) a--;
+  while (b < nuevas.length - 1 && casa[b + 1] === -1 && !usadas.has(b + 1)) b++;
+  const tramo = Array.from({ length: b - a + 1 }, (_, i) => a + i).filter((j) => !usadas.has(j));
   const largo = hasta - desde;
-  if (tramo.length > largo * 2 + 3 || tramo.length < largo / 2 - 1) return null;
+  if (!tramo.length || tramo.length > largo * 2 + 3 || tramo.length < largo / 2 - 1) return null;
+  // Que no se pierda texto: al menos el 85 % de las palabras antiguas tiene que casar con alguna nueva.
+  const casadas = new Set(tramo.map((j) => (casa[j] as number) + baseAntigua).filter((k) => k >= desde && k < hasta));
+  if (casadas.size < largo * 0.85) return null;
+  for (const j of tramo) usadas.add(j);
   const hablante = palabras[desde]?.hablante;
   const salida: PalabraTranscrita[] = [];
   const t0Frase = (palabras[desde] as PalabraTranscrita).t0, t1Frase = (palabras[hasta - 1] as PalabraTranscrita).t1;
@@ -215,8 +219,9 @@ export async function revisarTranscripcion(
       if (!indices.length || !nuevas.length) return;
       const base = (indices[0] as { i: number }).i;
       const casa = alinear(indices.map((x) => x.w.texto), nuevas);
+      const usadas = new Set<number>();
       for (const f of fs) {
-        const r = sustituir(palabras, f.desde, f.hasta, nuevas, casa, base);
+        const r = sustituir(palabras, f.desde, f.hasta, nuevas, casa, base, usadas);
         if (!r) continue;
         const despues = r.map((w) => w.texto).join(' ');
         if (exacta(despues) === exacta(f.texto)) continue;

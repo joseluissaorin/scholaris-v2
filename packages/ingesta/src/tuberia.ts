@@ -516,7 +516,7 @@ export async function consolidar(
   // Segunda escucha de lo que suena a error de reconocimiento (medios).
   if (medio && ctx.opciones.revisarTranscripcion !== false && palabras.length) {
     tm = reloj();
-    const r = await revisarTranscripcion(palabras, plan.tramos, puertos.fuente, meta, ia.redactor, { reloj, concurrencia: 8 }).catch(() => null);
+    const r = await revisarTranscripcion(palabras, plan.tramos, puertos.fuente, meta, ia.redactor, { reloj, concurrencia: 24 }).catch(() => null);
     if (r) {
       procedencia.push(r.procedencia);
       if (r.cambios.length) {
