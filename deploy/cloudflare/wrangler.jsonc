@@ -46,7 +46,7 @@
   "containers": [
     {
       "class_name": "Conversor",
-      "image": "registry.cloudflare.com/f22c7a728ddc8e41cefd2644f8fb7632/scholaris-conversor:20261007a",
+      "image": "registry.cloudflare.com/f22c7a728ddc8e41cefd2644f8fb7632/scholaris-conversor:20261007b",
       "instance_type": "standard-4",
       "max_instances": 3
     }
@@ -124,7 +124,7 @@
       "containers": [
         {
           "class_name": "Conversor",
-          "image": "registry.cloudflare.com/f22c7a728ddc8e41cefd2644f8fb7632/scholaris-conversor:20261007a",
+          "image": "registry.cloudflare.com/f22c7a728ddc8e41cefd2644f8fb7632/scholaris-conversor:20261007b",
           "instance_type": "standard-4",
           "max_instances": 3
         }
