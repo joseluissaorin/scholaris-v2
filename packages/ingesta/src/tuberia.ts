@@ -117,6 +117,8 @@ export interface EstadoTanda {
   idioma?: string;
   procedencia: Procedencia[];
   avisos: string[];
+  /** Ya tiene contexto y vectores (o no los tendrá: medios). */
+  enriquecida?: boolean;
 }
 
 export interface ResumenTanda {
@@ -333,6 +335,12 @@ export async function indexarTanda(
   fragmentos.forEach((f, i) => { f.id = `${documento}:t${t.id}.${i}`; f.orden = (unidades[0]?.orden ?? 0) * 1000 + i; });
   await escribir(sql, (tx) => spdf.escribirFragmentos(tx, fragmentos.map((f) => aFilaFragmento(documento, f, idU))));
   const buscable: ResumenTanda = { tanda: t.id, legibles, buscables: unidades.length, fragmentos: fragmentos.length, vectores: 0, ms: reloj() - t0 };
+  // Estado mínimo ya: la consolidación puede empezar con las unidades mientras se enriquece el resto.
+  await guardarJson(ctx, claveTanda(documento, t.id), {
+    tanda: t.id, unidades, fragmentos: fragmentos.map((f) => ({ id: f.id, texto: f.texto, seccion: f.seccion, contexto: '', vector: false })),
+    ...(lectura.palabras ? { palabras: lectura.palabras } : {}), ...(lectura.idioma ? { idioma: lectura.idioma } : {}),
+    procedencia: [...lectura.procedencia], avisos: lectura.avisos, enriquecida: false,
+  } satisfies EstadoTanda);
   extras.alBuscables?.(buscable);
 
   // 3. Contexto y vectores (no en medios: ahí se rehace todo al consolidar, con los hablantes).
@@ -370,6 +378,7 @@ export async function indexarTanda(
     ...(lectura.idioma ? { idioma: lectura.idioma } : {}),
     procedencia,
     avisos: lectura.avisos,
+    enriquecida: true,
   };
   await guardarJson(ctx, claveTanda(documento, t.id), estado);
   return { ...buscable, vectores: nVectores, ms: reloj() - t0 };
@@ -427,7 +436,18 @@ export interface ResultadoConsolidacion {
  * costuras entre tandas, hablantes, figuras; reaprovecha todo fragmento
  * provisional que salga igual y rehace solo los demás.
  */
-export async function consolidar(ctx: ContextoTuberia, extras: { metadatos?: MetadatosDocumento | null; hablantes?: Record<string, string> } = {}): Promise<ResultadoConsolidacion> {
+export async function consolidar(
+  ctx: ContextoTuberia,
+  extras: {
+    metadatos?: MetadatosDocumento | null | Promise<MetadatosDocumento | null>;
+    /**
+     * Orquestador local: la consolidación empieza en cuanto todo está LEÍDO (folios,
+     * secciones, troceado, figuras) y espera aquí a que las tandas terminen de
+     * enriquecerse antes de reaprovechar sus contextos y vectores.
+     */
+    esperarTandas?: Promise<unknown>;
+  } = {},
+): Promise<ResultadoConsolidacion> {
   const { paquete, plan, puertos, documento } = ctx;
   const sql = puertos.sql;
   const ia = puertos.inteligencia;
@@ -451,7 +471,7 @@ export async function consolidar(ctx: ContextoTuberia, extras: { metadatos?: Met
 
   // Metadatos (si no llegaron antes).
   let tm = reloj();
-  let meta = extras.metadatos ?? (await leerJson<{ metadatos: MetadatosDocumento; hablantes?: Record<string, string> }>(ctx, claveMetadatos(documento)))?.metadatos ?? null;
+  let meta = (await Promise.resolve(extras.metadatos ?? null).catch(() => null)) ?? (await leerJson<{ metadatos: MetadatosDocumento; hablantes?: Record<string, string> }>(ctx, claveMetadatos(documento)))?.metadatos ?? null;
   let unidades: UnidadLeida[];
   let palabras: PalabraTranscrita[] = [];
   if (medio) {
@@ -501,7 +521,21 @@ export async function consolidar(ctx: ContextoTuberia, extras: { metadatos?: Met
   let finales = medio ? fragmentosDeMedio(unidades) : trocear(unidades, est.secciones, { ...ctx.opciones.troceado, cortes });
   marca('estructura', tm);
 
-  // Reconciliar con los provisionales: mismo texto y sección → mismo id, contexto y vectores.
+  // Las figuras no dependen de nada más: se empiezan ya.
+  const figurasP = pasoFiguras(paquete, unidades, puertos.fuente, ia.redactor, { reloj, describir: ctx.opciones.describirFiguras !== false, ...(meta.idioma ? { idioma: meta.idioma } : {}), contexto: `«${meta.titulo}»` });
+  figurasP.catch(() => undefined);
+
+  // Reconciliar con los provisionales, ya enriquecidos: mismo texto y sección → mismo id, contexto y vectores.
+  if (extras.esperarTandas) {
+    tm = reloj();
+    await extras.esperarTandas.catch(() => undefined);
+    provisionales.length = 0;
+    for (const t of [...plan.tandas].sort((a, b) => a.id - b.id)) {
+      const e = await leerJson<EstadoTanda>(ctx, claveTanda(documento, t.id));
+      if (e) { provisionales.push(...e.fragmentos); if (e.enriquecida) procedencia.push(...e.procedencia.slice(estados.find((x) => x.tanda === e.tanda)?.procedencia.length ?? 0)); }
+    }
+    marca('esperaTandas', tm);
+  }
   const porClave = new Map(provisionales.map((p) => [`${p.seccion.join('›')}|${p.texto}`, p]));
   const usados = new Set<string>();
   const pendientesContexto: FragmentoPlano[] = [];
@@ -519,7 +553,11 @@ export async function consolidar(ctx: ContextoTuberia, extras: { metadatos?: Met
       else reaprovechados++;
     } else {
       f.id = `${documento}:c${huellaCorta(`${i}|${f.seccion.join('›')}|${f.texto}`)}`;
-      pendientesContexto.push(f);
+      // Una costura (cola de una tanda + cabo de la siguiente) cuenta lo mismo que su cola:
+      // se reaprovecha su línea de contexto y solo se vuelve a vectorizar.
+      const cabeza = f.texto.slice(0, 160);
+      const madre = medio || cabeza.length < 60 ? undefined : provisionales.find((q) => q.contexto && !usados.has(q.id) && q.seccion.join('›') === f.seccion.join('›') && (q.texto.startsWith(cabeza) || f.texto.startsWith(q.texto.slice(0, 160))));
+      if (madre) f.contexto = madre.contexto; else pendientesContexto.push(f);
       pendientesVector.add(f.id);
     }
   });
@@ -565,7 +603,6 @@ export async function consolidar(ctx: ContextoTuberia, extras: { metadatos?: Met
   tm = reloj();
   const tiemposVector = new Map<string, number>();
   for (const f of finales) if (f.ancla.tipo === 'tiempo') tiemposVector.set(f.id, f.ancla.t0);
-  const figurasP = pasoFiguras(paquete, unidades, puertos.fuente, ia.redactor, { reloj, describir: ctx.opciones.describirFiguras !== false, ...(meta.idioma ? { idioma: meta.idioma } : {}), contexto: `«${meta.titulo}»` });
   const vf = await vectorizarYGuardar(ctx, finales.filter((f) => pendientesVector.has(f.id)).map((f) => ({ objetivo: 'fragmento' as const, id: f.id, texto: textoVectorizable(f) })), documentoFinal, tiemposVector);
   procedencia.push(...vf.procedencia.map((p) => ({ ...p, detalle: { ...p.detalle, que: 'fragmentos-consolidacion' } })));
   const fig = await figurasP;

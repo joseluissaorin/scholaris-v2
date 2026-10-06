@@ -137,6 +137,8 @@ export async function ejecutarIngesta(paquete: PaqueteConversion, puertos: Puert
   // --- las tandas: leer (con su límite de concurrencia) e indexar (sin bloquear la lectura)
   const cobertura = new Cobertura(15_000, 2.2, reloj);
   const indexaciones: Array<Promise<ResumenTanda>> = [];
+  /** Una por tanda: se cumple cuando su texto ya es buscable y su estado está guardado. */
+  const yaBuscables: Array<Promise<void>> = [];
   let vectorizadas = 0;
   await enParalelo(plan.tandas, plan.concurrencia, async (t) => {
     const lectura = await leerTanda(t, ctx, { cobertura, ...(resultadosLote ? { resultadosLote } : {}) });
@@ -149,29 +151,30 @@ export async function ejecutarIngesta(paquete: PaqueteConversion, puertos: Puert
       opciones.alUnidades?.(Math.min(...ordenes), Math.max(...ordenes), false);
     }
     emitir('lectura', legibles / Math.max(1, plan.unidades));
+    let marcarBuscable: () => void = () => {};
+    yaBuscables.push(new Promise<void>((res) => { marcarBuscable = res; }));
     const p = indexarTanda(t, lectura, ctx, {
       metadatos: metadatosP,
       alBuscables: (r) => {
+        marcarBuscable();
         buscables += r.buscables;
         hito('primeraBuscable');
         if (r.legibles && plan.modo === 'paginas') opciones.alUnidades?.(r.legibles[0], r.legibles[1], true);
         emitir('indexado', buscables / Math.max(1, plan.unidades));
       },
     }).then((r) => { vectorizadas += r.vectores; return r; });
-    p.catch(() => undefined);
+    p.catch(() => undefined).finally(() => marcarBuscable());
     indexaciones.push(p);
   });
   hito('lecturaCompleta');
   resolver([...primeras.values()].sort((a, b) => a.fisica - b.fisica));
-  await Promise.all(indexaciones);
-  hito('todoBuscable');
-  emitir('vectores', 0.5, `${vectorizadas} vectores durante la lectura`);
-
-  // --- consolidación -------------------------------------------------------
+  // La consolidación empieza ya (folios, secciones, troceado, figuras) y espera a las tandas solo para reaprovechar.
+  const todas = Promise.all(indexaciones).then((rs) => { hito('todoBuscable'); emitir('vectores', 0.5, `${vectorizadas} vectores durante la lectura`); return rs; });
+  await Promise.all(yaBuscables);
   const tc = reloj();
-  const meta = await metadatosP;
   emitir('estructura', 0.5);
-  const r = await consolidar(ctx, { metadatos: meta });
+  const r = await consolidar(ctx, { metadatos: metadatosP, esperarTandas: todas });
+  await todas;
   tiempos.consolidacion = reloj() - tc;
   for (const [k, v] of Object.entries(r.tiempos)) tiempos[`consolidacion:${k}`] = v;
   tiempos.total = reloj() - inicio;

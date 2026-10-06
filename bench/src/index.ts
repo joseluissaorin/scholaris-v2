@@ -35,6 +35,8 @@ function opciones(args: string[]): { posicionales: string[]; o: OpcionesBanco } 
     else if (a === '--sin-vista') o.sinVista = true;
     else if (a === '--original') o.original = true;
     else if (a === '--lector') o.lector = sig() as OpcionesBanco['lector'];
+    else if (a === '--vista') o.vista = sig() as OpcionesBanco['vista'];
+    else if (a === '--modo') o.modo = sig() as OpcionesBanco['modo'];
     else posicionales.push(a);
   }
   return { posicionales, o };
@@ -46,8 +48,11 @@ if (orden === 'ingesta') {
     // `pnpm bench` corre dentro de bench/: las rutas relativas se resuelven desde donde se lanzó.
     const ruta = existsSync(r) ? r : resolve(process.env.INIT_CWD ?? '.', r);
     const inf = await ingerir(ruta, o);
-    console.log(JSON.stringify({ etiqueta: inf.etiqueta, ms: inf.ms, usd: inf.usd, unidades: inf.unidades, fragmentos: inf.fragmentos, folios: inf.folios, titulo: inf.metadatos.titulo }, null, 2));
+    console.log(JSON.stringify({ etiqueta: inf.etiqueta, hitos: inf.hitos, primeraBusqueda: inf.primeraBusqueda, ms: inf.ms.total, usd: inf.usd, unidades: inf.unidades, fragmentos: inf.fragmentos, folios: inf.folios, titulo: inf.metadatos.titulo }, null, 2));
   }
+} else if (orden === 'calidad') {
+  const { calidad } = await import('./calidad/index.js');
+  await calidad(resto);
 } else if (orden === 'comparar') {
   console.log(JSON.stringify(compararTodo(resto), null, 2));
 } else {

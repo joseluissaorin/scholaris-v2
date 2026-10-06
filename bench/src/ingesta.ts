@@ -33,6 +33,8 @@ export interface OpcionesBanco {
   /** Lector: 'alta' (3.8 Flash primero) o 'rapida' (Flash-Lite primero). Por defecto, alta solo para escaneados y fotos. */
   lector?: 'alta' | 'rapida';
   sinVista?: boolean;
+  vista?: 'todas' | 'utiles' | 'ninguna';
+  modo?: 'rapido' | 'economico';
   /** Reutilizar transcripciones ya hechas (bench/datos/cache): por defecto sí. */
   cacheTranscripciones?: boolean;
 }
@@ -117,6 +119,8 @@ export async function ingerir(ruta: string, o: OpcionesBanco = {}) {
 
   let ultimo = 0;
   const progreso: Progreso[] = [];
+  let busqueda: Promise<{ ms: number; palabra: string; resultados: number } | null> | null = null;
+  const tIngesta = Date.now();
   const opciones: OpcionesOrquestador = {
     ...(o.digital ? { digital: o.digital } : {}),
     ...(o.pliego ? { paginasPorPliego: o.pliego } : {}),
@@ -125,16 +129,29 @@ export async function ingerir(ruta: string, o: OpcionesBanco = {}) {
     ...(o.pista ? { pista: o.pista } : {}),
     ...(o.sinFiguras ? { describirFiguras: false } : {}),
     ...(o.sinVista ? { vectorPorPagina: false } : {}),
+    ...(o.vista ? { vistaPaginas: o.vista } : {}),
+    ...(o.modo ? { modo: o.modo } : {}),
+    // Primera búsqueda útil: en cuanto hay unidades buscables, se pregunta al índice léxico.
+    alUnidades: (_d: number, _h: number, buscables: boolean) => {
+      if (!buscables || busqueda) return;
+      busqueda = (async () => {
+        const filas = await archivo.sql.ejecutar<{ texto: string }>('SELECT texto FROM fragmentos LIMIT 1');
+        const palabra = (filas[0]?.texto ?? '').match(/\p{L}{7,}/gu)?.[0];
+        if (!palabra) return null;
+        const t = Date.now() - tIngesta;
+        const hits = await archivo.sql.ejecutar('SELECT rowid FROM fragmentos_fts WHERE fragmentos_fts MATCH ? LIMIT 20', `"${palabra}"`);
+        return { ms: t, palabra, resultados: hits.length };
+      })().catch(() => null);
+    },
     onProgreso: (p) => {
       progreso.push(p);
       const ahora = Date.now();
       if (ahora - ultimo > 2000 || p.fase === 'listo') {
         ultimo = ahora;
-        console.error(`[${etiqueta}] ${(p.transcurrido / 1000).toFixed(1)} s ${p.fase} ${(p.total * 100).toFixed(0)} % ${p.unidadesListas ?? 0} u ${p.mensaje ?? ''}`);
+        console.error(`[${etiqueta}] ${(p.transcurrido / 1000).toFixed(1)} s ${p.fase} ${(p.total * 100).toFixed(0)} % legibles ${p.unidadesListas ?? 0} buscables ${p.unidadesBuscables ?? 0} ${p.mensaje ?? ''}`);
       }
     },
   };
-  const tIngesta = Date.now();
   const r = await ejecutarIngesta(paquete, { inteligencia: ia, fuente, sql: archivo.sql, correoContacto: 'jl@joseluissaorin.com' }, opciones);
   const msIngesta = Date.now() - tIngesta;
 
@@ -178,6 +195,8 @@ export async function ingerir(ruta: string, o: OpcionesBanco = {}) {
     folios: r.unidades.reduce<Record<string, number>>((m, u) => { const a = u.ancla; const k = a?.tipo === 'pagina' ? a.origen : a?.tipo ?? 'sin'; m[k] = (m[k] ?? 0) + 1; return m; }, {}),
     bytesSpdf: bytes.length,
     primeraUnidadMs: progreso.find((p) => (p.unidadesListas ?? 0) > 0)?.transcurrido ?? null,
+    hitos: { primeraLegible: r.tiempos.primeraLegible, primeraBuscable: r.tiempos.primeraBuscable, todoBuscable: r.tiempos.todoBuscable, lecturaCompleta: r.tiempos.lecturaCompleta, consolidacion: r.tiempos.consolidacion, listo: r.tiempos.total },
+    primeraBusqueda: busqueda ? await busqueda : null,
   };
   await writeFile(join(SALIDA, `${etiqueta}.informe.json`), JSON.stringify(informe, null, 2));
   await mkdir(join(SALIDA, 'historial'), { recursive: true });
