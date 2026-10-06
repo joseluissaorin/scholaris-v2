@@ -22,14 +22,18 @@ export const q = {
   yo: () => queryOptions({ queryKey: ['yo'], queryFn: () => api().auth.yo(), staleTime: 5 * 60_000 }),
   documentos: (f: FiltrosDocumentos = {}) => queryOptions({ queryKey: ['documentos', f], queryFn: () => api().documentos.listar({ limite: 500, ...f }), placeholderData: keepPreviousData }),
   documento: (id: string) => queryOptions({ queryKey: ['documento', id], queryFn: () => api().documentos.obtener(id) }),
+  /*
+   * La API numera las unidades desde 0; la web, desde 1 (la página física 1 es
+   * la unidad 1). Se traduce aquí, en un solo sitio, y el resto de la web no lo sabe.
+   */
   bloque: (id: string, bloque: number) => queryOptions({
     queryKey: ['unidades', id, bloque],
-    queryFn: () => api().documentos.unidades(id, bloque * BLOQUE + 1, (bloque + 1) * BLOQUE),
+    queryFn: async () => (await api().documentos.unidades(id, bloque * BLOQUE, (bloque + 1) * BLOQUE - 1)).map((u) => ({ ...u, orden: u.orden + 1 })),
     staleTime: 5 * 60_000,
   }),
-  folios: (id: string) => queryOptions({ queryKey: ['folios', id], queryFn: () => api().documentos.folios(id), staleTime: 5 * 60_000 }),
-  secciones: (id: string) => queryOptions({ queryKey: ['secciones', id], queryFn: () => api().documentos.secciones(id), staleTime: 5 * 60_000 }),
-  figuras: (id: string) => queryOptions({ queryKey: ['figuras', id], queryFn: () => api().documentos.figuras(id), staleTime: 5 * 60_000 }),
+  folios: (id: string) => queryOptions({ queryKey: ['folios', id], queryFn: async () => { const m = await api().documentos.folios(id); return { folios: m.folios.map((f) => ({ ...f, orden: f.orden + 1 })) }; }, staleTime: 5 * 60_000 }),
+  secciones: (id: string) => queryOptions({ queryKey: ['secciones', id], queryFn: async () => (await api().documentos.secciones(id)).map((s) => ({ ...s, unidadDesde: s.unidadDesde + 1, ...(s.unidadHasta != null ? { unidadHasta: s.unidadHasta + 1 } : {}) })), staleTime: 5 * 60_000 }),
+  figuras: (id: string) => queryOptions({ queryKey: ['figuras', id], queryFn: async () => (await api().documentos.figuras(id)).map((f) => ({ ...f, unidad: f.unidad + 1 })), staleTime: 5 * 60_000 }),
   original: (id: string) => queryOptions({ queryKey: ['original', id], queryFn: () => api().documentos.original(id), staleTime: 50 * 60_000 }),
   bibliotecas: () => queryOptions({ queryKey: ['bibliotecas'], queryFn: () => api().bibliotecas.listar() }),
   busqueda: (consulta: string, filtros: Filtros) => queryOptions({

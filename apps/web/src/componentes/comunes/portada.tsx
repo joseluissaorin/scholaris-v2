@@ -1,4 +1,4 @@
-import { memo } from 'react';
+import { memo, useState } from 'react';
 import type { TipoEntrada } from '@scholaris/nucleo';
 import { cx } from '@scholaris/ui';
 
@@ -23,7 +23,8 @@ function hash(t: string) {
  * su motivo: el audio ondas, el vídeo un fotograma, la web una retícula.
  */
 export const Portada = memo(function Portada({ id, titulo, autores, tipo, url, className }: { id: string; titulo: string; autores?: string; tipo: TipoEntrada; url?: string; className?: string }) {
-  if (url) return <img src={url} alt="" loading="lazy" decoding="async" className={cx('h-full w-full object-cover', className)} />;
+  const [rota, setRota] = useState(false);
+  if (url && !rota) return <img src={url} alt="" loading="lazy" decoding="async" onError={() => setRota(true)} className={cx('h-full w-full object-cover', className)} />;
   const h = hash(id);
   const p = PALETAS[h % PALETAS.length]!;
   const giro = (h >> 4) % 4;

@@ -14,6 +14,7 @@ import type { FaseIngesta, TipoEntrada } from '@scholaris/nucleo';
 import type { ArchivoEntrada, EventoConversion, PaqueteConversion, ParteBinaria } from '@scholaris/imprenta';
 import { api, esSimulado, escucharTiempoReal } from './api';
 import { clienteConsultas } from './consultas';
+import { anotarPagina } from './previa';
 import type { MensajeDesdeImprenta, MensajeHaciaImprenta } from '../trabajadores/imprenta.worker';
 
 export type Etapa = 'preparando' | 'convirtiendo' | 'procesando' | 'listo' | 'error' | 'cancelada' | 'duplicado';
@@ -44,6 +45,24 @@ export interface Ingesta {
   inicio: number;
   fin?: number;
 }
+
+// ---------------------------------------------------------------------------
+// Tiempos percibidos: desde soltar hasta ver, leer y buscar.
+// ---------------------------------------------------------------------------
+
+export interface Hitos { miniatura?: number; legible?: number; listo?: number }
+const hitos = new Map<string, Hitos>();
+/** Anota un hito una sola vez y lo deja en la consola y en `performance` (para medir). */
+function hito(i: Ingesta, k: keyof Hitos) {
+  const h = hitos.get(i.id) ?? {};
+  if (h[k] != null) return;
+  h[k] = Date.now() - i.inicio;
+  hitos.set(i.id, h);
+  try { performance.mark(`scholaris:${k}:${i.nombre}`); } catch { /* sin performance */ }
+  console.info(`[ingesta] ${i.nombre}: ${k === 'miniatura' ? 'primera miniatura' : k === 'legible' ? 'página 1 legible' : 'lista para buscar'} a ${(h[k]! / 1000).toFixed(1)} s`);
+}
+export const hitosDe = (id: string) => hitos.get(id);
+if (typeof window !== 'undefined') (window as unknown as { __hitos: typeof hitos }).__hitos = hitos;
 
 // ---------------------------------------------------------------------------
 // El almacén
@@ -278,11 +297,22 @@ async function correr(i: Ingesta, archivo: File, biblioteca?: string, fotos?: Fi
         if (e.tipo === 'inicio') poner(i.id, (x) => ({ unidades: e.unidades ?? x.unidades, ...(e.duracion ? { duracion: e.duracion } : {}), tipo: e.entrada, ...(e.metadatos.titulo?.trim() ? { nombre: e.metadatos.titulo.trim() } : {}) }));
         // En audio y vídeo `total` son segundos, no unidades: no se confunden.
         else if (e.tipo === 'progreso') poner(i.id, (x) => ({ preparadas: Math.max(x.preparadas, e.hechas), unidades: x.unidades ?? (e.fase === 'paginas' ? e.total : null), avance: Math.max(x.avance, 0.3 * (e.total ? e.hechas / e.total : 0)), mensaje: e.mensaje ?? x.mensaje }));
+        else if (e.tipo === 'pagina_pdf') {
+          // La capa de texto y el folio de /PageLabels: legible sin esperar al servidor.
+          anotarPagina(sub.documento, e.pagina.fisica, { texto: e.pagina.cuerpo, impresa: e.pagina.etiqueta });
+          if (e.pagina.texto.util) hito(i, 'legible');
+        }
         else if (e.tipo === 'parte') {
           partes.anadir(e.parte, e.datos);
-          if (e.parte.clase === 'miniatura') {
+          if (e.parte.clase === 'pagina' && e.parte.unidad) {
+            anotarPagina(sub.documento, e.parte.unidad, { imagenUrl: URL.createObjectURL(new Blob([e.datos as BlobPart], { type: e.parte.mime })) });
+            if (i.tipo !== 'pdf') hito(i, 'legible');
+          }
+          // En el vídeo, los fotogramas clave hacen de páginas que aparecen.
+          if (e.parte.clase === 'miniatura' || (e.parte.clase === 'fotograma' && i.miniaturas.length < 400)) {
             const url = URL.createObjectURL(new Blob([e.datos as BlobPart], { type: e.parte.mime }));
             poner(i.id, (x) => ({ miniaturas: [...x.miniaturas, url] }));
+            hito(i, 'miniatura');
           }
         } else if (e.tipo === 'fin') paquete = e.paquete;
       }
@@ -355,14 +385,17 @@ function manejar(e: EventoTiempoReal) {
     }));
   } else if (e.tipo === 'unidades') {
     const i = porTarea(e.tarea, e.documento);
-    if (i) poner(i.id, (x) => ({ leidas: Math.max(x.leidas, e.hasta) }));
+    // `hasta` es un orden de la API (desde 0): leídas = hasta + 1.
+    if (i) { poner(i.id, (x) => ({ leidas: Math.max(x.leidas, e.hasta + 1) })); hito(i, 'legible'); }
     // Las páginas nuevas ya se pueden abrir en el lector.
     void clienteConsultas.invalidateQueries({ queryKey: ['unidades', e.documento] });
   } else if (e.tipo === 'fin') {
     const i = porTarea(e.tarea, e.documento);
     if (i) poner(i.id, { etapa: e.estado === 'listo' ? 'listo' : e.estado === 'cancelada' ? 'cancelada' : 'error', avance: 1, fin: Date.now(), ...(e.error ? { error: e.error } : {}) });
+    if (i && e.estado === 'listo') hito(i, 'listo');
     void clienteConsultas.invalidateQueries({ queryKey: ['documentos'] });
-    if (e.documento) void clienteConsultas.invalidateQueries({ queryKey: ['documento', e.documento] });
+    // Todo lo del documento se vuelve a pedir: lo que se cacheó mientras se leía estaba vacío.
+    if (e.documento) for (const k of ['documento', 'unidades', 'folios', 'secciones', 'figuras', 'original']) void clienteConsultas.invalidateQueries({ queryKey: [k, e.documento] });
     if (i && e.estado === 'listo') setTimeout(() => retirarIngesta(i.id), 5200);
   } else if (e.tipo === 'alerta') {
     void clienteConsultas.invalidateQueries({ queryKey: ['alertas'] });

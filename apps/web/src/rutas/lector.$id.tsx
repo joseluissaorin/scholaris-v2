@@ -121,7 +121,7 @@ function Lector() {
             <p className="truncate text-[0.8125rem] text-tinta-2">{autores(doc.metadatos) || 'Sin autor'} · {anioCita(doc.metadatos)} · <span className="text-apagado">{NOMBRE_TIPO[doc.tipo]}</span></p>
           </div>
 
-          <IrA etiqueta={etiquetaActual} total={medio ? tiempoACadena(doc.duracion ?? 0) : String(doc.unidades)} alIr={irA} medio={medio} />
+          <IrA etiqueta={etiquetaActual} total={medio ? tiempoACadena(doc.duracion ?? 0) : String(Math.max(doc.unidades, ingesta?.unidades ?? 0))} alIr={irA} medio={medio} />
 
           {paginado ? (
             <div role="group" aria-label="Modo de lectura" className="hidden rounded-s border border-filete-fuerte p-0.5 md:flex">
@@ -145,7 +145,7 @@ function Lector() {
         {ingesta || doc.estado === 'procesando' ? (
           <div className="flex items-center gap-3 border-t border-filete bg-amarillo-suave/60 px-4 py-2 text-[0.8125rem] md:px-6">
             <span className="h-2 w-2 shrink-0 rounded-full bg-rojo anim-pulso" />
-            <span>Se está leyendo{ingesta?.leidas ? `: ${ingesta.leidas} de ${doc.unidades}` : ''}. Lo que ya está leído se puede buscar y citar.</span>
+            <span>{ingesta?.preparadas && !ingesta.leidas ? 'Estás viendo la vista previa de tu navegador; Scholaris sigue leyendo y en unos segundos se podrá buscar y citar.' : `Se está leyendo${ingesta?.leidas ? `: ${ingesta.leidas} de ${ingesta.unidades ?? doc.unidades}` : ''}. Lo que ya está leído se puede buscar y citar.`}</span>
           </div>
         ) : null}
       </div>
@@ -155,7 +155,7 @@ function Lector() {
           {medio ? (
             <Medio ref={reproductor} doc={doc} url={original?.url || null} inicial={busqueda.t ?? 0} resaltar={busqueda.q} alVer={alVerMedio} />
           ) : (
-            <Flujo ref={flujo} doc={doc} modo={modo} inicial={inicial} resaltar={busqueda.q} leidas={ingesta ? ingesta.leidas : undefined} alVer={alVer} />
+            <Flujo ref={flujo} doc={doc} modo={modo} inicial={inicial} resaltar={busqueda.q} leidas={ingesta ? ingesta.leidas : undefined} total={ingesta?.unidades ?? undefined} alVer={alVer} />
           )}
         </div>
         {panel ? (

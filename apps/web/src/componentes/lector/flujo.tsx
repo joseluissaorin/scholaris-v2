@@ -12,6 +12,16 @@ import { BLOQUE, q } from '../../datos/consultas';
 import { Markdown } from './markdown';
 import { Facsimil } from './facsimil';
 import { etiquetaCorta } from '../../lib/formato';
+import { paginaPrevia, usePrevia, type PaginaPrevia } from '../../datos/previa';
+
+function unidadDePrevia(p: PaginaPrevia): UnidadVista {
+  return {
+    id: `previa-${p.fisica}`, orden: p.fisica, texto: p.texto, lector: 'imprenta', confianza: 0.5,
+    ancla: { tipo: 'pagina', fisica: p.fisica, impresa: p.impresa, romana: false, origen: p.impresa ? 'leido' : 'ninguno', confianza: 1 },
+    etiqueta: p.impresa ? `p. ${p.impresa}` : `[${p.fisica}]`,
+    ...(p.imagenUrl ? { imagenUrl: p.imagenUrl } : {}),
+  };
+}
 
 export type ModoLectura = 'ambas' | 'pagina' | 'texto';
 
@@ -31,8 +41,11 @@ function soloTexto(tipo: DetalleDocumento['tipo']) {
 
 export const Flujo = memo(forwardRef<ManejadorFlujo, {
   doc: DetalleDocumento; modo: ModoLectura; inicial: number; resaltar?: string; destacar?: string; leidas?: number;
+  /** Unidades totales si se conocen antes que el servidor (la imprenta ya las contó). */
+  total?: number;
   alVer: (orden: number) => void;
-}>(function Flujo({ doc, modo, inicial, resaltar, destacar, leidas, alVer }, ref) {
+}>(function Flujo({ doc, modo, inicial, resaltar, destacar, leidas, total: totalConocido, alVer }, ref) {
+  const total = Math.max(doc.unidades, totalConocido ?? 0);
   const contenedor = useRef<HTMLDivElement>(null);
   const [margen, setMargen] = useState(0);
   const texto = soloTexto(doc.tipo);
@@ -49,7 +62,7 @@ export const Flujo = memo(forwardRef<ManejadorFlujo, {
   }, [modoReal, texto, apaisada]);
 
   // El margen superior descuenta la barra del lector, que va pegada arriba.
-  const v = useWindowVirtualizer({ count: doc.unidades, estimateSize: estimar, overscan: 2, scrollMargin: margen, scrollPaddingStart: 84 });
+  const v = useWindowVirtualizer({ count: total, estimateSize: estimar, overscan: 2, scrollMargin: margen, scrollPaddingStart: 84 });
 
   // La página que se está leyendo: la que cruza una línea a 30 % de la ventana.
   useEffect(() => {
@@ -68,8 +81,8 @@ export const Flujo = memo(forwardRef<ManejadorFlujo, {
   }, [v, alVer]);
 
   useImperativeHandle(ref, () => ({
-    irA: (orden, suave) => v.scrollToIndex(Math.max(0, Math.min(doc.unidades - 1, orden - 1)), { align: 'start', behavior: suave ? 'smooth' : 'auto' }),
-  }), [v, doc.unidades]);
+    irA: (orden, suave) => v.scrollToIndex(Math.max(0, Math.min(total - 1, orden - 1)), { align: 'start', behavior: suave ? 'smooth' : 'auto' }),
+  }), [v, total]);
 
   // Primera posición: la del enlace (ancla, cita, resultado).
   const yaSituado = useRef(false);
@@ -88,18 +101,25 @@ export const Flujo = memo(forwardRef<ManejadorFlujo, {
       {v.getVirtualItems().map((it) => (
         // `top` y no `transform`: el folio pegado (sticky) no ve las transformaciones.
         <div key={it.key} data-index={it.index} ref={v.measureElement} className="absolute inset-x-0" style={{ top: it.start - v.options.scrollMargin }}>
-          <Fila docId={doc.id} orden={it.index + 1} modo={modoReal} texto={texto} apaisada={apaisada} resaltar={resaltar} destacar={inicial === it.index + 1 ? destacar : undefined} pendiente={leidas != null && it.index + 1 > leidas} titulillo={doc.metadatos.titulo} />
+          <Fila docId={doc.id} orden={it.index + 1} modo={modoReal} texto={texto} apaisada={apaisada} resaltar={resaltar} destacar={inicial === it.index + 1 ? destacar : undefined} pendiente={leidas != null && it.index + 1 > leidas} procesando={doc.estado !== 'listo'} titulillo={doc.metadatos.titulo} />
         </div>
       ))}
     </div>
   );
 }));
 
-const Fila = memo(function Fila({ docId, orden, modo, texto, apaisada, resaltar, destacar, pendiente, titulillo }: {
-  docId: string; orden: number; modo: ModoLectura; texto: boolean; apaisada: boolean; resaltar?: string; destacar?: string; pendiente: boolean; titulillo: string;
+const Fila = memo(function Fila({ docId, orden, modo, texto, apaisada, resaltar, destacar, pendiente: pendienteServidor, procesando, titulillo }: {
+  docId: string; orden: number; modo: ModoLectura; texto: boolean; apaisada: boolean; resaltar?: string; destacar?: string; pendiente: boolean; procesando: boolean; titulillo: string;
 }) {
-  const { data } = useQuery({ ...q.bloque(docId, bloqueDe(orden)), enabled: !pendiente });
-  const u = data?.find((x) => x.orden === orden);
+  const { data } = useQuery({ ...q.bloque(docId, bloqueDe(orden)), enabled: !pendienteServidor });
+  usePrevia(docId);
+  // Mientras el servidor lee, la página sale de lo que ya imprimió el navegador.
+  const previa = procesando ? paginaPrevia(docId, orden) : undefined;
+  const u = data?.find((x) => x.orden === orden) ?? (previa ? unidadDePrevia(previa) : undefined);
+  const esPrevia = !!previa && !data?.some((x) => x.orden === orden);
+  const pendiente = pendienteServidor && !previa;
+  // Si la imagen no llega, la página sigue siendo una página: el facsímil con su texto.
+  const [imagenRota, setImagenRota] = useState(false);
 
   if (texto) {
     return (
@@ -117,8 +137,8 @@ const Fila = memo(function Fila({ docId, orden, modo, texto, apaisada, resaltar,
         <div className={cx('grid w-full place-items-center rounded-[2px] border border-dashed border-filete-fuerte bg-hondo/40', apaisada ? 'aspect-[16/9]' : 'aspect-[1/1.414]')}>
           <span className="flex items-center gap-2 text-[0.875rem] text-apagado"><span className="h-1.5 w-1.5 rounded-full bg-rojo anim-pulso" />Leyendo esta página…</span>
         </div>
-      ) : u?.imagenUrl ? (
-        <img src={u.imagenUrl} alt={`Imagen de la página ${u.etiqueta}`} loading="lazy" decoding="async" className={cx('w-full rounded-[2px] bg-hoja object-contain shadow-hoja', apaisada ? 'aspect-[16/9]' : 'aspect-[1/1.414]')} />
+      ) : u?.imagenUrl && !imagenRota ? (
+        <img src={u.imagenUrl} alt={`Imagen de la página ${u.etiqueta}`} loading="lazy" decoding="async" onError={() => setImagenRota(true)} className={cx('w-full rounded-[2px] bg-hoja object-contain shadow-hoja', apaisada ? 'aspect-[16/9]' : 'aspect-[1/1.414]')} />
       ) : u ? (
         <Facsimil texto={u.texto} folio={folio?.impresa} titulillo={orden % 2 ? titulillo : undefined} apaisada={apaisada} />
       ) : (
@@ -135,6 +155,7 @@ const Fila = memo(function Fila({ docId, orden, modo, texto, apaisada, resaltar,
       <div className="folio-pegado z-10 mb-4 flex items-baseline gap-3 bg-papel/85 py-1 backdrop-blur-sm">
         {u ? <Folio grande dudoso={!!folio && folio.confianza < 0.75}>{u.etiqueta}</Folio> : <Esqueleto className="h-5 w-14" />}
         {folio ? <Rotulo>física {folio.fisica}{folio.origen === 'deducido' ? ' · folio deducido' : ''}</Rotulo> : null}
+        {esPrevia ? <Rotulo className="ml-auto text-rojo">Vista previa · aún se está leyendo</Rotulo> : null}
       </div>
       {pendiente ? <p className="text-apagado">El texto llegará en cuanto se lea esta página.</p> : u ? <Markdown texto={u.texto} q={resaltar} destacar={destacar} className="lectura" /> : <EsqueletoTexto lineas={9} />}
     </div>

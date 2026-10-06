@@ -114,7 +114,7 @@ function simularIngesta(documento: string, tarea: string, unidades: number, rapi
       const desde = leidas + 1;
       leidas = Math.min(unidades, leidas + paso);
       if (d) d.leidas = leidas;
-      emitir({ tipo: 'unidades', tarea, documento, desde, hasta: leidas });
+      emitir({ tipo: 'unidades', tarea, documento, desde: desde - 1, hasta: leidas - 1 });
       const p: Progreso = { tarea, documento, fase: 'lectura', avance: leidas / unidades, total: 0.75 * (leidas / unidades), unidadesListas: leidas, transcurrido: Date.now() - inicio, mensaje: `Leyendo ${leidas} de ${unidades}` };
       t.progreso = p;
       emitir({ tipo: 'progreso', progreso: p });
@@ -186,7 +186,7 @@ function detalle(d: DocDemo & { estado: string; tarea?: string }): DetalleDocume
 
 function unidad(d: DocDemo, orden: number): UnidadVista {
   const ancla = anclaDe(d, orden);
-  return { id: `u-${d.id}-${orden}`, orden, ancla, etiqueta: anclaACita(ancla), texto: textoDe(d, orden), lector: d.tipo === 'pdf' ? 'capa-de-texto' : d.tipo === 'audio' || d.tipo === 'video' ? 'whisper-large-v3-turbo' : 'gemini-flash', confianza: 0.96 };
+  return { id: `u-${d.id}-${orden}`, orden: orden - 1, ancla, etiqueta: anclaACita(ancla), texto: textoDe(d, orden), lector: d.tipo === 'pdf' ? 'capa-de-texto' : d.tipo === 'audio' || d.tipo === 'video' ? 'whisper-large-v3-turbo' : 'gemini-flash', confianza: 0.96 };
 }
 
 const normalizar = (s: string) => s.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase();
@@ -426,23 +426,24 @@ ruta('POST', '/documentos/:id/restaurar', (m) => { const d = docs.get(m[1]!); if
 ruta('GET', '/documentos/:id/unidades', (m, _c, q) => {
   const d = docs.get(m[1]!); if (!d) return error(404, 'no_encontrado', 'Ese documento no existe.');
   const tope = d.estado === 'procesando' ? (d.leidas ?? 0) : d.unidades;
-  const desde = Math.max(1, Number(q.get('desde') ?? 1)), hasta = Math.min(tope, Number(q.get('hasta') ?? desde + 19));
+  // Como la API real: órdenes desde 0.
+  const desde = Math.max(1, Number(q.get('desde') ?? 0) + 1), hasta = Math.min(tope, Number(q.get('hasta') ?? desde + 18) + 1);
   const out: UnidadVista[] = [];
   for (let o = desde; o <= hasta; o++) out.push(unidad(d, o));
   return json(out, 70 + Math.random() * 80);
 });
 ruta('GET', '/documentos/:id/folios', (m) => {
   const d = docs.get(m[1]!); if (!d) return error(404, 'no_encontrado', 'Ese documento no existe.');
-  return json({ folios: Array.from({ length: d.unidades }, (_, i) => { const a = anclaDe(d, i + 1); return { orden: i + 1, ...(a.tipo === 'pagina' ? { fisica: a.fisica, impresa: a.impresa, origen: a.origen, confianza: a.confianza } : a.tipo === 'tiempo' ? { impresa: null, t0: a.t0 } : a.tipo === 'seccion' ? { impresa: a.impresa ?? null } : { impresa: null }) }; }) });
+  return json({ folios: Array.from({ length: d.unidades }, (_, i) => { const a = anclaDe(d, i + 1); return { orden: i, ...(a.tipo === 'pagina' ? { fisica: a.fisica, impresa: a.impresa, origen: a.origen, confianza: a.confianza } : a.tipo === 'tiempo' ? { impresa: null, t0: a.t0 } : a.tipo === 'seccion' ? { impresa: a.impresa ?? null } : { impresa: null }) }; }) });
 });
 ruta('GET', '/documentos/:id/secciones', (m) => {
   const d = docs.get(m[1]!); if (!d) return error(404, 'no_encontrado', 'Ese documento no existe.');
-  return json(d.secciones.map((s, i): SeccionVista => ({ id: `s-${i}`, nivel: s.nivel, titulo: s.titulo, unidadDesde: s.unidad })));
+  return json(d.secciones.map((s, i): SeccionVista => ({ id: `s-${i}`, nivel: s.nivel, titulo: s.titulo, unidadDesde: s.unidad - 1 })));
 });
 ruta('GET', '/documentos/:id/figuras', (m) => {
   const d = docs.get(m[1]!); if (!d || !['pdf', 'pdf_escaneado'].includes(d.tipo)) return json([]);
   const n = Math.floor(d.unidades / 40);
-  return json(Array.from({ length: n }, (_, i) => { const u = 20 + i * 40; const a = anclaDe(d, u); return { id: `fig-${i}`, unidad: u, imagenUrl: '', pie: `Figura ${i + 1}. ${['Plano del panóptico de Bentham', 'Grabado de un suplicio', 'Horario de una escuela mutua', 'Celda individual', 'Esquema de la casa de corrección', 'Patio de la prisión', 'Tabla de clasificación'][i % 7]}`, ancla: a, etiqueta: anclaACita(a) }; }));
+  return json(Array.from({ length: n }, (_, i) => { const u = 20 + i * 40; const a = anclaDe(d, u); return { id: `fig-${i}`, unidad: u - 1, imagenUrl: '', pie: `Figura ${i + 1}. ${['Plano del panóptico de Bentham', 'Grabado de un suplicio', 'Horario de una escuela mutua', 'Celda individual', 'Esquema de la casa de corrección', 'Patio de la prisión', 'Tabla de clasificación'][i % 7]}`, ancla: a, etiqueta: anclaACita(a) }; }));
 });
 ruta('GET', '/documentos/:id/original', () => json({ url: '' }));
 ruta('GET', '/documentos/:id/cita', (m, _c, q) => {

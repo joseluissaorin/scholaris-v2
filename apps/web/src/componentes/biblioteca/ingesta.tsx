@@ -3,7 +3,7 @@ import { Link } from '@tanstack/react-router';
 import type { FaseIngesta } from '@scholaris/nucleo';
 import { cx, Icono, Rotulo } from '@scholaris/ui';
 import { cancelarIngesta, retirarIngesta, type Ingesta } from '../../datos/ingesta';
-import { bytes, duracion, ICONO_TIPO, NOMBRE_TIPO, nombreUnidad, esMedio } from '../../lib/formato';
+import { bytes, duracion, ICONO_TIPO, NOMBRE_TIPO, nombreUnidad, esMedio, tiempoACadena } from '../../lib/formato';
 
 const FASES: Partial<Record<FaseIngesta, string>> = {
   subida: 'Subiendo', conversion: 'Convirtiendo', lectura: 'Leyendo', folios: 'Buscando los folios impresos', metadatos: 'Identificando la obra',
@@ -13,7 +13,11 @@ const FASES: Partial<Record<FaseIngesta, string>> = {
 function textoEtapa(i: Ingesta): string {
   switch (i.etapa) {
     case 'preparando': return 'Preparando…';
-    case 'convirtiendo': return i.preparadas ? `Imprimiendo en tu navegador · ${i.preparadas}${i.unidades ? ` de ${i.unidades}` : ''}` : 'Subiendo y abriendo el archivo…';
+    case 'convirtiendo':
+      if (!i.preparadas) return 'Subiendo y abriendo el archivo…';
+      // En los medios, lo hecho son segundos de audio ya extraídos.
+      if (esMedio(i.tipo)) return `Extrayendo el sonido en tu navegador · ${tiempoACadena(i.preparadas)}${i.duracion ? ` de ${tiempoACadena(i.duracion)}` : ''}`;
+      return `Imprimiendo en tu navegador · ${i.preparadas}${i.unidades ? ` de ${i.unidades}` : ''}`;
     case 'procesando': return i.fase ? `${FASES[i.fase] ?? i.fase}${i.fase === 'lectura' && i.unidades ? ` · ${i.leidas} de ${i.unidades}` : ''}` : (i.mensaje ?? 'Leyendo…');
     case 'listo': return 'Listo. Ya se puede buscar y citar.';
     case 'duplicado': return 'Ya estaba en tu biblioteca.';
@@ -38,7 +42,7 @@ export function TarjetaIngesta({ i }: { i: Ingesta }) {
   const total = i.unidades ?? 0;
   const leida = i.leidas;
   const marcas = Math.min(total || 24, 48);
-  const abierta = i.documento && (leida > 0 || i.etapa === 'listo' || i.etapa === 'duplicado');
+  const abierta = i.documento && (leida > 0 || (!esMedio(i.tipo) && i.preparadas > 0) || i.etapa === 'listo' || i.etapa === 'duplicado');
   const terminado = i.etapa === 'listo' || i.etapa === 'duplicado' || i.etapa === 'cancelada' || i.etapa === 'error';
   const miniaturas = i.miniaturas.slice(-14);
 

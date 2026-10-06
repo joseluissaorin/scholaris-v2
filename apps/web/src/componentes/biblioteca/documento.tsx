@@ -51,6 +51,23 @@ export function MenuDocumento({ doc, bibliotecas, children }: { doc: ResumenDocu
     );
   }
 
+  async function reprocesar() {
+    try { await api().documentos.reprocesar(doc.id, { fases: ['lectura', 'folios', 'metadatos', 'estructura', 'contexto', 'vectores', 'figuras'] }); avisar('Vuelve a la imprenta.'); void qc.invalidateQueries({ queryKey: ['documentos'] }); }
+    catch (e) { avisar(e instanceof Error ? e.message : 'No se pudo volver a leer.', { tono: 'error' }); }
+  }
+
+  async function exportarSpdf() {
+    avisar(`Preparando «${doc.titulo}.spdf»…`);
+    try {
+      const bytes = await api().documentos.spdf(doc.id);
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(new Blob([bytes as BlobPart], { type: 'application/x-spdf' }));
+      a.download = `${doc.titulo.replace(/[\\/:*?"<>|]+/g, ' ').trim().slice(0, 80) || 'documento'}.spdf`;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+    } catch (e) { avisar(e instanceof Error ? e.message : 'No se pudo exportar.', { tono: 'error' }); }
+  }
+
   async function descargar() {
     try { const { url } = await api().documentos.original(doc.id); if (url) window.open(url, '_blank', 'noopener'); else avisar('En la demostración no hay original que descargar.'); }
     catch { avisar('No se pudo obtener el original.', { tono: 'error' }); }
@@ -62,6 +79,8 @@ export function MenuDocumento({ doc, bibliotecas, children }: { doc: ResumenDocu
       <MenuContenido className="w-64">
         <MenuElemento icono="citar" alElegir={() => void copiarCita()}>Copiar la referencia</MenuElemento>
         <MenuElemento icono="descargar" alElegir={() => void descargar()}>Descargar el original</MenuElemento>
+        <MenuElemento icono="pila" alElegir={() => void exportarSpdf()}>Exportar como .spdf</MenuElemento>
+        {doc.estado !== 'listo' && doc.estado !== 'procesando' ? <MenuElemento icono="rayo" alElegir={() => void reprocesar()}>Volver a leer</MenuElemento> : null}
         {bibliotecas.length ? (
           <>
             <MenuSeparador />
@@ -99,6 +118,7 @@ export const FichaDocumento = memo(function FichaDocumento({ doc, bibliotecas, i
             <span className="rotulo absolute left-2 top-2 flex items-center gap-1.5 rounded-full bg-papel/95 px-2 py-1 text-tinta"><span className="h-1.5 w-1.5 rounded-full bg-rojo anim-pulso" />Leyendo</span>
           ) : null}
           {doc.estado === 'error' ? <span className="rotulo absolute left-2 top-2 rounded-full bg-rojo px-2 py-1 text-[#fbf5ec]">Con errores</span> : null}
+          {doc.estado === 'pendiente' ? <span className="rotulo absolute left-2 top-2 rounded-full bg-amarillo px-2 py-1 text-tinta">Sin leer</span> : null}
           <span className="absolute bottom-2 right-2 grid h-6 w-6 place-items-center rounded-full bg-papel/90 text-tinta-2"><Icono nombre={ICONO_TIPO[doc.tipo]} tam={14} /></span>
         </div>
         <h3 className="mt-3 line-clamp-2 text-[1rem] leading-[1.2] tracking-[-0.01em] text-tinta">{doc.titulo}</h3>
