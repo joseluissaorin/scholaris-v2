@@ -10,20 +10,21 @@ type Oyente = (e: EventoTiempoReal) => void;
 
 export class CentralTiempoReal {
   private canales = new Map<string, Set<Oyente>>();
-  private ultimos = new Map<string, EventoTiempoReal>();
+  private ultimos = new Map<string, { e: EventoTiempoReal; en: number }>();
 
   suscribir(canal: string, oyente: Oyente): () => void {
     let s = this.canales.get(canal);
     if (!s) this.canales.set(canal, (s = new Set()));
     s.add(oyente);
+    // El último progreso se repite; un «fin» solo si es de hace menos de 2 minutos.
     const u = this.ultimos.get(canal);
-    if (u) oyente(u);
+    if (u && (u.e.tipo !== 'fin' || Date.now() - u.en < 120_000)) oyente(u.e);
     return () => { s!.delete(oyente); if (!s!.size) this.canales.delete(canal); };
   }
 
   publicar(canal: string, e: EventoTiempoReal): void {
     if (e.tipo === 'progreso' || e.tipo === 'fin') {
-      this.ultimos.set(canal, e);
+      this.ultimos.set(canal, { e, en: Date.now() });
       if (this.ultimos.size > 2000) this.ultimos.delete(this.ultimos.keys().next().value as string);
     }
     for (const o of this.canales.get(canal) ?? []) {

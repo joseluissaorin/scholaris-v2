@@ -24,7 +24,10 @@ export class Tarea extends DurableObject<Env> {
     const tarea = peticion.headers.get('x-scholaris-tarea') ?? undefined;
     servidor.send(JSON.stringify({ tipo: 'hola', usuario, ...(tarea ? { tarea } : {}) } satisfies EventoTiempoReal));
     const ultimo = await this.ctx.storage.get<EventoTiempoReal>('ultimo');
-    if (ultimo) servidor.send(JSON.stringify(ultimo));
+    // El último progreso se repite siempre; un «fin» solo si es reciente (quien conecta justo
+    // después de terminar lo necesita; uno de hace horas haría recargar a la web sin motivo).
+    const finEn = (await this.ctx.storage.get<number>('finEn')) ?? 0;
+    if (ultimo && (ultimo.tipo !== 'fin' || Date.now() - finEn < 120_000)) servidor.send(JSON.stringify(ultimo));
     return new Response(null, { status: 101, webSocket: cliente });
   }
 
@@ -36,7 +39,7 @@ export class Tarea extends DurableObject<Env> {
       await this.ctx.storage.put('avance', Date.now());
       if (!(await this.ctx.storage.get<boolean>('fin'))) await this.ctx.storage.setAlarm(Date.now() + 120_000);
     }
-    if (evento.tipo === 'fin') await this.ctx.storage.put('fin', true);
+    if (evento.tipo === 'fin') { await this.ctx.storage.put('fin', true); await this.ctx.storage.put('finEn', Date.now()); }
     const texto = JSON.stringify(evento);
     let n = 0;
     for (const ws of this.ctx.getWebSockets()) {
