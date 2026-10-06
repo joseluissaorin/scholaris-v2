@@ -125,12 +125,13 @@ export async function mencionesEntidad(sql: SQL, id: string, o: { documento?: st
 // Vecinos
 // ---------------------------------------------------------------------------
 
-async function relaciones(sql: SQL, pares: ReadonlyArray<[string, string]>, nombres: Map<string, Entidad>): Promise<Map<string, string>> {
+async function relaciones(sql: SQL, pares: ReadonlyArray<[string, string]>, _nombres?: Map<string, Entidad>): Promise<Map<string, string>> {
   const salida = new Map<string, string>();
   for (const [x, y] of pares) {
     const [a, b] = x < y ? [x, y] : [y, x];
     const [r] = await sql.ejecutar<{ etiqueta: string | null }>('SELECT etiqueta FROM entidades_relaciones WHERE a = ? AND b = ?', a, b);
-    if (r?.etiqueta) salida.set(`${a}\u0000${b}`, `${nombres.get(a)?.nombre ?? ''} ${r.etiqueta} ${nombres.get(b)?.nombre ?? ''}`.trim());
+    // La etiqueta es ya la frase entera («Julio Cortázar admira a Charlie Parker»).
+    if (r?.etiqueta) salida.set(`${a}\u0000${b}`, r.etiqueta);
   }
   return salida;
 }

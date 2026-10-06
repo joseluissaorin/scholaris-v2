@@ -30,6 +30,8 @@ export interface EntidadExtraida {
   nombre: string;
   tipo: TipoEntidad;
   formas: string[];
+  /** Personaje de ficción (no se enlaza con una persona real de Wikidata). */
+  ficticia?: boolean;
 }
 
 export interface MencionLocalizada {
@@ -41,6 +43,7 @@ export interface MencionLocalizada {
   texto: string;
   nombre: string;
   tipo: TipoEntidad;
+  ficticia?: boolean;
 }
 
 export interface UsoLote {
@@ -49,8 +52,8 @@ export interface UsoLote {
   llamadas: number;
 }
 
-/** Caracteres por lote: unos 5000 tokens de entrada, lo bastante para que el sistema pese poco. */
-export const CARACTERES_LOTE = 20_000;
+/** Caracteres por lote: unos 8500 tokens de entrada, lo bastante para que el sistema y la salida pesen poco. */
+export const CARACTERES_LOTE = 32_000;
 /** Un fragmento muy largo se recorta para el redactor (sus menciones se buscan en el texto entero). */
 const MAX_FRAGMENTO = 4_000;
 
@@ -73,33 +76,21 @@ export function formarLotes(fragmentos: readonly FragmentoEntidades[], maxCaract
 
 export const ESQUEMA_EXTRACCION = {
   type: 'object',
-  properties: {
-    e: {
-      type: 'array',
-      items: {
-        type: 'object',
-        properties: {
-          n: { type: 'string' },
-          t: { type: 'string', enum: Object.keys(CODIGOS_TIPO) },
-          f: { type: 'array', items: { type: 'string' } },
-        },
-        required: ['n', 't', 'f'],
-      },
-    },
-  },
+  properties: { e: { type: 'array', items: { type: 'string' } } },
   required: ['e'],
 } as const;
 
-export const SISTEMA_EXTRACCION = `Eres el catalogador de una biblioteca académica. Recibes pasajes numerados de un mismo documento y extraes las entidades con nombre que se mencionan en ellos.
-
-Tipos (campo t):
-p persona (también personajes de ficción) · o obra (libro, cuento, poema, película, disco, canción, artículo, cuadro) · l lugar · g organización (institución, editorial, revista, grupo) · e evento (guerra, congreso, revolución) · f fecha explícita · c concepto (solo los conceptos teóricos o técnicos centrales del pasaje, como mucho 8 por respuesta)
-
-Para cada entidad:
-- n: nombre canónico completo, el que usaría una enciclopedia («Julio Cortázar» aunque el texto diga «Cortázar» o «Julio»). Resuelve apodos, iniciales y nombres parciales cuando el texto o el conocimiento general lo dejan claro. Las obras, con su título habitual. Las fechas, como «AAAA», «AAAA-MM» o «AAAA-MM-DD».
-- f: TODAS las formas en que aparece escrita en los pasajes, copiadas carácter por carácter (mismas tildes, mayúsculas y puntos), sin repetir. Solo formas que estén literalmente en el texto.
-
-No incluyas pronombres, nombres comunes genéricos («el autor», «la ciudad»), ni nada que no esté escrito en los pasajes. Como mucho 60 entidades: si hay más, las más importantes. Responde solo con el JSON.`;
+/*
+ * Formato compacto de una línea por entidad («p|Julio Cortázar|Cortázar»):
+ * con objetos JSON la salida era seis veces más larga (2300 tokens por lote
+ * frente a 360), y la salida es lo caro.
+ */
+export const SISTEMA_EXTRACCION = `Eres el catalogador de una biblioteca académica. Recibes pasajes numerados de un mismo documento. Enumera las entidades con nombre que aparecen escritas en ellos, una por elemento del array «e», con este formato exacto:
+tipo|Nombre canónico completo|forma escrita|forma escrita
+- tipo: p persona real · q personaje de ficción · o obra (libro, cuento, poema, película, disco, canción, artículo, cuadro) · l lugar · g organización (institución, editorial, revista, grupo) · e evento · f fecha explícita («AAAA», «AAAA-MM» o «AAAA-MM-DD») · c concepto teórico o técnico central (como mucho 5).
+- Nombre canónico completo: SIEMPRE el nombre entero que usaría una enciclopedia en español (o el original si no tiene forma española asentada), aunque el texto lo abrevie: «Geoffrey Chaucer» y no «Chaucer»; «Platón» aunque el texto diga «Plato»; «Johnny Carter» si el texto dice «Johnny» y se sabe quién es. Resuelve apodos e iniciales solo cuando el documento o el conocimiento general dejan claro a quién se refieren; si dudas, deja la forma tal cual.
+- Formas escritas: las formas que aparecen en el texto y no son idénticas al nombre canónico, copiadas carácter por carácter. Si el texto usa exactamente el nombre canónico, no lo repitas.
+Nada de pronombres, nombres comunes genéricos ni lo que no esté escrito en los pasajes. Como mucho 40 elementos: los más importantes.`;
 
 /** Tokens aproximados (sin tokenizador): basta para estimar el coste. */
 export const tokensAprox = (s: string) => Math.ceil(s.length / 3.6);
@@ -129,12 +120,28 @@ export function leerRespuesta(json: unknown): EntidadExtraida[] {
   if (!Array.isArray(lista)) return [];
   const salida: EntidadExtraida[] = [];
   for (const x of lista) {
-    const o = x as { n?: unknown; t?: unknown; f?: unknown };
-    const tipo = typeof o.t === 'string' ? CODIGOS_TIPO[o.t.trim().toLowerCase().slice(0, 1)] : undefined;
-    const nombre = typeof o.n === 'string' ? o.n.replace(/\s+/g, ' ').trim() : '';
+    let codigo: string, nombre: string, crudas: unknown[];
+    if (typeof x === 'string') {
+      const partes = x.split('|').map((s) => s.trim());
+      codigo = partes[0] ?? '';
+      nombre = partes[1] ?? '';
+      crudas = partes.slice(2);
+    } else {
+      // También se acepta la forma larga { n, t, f }.
+      const o = x as { n?: unknown; t?: unknown; f?: unknown };
+      codigo = typeof o.t === 'string' ? o.t : '';
+      nombre = typeof o.n === 'string' ? o.n : '';
+      crudas = Array.isArray(o.f) ? o.f : [];
+    }
+    const c = codigo.toLowerCase().slice(0, 1);
+    const ficticia = c === 'q';
+    const tipo = ficticia ? 'persona' : CODIGOS_TIPO[c];
+    nombre = nombre.replace(/\s+/g, ' ').replace(/^[«"“]+|[»"”]+$/g, '').trim();
     if (!tipo || !nombre || nombre.length > 160) continue;
-    const formas = [...new Set((Array.isArray(o.f) ? o.f : []).filter((s): s is string => typeof s === 'string').map((s) => s.replace(/\s+/g, ' ').trim()).filter((s) => s.length >= 2 && s.length <= 160))];
-    salida.push({ nombre, tipo, formas });
+    const formas = [...new Set(crudas.filter((s): s is string => typeof s === 'string')
+      .map((s) => s.replace(/\s+/g, ' ').replace(/^[«"“]+|[»"”]+$/g, '').trim())
+      .filter((s) => s.length >= 2 && s.length <= 160 && s !== nombre))];
+    salida.push({ nombre, tipo, formas, ...(ficticia ? { ficticia: true } : {}) });
   }
   return salida;
 }
@@ -154,7 +161,7 @@ export async function extraerLote(redactor: Redactor, lote: Lote, doc: ContextoD
         esquema: ESQUEMA_EXTRACCION as unknown as Record<string, unknown>,
         calidad: 'rapida',
         temperatura: 0,
-        maxTokens: 4096,
+        maxTokens: 2048,
       });
       uso.tokensSalida += tokensAprox(r.texto ?? '');
       return { entidades: leerRespuesta(r.json ?? safeParse(r.texto)), uso };
@@ -183,7 +190,7 @@ export function localizarMenciones(lote: Lote, entidades: readonly EntidadExtrai
       const formas = [...new Set([...e.formas, e.nombre])];
       const propio = e.tipo !== 'concepto';
       for (const c of buscarFormas(f.texto, formas, propio, excluidos)) {
-        candidatas.push({ fragmento: f.id, orden: f.orden, ancla: f.ancla, ini: c.ini, fin: c.fin, texto: f.texto.slice(c.ini, c.fin), nombre: e.nombre, tipo: e.tipo });
+        candidatas.push({ fragmento: f.id, orden: f.orden, ancla: f.ancla, ini: c.ini, fin: c.fin, texto: f.texto.slice(c.ini, c.fin), nombre: e.nombre, tipo: e.tipo, ...(e.ficticia ? { ficticia: true } : {}) });
       }
     }
     salida.push(...sinSolapes(candidatas));

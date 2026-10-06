@@ -47,6 +47,12 @@ describe('normalizar y localizar', () => {
     expect(leerRespuesta({ e: [{ n: ' Charlie  Parker ', t: 'p', f: ['Parker', 'Parker', ''] }, { n: 'x', t: 'z', f: [] }, { n: '', t: 'p', f: [] }] }))
       .toEqual([{ nombre: 'Charlie Parker', tipo: 'persona', formas: ['Parker'] }]);
     expect(leerRespuesta(null)).toEqual([]);
+    // El formato compacto de una línea por entidad; «q» es un personaje de ficción.
+    expect(leerRespuesta({ e: ['p|Julio Cortázar|Cortázar|Julio Cortázar', 'q|Johnny Carter|Johnny', 'f|1959', 'x|Nada', '|'] })).toEqual([
+      { nombre: 'Julio Cortázar', tipo: 'persona', formas: ['Cortázar'] },
+      { nombre: 'Johnny Carter', tipo: 'persona', formas: ['Johnny'], ficticia: true },
+      { nombre: '1959', tipo: 'fecha', formas: [] },
+    ]);
   });
 
   it('lotes deterministas por caracteres y menciones localizadas en el lote', () => {
@@ -105,6 +111,12 @@ describe('normalizar y localizar', () => {
     expect(elegirCandidato('Charlie Parker', 'persona', cs)?.id).toBe('Q103767');
     expect(elegirCandidato('Parker', 'persona', cs)).toBeNull();
     expect(elegirCandidato('Charlie Parker', 'obra', [{ id: 'Q9', etiqueta: 'Charlie Parker', descripcion: 'ciudad de Texas' }])).toBeNull();
+    // Personajes con personajes; personas reales nunca con personajes; obras solo si lo son.
+    const johnny = [{ id: 'Q1', etiqueta: 'Johnny Carter', descripcion: 'cantante estadounidense' }, { id: 'Q2', etiqueta: 'Johnny Carter', descripcion: 'personaje de El perseguidor' }];
+    expect(elegirCandidato('Johnny Carter', 'persona', johnny, true)?.id).toBe('Q2');
+    expect(elegirCandidato('Johnny Carter', 'persona', johnny.slice(1))).toBeNull();
+    expect(elegirCandidato('Amorous', 'obra', [{ id: 'Q3', etiqueta: 'Amorous', descripcion: 'videojuego de 2018' }])).toBeNull();
+    expect(elegirCandidato('Rayuela', 'obra', [{ id: 'Q4', etiqueta: 'Rayuela', descripcion: 'novela de Julio Cortázar' }])?.id).toBe('Q4');
   });
 });
 
@@ -117,7 +129,7 @@ const CATALOGO: Array<{ si: RegExp; e: { n: string; t: string; f: string[] } }> 
   { si: /Charlie Parker|Parker/, e: { n: 'Charlie Parker', t: 'p', f: ['Charlie Parker', 'Parker'] } },
   { si: /CH\.P\./, e: { n: 'Charlie Parker', t: 'p', f: ['CH.P.'] } },
   { si: /Cortázar/, e: { n: 'Julio Cortázar', t: 'p', f: ['Cortázar', 'Julio Cortázar'] } },
-  { si: /Johnny/, e: { n: 'Johnny Carter', t: 'p', f: ['Johnny'] } },
+  { si: /Johnny/, e: { n: 'Johnny Carter', t: 'q', f: ['Johnny'] } },
   { si: /El perseguidor/, e: { n: 'El perseguidor', t: 'o', f: ['El perseguidor'] } },
   { si: /París/, e: { n: 'París', t: 'l', f: ['París'] } },
   { si: /1951/, e: { n: '1951', t: 'f', f: ['1951'] } },
@@ -130,7 +142,7 @@ function redactorCatalogo(fallarSi?: RegExp) {
     if (texto.includes(' · B = ')) {
       // Relaciones: «A admira a B» cuando el pasaje dice «admiraba».
       const pares = texto.split(/\n\n(?=\[\d+\])/);
-      return { r: pares.map((p, i) => ({ i: i + 1, e: !/admiraba/.test(p) ? '' : /A = Julio Cortázar/.test(p) ? 'admira a' : 'es admirado por' })) };
+      return { r: pares.map((p, i) => ({ i: i + 1, e: /admiraba/.test(p) && /Charlie Parker/.test(p) && /Cortázar/.test(p) ? 'Julio Cortázar admira a Charlie Parker' : /admiraba/.test(p) ? 'Algo admira a Rayuela' : '' })) };
     }
     if (fallarSi?.test(texto)) throw new Error('el proveedor se ha caído');
     // En Discarded Image, «Parker» es Matthew Parker, no el músico.
@@ -219,7 +231,7 @@ describe('grafo de entidades de la biblioteca', () => {
     const cortazar = await idDe(sql, 'Julio Cortázar');
     const v = parker.vecinos.find((x) => x.entidad.id === cortazar)!;
     expect(v).toBeDefined();
-    expect(['Julio Cortázar admira a Charlie Parker', 'Charlie Parker es admirado por Julio Cortázar']).toContain(v.relacion);
+    expect(v.relacion).toBe('Julio Cortázar admira a Charlie Parker');
 
     // Camino: Cortázar → Charlie Parker → Johnny Carter (de la entrevista a la novela).
     const johnny = await idDe(sql, 'Johnny Carter');
@@ -248,6 +260,7 @@ describe('grafo de entidades de la biblioteca', () => {
     const lector = await entidadesLector(sql, 'perseguidor');
     const forma = lector.formas.find((f) => f.texto === 'Johnny')!;
     expect(forma.unidades).toEqual([0, 1]);
+    expect(lector.entidades[forma.entidad]!.descripcion).toBe('personaje de ficción');
     expect(lector.entidades[forma.entidad]!.nombre).toBe('Johnny Carter');
     expect(Object.values(lector.entidades).some((e) => e.tipo === 'fecha')).toBe(false);
 

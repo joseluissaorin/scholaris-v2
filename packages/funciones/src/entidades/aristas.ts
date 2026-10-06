@@ -11,7 +11,7 @@
  */
 
 import type { Redactor, SQL } from '@scholaris/nucleo';
-import { ahora, marcas, num } from '../util.js';
+import { ahora, marcas, normalizarClave, num } from '../util.js';
 import { contextoMencion } from './normalizar.js';
 import { tokensAprox, type UsoLote } from './extraer.js';
 
@@ -106,7 +106,17 @@ export const ESQUEMA_RELACIONES = {
   required: ['r'],
 } as const;
 
-export const SISTEMA_RELACIONES = `Para cada par numerado de entidades (A y B) recibes un pasaje donde aparecen juntas. Escribe en «e» la relación entre A y B que expresa el pasaje, como un predicado breve en español (de 2 a 6 palabras) que se lea «A <predicado> B»: «admira a», «es autor de», «es personaje de», «está inspirado en», «nació en», «influyó en», «entrevista a». Si el pasaje no expresa una relación clara entre las dos, «e» va vacío. No inventes nada que no diga el pasaje. Responde solo con el JSON.`;
+export const SISTEMA_RELACIONES = `Para cada par numerado de entidades (A y B) recibes un pasaje donde aparecen juntas. En «e» escribe UNA frase breve en español (como mucho 12 palabras) que diga la relación entre las dos tal como la afirma el pasaje, empezando por el nombre de una y terminando con el de la otra, en el sentido correcto: «Julio Cortázar admira a Charlie Parker», «Rayuela es una novela de Julio Cortázar», «Johnny Carter está inspirado en Charlie Parker». Usa los nombres tal como se te dan. Si el pasaje solo las menciona juntas sin afirmar una relación concreta, deja «e» vacío. No inventes nada que no diga el pasaje. Responde solo con el JSON.`;
+
+/** ¿La frase nombra a las dos entidades? (Si no, el redactor se ha ido por las ramas.) */
+export function fraseValida(frase: string, a: string, b: string): boolean {
+  const n = normalizarClave(frase);
+  const nombra = (x: string) => {
+    const ps = normalizarClave(x).split(' ').filter((p) => p.length > 2);
+    return ps.length ? ps.some((p) => n.includes(p)) : n.includes(normalizarClave(x));
+  };
+  return nombra(a) && nombra(b);
+}
 
 /**
  * Pone nombre a las aristas más fuertes de un documento que aún no lo tienen
@@ -165,8 +175,8 @@ export async function etiquetarRelaciones(sql: SQL, redactor: Redactor, document
     const p = pares[i];
     if (!p || vistos.has(i)) continue;
     vistos.add(i);
-    const e = typeof x.e === 'string' ? x.e.replace(/\s+/g, ' ').trim().replace(/[.«»"]+$/g, '') : '';
-    const etiqueta = e && e.length <= 60 ? e : null;
+    const e = typeof x.e === 'string' ? x.e.replace(/\s+/g, ' ').trim().replace(/[.«»"]+$/g, '').replace(/^[«"]+/, '') : '';
+    const etiqueta = e && e.length <= 140 && fraseValida(e, nombres.get(p.a) ?? '', nombres.get(p.b) ?? '') ? e : null;
     if (etiqueta) etiquetadas++;
     await sql.ejecutar(
       'INSERT OR REPLACE INTO entidades_relaciones (a, b, etiqueta, documento, fragmento, creada) VALUES (?, ?, ?, ?, ?, ?)',

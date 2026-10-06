@@ -63,7 +63,9 @@ export async function entidadActiva(sql: SQL, id: string): Promise<FilaEntidad |
 }
 
 /** Busca (o crea) la entidad de un nombre y le suma las formas vistas. Devuelve el id activo. */
-export async function obtenerEntidad(sql: SQL, tipo: TipoEntidad, nombre: string, formas: Iterable<string>): Promise<string> {
+export const DESCRIPCION_FICCION = 'personaje de ficción';
+
+export async function obtenerEntidad(sql: SQL, tipo: TipoEntidad, nombre: string, formas: Iterable<string>, ficticia = false): Promise<string> {
   const clave = claveEntidad(nombre, tipo);
   const [f] = await sql.ejecutar<FilaEntidad>('SELECT * FROM entidades WHERE tipo = ? AND clave = ?', tipo, clave);
   const t = ahora();
@@ -71,8 +73,8 @@ export async function obtenerEntidad(sql: SQL, tipo: TipoEntidad, nombre: string
     const id = nuevoId('ent');
     const alias = unirAlias(nombre, [], formas);
     await sql.ejecutar(
-      `INSERT INTO entidades (id, tipo, clave, nombre, alias, busqueda, creada, actualizada) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      id, tipo, clave, nombre, JSON.stringify(alias), textoBusqueda(clave, alias), t, t,
+      `INSERT INTO entidades (id, tipo, clave, nombre, alias, busqueda, descripcion, creada, actualizada) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      id, tipo, clave, nombre, JSON.stringify(alias), textoBusqueda(clave, alias), ficticia ? DESCRIPCION_FICCION : null, t, t,
     );
     return id;
   }
@@ -80,6 +82,9 @@ export async function obtenerEntidad(sql: SQL, tipo: TipoEntidad, nombre: string
   if (!activa) return f.id;
   const actuales = deJSON<string[]>(activa.alias, []);
   const alias = unirAlias(activa.nombre, actuales, [...formas, ...(activa.id !== f.id ? [nombre] : [])]);
+  if (ficticia && !activa.descripcion && !activa.wikidata) {
+    await sql.ejecutar('UPDATE entidades SET descripcion = ? WHERE id = ?', DESCRIPCION_FICCION, activa.id);
+  }
   if (alias.length !== actuales.length) {
     await sql.ejecutar('UPDATE entidades SET alias = ?, busqueda = ?, actualizada = ? WHERE id = ?', JSON.stringify(alias), textoBusqueda(activa.clave, alias), t, activa.id);
   }
@@ -98,15 +103,16 @@ export async function guardarMenciones(sql: SQL, documento: string, fragmentos: 
     await sql.ejecutar(`DELETE FROM menciones WHERE fragmento IN (${marcas(lote.length)})`, ...lote);
   }
   // Una entidad por (tipo, nombre canónico); sus formas, las que de verdad aparecen.
-  const grupos = new Map<string, { tipo: TipoEntidad; nombre: string; formas: Set<string> }>();
+  const grupos = new Map<string, { tipo: TipoEntidad; nombre: string; formas: Set<string>; ficticia: boolean }>();
   for (const m of menciones) {
     const k = `${m.tipo}\u0000${claveEntidad(m.nombre, m.tipo)}`;
-    const g = grupos.get(k) ?? { tipo: m.tipo, nombre: m.nombre, formas: new Set<string>() };
+    const g = grupos.get(k) ?? { tipo: m.tipo, nombre: m.nombre, formas: new Set<string>(), ficticia: false };
     g.formas.add(m.texto.replace(/\s+/g, ' '));
+    if (m.ficticia) g.ficticia = true;
     grupos.set(k, g);
   }
   const ids = new Map<string, string>();
-  for (const [k, g] of grupos) ids.set(k, await obtenerEntidad(sql, g.tipo, g.nombre, g.formas));
+  for (const [k, g] of grupos) ids.set(k, await obtenerEntidad(sql, g.tipo, g.nombre, g.formas, g.ficticia));
   const filas = menciones.map((m) => {
     const entidad = ids.get(`${m.tipo}\u0000${claveEntidad(m.nombre, m.tipo)}`)!;
     tocadas.add(entidad);

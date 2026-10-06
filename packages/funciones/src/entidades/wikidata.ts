@@ -10,6 +10,7 @@ import type { SQL } from '@scholaris/nucleo';
 import type { TipoEntidad } from '@scholaris/contrato';
 import { ahora, deJSON, normalizarClave } from '../util.js';
 import { palabrasSignificativas } from './normalizar.js';
+import { DESCRIPCION_FICCION } from './resolver.js';
 
 export const AGENTE_WIKIDATA = 'Scholaris/2.0 (https://scholaris.app; jl@joseluissaorin.com)';
 const API = 'https://www.wikidata.org/w/api.php';
@@ -33,14 +34,26 @@ const NO_ES: Partial<Record<TipoEntidad, RegExp>> = {
 };
 const DESAMBIGUACION = /desambiguaci|disambiguation|página de wikimedia|wikimedia (list|category)|categoría de wikimedia|lista de wikimedia/i;
 
-export function elegirCandidato(nombre: string, tipo: TipoEntidad, cs: readonly CandidatoWikidata[]): CandidatoWikidata | null {
+const FICCION = /personaje|character|ficticio|ficticia|fictional|ficción|fiction/i;
+/** Lo que describe una obra: si la descripción no lo dice, no es la obra. */
+const ES_OBRA = /novela|cuento|relato|libro|obra|ensayo|poema|poemario|película|film|álbum|album|canción|song|single|sencillo|artículo|article|paper|cuadro|pintura|painting|ópera|opera|comedia|tragedia|drama|teatro|play|novel|book|story|poem|essay|composición|composition|sinfonía|symphony|serie|series|revista|periódico|tratado|treatise|épica|epic|cantar|romance|manuscrito|texto|text|diálogo|dialogue|work|disco|pieza|piece|standard|tema musical/i;
+
+/**
+ * El candidato de Wikidata para un nombre, o nada. Los personajes de ficción
+ * solo enlazan con personajes; las personas reales, nunca con personajes; las
+ * obras, solo con algo cuya descripción diga que es una obra.
+ */
+export function elegirCandidato(nombre: string, tipo: TipoEntidad, cs: readonly CandidatoWikidata[], ficticia = false): CandidatoWikidata | null {
   const clave = normalizarClave(nombre);
   for (const c of cs) {
     const exacta = normalizarClave(c.etiqueta) === clave || normalizarClave(c.coincide) === clave;
     if (!exacta) continue;
     const d = c.descripcion ?? '';
     if (DESAMBIGUACION.test(d)) continue;
-    if (NO_ES[tipo]?.test(d)) continue;
+    if (tipo === 'persona' && ficticia) {
+      if (!FICCION.test(d)) continue;
+    } else if (NO_ES[tipo]?.test(d) || (tipo === 'persona' && FICCION.test(d))) continue;
+    if (tipo === 'obra' && !ES_OBRA.test(d)) continue;
     // Sin descripción no hay forma de saber si es lo que buscamos.
     if (!d) continue;
     return c;
@@ -85,9 +98,9 @@ const ENLAZABLES: TipoEntidad[] = ['persona', 'obra', 'lugar', 'organizacion', '
 export async function enlazarWikidata(sql: SQL, o: OpcionesWikidata = {}): Promise<{ consultadas: number; enlazadas: number }> {
   const f = o.fetch ?? (typeof fetch === 'function' ? fetch : undefined);
   if (!f) return { consultadas: 0, enlazadas: 0 };
-  const maximo = o.maximo ?? 40, pausa = o.pausa ?? 120, idiomas = o.idiomas ?? ['es', 'en'];
-  const filas = await sql.ejecutar<{ id: string; tipo: TipoEntidad; nombre: string; clave: string }>(
-    `SELECT id, tipo, nombre, clave FROM entidades
+  const maximo = o.maximo ?? 80, pausa = o.pausa ?? 120, idiomas = o.idiomas ?? ['es', 'en'];
+  const filas = await sql.ejecutar<{ id: string; tipo: TipoEntidad; nombre: string; clave: string; descripcion: string | null }>(
+    `SELECT id, tipo, nombre, clave, descripcion FROM entidades
       WHERE fusionada_en IS NULL AND wikidata IS NULL AND wikidata_visto = 0
         AND tipo IN (${ENLAZABLES.map(() => '?').join(', ')}) AND (n_menciones >= 2 OR n_documentos >= 2)
       ORDER BY n_documentos DESC, n_menciones DESC LIMIT ?`,
@@ -109,7 +122,7 @@ export async function enlazarWikidata(sql: SQL, o: OpcionesWikidata = {}): Promi
           consultadas++;
           if (pausa) await new Promise((r) => setTimeout(r, pausa));
         }
-        elegido = elegirCandidato(e.nombre, e.tipo, cs);
+        elegido = elegirCandidato(e.nombre, e.tipo, cs, e.descripcion === DESCRIPCION_FICCION);
         if (elegido) break;
       }
     } catch {
