@@ -129,7 +129,12 @@ export async function leerPliego(
       const entrada = await entradaPara(desde, hasta, pliego.envio);
       paginas = await reintentar(
         () => {
-          const llamada = () => conLimite(lector.leerPliego({ ...entrada, ...(opciones.pista ? { pista: opciones.pista } : {}) }), opciones.limiteMs ?? Math.max(60_000, (hasta - desde + 1) * 20_000), lector.nombre);
+          // La llamada de cobertura cambia un poco la pista: si la primera se quedó en un bucle
+          // de repetición (determinista), la segunda no lo repite.
+          const llamada = (n = 0) => {
+            const pista = [opciones.pista, n > 0 ? 'Transcribe cada página una sola vez, sin repetir líneas.' : ''].filter(Boolean).join(' ');
+            return conLimite(lector.leerPliego({ ...entrada, ...(pista ? { pista } : {}) }), opciones.limiteMs ?? Math.max(60_000, (hasta - desde + 1) * 20_000), lector.nombre);
+          };
           return opciones.cobertura && nivel === 0 ? opciones.cobertura.llamar(llamada) : llamada();
         },
         { intentos: 2, base: 1500 },

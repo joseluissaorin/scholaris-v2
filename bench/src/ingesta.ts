@@ -32,6 +32,7 @@ export interface OpcionesBanco {
   original?: boolean;
   /** Lector: 'alta' (3.8 Flash primero) o 'rapida' (Flash-Lite primero). Por defecto, alta solo para escaneados y fotos. */
   lector?: 'alta' | 'rapida';
+  sinVista?: boolean;
 }
 
 export function fuenteEnMemoria(m: PaqueteEnMemoria, original: Uint8Array | null): FuentePaquete {
@@ -103,6 +104,7 @@ export async function ingerir(ruta: string, o: OpcionesBanco = {}) {
     ...(o.sinContexto ? { sinContexto: true } : {}),
     ...(o.pista ? { pista: o.pista } : {}),
     ...(o.sinFiguras ? { describirFiguras: false } : {}),
+    ...(o.sinVista ? { vectorPorPagina: false } : {}),
     onProgreso: (p) => {
       progreso.push(p);
       const ahora = Date.now();

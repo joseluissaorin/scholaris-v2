@@ -21,20 +21,21 @@ export class Cobertura {
   }
   anotar(ms: number) { this.latencias.push(ms); if (this.latencias.length > 200) this.latencias.shift(); }
   cubiertas = 0;
-  async llamar<T>(fn: () => Promise<T>): Promise<T> {
+  /** `fn` recibe 0 en la llamada original y 1 en la de cobertura (puede variar la petición). */
+  async llamar<T>(fn: (intento: number) => Promise<T>): Promise<T> {
     const t0 = this.reloj();
     this.lanzadas++;
     return new Promise<T>((resolver, rechazar) => {
       let hecho = false, fallos = 0, lanzadas = 1;
-      const intento = () => fn().then(
+      const intento = (n: number) => fn(n).then(
         (v) => { if (!hecho) { hecho = true; clearTimeout(temporizador); this.anotar(this.reloj() - t0); resolver(v); } },
         (e) => { if (++fallos >= lanzadas && !hecho) { hecho = true; clearTimeout(temporizador); rechazar(e); } },
       );
       const temporizador = setTimeout(() => {
         if (hecho || this.cubiertas + 1 > Math.max(2, this.lanzadas * this.presupuesto)) return;
-        lanzadas++; this.cubiertas++; void intento();
+        lanzadas++; this.cubiertas++; void intento(1);
       }, this.umbral());
-      void intento();
+      void intento(0);
     });
   }
 }
