@@ -84,3 +84,14 @@ describe('pasoMetadatos', () => {
     expect(metadatos.procedencia?.titulo?.fuente).toBe('lectura');
   });
 });
+
+describe('nombres compatibles', () => {
+  it('iniciales y nombres', async () => {
+    const { nombresCompatibles } = await import('../src/pasos/metadatos.js');
+    expect(nombresCompatibles('C. S.', 'Cynthia')).toBe(false);
+    expect(nombresCompatibles('C. S.', 'Clive Staples')).toBe(true);
+    expect(nombresCompatibles('Ashish', 'A.')).toBe(true);
+    expect(nombresCompatibles('Julio', 'Julio')).toBe(true);
+    expect(nombresCompatibles('Julio', 'Javier')).toBe(false);
+  });
+});

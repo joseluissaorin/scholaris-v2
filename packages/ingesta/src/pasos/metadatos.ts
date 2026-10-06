@@ -247,6 +247,22 @@ function deOpenAlex(o: ObraOpenAlex): RegistroExterno {
   return r;
 }
 
+/** ¿Pueden ser la misma persona? Compara iniciales y, si ambos traen nombres enteros, los nombres. */
+export function nombresCompatibles(a: string, b: string): boolean {
+  const fichas = (s: string) => normalizar(s.replace(/\./g, '. ')).split(' ').filter(Boolean);
+  const x = fichas(a), y = fichas(b);
+  if (!x.length || !y.length) return true;
+  if (x.length !== y.length) {
+    // «Ashish» frente a «A.»: vale; «C. S.» frente a «Cynthia»: no.
+    return x.length === 1 && y.length === 1;
+  }
+  return x.every((t, i) => {
+    const u = y[i] as string;
+    if (t[0] !== u[0]) return false;
+    return t.length === 1 || u.length === 1 || similitud(t, u) >= 0.8;
+  });
+}
+
 /** ¿El registro externo es la misma obra? 0-1. Título casi igual y autor o año compatibles. */
 export function coincidencia(lectura: Partial<MetadatosDocumento>, ext: Partial<MetadatosDocumento>): number {
   if (!lectura.titulo || !ext.titulo) return 0;
@@ -254,11 +270,15 @@ export function coincidencia(lectura: Partial<MetadatosDocumento>, ext: Partial<
   // El externo puede traer «Título: subtítulo» en el título.
   const st = Math.max(similitud(tl, te), te.startsWith(tl) && tl.length > 12 ? 0.95 : 0, tl.startsWith(te) && te.length > 12 ? 0.9 : 0);
   if (st < 0.8) return 0;
-  const apL = new Set((lectura.autores ?? []).map((a) => normalizar(a.apellidos).split(' ').at(-1)));
-  const apE = (ext.autores ?? []).map((a) => normalizar(a.apellidos).split(' ').at(-1));
-  const autor = apL.size && apE.length ? (apE.some((a) => apL.has(a)) ? 1 : 0) : 0.5;
+  const autoresL = lectura.autores ?? [], autoresE = ext.autores ?? [];
+  const ultimo = (a: Autor) => normalizar(a.apellidos).split(' ').at(-1) ?? '';
+  let autor = 0.5;
+  if (autoresL.length && autoresE.length) {
+    // Mismo apellido Y nombres compatibles («C. S.» ≠ «Cynthia»; «A.» = «Ashish»).
+    autor = autoresL.some((a) => autoresE.some((b) => ultimo(a) === ultimo(b) && nombresCompatibles(a.nombre, b.nombre))) ? 1 : 0;
+  }
   const anio = lectura.anio && ext.anio ? (Math.abs(lectura.anio - ext.anio) <= 1 ? 1 : 0.3) : 0.5;
-  if (autor === 0 && apL.size && apE.length) return 0;
+  if (autor === 0) return 0;
   // Un artículo no cambia de año: si el registro dice otro, es otra cosa (o una copia basura
   // con DOI propio, que las hay a miles). En libros, una reedición sí puede cambiarlo.
   const libro = lectura.tipoCSL === 'book' || lectura.tipoCSL === 'chapter' || Boolean(lectura.isbn);

@@ -52,10 +52,15 @@ export function planificar(paquete: PaqueteConversion, opciones: OpcionesPlan = 
 
   const paginas = c.paginas;
   const digital = opciones.digital ?? 'auto';
+  // Una capa de texto que viene de un OCR ajeno (Acrobat Paper Capture, ABBYY…) trae
+  // erratas («n6o», «beliefis»), titulillos dentro del cuerpo y notas mezcladas: se relee.
+  const ocrAjeno = digital === 'auto' && capaDeOcr(paquete);
+  if (ocrAjeno) notas.push('La capa de texto es de un OCR anterior: se relee con visión');
   const motivos: Array<Pliego['motivo'] | null> = paginas.map((p) => {
     if (p.clase === 'pdf_escaneado') return 'sin_capa';
     if (digital === 'vision') return 'todo_vision';
     const t = p.texto;
+    if (ocrAjeno && (t.caracteres > 0 || p.imagenes.length > 0 || t.coberturaImagen > 0.02)) return 'capa_ocr';
     if (!t.util) {
       // Sin capa útil: si no hay nada que ver (página en blanco), no se manda.
       if (t.caracteres === 0 && p.imagenes.length === 0 && t.coberturaImagen < 0.02) return null;
@@ -67,7 +72,7 @@ export function planificar(paquete: PaqueteConversion, opciones: OpcionesPlan = 
 
   // Si casi todo va por visión, es un escaneado con alguna página de texto: todo por visión.
   const nVision = motivos.filter(Boolean).length;
-  if (digital === 'auto' && nVision > paginas.length * 0.5 && nVision < paginas.length) {
+  if (digital === 'auto' && !ocrAjeno && nVision > paginas.length * 0.5 && nVision < paginas.length) {
     notas.push(`${nVision}/${paginas.length} páginas sin capa útil: se lee entero con visión`);
     for (let i = 0; i < motivos.length; i++) motivos[i] ??= 'sin_capa';
   }
@@ -125,7 +130,28 @@ const RE_MATES = /[∑∏∫√∂∇≤≥≈≠∈∉⊂⊆∪∩→←↔⇒�
  * con visión, que devuelve tablas en Markdown y fórmulas en LaTeX. La prosa,
  * aunque sea de un libro de 600 páginas, se queda en la capa (gratis e inmediata).
  */
+const RE_OCR = /paper capture|clearscan|abbyy|finereader|omnipage|readiris|tesseract|ocrmypdf|\bocr\b|scansnap|capture|kofax|naps2|vflat|camscanner|adobe scan|internet archive|djvu|luratech/i;
+
+/** ¿La capa de texto del PDF es un OCR hecho por otro programa? */
+export function capaDeOcr(paquete: PaqueteConversion): boolean {
+  const c = paquete.contenido;
+  if (c.clase !== 'pdf') return false;
+  const ficha = [paquete.metadatos.productor, paquete.metadatos.creador, c.info.Producer, c.info.Creator, c.xmp ? Object.values(c.xmp).join(' ') : ''].filter(Boolean).join(' ');
+  if (RE_OCR.test(ficha)) return true;
+  const conTexto = c.paginas.filter((p) => p.texto.caracteres > 0);
+  return conTexto.length > 0 && conTexto.filter((p) => p.texto.origen === 'ocr').length / conTexto.length > 0.3;
+}
+
+/** Letras espaciadas («T H E  M E D I E V A L»): la capa no sabe dónde acaban las palabras. */
+export function capaEspaciada(texto: string): boolean {
+  const fichas = texto.split(/\s+/).filter(Boolean);
+  if (fichas.length < 8) return false;
+  const sueltas = fichas.filter((f) => /^\p{L}$/u.test(f)).length;
+  return sueltas / fichas.length > 0.3;
+}
+
 export function paginaCompleja(p: PaginaPdf): boolean {
+  if (capaEspaciada(p.cuerpo)) return true;
   const bloques = p.bloques.filter((b) => b.texto.trim());
   if (bloques.length < 6) return false;
   const palabras = (t: string) => t.trim().split(/\s+/).length;

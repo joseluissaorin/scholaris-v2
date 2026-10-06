@@ -71,7 +71,7 @@ export interface Pliego {
   hasta: number;
   /** Cómo se manda: sub-PDF (más barato y limpio) o imágenes sueltas. */
   envio: 'pdf' | 'imagenes';
-  motivo: 'sin_capa' | 'capa_mala' | 'maquetacion' | 'todo_vision' | 'fotos';
+  motivo: 'sin_capa' | 'capa_mala' | 'capa_ocr' | 'maquetacion' | 'todo_vision' | 'fotos';
 }
 
 export interface Plan {

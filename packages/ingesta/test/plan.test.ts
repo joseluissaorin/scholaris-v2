@@ -52,3 +52,16 @@ describe('cortarPliegos', () => {
     expect(ps.map((p) => [p.desde, p.hasta])).toEqual([[1, 1], [3, 4]]);
   });
 });
+
+describe('capa de OCR ajeno', () => {
+  it('un PDF de Paper Capture se relee entero con visión (menos las páginas en blanco)', () => {
+    const ps = [paginaPdf(1, texto), paginaPdf(2, ''), paginaPdf(3, texto)];
+    const plan = planificar(paquetePdf(ps, { metadatos: { productor: 'Adobe Acrobat 10.1.7 Paper Capture Plug-in with ClearScan' } }));
+    expect(plan.vias).toEqual(['vision', 'capa', 'vision']);
+    expect(plan.pliegos.every((p) => p.motivo === 'capa_ocr')).toBe(true);
+  });
+  it('las letras espaciadas van por visión', () => {
+    const plan = planificar(paquetePdf([paginaPdf(1, 'T H E D I S C A R D E D I M A G E by C. S. L E W I S')]));
+    expect(plan.vias).toEqual(['vision']);
+  });
+});

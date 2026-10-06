@@ -92,6 +92,16 @@ export function anclarIndice(indice: EntradaIndice[], unidades: UnidadLeida[]): 
     const u = porFisica.get(e.fisica);
     let t: Titulo | null = mejor && puntos >= 0.6 ? mejor : u ? { unidad: u.orden, parrafo: 0, nivel: e.nivel, texto: e.titulo } : null;
     if (!t) continue;
+    // «CHAPTER I» encima del título: la sección empieza en el rótulo.
+    const un = unidades.find((x) => x.orden === (t as Titulo).unidad);
+    if (un) {
+      const ps = parrafosDeUnidad(un);
+      while (t.parrafo > 0 && despues(t.unidad, t.parrafo - 1)) {
+        const previo = esTituloMarkdown(ps[t.parrafo - 1] ?? '');
+        if (!previo || previo.texto.split(/\s+/).length > 5) break;
+        t = { ...t, parrafo: t.parrafo - 1 };
+      }
+    }
     if (!despues(t.unidad, t.parrafo)) t = { ...t, unidad: ultimo.unidad, parrafo: ultimo.parrafo };
     ultimo = { unidad: t.unidad, parrafo: t.parrafo };
     salida.push(t);
@@ -116,11 +126,11 @@ export function pasoEstructura(
     const niveles = new Set(util.map((e) => e.nivel));
     if (niveles.size === 1) {
       const primero = titulos.reduce((m, y) => (y.unidad < m.unidad || (y.unidad === m.unidad && y.parrafo < m.parrafo) ? y : m), titulos[0] as Titulo);
-      const delTexto = titulosDelTexto(unidades).filter((x) => primero && (x.unidad > primero.unidad || (x.unidad === primero.unidad && x.parrafo > primero.parrafo))).filter((x) => !titulos.some((y) => similitud(x.texto, y.texto) > 0.8 || (x.unidad === y.unidad && x.parrafo === y.parrafo)));
+      const delTexto = titulosDelTexto(unidades).filter((x) => primero && (x.unidad > primero.unidad || (x.unidad === primero.unidad && x.parrafo > primero.parrafo))).filter((x) => !titulos.some((y) => similitud(x.texto, y.texto) > 0.8 || (x.unidad === y.unidad && x.parrafo >= y.parrafo - 2 && x.parrafo <= y.parrafo)));
       const base = Math.max(...niveles);
       if (delTexto.length && delTexto.length < unidades.length * 1.5) {
-        const minNivel = Math.min(...delTexto.map((x) => x.nivel));
-        titulos.push(...delTexto.map((x) => ({ ...x, nivel: base + 1 + (x.nivel - minNivel) })));
+        // Los niveles que pone el lector cambian de una página a otra: todos, un nivel por debajo del índice.
+        titulos.push(...delTexto.map((x) => ({ ...x, nivel: base + 1 })));
         fuente = 'indice+texto';
       }
     }
