@@ -20,6 +20,7 @@ import { BarraSeleccion, useSeleccion } from '../componentes/lector/seleccion';
 import { MenuDocumento, reintentarDocumento } from '../componentes/biblioteca/documento';
 import { BotonReferencia } from '../componentes/comunes/boton-referencia';
 import { copiarReferencia } from '../lib/referencia';
+import { PanelFiguras } from '../componentes/inspector/panel-figuras';
 import { hojear } from '../movimiento/hojear';
 import { Portada } from '../componentes/comunes/portada';
 
@@ -161,8 +162,12 @@ function Lector() {
           ) : null}
 
           <BotonReferencia documento={doc.id} className="hidden md:flex" />
+          <Consejo texto="Todo lo que contiene el .spdf: páginas, fragmentos, figuras, vectores, procedencia">
+            <Link to="/documentos/$id/contenido" params={{ id: doc.id }} aria-label="Ver todo el SPDF" className="hidden h-9 shrink-0 items-center gap-1.5 rounded-xl px-2.5 text-[0.8125rem] font-medium text-coffee-500 hover:bg-cream-200 hover:text-coffee-800 md:flex"><Icono nombre="pila" tam={16} /><span className="hidden 2xl:inline">Todo el SPDF</span></Link>
+          </Consejo>
           <div className="hidden items-center gap-1 sm:flex">
             <BotonPanel activo={panel === 'indice'} icono="indice" etiqueta="Índice" alPulsar={() => abrirPanel('indice')} />
+            {doc.cuentas.figuras > 0 ? <BotonPanel activo={panel === 'figuras'} icono={medio ? 'video' : 'figura'} etiqueta={medio ? 'Fotogramas' : 'Figuras'} alPulsar={() => abrirPanel('figuras')} /> : null}
             <BotonPanel activo={panel === 'ficha'} icono="editar" etiqueta="Ficha" alPulsar={() => abrirPanel('ficha')} />
           </div>
           <MenuDocumento doc={resumen} bibliotecas={bibliotecas}>
@@ -230,7 +235,7 @@ function Lector() {
   );
 }
 
-function BotonPanel({ activo, icono, etiqueta, alPulsar }: { activo: boolean; icono: 'indice' | 'editar'; etiqueta: string; alPulsar: () => void }) {
+function BotonPanel({ activo, icono, etiqueta, alPulsar }: { activo: boolean; icono: 'indice' | 'editar' | 'figura' | 'video'; etiqueta: string; alPulsar: () => void }) {
   return (
     <button type="button" aria-pressed={activo} onClick={alPulsar} className={cx('flex h-9 items-center gap-1.5 rounded-xl border px-2.5 text-[0.8125rem] font-medium transition-[background,box-shadow]', activo ? 'border-[#1a0f0a] bg-coffee-800 text-cream-50 shadow-[inset_0_1px_3px_rgb(0_0_0/0.35)]' : 'border-transparent text-coffee-500 hover:bg-cream-200 hover:text-coffee-800')}>
       <Icono nombre={icono} tam={16} /><span className="hidden lg:inline">{etiqueta}</span>
@@ -267,9 +272,9 @@ function IrA({ etiqueta, total, alIr, medio }: { etiqueta: string; total: string
 
 function PanelDocumento({ doc, panel, setPanel, irA, irT, actual }: { doc: DetalleDocumento; panel: Panel; setPanel: (p: Panel | null) => void; irA: (o: number) => void; irT: (t: number) => void; actual: number }) {
   const { data: secciones, isPending } = useQuery(q.secciones(doc.id));
-  const { data: figuras } = useQuery({ ...q.figuras(doc.id), enabled: panel === 'figuras' || !esMedio(doc.tipo) });
+  const { data: figuras } = useQuery({ ...q.figuras(doc.id), enabled: panel === 'figuras' || doc.cuentas.figuras > 0 });
   const { data: folios } = useQuery(q.folios(doc.id));
-  const pestanas: Array<[Panel, string]> = [['indice', 'Índice'], ...(figuras?.length ? [['figuras', 'Figuras'] as [Panel, string]] : []), ['ficha', 'Ficha']];
+  const pestanas: Array<[Panel, string]> = [['indice', 'Índice'], ...(figuras?.length || doc.cuentas.figuras > 0 ? [['figuras', esMedio(doc.tipo) ? 'Fotogramas' : 'Figuras'] as [Panel, string]] : []), ['ficha', 'Ficha']];
   const etiqueta = (orden: number, m?: MapaFolios) => {
     const f = m?.folios[orden - 1];
     if (esMedio(doc.tipo)) return f?.t0 != null ? tiempoACadena(f.t0) : '';
@@ -305,17 +310,7 @@ function PanelDocumento({ doc, panel, setPanel, irA, irT, actual }: { doc: Detal
             </ol>
           )
         ) : panel === 'figuras' ? (
-          <ul className="grid grid-cols-2 gap-3">
-            {figuras?.map((f) => (
-              <li key={f.id}>
-                <button type="button" onClick={() => irA(f.unidad)} className="group block w-full text-left">
-                  {f.imagenUrl ? <img src={f.imagenUrl} alt={f.descripcion ?? f.pie ?? ''} loading="lazy" className="aspect-[4/3] w-full rounded-s border border-filete object-cover" /> : <div className="grid aspect-[4/3] place-items-center rounded-s border border-filete bg-hondo"><Icono nombre="figura" tam={22} className="text-apagado" /></div>}
-                  <p className="mt-1.5 line-clamp-2 text-[0.8125rem] group-hover:underline">{f.pie}</p>
-                  <Rotulo>{f.etiqueta}</Rotulo>
-                </button>
-              </li>
-            ))}
-          </ul>
+          <PanelFiguras documento={doc.id} actual={actual} alIr={(f) => (f.t !== undefined ? irT(f.t) : irA(f.unidad))} />
         ) : (
           <Ficha doc={doc} />
         )}

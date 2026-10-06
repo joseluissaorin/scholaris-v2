@@ -30,6 +30,7 @@ import { Route as ExplorarEntidadesRouteImport } from './rutas/explorar.entidade
 import { Route as ExplorarGrafoRouteImport } from './rutas/explorar.grafo'
 import { Route as ExplorarPerspectivasRouteImport } from './rutas/explorar.perspectivas'
 import { Route as LectorIdRouteImport } from './rutas/lector.$id'
+import { Route as DocumentosIdContenidoRouteImport } from './rutas/documentos.$id.contenido'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -136,6 +137,11 @@ const LectorIdRoute = LectorIdRouteImport.update({
   path: '/lector/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
+const DocumentosIdContenidoRoute = DocumentosIdContenidoRouteImport.update({
+  id: '/documentos/$id/contenido',
+  path: '/documentos/$id/contenido',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -159,6 +165,7 @@ export interface FileRoutesByFullPath {
   '/buscar/': typeof BuscarIndexRoute
   '/escribir/': typeof EscribirIndexRoute
   '/explorar/': typeof ExplorarIndexRoute
+  '/documentos/$id/contenido': typeof DocumentosIdContenidoRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -178,6 +185,7 @@ export interface FileRoutesByTo {
   '/buscar': typeof BuscarIndexRoute
   '/escribir': typeof EscribirIndexRoute
   '/explorar': typeof ExplorarIndexRoute
+  '/documentos/$id/contenido': typeof DocumentosIdContenidoRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -202,6 +210,7 @@ export interface FileRoutesById {
   '/buscar/': typeof BuscarIndexRoute
   '/escribir/': typeof EscribirIndexRoute
   '/explorar/': typeof ExplorarIndexRoute
+  '/documentos/$id/contenido': typeof DocumentosIdContenidoRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -227,6 +236,7 @@ export interface FileRouteTypes {
     | '/buscar/'
     | '/escribir/'
     | '/explorar/'
+    | '/documentos/$id/contenido'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -246,6 +256,7 @@ export interface FileRouteTypes {
     | '/buscar'
     | '/escribir'
     | '/explorar'
+    | '/documentos/$id/contenido'
   id:
     | '__root__'
     | '/'
@@ -269,6 +280,7 @@ export interface FileRouteTypes {
     | '/buscar/'
     | '/escribir/'
     | '/explorar/'
+    | '/documentos/$id/contenido'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -278,6 +290,7 @@ export interface RootRouteChildren {
   EscribirRoute: typeof EscribirRouteWithChildren
   ExplorarRoute: typeof ExplorarRouteWithChildren
   LectorIdRoute: typeof LectorIdRoute
+  DocumentosIdContenidoRoute: typeof DocumentosIdContenidoRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -429,6 +442,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LectorIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/documentos/$id/contenido': {
+      id: '/documentos/$id/contenido'
+      path: '/documentos/$id/contenido'
+      fullPath: '/documentos/$id/contenido'
+      preLoaderRoute: typeof DocumentosIdContenidoRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -507,6 +527,7 @@ const rootRouteChildren: RootRouteChildren = {
   EscribirRoute: EscribirRouteWithChildren,
   ExplorarRoute: ExplorarRouteWithChildren,
   LectorIdRoute: LectorIdRoute,
+  DocumentosIdContenidoRoute: DocumentosIdContenidoRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

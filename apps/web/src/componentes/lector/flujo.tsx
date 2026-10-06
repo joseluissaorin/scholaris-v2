@@ -13,6 +13,8 @@ import { Markdown } from './markdown';
 import { Facsimil } from './facsimil';
 import { etiquetaCorta } from '../../lib/formato';
 import { paginaPrevia, usePrevia, type PaginaPrevia } from '../../datos/previa';
+import { altPagina, MarcasFiguras, useFigurasDePagina } from '../inspector/marcas-pagina';
+import { useFigurasDocumento } from '../inspector/figuras';
 
 function unidadDePrevia(p: PaginaPrevia): UnidadVista {
   return {
@@ -120,6 +122,10 @@ const Fila = memo(function Fila({ docId, orden, modo, texto, apaisada, resaltar,
   const pendiente = pendienteServidor && !previa;
   // Si la imagen no llega, la página sigue siendo una página: el facsímil con su texto.
   const [imagenRota, setImagenRota] = useState(false);
+  // Las figuras de esta página: marcadas sobre la imagen, y descritas en su texto alternativo.
+  const figuras = useFigurasDePagina(docId, orden);
+  const { figuras: todas } = useFigurasDocumento(docId, figuras.length > 0);
+  const [aspectoImagen, setAspectoImagen] = useState<number | null>(null);
 
   if (texto) {
     return (
@@ -138,7 +144,10 @@ const Fila = memo(function Fila({ docId, orden, modo, texto, apaisada, resaltar,
           <span className="flex items-center gap-2 text-[0.875rem] text-apagado"><span className="h-1.5 w-1.5 rounded-full bg-rojo anim-pulso" />Leyendo esta página…</span>
         </div>
       ) : u?.imagenUrl && !imagenRota ? (
-        <img src={u.imagenUrl} alt={`Imagen de la página ${u.etiqueta}`} loading="lazy" decoding="async" onError={() => setImagenRota(true)} className={cx('w-full rounded-md bg-white object-contain shadow-hoja', apaisada ? 'aspect-[16/9]' : 'aspect-[1/1.414]')} />
+        <div className="relative">
+          <img src={u.imagenUrl} alt={altPagina(u.etiqueta, figuras)} loading="lazy" decoding="async" onError={() => setImagenRota(true)} onLoad={(e) => setAspectoImagen(e.currentTarget.naturalWidth / e.currentTarget.naturalHeight)} className={cx('w-full rounded-md bg-white object-contain shadow-hoja', apaisada ? 'aspect-[16/9]' : 'aspect-[1/1.414]')} />
+          <MarcasFiguras documento={docId} figuras={figuras} aspecto={aspectoImagen ? { imagen: aspectoImagen, caja: apaisada ? 16 / 9 : 1 / 1.414 } : undefined} todas={todas.filter((f) => f.ancla.tipo !== 'tiempo')} alIr={() => undefined} />
+        </div>
       ) : u ? (
         <Facsimil texto={u.texto} folio={folio?.impresa} titulillo={orden % 2 ? titulillo : undefined} apaisada={apaisada} />
       ) : (

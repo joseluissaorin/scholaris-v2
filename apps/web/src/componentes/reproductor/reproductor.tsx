@@ -27,6 +27,7 @@ import { FormaHablante } from './hablantes';
 import { IconoR } from './iconos';
 import { ATAJOS, useTeclado } from './teclado';
 import { enlaceAlMinuto, useSeleccionTranscripcion } from './citar';
+import { TiraFotogramas, useEscenas } from '../inspector/fotogramas';
 
 export interface ManejadorMedio { irA: (t: number) => void }
 
@@ -70,6 +71,8 @@ export const Reproductor = forwardRef<ManejadorMedio, Props>(function Reproducto
   const trRef = useRef<Transcripcion | null>(null);
   trRef.current = tr;
   const fotogramas = useFotogramas(doc);
+  // Lo que se ve en cada escena, marcado en la transcripción.
+  const escenas = useEscenas(doc.id, doc.tipo === 'video');
   const capitulos = useCapitulos(doc);
   const propio = inst.documento === doc.id;
   const duracion = (propio && inst.duracion) || doc.duracion || 0;
@@ -165,7 +168,7 @@ export const Reproductor = forwardRef<ManejadorMedio, Props>(function Reproducto
         <div className="hidden lg:block">
           {tr && tr.hablantes.length ? <Hablantes tr={tr} /> : null}
           {capitulos.length ? <Capitulos capitulos={capitulos} /> : null}
-          {esVideo && fotogramas ? <Escenas fotogramas={fotogramas} cargar={propio && inst.estado !== 'vacio' && inst.estado !== 'cargando'} /> : null}
+          {esVideo ? <TiraFotogramas documento={doc.id} cargar={propio && inst.estado !== 'vacio' && inst.estado !== 'cargando'} /> : null}
           <p className="mt-6 flex flex-wrap items-center gap-x-2 gap-y-1 text-[0.75rem] text-apagado">
             <Teclas>Espacio</Teclas> reproduce · <Teclas>J</Teclas><Teclas>L</Teclas> 10 s · <Teclas>[</Teclas><Teclas>]</Teclas> velocidad ·
             <button type="button" onClick={abrirAyuda} className="underline decoration-filete-fuerte underline-offset-4 hover:text-coffee-800">todas las teclas</button>
@@ -179,7 +182,7 @@ export const Reproductor = forwardRef<ManejadorMedio, Props>(function Reproducto
         <div ref={barraDesktop} className="sticky top-[4.25rem] z-10 -mx-2 hidden bg-cream-100/90 px-2 py-3 backdrop-blur lg:block">{barraBusqueda}</div>
         <div ref={zonaTexto} className="mx-auto max-w-[46rem] pb-24 pt-2" onPointerDown={(e) => { if (e.pointerType === 'mouse' && !(e.target as HTMLElement).closest('button')) setSeguir(false); }}>
           <TranscripcionVista ref={vista} transcripcion={tr} marcadas={marcadas} foco={coincidencias[indiceCoincidencia]?.desde ?? null} resaltar={resaltar}
-            margenSuperior={margenSuperior} seguir={seguir} alCambiarSeguir={setSeguir} pendientes={pendientes ?? (unidades && doc.estado === 'procesando' ? undefined : 0)} />
+            margenSuperior={margenSuperior} seguir={seguir} alCambiarSeguir={setSeguir} escenas={escenas} pendientes={pendientes ?? (unidades && doc.estado === 'procesando' ? undefined : 0)} />
         </div>
       </div>
 
@@ -599,47 +602,6 @@ function Capitulos({ capitulos }: { capitulos: Capitulo[] }) {
               <span className="mt-1 h-2 w-2 shrink-0 rounded-full border-2 border-azul" aria-hidden />
               <span className="min-w-0 flex-1">{c.titulo}</span>
               <span className="font-mono text-[0.75rem] tnum text-apagado">{tiempoACadena(c.t0)}</span>
-            </button>
-          </li>
-        ))}
-      </ol>
-    </section>
-  );
-}
-
-/** Escenas: nueve fotogramas clave repartidos por el vídeo (sin los fundidos a negro); la actual, marcada. */
-function Escenas({ fotogramas, cargar }: { fotogramas: NonNullable<ReturnType<typeof useFotogramas>>; cargar: boolean }) {
-  // Las imágenes esperan a que el vídeo tenga su índice: los primeros bytes son para el vídeo.
-  const [pedir, setPedir] = useState(cargar);
-  useEffect(() => { if (cargar) setPedir(true); }, [cargar]);
-  const elegidos = useMemo(() => {
-    const validos = Array.from(fotogramas.t, (_, i) => i).filter((i) => !/negr|en blanco|vac[ií]o/i.test(fotogramas.descripcion[i] ?? ''));
-    if (validos.length <= 9) return validos;
-    return Array.from({ length: 9 }, (_, k) => validos[Math.round((k * (validos.length - 1)) / 8)]!);
-  }, [fotogramas]);
-  const lista = useRef<HTMLOListElement>(null);
-  useEffect(() => {
-    let previo = -2;
-    return motor().escucharTiempo((t) => {
-      const f = fotogramaEn(fotogramas, t);
-      let actual = -1;
-      for (let k = 0; k < elegidos.length; k++) if (elegidos[k]! <= f) actual = k;
-      if (actual === previo || !lista.current) return;
-      previo = actual;
-      lista.current.querySelectorAll('[data-escena]').forEach((n, k) => n.toggleAttribute('data-actual', k === actual));
-    });
-  }, [fotogramas, elegidos]);
-  if (elegidos.length < 3) return null;
-  return (
-    <section className="mt-6" aria-label="Escenas">
-      <h2 className="rotulo text-apagado">Escenas</h2>
-      <ol ref={lista} className="mt-2 grid grid-cols-3 gap-2">
-        {elegidos.map((i) => (
-          <li key={i}>
-            <button type="button" data-escena onClick={() => motor().irA(fotogramas.t[i]!, { sonar: true })} aria-label={`Ir a ${tiempoACadena(fotogramas.t[i]!)}${fotogramas.descripcion[i] ? `: ${fotogramas.descripcion[i]}` : ''}`}
-              className="escena group block w-full overflow-hidden rounded-lg border border-cream-400 bg-cream-50 text-left shadow-[var(--relieve)] transition-[transform,box-shadow] hover:-translate-y-px hover:shadow-[var(--levantado)]">
-              {pedir ? <img src={fotogramas.url[i]} alt="" loading="lazy" decoding="async" className="block aspect-video w-full bg-coffee-900 object-cover" /> : <span className="block aspect-video w-full bg-coffee-900/80" />}
-              <span className="block px-1.5 py-1 font-mono text-[0.6875rem] tnum text-coffee-600">{tiempoACadena(fotogramas.t[i]!)}</span>
             </button>
           </li>
         ))}

@@ -18,6 +18,8 @@ import { motor } from './motor';
 import { normalizar, palabraEn, parrafoEn, type Parrafo, type Transcripcion } from './transcripcion';
 import { FormaHablante } from './hablantes';
 import { menosMovimiento } from './ganchos';
+import { escenasEntre, MarcaEscena, type Escenas } from '../inspector/fotogramas';
+import { VisorFigura, type FiguraVisor } from '../inspector/figuras';
 
 export interface ManejadorTranscripcion {
   /** Lleva la vista a una palabra (sin tocar la reproducción). */
@@ -39,6 +41,8 @@ interface Props {
   alCambiarSeguir: (v: boolean) => void;
   /** Unidades aún no leídas (ingesta en curso). */
   pendientes?: number;
+  /** Vídeo: las escenas (fotogramas con lo que se ve), marcadas donde empiezan. */
+  escenas?: Escenas | null;
 }
 
 const ADELANTO = 0.25;
@@ -46,7 +50,7 @@ const ADELANTO = 0.25;
 const estimar = (p: Parrafo) => 36 + Math.ceil(((p.hasta - p.desde) * 6.4) / 64) * 29 + (p.turno ? 26 : 0);
 
 export const TranscripcionVista = forwardRef<ManejadorTranscripcion, Props>(function TranscripcionVista(
-  { transcripcion: tr, marcadas, foco, resaltar, margenSuperior, seguir, alCambiarSeguir, pendientes }, ref,
+  { transcripcion: tr, marcadas, foco, resaltar, margenSuperior, seguir, alCambiarSeguir, pendientes, escenas }, ref,
 ) {
   const contenedor = useRef<HTMLDivElement>(null);
   const [margen, setMargen] = useState(0);
@@ -171,6 +175,9 @@ export const TranscripcionVista = forwardRef<ManejadorTranscripcion, Props>(func
     seguir: () => alCambiarSeguir(true),
   }), [tr, v, margenSuperior, desplazarA, alCambiarSeguir]);
 
+  const [escenaAbierta, setEscenaAbierta] = useState<number | null>(null);
+  const abrirEscena = useCallback((f: FiguraVisor) => setEscenaAbierta(escenas ? escenas.lista.indexOf(f) : null), [escenas]);
+
   const raices = useMemo(() => (resaltar ? resaltar.split(/\s+/).map(normalizar).filter((x) => x.length > 2).map((x) => x.slice(0, Math.max(4, x.length - 2))) : []), [resaltar]);
 
   if (!tr) {
@@ -184,17 +191,20 @@ export const TranscripcionVista = forwardRef<ManejadorTranscripcion, Props>(func
     <div ref={contenedor} role="region" aria-label="Transcripción" className="transcripcion relative" style={{ height: v.getTotalSize() }}>
       {items.map((it) => (
         <div key={it.key} data-index={it.index} ref={v.measureElement} className="absolute inset-x-0" style={{ top: it.start - v.options.scrollMargin }}>
-          <ParrafoVista tr={tr} i={it.index} marcadas={marcadas} foco={foco} raices={raices} alSeguir={() => alCambiarSeguir(true)} />
+          <ParrafoVista tr={tr} i={it.index} marcadas={marcadas} foco={foco} raices={raices} alSeguir={() => alCambiarSeguir(true)} escenas={escenas ?? null} alAbrirEscena={abrirEscena} />
         </div>
       ))}
+      {escenas ? <VisorFigura figuras={escenas.lista} indice={escenaAbierta} alCambiar={setEscenaAbierta} alIr={(f) => { motor().irA(f.t ?? 0, { sonar: true }); alCambiarSeguir(true); }} /> : null}
       {pendientes ? <p className="absolute inset-x-0 bottom-0 py-6 text-[0.875rem] text-apagado" style={{ top: v.getTotalSize() }}>Faltan {pendientes} tramos por transcribir…</p> : null}
     </div>
   );
 });
 
-const ParrafoVista = memo(function ParrafoVista({ tr, i, marcadas, foco, raices, alSeguir }: { tr: Transcripcion; i: number; marcadas: Uint8Array | null; foco: number | null; raices: string[]; alSeguir: () => void }) {
+const ParrafoVista = memo(function ParrafoVista({ tr, i, marcadas, foco, raices, alSeguir, escenas, alAbrirEscena }: { tr: Transcripcion; i: number; marcadas: Uint8Array | null; foco: number | null; raices: string[]; alSeguir: () => void; escenas: Escenas | null; alAbrirEscena: (f: FiguraVisor) => void }) {
   const p = tr.parrafos[i]!;
   const anterior = tr.parrafos[i - 1];
+  // Las escenas que empiezan durante este párrafo (hasta que empieza el siguiente).
+  const aqui = escenas ? escenasEntre(escenas, i === 0 ? 0 : p.t0, tr.parrafos[i + 1]?.t0 ?? Infinity) : [];
   // La marca de tiempo solo al empezar turno o si han pasado 40 s desde la última visible.
   const marcaTiempo = p.turno || !anterior || Math.floor(p.t0 / 40) !== Math.floor(anterior.t0 / 40);
   const ws = tr.palabras.slice(p.desde, p.hasta);
@@ -214,6 +224,7 @@ const ParrafoVista = memo(function ParrafoVista({ tr, i, marcadas, foco, raices,
         ) : null}
       </div>
       <div className="min-w-0">
+        {aqui.length ? <MarcaEscena escenas={aqui} alAbrir={alAbrirEscena} /> : null}
         {p.turno && p.h >= 0 ? (
           <p className="mb-1 flex items-center gap-2 text-[0.6875rem] font-semibold uppercase tracking-[0.06em] text-coffee-600">
             <FormaHablante h={p.h} tam={9} />{tr.hablantes[p.h]}
