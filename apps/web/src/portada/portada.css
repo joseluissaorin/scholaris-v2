@@ -248,9 +248,9 @@ img, svg { display: block; max-width: 100%; }
 .lamina { grid-row: 3; margin: clamp(2.5rem, 5vw, 4rem) 0 0; }
 .lamina svg { width: 100%; height: auto; }
 .lamina-ancha { grid-column: borde-izq / borde-der; overflow: hidden; }
-.lamina-derecha { grid-column: texto / borde-der; margin-right: calc(-1 * clamp(2rem, 8vw, 9rem)); }
+.lamina-derecha { grid-column: texto / borde-der; margin-right: calc(-1 * clamp(1rem, 3vw, 3.5rem)); }
 .lamina-media { grid-column: texto / span 2; }
-.lamina-ancha svg { width: max(100%, 56rem); margin-inline: auto; position: relative; left: 50%; transform: translateX(-50%); }
+.lamina-ancha svg { max-width: none; width: max(100%, 56rem); margin-inline: auto; position: relative; left: 50%; transform: translateX(-50%); }
 
 /* El espécimen: una ficha que se levanta del papel. */
 .especimen {
@@ -334,10 +334,13 @@ img, svg { display: block; max-width: 100%; }
   .heroe { padding-top: 6rem; min-height: auto; }
   .heroe-sol { width: 88vw; right: -38vw; top: 3.2rem; }
   .titular { grid-column: 1 / -1; }
-  .heroe-mano { grid-column: 1 / -1; grid-row: auto; width: calc(100% + var(--canal) * 1.4); margin-top: 1.4rem; }
-  .heroe-pie { grid-column: 1 / -1; grid-row: auto; justify-self: stretch; max-width: none; transform: none; margin: 1rem 0 0; }
+  .heroe-mano { grid-column: 1 / -1; grid-row: auto; width: calc(100% + var(--canal) * 1.4); margin-top: 0.6rem; }
+  .heroe-pie { grid-column: 1 / -1; grid-row: auto; justify-self: stretch; max-width: none; transform: none; margin: 0.4rem 0 0; padding: 1.25rem 1.3rem 1.2rem; gap: 1rem; }
+  .heroe .rotulo { display: none; }
+  .heroe .acciones .boton { flex: 1 1 auto; }
   .cuerpo p { text-align: left; }
-  .lamina-ancha svg { width: 160%; left: 38%; }
+  .lamina-ancha svg { width: 175%; left: 50%; }
+  .lamina-media svg { max-width: none; width: 128%; }
   .especimen .mano-ficha { width: 5rem; right: -0.6rem; bottom: -2.6rem; }
   .especimen .nota-mano { right: 4rem; bottom: -3.3rem; font-size: 1.05rem; max-width: 13rem; }
   .indice .linea { flex-wrap: wrap; }
