@@ -24,7 +24,7 @@ describe('ejecutarIngesta', () => {
     expect(r.unidades).toHaveLength(5);
     expect(r.unidades[0]?.lector).toBe('vision');
     expect(r.unidades[1]?.lector).toBe('capa-pdf');
-    expect(r.unidades.map((u) => (u.ancla?.tipo === 'pagina' ? u.ancla.impresa : '?'))).toEqual(['9', '10', '11', '12', '13']);
+    expect(r.unidades.map((u) => (u.ancla?.tipo === 'pagina' ? u.ancla.impresa : '?'))).toEqual([null, '10', '11', '12', '13']);
     expect(r.documento.metadatos.titulo).toBe('The Discarded Image');
     expect(r.secciones.map((s) => s.titulo)).toEqual(['I. The Medieval Situation', 'II. Selected Materials']);
     expect(r.fragmentos.length).toBeGreaterThan(3);
@@ -39,4 +39,19 @@ describe('ejecutarIngesta', () => {
     expect(progreso.at(-1)?.fase).toBe('listo');
     expect(progreso.some((p) => (p.unidadesListas ?? 0) > 0 && p.fase === 'lectura')).toBe(true);
   });
+});
+
+describe('vectores', () => {
+  it('un fallo al guardar se propaga (no se da por bueno un documento a medio indexar)', async () => {
+    const { vectorizar } = await import('../src/pasos/vectores.js');
+    const { embebedorFalso, fuenteFalsa } = await import('./fakes.js');
+    await expect(vectorizar([{ objetivo: 'fragmento', id: 'a', texto: 'x' }], embebedorFalso, fuenteFalsa, async () => { throw new Error('sqlite-vec: NULL'); })).rejects.toThrow('NULL');
+  });
+  it('un fallo del embebedor se cuenta y se sigue', async () => {
+    const { vectorizar } = await import('../src/pasos/vectores.js');
+    const { embebedorFalso, fuenteFalsa } = await import('./fakes.js');
+    const malo = { ...embebedorFalso, vectorizar: async () => { throw new Error('500'); } };
+    const p = await vectorizar([{ objetivo: 'fragmento', id: 'a', texto: 'x' }], malo, fuenteFalsa, async () => {}, { concurrencia: 1 });
+    expect(p.detalle?.fallidos).toBe(1);
+  }, 30000);
 });

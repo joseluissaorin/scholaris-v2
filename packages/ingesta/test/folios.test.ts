@@ -33,3 +33,14 @@ describe('deducirFolios', () => {
     expect(a.map((x) => x.impresa)).toEqual(['230', '231', '232', '233']);
   });
 });
+
+describe('etiquetas del PDF frente a lo que se ve', () => {
+  it('se aceptan si el valor está entre los números del pie aunque el elegido sea una nota', async () => {
+    const { pasoFolios } = await import('../src/pasos/folios.js');
+    const u = (fisica: number, etiqueta: string, pie: string) => ({ orden: fisica - 1, fisica, texto: 'x', notas: [], cabecera: '', pie, folioVisto: pie.split(' ')[0] ?? null, etiqueta, titulos: [], figuras: [], vacia: false, lector: 't', confianza: 1 });
+    const us = [u(1, 'i', 'i'), u(2, 'ii', ''), u(3, '1', '1 Ed. Madden / 1'), u(4, '2', '3 Cf. / 2'), u(5, '3', '3'), u(6, '4', '1 nota / 4')];
+    const r = await pasoFolios(us, { propio: true });
+    expect(r.anclas.map((a) => a.impresa)).toEqual(['i', 'ii', '1', '2', '3', '4']);
+    expect(r.procedencia.proveedor).toBe('etiquetas-pdf');
+  });
+});

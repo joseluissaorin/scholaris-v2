@@ -248,6 +248,8 @@ export function trocear(unidades: UnidadLeida[], secciones: Seccion[], opciones:
     for (let i = todos.length - 1; i >= 0; i--) if ((todos[i] as FragmentoPlano).unidad <= h.unidad) { pos = i + 1; break; }
     todos.splice(pos, 0, h);
   }
+  // Fuera los fragmentos sin contenido (llamadas de nota sueltas, «† ‡»).
+  for (let i = todos.length - 1; i >= 0; i--) if (((todos[i] as FragmentoPlano).texto.match(/\p{L}/gu)?.length ?? 0) < 12) todos.splice(i, 1);
   todos.forEach((f, i) => { f.orden = i; f.texto = f.texto.replace(/\n{3,}/g, '\n\n'); });
   return todos;
 }

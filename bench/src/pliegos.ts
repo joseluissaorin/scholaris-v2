@@ -1,3 +1,5 @@
+import { Agent, setGlobalDispatcher } from 'undici';
+setGlobalDispatcher(new Agent({ connections: 256 }));
 /**
  * `tsx src/pliegos.ts <pdf> <desde> <hasta> <tam,tam,…>`: mide el tamaño de pliego.
  * Lee el mismo tramo de páginas con pliegos de distintos tamaños, todos en

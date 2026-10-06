@@ -5,7 +5,12 @@
  *   pnpm bench comparar [etiqueta…]
  */
 
+import { Agent, setGlobalDispatcher } from 'undici';
 import { ingerir, type OpcionesBanco } from './ingesta.js';
+
+// El fetch de Node 26 encola las peticiones simultáneas al mismo origen (8 llamadas
+// a Gemini en paralelo acaban de una en una); con un Agent propio van de verdad en paralelo.
+setGlobalDispatcher(new Agent({ connections: 256, keepAliveTimeout: 30_000 }));
 import { compararTodo } from './comparar.js';
 
 const [orden, ...resto] = process.argv.slice(2);

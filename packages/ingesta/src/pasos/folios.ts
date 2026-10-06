@@ -11,7 +11,8 @@
  * `opciones.deducir`; esta es la implementación propia, pura y sin red.
  */
 
-import { aRomano, deRomano, type AnclaPagina } from '@scholaris/nucleo';
+import { aRomano, deRomano, type AnclaPagina, type Juez } from '@scholaris/nucleo';
+import { aAncla, calcularFolios, type PaginaFolio } from '@scholaris/folios';
 import type { Procedencia, UnidadLeida } from '../tipos.js';
 
 export interface EntradaFolio {
@@ -19,6 +20,36 @@ export interface EntradaFolio {
   visto: string | null;
   etiqueta: string | null;
   vacia: boolean;
+  cabecera?: string;
+  pie?: string;
+  texto?: string;
+}
+
+/** Todos los números que se ven en cabecera, pie y folio leído de una página. */
+export function numerosVistos(e: EntradaFolio): Set<string> {
+  const s = new Set<string>();
+  for (const t of `${e.cabecera ?? ''} ${e.pie ?? ''} ${e.visto ?? ''}`.split(/[\s/|·.,;:()\[\]—–-]+/)) {
+    const f = interpretarFolio(t);
+    if (f) s.add(f.romano ? `r${f.valor}` : String(f.valor));
+  }
+  return s;
+}
+
+/**
+ * ¿Las etiquetas del PDF cuadran con lo que se ve? Se mira si el valor de la
+ * etiqueta está entre los números de la cabecera o el pie (no solo el elegido:
+ * en el pie también hay llamadas de nota y años).
+ */
+export function acuerdoEtiquetas(entradas: EntradaFolio[]): { acuerdo: number; comparadas: number } {
+  let acuerdo = 0, comparadas = 0;
+  for (const e of entradas) {
+    const et = interpretarFolio(e.etiqueta);
+    const vistos = numerosVistos(e);
+    if (!et || !vistos.size) continue;
+    comparadas++;
+    if (vistos.has(et.romano ? `r${et.valor}` : String(et.valor))) acuerdo++;
+  }
+  return { acuerdo, comparadas };
 }
 
 interface Lectura { fisica: number; valor: number; romano: boolean }
@@ -66,6 +97,18 @@ function zonas(lecturas: Lectura[]): Array<{ desde: number; hasta: number; despl
   return salida.sort((a, b) => a.desde - b.desde);
 }
 
+export function anclasDeEtiquetas(entradas: EntradaFolio[], contrastadas: boolean): AnclaPagina[] {
+  return entradas.map((e) => {
+    const et = interpretarFolio(e.etiqueta);
+    if (!e.etiqueta || !et) return e.etiqueta ? { tipo: 'pagina', fisica: e.fisica, impresa: e.etiqueta, romana: false, origen: 'deducido', confianza: 0.7 } : { tipo: 'pagina', fisica: e.fisica, impresa: null, romana: false, origen: 'ninguno', confianza: 0 };
+    const visto = numerosVistos(e).has(et.romano ? `r${et.valor}` : String(et.valor));
+    return {
+      tipo: 'pagina', fisica: e.fisica, impresa: et.romano ? (e.etiqueta as string).toLowerCase() : (e.etiqueta as string),
+      romana: et.romano, origen: visto ? 'leido' : 'deducido', confianza: visto ? 0.99 : contrastadas ? 0.93 : 0.8,
+    };
+  });
+}
+
 export function deducirFolios(entradas: EntradaFolio[]): AnclaPagina[] {
   const ninguno = (fisica: number): AnclaPagina => ({ tipo: 'pagina', fisica, impresa: null, romana: false, origen: 'ninguno', confianza: 0 });
   const vistos: Lectura[] = [];
@@ -76,27 +119,8 @@ export function deducirFolios(entradas: EntradaFolio[]): AnclaPagina[] {
 
   // 1. Etiquetas del PDF, si son informativas y no contradicen lo que se ve.
   if (etiquetasInformativas(entradas)) {
-    let acuerdo = 0, comparadas = 0;
-    for (const v of vistos) {
-      const e = entradas.find((x) => x.fisica === v.fisica);
-      const et = interpretarFolio(e?.etiqueta ?? null);
-      if (!et) continue;
-      comparadas++;
-      if (et.valor === v.valor && et.romano === v.romano) acuerdo++;
-    }
-    if (comparadas === 0 || acuerdo / comparadas >= 0.7) {
-      const vistosPor = new Map(vistos.map((v) => [v.fisica, v]));
-      return entradas.map((e) => {
-        const et = interpretarFolio(e.etiqueta);
-        if (!e.etiqueta) return ninguno(e.fisica);
-        const visto = vistosPor.get(e.fisica);
-        const coincide = visto && et && visto.valor === et.valor;
-        return {
-          tipo: 'pagina', fisica: e.fisica, impresa: et?.romano ? (e.etiqueta as string).toLowerCase() : (e.etiqueta as string),
-          romana: Boolean(et?.romano), origen: coincide ? 'leido' : 'deducido', confianza: coincide ? 0.99 : comparadas ? 0.9 : 0.8,
-        };
-      });
-    }
+    const { acuerdo, comparadas } = acuerdoEtiquetas(entradas);
+    if (comparadas === 0 || acuerdo / comparadas >= 0.5) return anclasDeEtiquetas(entradas, comparadas > 0);
   }
 
   // 2. Consenso de desplazamiento sobre lo que se ve.
@@ -134,14 +158,18 @@ export function deducirFolios(entradas: EntradaFolio[]): AnclaPagina[] {
       const valor = e.fisica - primera.desplazamiento;
       if (valor >= 1 && primera.desde - e.fisica <= 6 && !e.vacia) return { tipo: 'pagina', fisica: e.fisica, impresa: String(valor), romana: false, origen: 'deducido', confianza: 0.6 };
     }
-    if (visto) return { tipo: 'pagina', fisica: e.fisica, impresa: visto.romano ? aRomano(visto.valor) : String(visto.valor), romana: visto.romano, origen: 'leido', confianza: 0.5 };
+    // Una lectura aislada que no cuadra con nadie solo vale si es plausible (no un año, no mayor que el libro).
+    if (visto && visto.valor <= entradas.length + 20) return { tipo: 'pagina', fisica: e.fisica, impresa: visto.romano ? aRomano(visto.valor) : String(visto.valor), romana: visto.romano, origen: 'leido', confianza: 0.4 };
     return ninguno(e.fisica);
   });
 }
 
 export interface OpcionesFolios {
-  /** Deductor externo (p. ej. `@scholaris/folios` con Jev). */
+  /** Deductor externo; por defecto `@scholaris/folios` (con el juez si se da). */
   deducir?: (entradas: EntradaFolio[]) => Promise<AnclaPagina[]>;
+  juez?: Juez;
+  /** Usar solo la deducción propia (sin `@scholaris/folios`). */
+  propio?: boolean;
   reloj?: () => number;
 }
 
@@ -149,14 +177,33 @@ export interface OpcionesFolios {
 export async function pasoFolios(unidades: UnidadLeida[], opciones: OpcionesFolios = {}): Promise<{ anclas: AnclaPagina[]; procedencia: Procedencia }> {
   const reloj = opciones.reloj ?? Date.now;
   const t = reloj();
-  const entradas: EntradaFolio[] = unidades.map((u) => ({ fisica: u.fisica, visto: u.folioVisto, etiqueta: u.etiqueta ?? null, vacia: u.vacia }));
-  let anclas: AnclaPagina[];
+  const entradas: EntradaFolio[] = unidades.map((u) => ({ fisica: u.fisica, visto: u.folioVisto, etiqueta: u.etiqueta ?? null, vacia: u.vacia, cabecera: u.cabecera, pie: u.pie, texto: u.texto.slice(0, 600) }));
+  let anclas: AnclaPagina[] | null = null;
   let proveedor = 'folios-propio';
-  if (opciones.deducir) {
-    try { anclas = await opciones.deducir(entradas); proveedor = 'folios'; }
-    catch { anclas = deducirFolios(entradas); }
-  } else anclas = deducirFolios(entradas);
+  const detalle: Record<string, unknown> = {};
+  // 1. Etiquetas del PDF que cuadran con lo que se ve: mandan (son del editor).
+  if (etiquetasInformativas(entradas)) {
+    const { acuerdo, comparadas } = acuerdoEtiquetas(entradas);
+    detalle.etiquetas = { acuerdo, comparadas };
+    if (comparadas === 0 || acuerdo / comparadas >= 0.5) { anclas = anclasDeEtiquetas(entradas, comparadas > 0); proveedor = 'etiquetas-pdf'; }
+  }
+  // 2. La secuencia de candidatos de `@scholaris/folios`, con Jev para las dudosas.
+  if (!anclas && !opciones.propio) {
+    try {
+      if (opciones.deducir) { anclas = await opciones.deducir(entradas); proveedor = 'folios-externo'; }
+      else {
+        const paginas: PaginaFolio[] = unidades.map((u) => ({ fisica: u.fisica, cabecera: u.cabecera, pie: u.pie, folio: u.folioVisto, texto: u.texto.slice(0, 600), vacia: u.vacia, confianza: u.confianza }));
+        const r = await calcularFolios(paginas, opciones.juez ? { juez: opciones.juez } : {});
+        anclas = r.paginas.map(aAncla);
+        proveedor = opciones.juez ? `folios+${opciones.juez.nombre}` : 'folios';
+        Object.assign(detalle, { estrategia: r.estrategia, disposicion: r.disposicion, juez: r.juez, anclasSecuencia: r.anclas, avisos: r.avisos.slice(0, 5) });
+      }
+    } catch (e) {
+      detalle.error = String((e as Error)?.message ?? e).slice(0, 200);
+    }
+  }
+  anclas ??= deducirFolios(entradas);
   const cuenta = { leido: 0, deducido: 0, ninguno: 0, epub: 0 };
   for (const a of anclas) cuenta[a.origen]++;
-  return { anclas, procedencia: { fase: 'folios', proveedor, ms: reloj() - t, detalle: { ...cuenta, vistos: entradas.filter((e) => e.visto).length } } };
+  return { anclas, procedencia: { fase: 'folios', proveedor, ms: reloj() - t, detalle: { ...detalle, ...cuenta, vistos: entradas.filter((e) => e.visto).length } } };
 }

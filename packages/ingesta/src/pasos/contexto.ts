@@ -8,6 +8,7 @@
 import { enParalelo, reintentar, type MetadatosDocumento, type Redactor } from '@scholaris/nucleo';
 import type { FragmentoPlano, Procedencia } from '../tipos.js';
 import { nombreCompleto } from './autores.js';
+import { Cobertura } from '../cobertura.js';
 
 export interface GrupoContexto {
   seccion: string[];
@@ -62,10 +63,12 @@ export async function contextualizarGrupo(
   grupo: GrupoContexto,
   metadatos: MetadatosDocumento,
   redactor: Redactor,
+  cobertura?: Cobertura,
 ): Promise<Record<string, string>> {
   const idioma = metadatos.idioma ?? 'el del texto';
   const cuerpo = grupo.fragmentos.map((f, i) => `<fragmento n="${i + 1}"${f.ancla ? ` lugar="${f.ancla}"` : ''}>\n${f.texto}\n</fragmento>`).join('\n');
-  const r = await reintentar(() => redactor.generar<{ contextos: Array<{ n: number; contexto: string }> }>({
+  const llamar = <T,>(fn: () => Promise<T>) => (cobertura ? cobertura.llamar(fn) : fn());
+  const r = await reintentar(() => llamar(() => redactor.generar<{ contextos: Array<{ n: number; contexto: string }> }>({
     sistema:
       'Escribes, para cada fragmento de una obra, UNA línea breve (15-35 palabras) que lo sitúa para un buscador: de qué obra y parte es, ' +
       'quién habla o de qué trata y a qué se refieren los pronombres o elipsis («él», «este método», «la reina»). ' +
@@ -79,7 +82,7 @@ export async function contextualizarGrupo(
     temperatura: 0.2,
     maxTokens: Math.min(8192, 120 + grupo.fragmentos.length * 90),
     calidad: 'rapida',
-  }), { intentos: 3, base: 1500 });
+  })), { intentos: 3, base: 1500 });
   const salida: Record<string, string> = {};
   for (const c of r.json?.contextos ?? []) {
     const f = grupo.fragmentos[c.n - 1];
@@ -98,14 +101,15 @@ export async function pasoContexto(
   const t = reloj();
   const grupos = agruparPorSeccion(fragmentos);
   let hechos = 0, fallidos = 0;
+  const cobertura = new Cobertura(15_000, 2, reloj);
   const partes = await enParalelo(grupos, opciones.concurrencia ?? 16, async (g) => {
-    try { return await contextualizarGrupo(g, metadatos, redactor); }
+    try { return await contextualizarGrupo(g, metadatos, redactor, cobertura); }
     catch { fallidos++; return {}; }
     finally { opciones.alGrupo?.(++hechos, grupos.length); }
   });
   const contextos: Record<string, string> = Object.assign({}, ...partes);
   return {
     contextos,
-    procedencia: { fase: 'contexto', proveedor: redactor.nombre, ms: reloj() - t, detalle: { grupos: grupos.length, fallidos, cubiertos: Object.keys(contextos).length, fragmentos: fragmentos.length } },
+    procedencia: { fase: 'contexto', proveedor: redactor.nombre, ms: reloj() - t, detalle: { grupos: grupos.length, fallidos, cubiertas: cobertura.cubiertas, cubiertos: Object.keys(contextos).length, fragmentos: fragmentos.length } },
   };
 }

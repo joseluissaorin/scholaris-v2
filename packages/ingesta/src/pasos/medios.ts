@@ -5,6 +5,7 @@
 
 import { enParalelo, reintentar, type PalabraTranscrita, type Transcriptor } from '@scholaris/nucleo';
 import type { FuentePaquete, Procedencia, TramoPlan, UnidadLeida } from '../tipos.js';
+import { Cobertura } from '../cobertura.js';
 
 export interface ResultadoTranscripcionTramo {
   n: number;
@@ -18,17 +19,18 @@ export async function transcribirTramo(
   tramo: TramoPlan,
   fuente: FuentePaquete,
   transcriptor: Transcriptor,
-  opciones: { idioma?: string; pista?: string; reloj?: () => number } = {},
+  opciones: { idioma?: string; pista?: string; reloj?: () => number; cobertura?: Cobertura } = {},
 ): Promise<ResultadoTranscripcionTramo> {
   const reloj = opciones.reloj ?? Date.now;
   const t = reloj();
   const audio = await fuente.parte(tramo.parte);
   if (!audio) throw new Error(`Falta el tramo de audio ${tramo.parte}`);
+  const llamar = <T,>(fn: () => Promise<T>) => (opciones.cobertura ? opciones.cobertura.llamar(fn) : fn());
   const r = await reintentar(
-    () => transcriptor.transcribir(
+    () => llamar(() => transcriptor.transcribir(
       { bytes: audio.bytes, mime: audio.mime, desplazamiento: tramo.t0 },
       { hablantes: true, ...(opciones.idioma ? { idioma: opciones.idioma } : {}), ...(opciones.pista ? { pista: opciones.pista } : {}) },
-    ),
+    )),
     { intentos: 3, base: 2000 },
   );
   let palabras = r.palabras.filter((p) => p.texto.trim());
@@ -57,8 +59,9 @@ export async function transcribirMedio(
   concurrencia: number,
   opciones: { idioma?: string; pista?: string; reloj?: () => number; alTramo?: (r: ResultadoTranscripcionTramo) => void } = {},
 ): Promise<{ palabras: PalabraTranscrita[]; idioma?: string; procedencia: Procedencia[] }> {
+  const cobertura = new Cobertura(45_000, 2, opciones.reloj);
   const res = await enParalelo(tramos, concurrencia, async (t) => {
-    const r = await transcribirTramo(t, fuente, transcriptor, opciones);
+    const r = await transcribirTramo(t, fuente, transcriptor, { ...opciones, cobertura });
     opciones.alTramo?.(r);
     return r;
   });

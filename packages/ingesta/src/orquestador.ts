@@ -47,6 +47,8 @@ export interface OpcionesOrquestador extends OpcionesIngesta {
   pista?: string;
   /** Deductor de folios externo (`@scholaris/folios`). */
   deducirFolios?: OpcionesFolios['deducir'];
+  /** Solo la deducción de folios propia, sin `@scholaris/folios` ni juez. */
+  foliosPropios?: boolean;
   /** Describir con el Redactor las figuras sin descripción. */
   describirFiguras?: boolean;
   /** Tamaño de los tramos citables de audio y vídeo. */
@@ -125,6 +127,8 @@ export async function ejecutarIngesta(paquete: PaqueteConversion, puertos: Puert
   const vistaPaginas = plan.paginasImagen.length
     ? vectorizarEnTodos(plan.paginasImagen.map((p) => ({ objetivo: 'unidad', id: idUnidad(p.fisica), parte: p.parte })), 'paginas')
     : Promise.resolve();
+  // Se espera más abajo; esto solo evita el aviso de promesa rechazada sin manejar mientras tanto.
+  vistaPaginas.catch(() => {});
 
   // --- lectura ------------------------------------------------------------
   const tLectura = reloj();
@@ -209,7 +213,7 @@ export async function ejecutarIngesta(paquete: PaqueteConversion, puertos: Puert
   // --- folios -------------------------------------------------------------
   if (plan.modo === 'paginas') {
     const t = reloj();
-    const r = await pasoFolios(unidades, { ...(opciones.deducirFolios ? { deducir: opciones.deducirFolios } : {}), reloj });
+    const r = await pasoFolios(unidades, { ...(opciones.deducirFolios ? { deducir: opciones.deducirFolios } : {}), ...(opciones.foliosPropios ? { propio: true } : { juez: ia.juez }), reloj });
     unidades.forEach((u, i) => { u.ancla = r.anclas[i]; });
     procedencia.push(r.procedencia);
     marcar('folios', t);
@@ -248,6 +252,9 @@ export async function ejecutarIngesta(paquete: PaqueteConversion, puertos: Puert
     await vectorizarEnTodos(piezas, 'figuras');
     return r.figuras;
   })();
+
+  metadatosP.catch(() => {});
+  figurasP.catch(() => {});
 
   // --- contexto y vectores de texto ---------------------------------------
   const metadatos = await metadatosP;

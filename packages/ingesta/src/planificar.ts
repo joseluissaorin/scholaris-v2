@@ -3,11 +3,12 @@
  * cortan los pliegos y qué tramos de audio y fotogramas hay. Puro y determinista.
  */
 
-import type { PaqueteConversion } from '@scholaris/imprenta';
+import type { PaginaPdf, PaqueteConversion } from '@scholaris/imprenta';
 import type { OpcionesPlan, Plan, Pliego, ViaLectura } from './tipos.js';
 
-export const PAGINAS_POR_PLIEGO = 6;
-export const CONCURRENCIA = 24;
+/** Medido en el banco (48 páginas, Flash-Lite): 1 → 5,6 s y 0,00165 $/p; 4 → 7,5 s y 0,00143 $/p; 8 → 11,2 s y 0,00131 $/p. */
+export const PAGINAS_POR_PLIEGO = 4;
+export const CONCURRENCIA = 48;
 
 export function planificar(paquete: PaqueteConversion, opciones: OpcionesPlan = {}): Plan {
   const porPliego = Math.max(1, opciones.paginasPorPliego ?? PAGINAS_POR_PLIEGO);
@@ -60,7 +61,7 @@ export function planificar(paquete: PaqueteConversion, opciones: OpcionesPlan = 
       if (t.caracteres === 0 && p.imagenes.length === 0 && t.coberturaImagen < 0.02) return null;
       return t.caracteres > 0 ? 'capa_mala' : 'sin_capa';
     }
-    if (digital === 'auto' && t.coberturaImagen > 0.3) return 'maquetacion';
+    if (digital === 'auto' && (t.coberturaImagen > 0.3 || paginaCompleja(p))) return 'maquetacion';
     return null;
   });
 
@@ -114,4 +115,21 @@ export function cortarPliegos(
     }
   }
   return pliegos;
+}
+
+const RE_MATES = /[∑∏∫√∂∇≤≥≈≠∈∉⊂⊆∪∩→←↔⇒∀∃±×÷·∞αβγδεθλμσφψωΩΣΠ]/gu;
+
+/**
+ * ¿La capa de texto destroza esta página? Tablas y fórmulas salen de pdf.js como
+ * muchos bloques diminutos («O(1) O(n)», «P E», «(pos,2i)»): esas páginas se leen
+ * con visión, que devuelve tablas en Markdown y fórmulas en LaTeX. La prosa,
+ * aunque sea de un libro de 600 páginas, se queda en la capa (gratis e inmediata).
+ */
+export function paginaCompleja(p: PaginaPdf): boolean {
+  const bloques = p.bloques.filter((b) => b.texto.trim());
+  if (bloques.length < 6) return false;
+  const palabras = (t: string) => t.trim().split(/\s+/).length;
+  const diminutos = bloques.filter((b) => palabras(b.texto) <= 3).length;
+  const mates = (p.cuerpo.match(RE_MATES)?.length ?? 0) / Math.max(1, p.cuerpo.length);
+  return (diminutos >= 6 && diminutos / bloques.length >= 0.35) || mates > 0.01;
 }

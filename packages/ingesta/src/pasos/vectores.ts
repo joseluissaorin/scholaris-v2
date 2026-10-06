@@ -56,15 +56,20 @@ export async function vectorizar(
       else omitidas++;
     }
     if (!entradas.length) return;
+    let vs: Float32Array[];
     try {
-      const vs = await reintentar(() => embebedor.vectorizar(entradas.map((e) => e.pieza), 'documento'), { intentos: 4, base: 1000 });
-      await guardar(vs.map((v, i) => ({ objetivo: (entradas[i] as (typeof entradas)[number]).p.objetivo, id: (entradas[i] as (typeof entradas)[number]).p.id, espacio: embebedor.espacio.id, valores: v })));
-      vectores += vs.length;
+      vs = await reintentar(() => embebedor.vectorizar(entradas.map((e) => e.pieza), 'documento'), { intentos: 4, base: 1000 });
     } catch {
+      // Un lote que el embebedor no puede vectorizar se cuenta y se sigue: el documento
+      // vale sin esos vectores. Lo que falle al GUARDAR, en cambio, se propaga: un
+      // documento a medio indexar no debe darse por bueno (el paso se reintenta).
       fallidos += entradas.length;
-    } finally {
       opciones.alLote?.(++hechos, lotes.length);
+      return;
     }
+    await guardar(vs.map((v, i) => ({ objetivo: (entradas[i] as (typeof entradas)[number]).p.objetivo, id: (entradas[i] as (typeof entradas)[number]).p.id, espacio: embebedor.espacio.id, valores: v })));
+    vectores += vs.length;
+    opciones.alLote?.(++hechos, lotes.length);
   });
   return {
     fase: 'vectores',

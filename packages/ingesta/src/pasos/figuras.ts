@@ -7,6 +7,7 @@
 import { enParalelo, nuevoId, reintentar, type Ancla, type Redactor } from '@scholaris/nucleo';
 import type { PaqueteConversion } from '@scholaris/imprenta';
 import type { FiguraPlana, FuentePaquete, Procedencia, UnidadLeida } from '../tipos.js';
+import { Cobertura } from '../cobertura.js';
 
 export interface FiguraConAncla extends FiguraPlana {
   ancla: Ancla;
@@ -75,10 +76,11 @@ export async function describirFiguras(
   opciones: { lote?: number; concurrencia?: number; idioma?: string; contexto?: string } = {},
 ): Promise<number> {
   const pendientes = figuras.filter((f) => !f.descripcion && (f.parte || f.imagen));
-  const lote = opciones.lote ?? 8;
+  const lote = opciones.lote ?? 4;
   const lotes: FiguraConAncla[][] = [];
   for (let i = 0; i < pendientes.length; i += lote) lotes.push(pendientes.slice(i, i + lote));
   let descritas = 0;
+  const cobertura = new Cobertura(12_000, 2);
   await enParalelo(lotes, opciones.concurrencia ?? 8, async (l) => {
     const partes: Array<{ texto: string } | { bytes: Uint8Array; mime: string }> = [];
     const incluidas: FiguraConAncla[] = [];
@@ -90,14 +92,14 @@ export async function describirFiguras(
     }
     if (!incluidas.length) return;
     try {
-      const r = await reintentar(() => redactor.generar<{ figuras: Array<{ n: number; descripcion: string }> }>({
+      const r = await reintentar(() => cobertura.llamar(() => redactor.generar<{ figuras: Array<{ n: number; descripcion: string }> }>({
         sistema: `Describes imágenes de documentos y vídeos para un buscador: qué se ve, texto legible relevante (fórmulas, rótulos, títulos de diapositiva), tipo (diagrama, tabla, foto, grabado, plano). Una o dos frases por imagen, sin adornos. Idioma: ${opciones.idioma ?? 'el del documento'}.`,
         mensajes: [{ rol: 'usuario', partes: [...(opciones.contexto ? [{ texto: `Documento: ${opciones.contexto}` }] : []), ...partes] }],
         esquema: ESQUEMA,
         temperatura: 0.2,
         maxTokens: 200 + incluidas.length * 160,
         calidad: 'rapida',
-      }), { intentos: 3, base: 1500 });
+      })), { intentos: 3, base: 1500 });
       for (const d of r.json?.figuras ?? []) {
         const f = incluidas[d.n - 1];
         if (f && d.descripcion?.trim()) { f.descripcion = d.descripcion.trim(); descritas++; }
