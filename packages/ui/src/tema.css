@@ -53,7 +53,7 @@
   --color-sobre-barra: var(--s-sobre-barra);
   --color-sobre-barra-2: var(--s-sobre-barra-2);
 
-  --font-sans: 'DM Sans Variable', 'DM Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-sans: 'DM Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
   --font-serif: Georgia, 'Iowan Old Style', 'Palatino Linotype', serif;
   --font-mono: ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, Consolas, monospace;
 
@@ -82,8 +82,8 @@
   --s-cream-300: #e2d9c5;
   --s-cream-400: #d4c4b0;
   --s-cream-500: #c4ae96;
-  --s-coffee-300: #a89485;
-  --s-coffee-400: #8b6f5e;
+  --s-coffee-300: #8f7868;
+  --s-coffee-400: #7a5f4f;
   --s-coffee-500: #6b4226;
   --s-coffee-600: #5c3d2e;
   --s-coffee-700: #4a2e1a;

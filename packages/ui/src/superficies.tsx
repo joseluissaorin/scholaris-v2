@@ -45,7 +45,7 @@ export function Chip({ activo, icono, punto, alQuitar, recuento, className, chil
       {punto ? <span className={cx('h-1.5 w-1.5 shrink-0 rounded-full', PUNTO[punto])} aria-hidden /> : null}
       {icono ? <Icono nombre={icono} tam={14} /> : null}
       <span>{children}</span>
-      {recuento != null ? <span className={cx('tnum text-[0.75rem]', activo ? 'text-cream-300' : 'text-coffee-300')}>{recuento}</span> : null}
+      {recuento != null ? <span className={cx('tnum text-[0.75rem]', activo ? 'text-cream-300' : 'text-coffee-400')}>{recuento}</span> : null}
     </>
   );
   const clases = cx(
