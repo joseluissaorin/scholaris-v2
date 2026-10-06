@@ -252,7 +252,8 @@ export async function crearServidorLocal(o: OpcionesServidor): Promise<ServidorL
     async fetch(peticion) {
       const url = new URL(peticion.url);
       if (url.pathname.startsWith('/api/') || url.pathname === '/mcp') return puerta.fetch(peticion);
-      const r = estatico(url.pathname);
+      // Las páginas prerenderizadas (/acerca, /api, /en/api) se sirven sin «.html», como en Cloudflare.
+      const r = estatico(url.pathname) ?? (/\.[a-z0-9]+$/i.test(url.pathname) ? null : estatico(`${url.pathname.replace(/\/$/, '')}.html`));
       if (r) return r;
       // Rutas de la web (SPA): index.html. Un fichero que no existe es un 404 de verdad.
       if (peticion.method === 'GET' && !/\.[a-z0-9]+$/i.test(url.pathname.split('/').pop() ?? '')) {

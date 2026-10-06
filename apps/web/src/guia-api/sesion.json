@@ -1,0 +1,26 @@
+{
+ "grabada": "2026-10-06",
+ "contra": "apps/local (http://localhost:8795), con Gemini de verdad",
+ "sesion": [
+  {
+   "comando": "curl -s \"$B/documentos?esperar=120\" -H \"Authorization: Bearer $SCHOLARIS\" -H \"Content-Type: application/pdf\" --data-binary @cortazar1959perseguidor.pdf | jq '{id, titulo, autores, estado, unidades, referencia}'",
+   "salida": "{\n  \"id\": \"dmuwzohwaoqul34wy\",\n  \"titulo\": \"El perseguidor\",\n  \"autores\": [\n    \"Cortázar, Julio\"\n  ],\n  \"estado\": \"listo\",\n  \"unidades\": 37,\n  \"referencia\": \"Cortázar, J. (1996). El perseguidor.\"\n}"
+  },
+  {
+   "comando": "curl -sG \"$B/buscar\" -H \"Authorization: Bearer $SCHOLARIS\" --data-urlencode \"q=la música me metía en el tiempo\" -d k=2 -d formato=markdown",
+   "salida": "# la música me metía en el tiempo\n\n## 1. (Cortázar, 1996, p. 5)\n\n*El perseguidor* · p. 5 · [abrir](http://localhost:8795/lector/dmuwzohwaoqul34wy?u=5&f=dmuwzohwaoqul34wy%3At0.8) · `dmuwzohwaoqul34wy:t0.8`\n\n> Vaya si lo he oído; vaya si he tratado de escribirlo bien y verídicamente en mi biografía de Johnny.\n> \n> —Por eso en casa el tiempo no acababa nunca, sabes. De pelea en pelea, casi sin comer. Y para colmo la religión, ah, eso no te lo puedes imaginar. Cuando el maestro me consiguió un saxo que te hubieras muerto de risa si lo ves, entonces creo que me di cuenta en seguida. La música me sacaba del tiempo, aunque no es más que una manera de decirlo. Si quieres saber lo que realmente siento, yo creo que la música me metía en el tiempo. Pero entonces hay que creer que este tiempo no tiene nada que ver con... bueno, con nosotros, por decirlo así.\n>\n[…]"
+  },
+  {
+   "comando": "curl -sG \"$B/buscar\" -H \"Authorization: Bearer $SCHOLARIS\" --data-urlencode \"q=vectors as arrows in space\" -d k=1 | jq '.pasajes[0] | {cita, localizador, enlace}'",
+   "salida": "{\n  \"cita\": \"(3Blue1Brown, s. f., 0:11)\",\n  \"localizador\": \"0:11\",\n  \"enlace\": \"http://localhost:8795/lector/dmuwzm8ascxmk4ayv?t=11.3&f=dmuwzm8ascxmk4ayv%3Ac9tp39p\"\n}"
+  },
+  {
+   "comando": "curl -s \"$B/preguntar?formato=markdown\" -H \"Authorization: Bearer $SCHOLARIS\" -H \"Content-Type: application/json\" -d '{\"pregunta\":\"¿Qué le pasa a Johnny con el tiempo cuando toca?\"}'",
+   "salida": "Cuando Johnny toca, experimenta que el tiempo cambia[^1][^2]. Aunque en un principio expresa que «la música me sacaba del tiempo», matiza que en realidad siente que lo «metía en el tiempo», entendiendo que se trata de un tiempo distinto que no tiene que ver con el orden cotidiano[^3]. Niega que se trate de una abstracción; más bien describe que simplemente cambia de lugar, comparando la experiencia con entrar en «un ascensor de tiempo» donde transcurren decenas de pisos en lo que dura una sola frase, mientras asuntos como las hipotecas o la religión dejan de existir para él[^4]. Asimismo, percibe la elasticidad del tiempo mediante la metáfora de una valija en la que, al tocar, es capaz de meter «cientos y cientos de trajes» o «una tienda entera»[^5].\n\nDurante esos momentos musicales, Johnny siente que se abre una puerta y que vuela hacia un estado de seguridad donde queda «sobre todo sin tiempo, sin que después... sin que hubiera después... Por un rato no hubo más que siempre...»[^6]. Sin embargo, esa vivencia dura solo mientras se encuentra sumergido en la música; al dejar de tocar, cae de nuevo «de cabeza» en sí mismo[^6]. Bruno observa que en su ejecución Johnny «siempre está tocando mañana», adelantándose sin esfuerzo al hoy[^3], y viviendo intensamente lo que describe como su «cuarto de hora de minuto y medio», una alteración temporal frente al límite impuesto por los relojes[^1][^7].\n\n[^1]: Cortázar, *El perseguidor* (1996), p. 9.\n[^2]: Cortázar, *El perseguidor* (1996), p. 5.\n[^3]: Cortázar, *El perseguidor* (1996), p. 5.\n[^4]: Cortázar, *El perseguidor* (1996), pp. 5-6.\n[^5]: Cortázar, *El perseguidor* (1996), p. 6.\n[^6]: Cortázar, *El perseguidor* (1996), p. 34.\n[^7]: Cortázar, *El perseguidor* (1996), pp. 16-17.\n\n---\n\nFuentes (confianza alta):\n[…]"
+  },
+  {
+   "comando": "curl -s \"$B/citar?formato=markdown\" -H \"Authorization: Bearer $SCHOLARIS\" -H \"Content-Type: application/json\" -d '{\"texto\":\"Johnny Carter siente que la música no lo saca del tiempo, sino que lo mete en otro. Ese tiempo no se parece al de los relojes.\",\"estilo\":\"apa\"}'",
+   "salida": "Johnny Carter siente que la música no lo saca del tiempo, sino que lo mete en otro (Cortázar, 1996, p. 5). Ese tiempo no se parece al de los relojes (Cortázar, 1996, pp. 8-9).\n\n## Referencias\n\n- Cortázar, J. (1996). El perseguidor."
+  }
+ ]
+}
