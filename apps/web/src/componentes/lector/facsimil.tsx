@@ -8,7 +8,7 @@ import { cx } from '@scholaris/ui';
  */
 export const Facsimil = memo(function Facsimil({ texto, folio, titulillo, apaisada, className }: { texto: string; folio?: string | null; titulillo?: string; apaisada?: boolean; className?: string }) {
   const titulo = /^#+\s+(.+)$/m.exec(texto)?.[1];
-  const limpio = texto.replace(/^#+\s+.*$/gm, '').replace(/^\s*[-*]\s+/gm, '— ').trim();
+  const limpio = texto.replace(/\*+/g, '').replace(/^#+\s+.*$/gm, '').replace(/^\s*[-*]\s+/gm, '— ').trim();
   return (
     <div className={cx('facsimil relative w-full overflow-hidden rounded-[2px]', apaisada ? 'aspect-[16/9]' : 'aspect-[1/1.414]', className)} aria-hidden>
       <div className="absolute inset-0 flex flex-col px-[11%] pb-[7%] pt-[8%] text-[2.05cqi]">

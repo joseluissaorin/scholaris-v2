@@ -157,7 +157,7 @@ const Fila = memo(function Fila({ docId, orden, modo, texto, apaisada, resaltar,
         {folio ? <Rotulo>física {folio.fisica}{folio.origen === 'deducido' ? ' · folio deducido' : ''}</Rotulo> : null}
         {esPrevia ? <Rotulo className="ml-auto text-rojo">Vista previa · aún se está leyendo</Rotulo> : null}
       </div>
-      {pendiente ? <p className="text-apagado">El texto llegará en cuanto se lea esta página.</p> : u ? <Markdown texto={u.texto} q={resaltar} destacar={destacar} className="lectura" /> : <EsqueletoTexto lineas={9} />}
+      {pendiente ? <p className="text-apagado">El texto llegará en cuanto se lea esta página.</p> : u && !u.texto.trim() && !esPrevia ? <p className="italic text-apagado">Página sin texto: en blanco, guarda o lámina.</p> : u ? <Markdown texto={u.texto} q={resaltar} destacar={destacar} className="lectura" /> : <EsqueletoTexto lineas={9} />}
     </div>
   );
 

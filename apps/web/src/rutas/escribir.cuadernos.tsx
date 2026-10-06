@@ -7,6 +7,7 @@ import { api } from '../datos/api';
 import { q } from '../datos/consultas';
 import { Lienzo } from '../componentes/comunes/cabecera';
 import { haceCuanto } from '../lib/formato';
+import { textoLimpio } from '../lib/texto';
 
 export const Route = createFileRoute('/escribir/cuadernos')({
   validateSearch: (s: Record<string, unknown>): { c?: string } => ({ c: typeof s.c === 'string' ? s.c : undefined }),
@@ -95,9 +96,9 @@ function DetalleCuaderno({ cuaderno }: { cuaderno: Cuaderno }) {
                 </div>
               ) : (
                 <div className={cx('rounded-s border bg-hoja px-4 py-3', t.huerfana ? 'border-rojo' : 'border-filete')}>
-                  <p className="lectura text-[1rem]">«{t.cita?.texto ?? String(t.contenido.texto ?? '')}»</p>
+                  <p className="lectura text-[1rem]">«{textoLimpio(t.cita?.texto ?? String(t.contenido.texto ?? ''))}»</p>
                   <div className="mt-2 flex flex-wrap items-center gap-2 text-[0.8125rem] text-tinta-2">
-                    {t.cita ? <Folio>{t.cita.etiqueta}</Folio> : null}
+                    {t.cita ? <Folio className="shrink-0">{t.cita.etiqueta.replace(/^.*,\s*(párr\.\s*\d+)$/, '$1')}</Folio> : null}
                     <span className="font-mono">{t.cita?.citaCorta}</span>
                     {t.documento ? <Link to="/lector/$id" params={{ id: t.documento }} search={{ u: Number(t.objetivo?.split('-').at(-2)) || undefined }} className="ml-auto underline underline-offset-4">Abrir</Link> : null}
                   </div>
@@ -123,8 +124,8 @@ function DetalleCuaderno({ cuaderno }: { cuaderno: Cuaderno }) {
           {sintetizando ? <EsqueletoTexto lineas={5} className="mt-2" /> : sintesis ? (
             <div className="mt-2 rounded-s border border-tinta bg-hoja p-4 anim-entra">
               <p className="lectura text-[0.9875rem]">
-                {sintesis.texto.split(/(\[\d+\])/g).map((p, i) => {
-                  const m = /^\[(\d+)\]$/.exec(p);
+                {sintesis.texto.split(/(\[\^?\d+\])/g).map((p, i) => {
+                  const m = /^\[\^?(\d+)\]$/.exec(p);
                   const c = m ? sintesis.citas.find((x) => x.n === Number(m[1])) : undefined;
                   return c ? <span key={i} className="mx-0.5 rounded-[3px] border border-filete-fuerte px-1 font-mono text-[0.72em]"><span className="text-rojo">{c.n}</span> {c.etiqueta}</span> : <span key={i}>{p}</span>;
                 })}

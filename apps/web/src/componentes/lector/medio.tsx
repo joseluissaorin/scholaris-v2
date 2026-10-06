@@ -58,14 +58,26 @@ function useReloj(el: HTMLMediaElement | null, duracion: number, inicial: number
   };
 }
 
-function palabrasDe(u: UnidadVista) {
+interface Palabra { p: string; t0: number; t1: number; turno?: string }
+
+/**
+ * Palabras con su instante. La transcripción marca los turnos como
+ * «**Nombre:**»: se convierten en cambios de hablante, no en texto.
+ */
+function palabrasDe(u: UnidadVista): Palabra[] {
   if (u.ancla.tipo !== 'tiempo') return [];
   const { t0, t1 } = u.ancla;
-  const ps = u.texto.replace(/\s+/g, ' ').trim().split(' ');
-  const pesos = ps.map((p) => p.length + 2);
-  const total = pesos.reduce((a, b) => a + b, 0);
+  const crudas: Array<{ p: string; turno?: string }> = [];
+  let turno: string | undefined;
+  for (const trozo of u.texto.replace(/\s+/g, ' ').trim().split(/(\*\*[^*]{1,60}?:\*\*)/)) {
+    const m = /^\*\*([^*]+?):\*\*$/.exec(trozo);
+    if (m) { turno = m[1]!.trim(); continue; }
+    for (const p of trozo.split(' ').filter(Boolean)) { crudas.push({ p: p.replace(/\*\*/g, ''), ...(turno ? { turno } : {}) }); turno = undefined; }
+  }
+  const pesos = crudas.map((c) => c.p.length + 2);
+  const total = pesos.reduce((a, b) => a + b, 0) || 1;
   let acum = 0;
-  return ps.map((p, i) => { const a = t0 + ((t1 - t0) * acum) / total; acum += pesos[i]!; return { p, t0: a, t1: t0 + ((t1 - t0) * acum) / total }; });
+  return crudas.map((c, i) => { const a = t0 + ((t1 - t0) * acum) / total; acum += pesos[i]!; return { ...c, t0: a, t1: t0 + ((t1 - t0) * acum) / total }; });
 }
 
 export const Medio = forwardRef<ManejadorMedio, { doc: DetalleDocumento; url?: string | null; inicial: number; resaltar?: string; alVer: (orden: number, t: number) => void }>(
@@ -173,7 +185,7 @@ const Tramo = memo(function Tramo({ docId, orden, t, futuro, ir, resaltar }: { d
     <section data-orden={orden} className={cx('grid grid-cols-[4.75rem_minmax(0,1fr)] gap-4 border-l-[3px] py-4 pl-3 md:grid-cols-[6rem_minmax(0,44rem)] md:gap-8', t != null ? 'border-rojo' : 'border-transparent', futuro && 'tramo-futuro')}>
       <div className="flex flex-col items-start gap-1">
         <button type="button" onClick={() => ir(ancla.t0)} className="border-l-2 border-rojo pl-1.5 font-mono text-[0.8125rem] tnum hover:bg-hondo" aria-label={`Ir a ${tiempoACadena(ancla.t0)}`}>{tiempoACadena(ancla.t0)}</button>
-        {ancla.hablante ? <span className="rotulo text-[0.625rem] leading-tight text-apagado">{ancla.hablante}</span> : null}
+        {ancla.hablante && !palabras.some((w) => w.turno) ? <span className="rotulo text-[0.625rem] leading-tight text-apagado">{ancla.hablante}</span> : null}
       </div>
       <p className="lectura">
         {palabras.map((w, i) => {
@@ -182,6 +194,7 @@ const Tramo = memo(function Tramo({ docId, orden, t, futuro, ir, resaltar }: { d
           const marcada = raices.length && raices.some((r) => norm(w.p).startsWith(r));
           return (
             <span key={i}>
+              {w.turno ? <><br className={i ? undefined : 'hidden'} /><span className="rotulo mr-2 inline-block pt-2 text-tinta-2">{w.turno}</span></> : null}
               <span className="palabra" data-ahora={ahora || undefined} data-dicha={dicha || undefined} onClick={() => ir(w.t0)}>{marcada ? <mark>{w.p}</mark> : w.p}</span>{' '}
             </span>
           );

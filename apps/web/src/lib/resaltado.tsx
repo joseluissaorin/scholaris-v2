@@ -4,8 +4,10 @@
  */
 const ESC: Record<string, string> = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
 
+import { textoLimpio } from './texto';
+
 export function htmlSeguro(html: string): string {
-  return html.replace(/[&<>"']/g, (c) => ESC[c]!).replace(/&lt;(\/?)mark&gt;/g, '<$1mark>');
+  return textoLimpio(html).replace(/[&<>"']/g, (c) => ESC[c]!).replace(/&lt;(\/?)mark&gt;/g, '<$1mark>');
 }
 
 export function Resaltado({ html, className }: { html: string; className?: string }) {

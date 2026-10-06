@@ -53,7 +53,13 @@ export const Markdown = memo(function Markdown({ texto, q, className, destacar }
         }
         if (/^[-*]\s/.test(t)) return <ul key={i}>{t.split('\n').map((l, j) => <li key={j}>{enLinea(l.replace(/^[-*]\s+/, ''), raices, `l${i}${j}`)}</li>)}</ul>;
         const esDestacado = destacado && normal(t).includes(destacado);
-        return <p key={i} data-destacado={esDestacado || undefined} className={esDestacado ? '-mx-3 border-l-[3px] border-rojo bg-rojo-suave/50 px-3 py-1' : undefined}>{enLinea(t.replace(/\n/g, ' '), raices, `p${i}`)}</p>;
+        // Los saltos de línea se respetan: el verso y el teatro son líneas, no párrafos.
+        const lineas = t.split('\n');
+        return (
+          <p key={i} data-destacado={esDestacado || undefined} className={esDestacado ? '-mx-3 border-l-[3px] border-rojo bg-rojo-suave/50 px-3 py-1' : undefined}>
+            {lineas.map((l, j) => <Fragment key={j}>{j ? <br /> : null}{enLinea(l, raices, `p${i}l${j}`)}</Fragment>)}
+          </p>
+        );
       })}
     </div>
   );

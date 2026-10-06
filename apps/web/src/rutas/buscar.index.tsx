@@ -9,7 +9,8 @@ import { q } from '../datos/consultas';
 import { Resultado } from '../componentes/busqueda/resultado';
 import { Lienzo } from '../componentes/comunes/cabecera';
 import { anclaABusqueda } from '../lib/anclas';
-import { haceCuanto } from '../lib/formato';
+import { etiquetaCorta, haceCuanto } from '../lib/formato';
+import { textoLimpio } from '../lib/texto';
 
 type Modo = 'buscar' | 'preguntar';
 interface BusquedaBuscar { q?: string; modo?: Modo; grupo?: string; col?: string; cruzada?: boolean; desde?: number; hasta?: number }
@@ -254,10 +255,11 @@ function Respuesta({ pregunta, filtros }: { pregunta: string; filtros: Filtros }
   };
 
   // El texto con sus [n] convertidos en anclas.
-  const partes = texto.split(/(\[\d+\])/g);
+  // La API marca las citas como [n] o [^n] (estilo nota): las dos valen.
+  const partes = texto.split(/(\[\^?\d+\])/g);
 
   async function copiar() {
-    const plano = texto.replace(/\[(\d+)\]/g, (_, n) => { const c = citas.get(Number(n)); return c ? ` ${c.citaCorta}` : ''; });
+    const plano = texto.replace(/\[\^?(\d+)\]/g, (_, n) => { const c = citas.get(Number(n)); return c ? ` ${c.citaCorta}` : ''; });
     try { await navigator.clipboard.writeText(plano.trim()); avisar('Respuesta copiada con sus citas.', { tono: 'exito' }); } catch { avisar('No se pudo copiar.', { tono: 'error' }); }
   }
 
@@ -274,7 +276,7 @@ function Respuesta({ pregunta, filtros }: { pregunta: string; filtros: Filtros }
           ) : (
             <p className="lectura text-[1.1875rem] leading-[1.65]">
               {partes.map((p, i) => {
-                const m = /^\[(\d+)\]$/.exec(p);
+                const m = /^\[\^?(\d+)\]$/.exec(p);
                 if (!m) return <span key={i}>{p}</span>;
                 const n = Number(m[1]);
                 const f = fuentePorCita(n);
@@ -284,7 +286,7 @@ function Respuesta({ pregunta, filtros }: { pregunta: string; filtros: Filtros }
                   <Link key={i} to="/lector/$id" params={{ id: f.documento.id }} search={anclaABusqueda(f.fragmento.ancla, { q: pregunta })}
                     className="mx-0.5 inline-flex -translate-y-[0.15em] items-baseline gap-1 rounded-s border border-filete-fuerte bg-hoja px-1.5 align-baseline font-mono text-[0.7em] text-tinta no-underline hover:border-tinta"
                     title={`${f.documento.metadatos.titulo}, ${c?.etiqueta ?? f.etiqueta}`}>
-                    <span className="text-rojo">{n}</span>{c?.etiqueta ?? f.etiqueta}
+                    <span className="text-rojo">{n}</span>{etiquetaCorta(f.fragmento.ancla, c?.etiqueta ?? f.etiqueta)}
                   </Link>
                 );
               })}
@@ -311,9 +313,9 @@ function Respuesta({ pregunta, filtros }: { pregunta: string; filtros: Filtros }
                   <div className="flex items-center gap-2">
                     {n ? <span className="grid h-5 w-5 place-items-center rounded-full bg-tinta font-mono text-[0.6875rem] text-sobre-tinta">{n}</span> : null}
                     <span className="min-w-0 flex-1 truncate text-[0.8125rem] italic">{f.documento.metadatos.titulo}</span>
-                    <Folio>{f.etiqueta}</Folio>
+                    <Folio className="shrink-0">{etiquetaCorta(f.fragmento.ancla, f.etiqueta)}</Folio>
                   </div>
-                  <p className="mt-2 line-clamp-3 text-[0.8125rem] text-tinta-2">{f.fragmento.texto}</p>
+                  <p className="mt-2 line-clamp-3 text-[0.8125rem] text-tinta-2">{textoLimpio(f.fragmento.texto)}</p>
                 </Link>
               </li>
             );

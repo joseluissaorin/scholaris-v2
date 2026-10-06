@@ -11,7 +11,7 @@ import { cx, Folio, Icono, Teclas, type NombreIcono } from '@scholaris/ui';
 import type { ResultadoVista } from '@scholaris/contrato';
 import { q } from '../../datos/consultas';
 import { disparar, ponerTema, recientes, esOscuro } from '../../lib/acciones';
-import { ICONO_TIPO, NOMBRE_TIPO } from '../../lib/formato';
+import { etiquetaCorta, ICONO_TIPO, NOMBRE_TIPO } from '../../lib/formato';
 import { anclaABusqueda } from '../../lib/anclas';
 import { Resaltado } from '../../lib/resaltado';
 
@@ -174,7 +174,7 @@ function opcionPasaje(r: ResultadoVista, ir: (f: () => void) => () => void, nave
     icono: 'citar',
     titulo: <Resaltado html={r.resaltado ?? r.fragmento.texto} />,
     detalle: <><em>{r.documento.metadatos.titulo}</em> · {r.citaCorta}</>,
-    folio: r.etiqueta,
+    folio: etiquetaCorta(r.fragmento.ancla, r.etiqueta),
     hacer: ir(() => void navegar({ to: '/lector/$id', params: { id: r.documento.id }, search: anclaABusqueda(r.fragmento.ancla) })),
   };
 }

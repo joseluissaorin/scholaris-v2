@@ -10,7 +10,8 @@ import { api } from '../datos/api';
 import { q } from '../datos/consultas';
 import { Lienzo } from '../componentes/comunes/cabecera';
 import { anclaABusqueda } from '../lib/anclas';
-import { anclaACita } from '../lib/formato';
+import { anclaACita, etiquetaCorta } from '../lib/formato';
+import { textoLimpio } from '../lib/texto';
 import { preferencia, ponerPreferencia } from '../lib/acciones';
 
 export const Route = createFileRoute('/escribir/')({
@@ -247,9 +248,9 @@ function Propuesta({ p, alDecidir }: { p: PropuestaCita; alDecidir: (d: 'aceptad
           <span className="tnum ml-auto font-mono text-[0.8125rem]">{Math.round(p.cita.respaldo * 100)} %</span>
         </div>
         <div className="mt-2 h-[3px] bg-hondo"><div className="h-full bg-tinta" style={{ width: `${p.cita.respaldo * 100}%` }} /></div>
-        <blockquote className="mt-4 border-l-[3px] border-rojo pl-3 text-[0.9375rem] leading-relaxed">{p.cita.pasaje}</blockquote>
+        <blockquote className="mt-4 border-l-[3px] border-rojo pl-3 text-[0.9375rem] leading-relaxed">{textoLimpio(p.cita.pasaje)}</blockquote>
         <div className="mt-3 flex items-center gap-2 text-[0.8125rem] text-tinta-2">
-          <Folio>{anclaACita(p.cita.ancla, p.cita.anclaFin)}</Folio>
+          <Folio className="shrink-0">{etiquetaCorta(p.cita.ancla, anclaACita(p.cita.ancla, p.cita.anclaFin))}</Folio>
           <span className="min-w-0 flex-1 truncate italic">{doc?.metadatos.titulo ?? '…'}</span>
           <Link to="/lector/$id" params={{ id: p.cita.documento }} search={anclaABusqueda(p.cita.ancla)} className="shrink-0 underline underline-offset-4">Ver en el libro</Link>
         </div>
@@ -262,7 +263,7 @@ function Propuesta({ p, alDecidir }: { p: PropuestaCita; alDecidir: (d: 'aceptad
       {p.alternativas?.length ? (
         <details className="border-t border-filete px-4 py-3 text-[0.875rem]">
           <summary className="cursor-pointer text-tinta-2">{p.alternativas.length} pasajes alternativos</summary>
-          <ul className="mt-2 flex flex-col gap-2">{p.alternativas.map((x) => <li key={x.fragmento} className="flex gap-2"><Folio>{anclaACita(x.ancla)}</Folio><span className="line-clamp-2 text-tinta-2">{x.pasaje}</span></li>)}</ul>
+          <ul className="mt-2 flex flex-col gap-2">{p.alternativas.map((x) => <li key={x.fragmento} className="flex gap-2"><Folio className="shrink-0">{etiquetaCorta(x.ancla, anclaACita(x.ancla))}</Folio><span className="line-clamp-2 text-tinta-2">{textoLimpio(x.pasaje)}</span></li>)}</ul>
         </details>
       ) : null}
     </Tarjeta>
