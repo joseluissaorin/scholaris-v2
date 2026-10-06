@@ -181,7 +181,7 @@ export async function atribuirHablantes(
     const salida = nombre && etiquetas.size <= 1 ? palabras.map((p) => ({ ...p, hablante: nombre })) : palabras;
     return { palabras: salida, reparto, procedencia: { ...base, ms: reloj() - t, detalle: { frases: frases.length, reparto, ventanas: 0 } } };
   }
-  const tam = opciones.ventana ?? 60, ctx = opciones.contexto ?? 8;
+  const tam = opciones.ventana ?? 120, ctx = opciones.contexto ?? 8;
   const ventanas: FraseIndexada[][] = [];
   for (let i = 0; i < frases.length; i += tam) ventanas.push(frases.slice(i, i + tam));
   const asignado = new Map<number, string>();
