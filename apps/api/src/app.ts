@@ -38,6 +38,7 @@ import { rutasMedios } from './rutas/medios.js';
 import { montarFunciones } from './rutas/funciones.js';
 import { rutasMcp } from './rutas/mcp.js';
 import { restringirAmbito } from './rutas/ambito.js';
+import { montarV1 } from './rutas/v1.js';
 
 export { VERSION } from './version.js';
 
@@ -223,6 +224,9 @@ export function crearPuerta(pl: Plataforma) {
     if (!u.correo && v.correo) { u.correo = v.correo; u.nombre = v.nombre || u.nombre; }
     return u;
   };
+
+  // API pública v1 (/api/v1): la fachada sencilla sobre la v2, con la misma autenticación.
+  montarV1(app, pl, autenticar);
 
   app.use(`${PREFIJO_API}/*`, async (c, next) => {
     c.set('inicio' as never, Date.now() as never);

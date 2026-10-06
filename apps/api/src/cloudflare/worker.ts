@@ -9,7 +9,7 @@
  */
 import { recordarDemostracion, redireccionPortada } from './portada.js';
 import { prepararMotorWorkers } from '@scholaris/spdf/workers';
-import { PREFIJO_API } from '@scholaris/contrato';
+import { PREFIJO_API, PREFIJO_V1 } from '@scholaris/contrato';
 import { crearPuerta, type Plataforma } from '../app.js';
 import { crearVerificadorClerk } from '../compartido/clerk.js';
 import type { UsuarioSesion } from '../puertos.js';
@@ -72,7 +72,8 @@ const esPagina = (ruta: string) => !/\.[a-z0-9]+$/i.test(ruta.split('/').pop() ?
 const normal: ExportedHandler<Env> = {
   async fetch(peticion: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(peticion.url);
-    const esApi = url.pathname.startsWith(`${PREFIJO_API}/`) || url.pathname === PREFIJO_API || url.pathname === '/mcp';
+    const esApi = url.pathname.startsWith(`${PREFIJO_API}/`) || url.pathname === PREFIJO_API || url.pathname === '/mcp'
+      || url.pathname.startsWith(`${PREFIJO_V1}/`) || url.pathname === PREFIJO_V1;
     if (esApi) {
       return crearPuerta(plataforma(env, peticion)).fetch(peticion, env, ctx);
     }

@@ -12,3 +12,5 @@ export * from './citas.js';
 export * from './funciones.js';
 export * from './tiempo-real.js';
 export * from './cliente.js';
+export * from './v1.js';
+export * from './v1-documentacion.js';
