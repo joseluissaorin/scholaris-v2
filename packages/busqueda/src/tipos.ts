@@ -47,8 +47,10 @@ export interface OpcionesBusqueda {
   candidatos?: number;
   /** Cuántos candidatos fusionados pasan por el reordenador (30). */
   reordenarTop?: number;
-  /** Llamar al redactor para entender la consulta (sí). */
+  /** Llamar al redactor para entender la consulta (por defecto, lo que digan los ajustes del buscador: no). */
   comprender?: boolean;
+  /** Se llama con el orden de la fusión antes de reordenar: la interfaz puede pintarlo mientras llega el definitivo. */
+  alPreliminar?: (resultados: Resultado[]) => void;
   reordenar?: boolean;
   /** Pasar el juez por los resultados (no: cuesta una llamada más). */
   juez?: boolean;

@@ -1,4 +1,5 @@
 import { beforeAll, describe, expect, it } from 'vitest';
+import type { Fragmento } from '@scholaris/nucleo';
 import { Buscador, IndiceVectorialSQL, analizarHeuristico, sinDuplicados, consultaFts, intencionHeuristica, plegar, resaltar, responder, responderCompleto } from '../src/index.js';
 import { EmbebedorFalso, JuezFalso, RedactorFalso, RedactorFalsoConFlujo, ReordenadorFalso } from './apoyo/falsos.js';
 import { cargarFixtura, contarFragmentos } from './apoyo/fixtura.js';
@@ -13,7 +14,7 @@ async function montar(lat: { redactor?: number; emb?: number; reord?: number; ju
   const reordenador = new ReordenadorFalso(lat.reord ?? 0);
   const juez = new JuezFalso(lat.juez ?? 0);
   const indice = new IndiceVectorialSQL(sql, embebedor.espacio);
-  const buscador = new Buscador({ sql, embebedor, indice, redactor, reordenador, juez, espacioNombres: 'pruebas' }, { plazoComprensionMs: plazo ?? 2000 });
+  const buscador = new Buscador({ sql, embebedor, indice, redactor, reordenador, juez, espacioNombres: 'pruebas' }, { plazoComprensionMs: plazo ?? 2000, ajustes: { comprender: true } });
   return { sql, embebedor, redactor, reordenador, juez, indice, buscador };
 }
 
@@ -120,13 +121,14 @@ describe('Buscador', () => {
     expect(d.resultados.every((x) => x.documento.id === 'doc-foucault')).toBe(true);
   });
 
-  it('las citas literales van directas a FTS, sin modelo ni vectores', async () => {
+  it('las citas literales van a FTS sin modelo; el pasaje exacto primero y detrás los afines', async () => {
     const llamadasR = m.redactor.contador.llamadas, llamadasE = m.embebedor.contador.llamadas;
     const r = await m.buscador.buscar('"ver y ser visto"');
     expect(r.resultados[0]!.fragmento.id).toBe('fr-fou-08');
+    expect(r.resultados.length).toBeGreaterThan(1);
     expect(r.comprension.intencion).toBe('cita');
     expect(m.redactor.contador.llamadas).toBe(llamadasR);
-    expect(m.embebedor.contador.llamadas).toBe(llamadasE);
+    expect(m.embebedor.contador.llamadas).toBeLessThanOrEqual(llamadasE + 1);
     expect(r.resultados[0]!.resaltado).toContain('<mark>ver</mark> y <mark>ser</mark> <mark>visto</mark>');
   });
 
@@ -287,7 +289,7 @@ describe('latencia (puertos falsos con latencias realistas)', () => {
     console.log(`latencia fría p50=${p50(frio).toFixed(0)} ms p95=${p95(frio).toFixed(0)} ms · caliente p50=${p50(caliente).toFixed(0)} ms · literal=${literal.toFixed(1)} ms`);
     expect(p50(frio)).toBeLessThan(600);
     expect(p50(caliente)).toBeLessThan(300);
-    expect(literal).toBeLessThan(50);
+    expect(literal).toBeLessThan(50 + 90); // FTS + un vector de consulta para los afines
   }, 60_000);
 });
 
@@ -297,7 +299,7 @@ describe('sin repetidos', () => {
   it('quita el mismo pasaje con otro id (copia del documento o reintento de ingesta) y conserva sus vías', () => {
     const ancla = { tipo: 'pagina' as const, fisica: 3, impresa: '3', romana: false, origen: 'leido' as const, confianza: 1 };
     const texto = 'El panóptico de Bentham es una figura arquitectónica de la vigilancia, una torre en el centro de un anillo.';
-    const f = (id: string, documento: string, t = texto) => [id, { id, documento, unidad: `${documento}-u3`, orden: 1, texto: t, contexto: '', seccion: [], ancla }] as const;
+    const f = (id: string, documento: string, t = texto): [string, Fragmento] => [id, { id, documento, unidad: `${documento}-u3`, orden: 1, texto: t, contexto: '', seccion: [], ancla }];
     const frags = new Map([f('a', 'd1'), f('b', 'd1'), f('c', 'd2'), f('d', 'd1', 'Otro pasaje distinto de la misma página, con su propio texto y bastante largo.')]);
     const cs = [
       { id: 'a', puntos: 4, vias: new Set(['lexica' as const]) },
@@ -309,5 +311,21 @@ describe('sin repetidos', () => {
     const r = sinDuplicados(cs, frags);
     expect(r.map((c) => c.id)).toEqual(['a', 'd']);
     expect([...r[0]!.vias].sort()).toEqual(['densa', 'lexica', 'visual']);
+  });
+});
+
+describe('valores por defecto medidos', () => {
+  it('sin ajustes no llama al redactor y avisa con el orden preliminar antes de reordenar', async () => {
+    const sql = crearSQL();
+    const embebedor = new EmbebedorFalso(0);
+    await cargarFixtura(sql, embebedor);
+    const redactor = new RedactorFalso(0);
+    const b = new Buscador({ sql, embebedor, indice: new IndiceVectorialSQL(sql, embebedor.espacio), redactor, reordenador: new ReordenadorFalso(0), espacioNombres: 'pruebas' });
+    let preliminar: number | undefined;
+    const r = await b.buscar('panoptico y vigilancia', { alPreliminar: (rs) => { preliminar = rs.length; } });
+    expect(r.comprension.origen).toBe('heuristica');
+    expect(redactor.contador.llamadas).toBe(0);
+    expect(preliminar).toBeGreaterThan(0);
+    expect(r.tiempos.reordenacion).toBeDefined();
   });
 });

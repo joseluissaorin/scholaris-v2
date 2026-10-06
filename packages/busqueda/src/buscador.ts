@@ -45,6 +45,18 @@ export interface AjustesBusqueda {
   penalizacionUnidad?: number;
   /** Fundir fragmentos contiguos si la llamada no dice nada. */
   fundirContiguos?: boolean;
+  /**
+   * Llamar al redactor para entender la consulta si la llamada no dice nada (no:
+   * en el banco las expansiones no subían el nDCG@10 y la segunda ronda de vectores
+   * alargaba la búsqueda; los filtros de años y autores conocidos salen igual de la heurística).
+   */
+  comprender?: boolean;
+  /** En una cita literal, añadir detrás de los pasajes exactos los afines por sentido (sí). */
+  literalConAfines?: boolean;
+  /** Caracteres de cada pasaje que ve el reordenador. */
+  caracteresReordenar?: number;
+  /** Margen mínimo entre el 1.º y el 2.º de la fusión (0-1) por debajo del cual se reordena; sin él, siempre. */
+  margenReordenar?: number;
   /** Expansiones que pasan también por la vía léxica (por defecto, todas menos el HyDE). */
   expansionesLexicas?: Array<Expansion['tipo']>;
   /** Tipos de expansión de la comprensión que se usan para buscar. */
@@ -228,24 +240,38 @@ export class Buscador {
       }
     }
 
-    // Cita literal: atajo directo a FTS, sin modelo ni vectores.
+    // Cita literal: la frase exacta por FTS, sin modelo; los pasajes que la contienen van
+    // primero y detrás, si hay vectores, los afines por sentido (en el banco, el pasaje
+    // exacto ya salía primero, pero la lista se quedaba en uno o dos resultados).
     if (heur.literales.length && vias.has('lexica')) {
       const tl = ahora();
       const filtros = unirFiltros(explicitos, heur.filtros);
       const permitidos = await this.estanteria.documentosPermitidos(filtros);
+      const quiereDensa = vias.has('densa') && !!this.puertos.embebedor && !!this.puertos.indice && this.ajustes.literalConAfines !== false;
+      const pDensa = quiereDensa
+        ? this.vectorizarConsultas([heur.literales.join(' ')]).then((vs) => this.viaDensa(vs.map((v) => ({ v, peso: 1 })), k, permitidos)).catch(() => [] as ListaVia[])
+        : Promise.resolve([] as ListaVia[]);
       const listas = await this.viaLexica([{ texto: consulta, peso: 1 }], k, permitidos);
       marca('lexica', tl);
       if (listas.length) {
-        const r = await this.terminar(this.fusionar(listas, 'cita'), heur, filtros, opciones, new Map(), tiempos, avisos, { reordenar: false });
+        const exactos = new Set(listas.flatMap((l) => l.ids));
+        const densas = await pDensa;
+        if (densas.length) marca('densa', tl);
+        const fusion = this.fusionar([...listas, ...densas], 'cita');
+        const ordenados = [...fusion.filter((c) => exactos.has(c.id)), ...fusion.filter((c) => !exactos.has(c.id))];
+        // Los exactos por encima de cualquier afín, también tras normalizar las puntuaciones.
+        ordenados.forEach((c, i) => { c.puntos = (exactos.has(c.id) ? 2 : 1) - i * 1e-3; });
+        const r = await this.terminar(ordenados, heur, filtros, opciones, new Map(), tiempos, avisos, { reordenar: false });
         tiempos.total = Math.round(ahora() - t0);
         return { ...r, comprension: heur, tiempos, avisos };
       }
+      void pDensa.catch(() => undefined);
       avisos.push('La frase exacta no aparece; se busca por sentido.');
     }
 
     // Comprensión (con plazo) en paralelo con la primera ronda de vías.
     const tc = ahora();
-    const conModelo = opciones.comprender !== false && !!this.puertos.redactor;
+    const conModelo = (opciones.comprender ?? this.ajustes.comprender ?? false) && !!this.puertos.redactor;
     const enCache = conModelo ? this.comprensiones.obtener(normalizarConsulta(consulta)) : undefined;
     const compP = conModelo ? this.comprender(consulta, true) : Promise.resolve(heur);
     compP.then(() => marca('comprension', tc), () => undefined);
@@ -342,13 +368,26 @@ export class Buscador {
 
     // Reordenación sobre el texto (no sobre la imagen).
     let puntuaciones = normalizar(candidatos.map((c) => c.puntos));
-    const reordenar = (forzar.reordenar ?? opciones.reordenar ?? true) && !!this.puertos.reordenador && candidatos.length > 1;
+    const margen = this.ajustes.margenReordenar;
+    const p0 = candidatos[0]?.puntos ?? 0, p1 = candidatos[1]?.puntos ?? 0;
+    const clara = margen !== undefined && p0 > 0 && (p0 - p1) / p0 >= margen;
+    const reordenar = (forzar.reordenar ?? opciones.reordenar ?? true) && !!this.puertos.reordenador && candidatos.length > 1 && !clara;
+    if (reordenar && opciones.alPreliminar) {
+      // Respuesta rápida: el orden de la fusión, antes de esperar al reordenador.
+      try {
+        const ts = terminos(comprension.consulta);
+        opciones.alPreliminar(candidatos.slice(0, limite).map((c, i) => {
+          const f = frags.get(c.id) as Fragmento;
+          return { fragmento: f, documento: docs.get(f.documento) as DocumentoBreve, puntuacion: Math.round((puntuaciones[i] ?? 0) * 1e4) / 1e4, vias: [...c.vias].sort(), resaltado: resaltar(f.texto, ts) };
+        }));
+      } catch { /* un oyente roto no tumba la búsqueda */ }
+    }
     if (reordenar) {
       const tr = ahora();
       try {
         const textos = candidatos.map((c) => {
           const f = frags.get(c.id) as Fragmento;
-          return `${f.seccion.length ? f.seccion.join(' › ') + '\n' : ''}${f.texto}`.slice(0, 2000);
+          return `${f.seccion.length ? f.seccion.join(' › ') + '\n' : ''}${f.texto}`.slice(0, this.ajustes.caracteresReordenar ?? 2000);
         });
         const r = await this.puertos.reordenador!.reordenar(comprension.consulta, textos);
         const nr = normalizar(r);
