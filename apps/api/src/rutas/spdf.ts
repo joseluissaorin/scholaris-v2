@@ -43,7 +43,7 @@ async function armarSpdf(p: PuertosUsuario, d: Documento, incrustar: boolean): P
     await a.escribirUnidades(v.unidades.map((u) => ({ ...u, documento: d.id, imagen: rel(u.imagen), miniatura: rel(u.miniatura) })));
     await a.escribirSecciones(v.secciones.map((s) => ({ ...s, documento: d.id })));
     await a.escribirFragmentos(v.fragmentos.map((f) => ({ ...f, documento: d.id })));
-    await a.escribirFiguras(v.figuras.map((g) => ({ ...g, documento: d.id, imagen: rel(g.imagen)! })));
+    await a.escribirFiguras(v.figuras.map((g) => ({ ...g, documento: d.id, imagen: rel(g.imagen) ?? g.imagen ?? "" })));
     for (const e of v.espacios) await a.escribirEspacio(e);
     const { leerVectores } = await import('@scholaris/spdf');
     for (const e of v.espacios) await a.escribirVectores((await leerVectores(p.sql, { espacio: e.id, documento: d.id })).map((x) => ({ ...x, documento: d.id })));

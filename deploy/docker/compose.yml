@@ -1,0 +1,25 @@
+# Scholaris en casa: docker compose -f deploy/docker/compose.yml up -d
+# Abre http://localhost:8790. Las claves van en deploy/docker/.env (no se sube a git):
+#   GEMINI_API_KEY=…      (lectura, vectores, redacción)
+#   TYPESAFE_API_KEY=…    (juez y reordenador; opcional)
+#   OPENROUTER_API_KEY=…  (lector de reserva; opcional)
+#   SCHOLARIS_TOKEN=…     (opcional: protege la instancia con un token fijo)
+services:
+  scholaris:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile
+    image: scholaris:local
+    restart: unless-stopped
+    ports:
+      - "8790:8790"
+    volumes:
+      - scholaris-datos:/data
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      PUBLIC_URL: ${PUBLIC_URL:-http://localhost:8790}
+
+volumes:
+  scholaris-datos:

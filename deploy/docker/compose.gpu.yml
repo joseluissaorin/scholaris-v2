@@ -1,0 +1,29 @@
+# Sin conexión: Scholaris + InferBox en la misma máquina con GPU NVIDIA.
+#   docker compose -f deploy/docker/compose.yml -f deploy/docker/compose.gpu.yml up -d
+# InferBox añade su espacio vectorial (Qwen3-VL) a cada SPDF y sirve de lector,
+# transcriptor y reordenador de reserva cuando no hay red.
+services:
+  inferbox:
+    image: ${INFERBOX_IMAGEN:-ghcr.io/joseluissaorin/inferbox:latest}
+    restart: unless-stopped
+    environment:
+      INFERBOX_API_KEY: ${INFERBOX_API_KEY:-}
+    volumes:
+      - inferbox-modelos:/modelos
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+  scholaris:
+    environment:
+      INFERBOX_URL: http://inferbox:8811
+      INFERBOX_API_KEY: ${INFERBOX_API_KEY:-}
+    depends_on:
+      - inferbox
+
+volumes:
+  inferbox-modelos:
