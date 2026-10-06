@@ -56,22 +56,22 @@ function UnaTostada({ t }: { t: Tostada }) {
     <div
       role={t.tono === 'error' ? 'alert' : 'status'}
       className={cx(
-        'pointer-events-auto flex min-h-11 w-full max-w-md items-center gap-3 rounded-m border px-4 py-2 shadow-flota anim-tostada',
-        'border-tinta bg-tinta text-sobre-tinta',
+        'pointer-events-auto flex min-h-11 w-full max-w-md items-center gap-3 rounded-xl border px-4 py-2 anim-tostada',
+        'border-[#1a0f0a] bg-[#2c1810] text-[#faf7f0] shadow-[inset_0_1px_0_rgb(255_255_255/0.1),0_8px_30px_rgb(44_24_16/0.3)]',
       )}
     >
-      <span className={cx('h-2.5 w-2.5 shrink-0', t.tono === 'error' ? 'bg-rojo' : t.tono === 'exito' ? 'rounded-full bg-amarillo' : 'rounded-full bg-sobre-tinta/50')} aria-hidden />
-      <span className="flex-1 text-[0.9375rem]">{t.mensaje}</span>
+      <span className={cx('h-2 w-2 shrink-0', t.tono === 'error' ? 'bg-[#e0705f]' : t.tono === 'exito' ? 'rounded-full bg-[#e8a838]' : 'rounded-full bg-[#d4c4b0]')} aria-hidden />
+      <span className="flex-1 text-[0.875rem]">{t.mensaje}</span>
       {t.accion ? (
         <button
           type="button"
-          className="rotulo -mr-1 rounded-s px-2 py-1.5 text-amarillo hover:bg-white/10"
+          className="-mr-1 rounded-lg px-2.5 py-1.5 text-[0.8125rem] font-semibold text-[#e8a838] hover:bg-white/10"
           onClick={() => { t.accion?.alPulsar(); retirar(t.id); }}
         >
           {t.accion.etiqueta}
         </button>
       ) : null}
-      <button type="button" aria-label="Cerrar aviso" className="-mr-2 grid h-7 w-7 place-items-center rounded-s opacity-60 hover:opacity-100" onClick={() => retirar(t.id)}>
+      <button type="button" aria-label="Cerrar aviso" className="-mr-2 grid h-7 w-7 place-items-center rounded-lg opacity-60 hover:opacity-100" onClick={() => retirar(t.id)}>
         <Icono nombre="cerrar" tam={14} />
       </button>
     </div>
@@ -82,7 +82,7 @@ function UnaTostada({ t }: { t: Tostada }) {
 export function Tostadora() {
   const lista = useSyncExternalStore(suscribir, () => tostadas, () => tostadas);
   return (
-    <div aria-live="polite" className="pointer-events-none fixed inset-x-0 bottom-[calc(env(safe-area-inset-bottom)+4.75rem)] z-[60] flex flex-col items-center gap-2 px-3 md:bottom-6">
+    <div aria-live="polite" className="pointer-events-none fixed inset-x-0 bottom-[calc(env(safe-area-inset-bottom)+5.5rem)] z-[60] flex flex-col items-center gap-2 px-3 md:bottom-6">
       {lista.map((t) => <UnaTostada key={t.id} t={t} />)}
     </div>
   );

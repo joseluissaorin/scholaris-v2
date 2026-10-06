@@ -28,7 +28,7 @@ function Conceptos() {
     <Lienzo>
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div className="max-w-2xl">
-          <h2 className="text-[1.625rem] tracking-[-0.015em]">Sigue un concepto por todo lo que has leído.</h2>
+          <h2 className="text-[1.125rem] font-semibold text-coffee-800">Sigue un concepto por todo lo que has leído.</h2>
           <p className="mt-1 text-tinta-2">Dónde se define, dónde se aplica, dónde se critica. Con sus variantes en otras lenguas, y cada aparición con su página.</p>
         </div>
         <Boton variante="tinta" icono="mas" onClick={() => setNuevo(true)}>Nuevo concepto</Boton>
@@ -39,7 +39,7 @@ function Conceptos() {
         ) : data.map((c) => (
           <li key={c.id}>
             <Tarjeta className="flex h-full flex-col p-5">
-              <h3 className="titular text-[2rem]">{c.nombre}</h3>
+              <h3 className="text-[1.375rem] font-bold tracking-[-0.01em]">{c.nombre}</h3>
               {c.descripcion ? <p className="mt-2 text-[0.9375rem] text-tinta-2">{c.descripcion}</p> : null}
               <div className="mt-3 flex flex-wrap gap-1.5">{c.terminos.map((t) => <span key={t} className="rounded-full border border-filete-fuerte px-2 py-0.5 font-mono text-[0.75rem]">{t}</span>)}</div>
               <Rotulo className="mt-auto block pt-4">{c.ultimoInforme ? `Último informe ${haceCuanto(c.actualizado)}` : 'Sin informes todavía'}</Rotulo>

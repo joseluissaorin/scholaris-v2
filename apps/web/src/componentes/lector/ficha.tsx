@@ -141,7 +141,7 @@ function CampoEditable({ etiqueta, valor, alGuardar, procedencia, ancho, numeric
           className="mt-1 h-9 w-full rounded-s border border-tinta bg-hoja px-2 text-[0.9375rem] outline-none shadow-[0_0_0_3px_var(--s-rojo-suave)]"
         />
       ) : (
-        <button type="button" onClick={() => { setBorrador(valor); setEditando(true); }} className={cx('group mt-1 flex min-h-9 w-full items-center gap-2 rounded-s border border-transparent px-2 text-left text-[0.9375rem] hover:border-filete-fuerte hover:bg-hoja', dudoso && 'border-amarillo/70 bg-amarillo-suave/40', !valor && 'text-apagado italic')}>
+        <button type="button" onClick={() => { setBorrador(valor); setEditando(true); }} className={cx('group mt-1 flex min-h-9 w-full items-center gap-2 rounded-s border border-transparent px-2 text-left text-[0.9375rem] hover:border-filete-fuerte hover:bg-hoja', dudoso && 'border-amarillo/70 bg-amarillo-suave/40', !valor && 'text-apagado')}>
           <span className="min-w-0 flex-1 truncate">{valor || 'Añadir'}</span>
           <Icono nombre="editar" tam={13} className="shrink-0 opacity-0 group-hover:opacity-60" />
         </button>

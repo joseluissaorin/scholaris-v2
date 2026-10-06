@@ -46,7 +46,7 @@ export default function Compartir({ biblioteca, alCerrar }: { biblioteca: Biblio
       <ul className="mt-5 border-t border-filete">
         {isPending ? <li className="py-3 text-apagado">Cargando…</li> : miembros?.map((m) => (
           <li key={m.correo} className="flex items-center gap-3 border-b border-filete py-3">
-            <span className="grid h-8 w-8 place-items-center rounded-full bg-hondo text-[0.875rem] italic">{m.correo.charAt(0)}</span>
+            <span className="grid h-8 w-8 place-items-center rounded-full bg-hondo text-[0.875rem]">{m.correo.charAt(0)}</span>
             <div className="min-w-0 flex-1"><p className="truncate">{m.correo}</p>{m.pendiente ? <Rotulo>invitación pendiente</Rotulo> : null}</div>
             <span className="text-[0.875rem] text-tinta-2">{PERMISO[m.permiso]}</span>
             {m.permiso !== 'propietario' && m.usuario ? <Boton variante="fantasma" tam="p" onClick={() => void quitar(m)}>Quitar</Boton> : null}

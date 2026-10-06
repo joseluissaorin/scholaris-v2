@@ -64,7 +64,7 @@ function MarcaEntidad({ id, texto, documento, datos }: { id: string; texto: stri
   return (
     <Popover.Root>
       <Popover.Trigger asChild>
-        <button type="button" className="entidad-marca cursor-pointer rounded-[2px] text-inherit underline decoration-coffee-300 decoration-dotted decoration-1 underline-offset-[3px] hover:decoration-coffee-700 focus-visible:decoration-rojo"
+        <button type="button" className="entidad-marca cursor-pointer rounded-md text-inherit underline decoration-coffee-300 decoration-dotted decoration-1 underline-offset-[3px] hover:decoration-coffee-700 focus-visible:decoration-rojo"
           aria-label={`${texto}: ${NOMBRE_TIPO_ENTIDAD[datos.tipo].toLowerCase()}${datos.documentos > 1 ? `, aparece en ${datos.documentos} documentos` : ''}`}>
           {texto}
         </button>
@@ -100,7 +100,7 @@ function OtrosDocumentos({ id, documento, hay }: { id: string; documento: string
             <li key={d.documento}>
               <Link to="/lector/$id" params={{ id: d.documento }} search={m ? anclaABusqueda(m.ancla, { f: m.fragmento, q: m.texto }) : {}} className="group block text-[0.8125rem] leading-snug">
                 <span className="flex items-baseline gap-2">
-                  <span className="min-w-0 truncate font-semibold italic text-coffee-800 group-hover:underline">{d.titulo}</span>
+                  <span className="min-w-0 truncate font-semibold text-coffee-800 group-hover:underline">{d.titulo}</span>
                   {m ? <Folio className="shrink-0">{etiquetaCorta(m.ancla, m.etiqueta)}</Folio> : null}
                 </span>
                 {m ? <Pasaje texto={m.contexto} className="mt-0.5 line-clamp-2 block text-coffee-600" /> : null}

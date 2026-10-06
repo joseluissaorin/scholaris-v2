@@ -5,7 +5,7 @@ import { useWindowVirtualizer } from '@tanstack/react-virtual';
 import type { TipoEntrada } from '@scholaris/nucleo';
 import type { Biblioteca, ResumenDocumento } from '@scholaris/contrato';
 import {
-  avisar, Boton, Campo, Chip, cx, Dialogo, Esqueleto, Icono, MenuContenido, MenuDisparador, MenuElemento, MenuRaiz, Rotulo, Teclas, Vacio,
+  avisar, Boton, Campo, Chip, Composicion, cx, Dialogo, Esqueleto, Folio, Icono, MenuContenido, MenuDisparador, MenuElemento, MenuRaiz, Rotulo, Tarjeta, Teclas, Vacio,
 } from '@scholaris/ui';
 import { q } from '../datos/consultas';
 import { api } from '../datos/api';
@@ -15,14 +15,17 @@ import { Cabecera } from '../componentes/comunes/cabecera';
 import { FichaDocumento, FilaDocumento, puntoColeccion } from '../componentes/biblioteca/documento';
 import { TarjetaIngesta } from '../componentes/biblioteca/ingesta';
 import { TECLA_MOD } from '../componentes/marco/navegacion';
+import { numero } from '../lib/numero';
+import { IconoTipo } from '../componentes/comunes/icono-tipo';
+import { bytes } from '../lib/formato';
 
 const Compartir = lazy(() => import('../componentes/biblioteca/compartir'));
 
-const GRUPOS: Array<{ id: string; nombre: string; tipos: TipoEntrada[] }> = [
-  { id: 'libros', nombre: 'Libros y artículos', tipos: ['pdf', 'epub'] },
-  { id: 'escaneos', nombre: 'Escaneos y fotos', tipos: ['pdf_escaneado', 'fotos', 'imagen'] },
-  { id: 'medios', nombre: 'Audio y vídeo', tipos: ['audio', 'video'] },
-  { id: 'textos', nombre: 'Textos y web', tipos: ['documento', 'web'] },
+const GRUPOS: Array<{ id: string; nombre: string; tipos: TipoEntrada[]; punto?: 'rojo' | 'azul' | 'amarillo' | 'tinta' }> = [
+  { id: 'libros', nombre: 'Libros y artículos', tipos: ['pdf', 'epub'], punto: 'azul' },
+  { id: 'escaneos', nombre: 'Escaneos y fotos', tipos: ['pdf_escaneado', 'fotos', 'imagen'], punto: 'tinta' },
+  { id: 'medios', nombre: 'Audio y vídeo', tipos: ['audio', 'video'], punto: 'rojo' },
+  { id: 'textos', nombre: 'Textos y web', tipos: ['documento', 'web'], punto: 'amarillo' },
   { id: 'otros', nombre: 'Diapositivas y hojas', tipos: ['presentacion', 'hoja'] },
 ];
 
@@ -96,25 +99,43 @@ function PaginaBiblioteca() {
   const coleccion = bibliotecas.find((b) => b.id === busqueda.col);
   const vacia = !isPending && !todos.length && !ingestas.length;
 
+  const paginas = todos.reduce((t, d) => t + (d.tipo === 'audio' || d.tipo === 'video' ? 0 : d.unidades), 0);
+  const horas = todos.reduce((t, d) => t + (d.duracion ?? 0), 0) / 3600;
+  const ocupado = todos.reduce((t, d) => t + d.bytes, 0);
+
   return (
     <>
-      <Cabecera numero="01" antetitulo={coleccion ? `Colección · ${coleccion.documentos} documentos` : `Tu biblioteca · ${todos.length} documentos`} titulo={coleccion?.nombre ?? 'Biblioteca'} forma="cuarto">
+      <Cabecera antetitulo={coleccion ? `Colección${coleccion.compartida ? ' compartida' : ''} · ${coleccion.documentos} documentos` : 'Todo lo que has leído, buscable y citable'} titulo={coleccion?.nombre ?? 'Biblioteca'} forma="cuarto" />
+
+      <div className="mx-auto w-full max-w-6xl px-4 pb-16 pt-5 sm:px-6 lg:px-10">
         {!vacia ? (
-          <div className="flex flex-col gap-4">
-            <div className="flex flex-wrap items-center gap-2">
-              <Campo
-                icono="filtro"
-                placeholder="Filtrar por título, autor o año"
-                value={texto}
-                onChange={(e) => setTexto(e.target.value)}
-                className="w-full max-w-sm"
-                aria-label="Filtrar la biblioteca"
-                sufijo={texto ? <button type="button" aria-label="Borrar el filtro" onClick={() => setTexto('')} className="grid h-7 w-7 place-items-center rounded-s text-apagado hover:text-tinta"><Icono nombre="cerrar" tam={14} /></button> : undefined}
-              />
-              <div className="ml-auto flex items-center gap-1">
+          <div className="space-y-3">
+            <Campo
+              icono="filtro"
+              placeholder="Filtrar por título, autor o año"
+              value={texto}
+              onChange={(e) => setTexto(e.target.value)}
+              aria-label="Filtrar la biblioteca"
+              className="[&_input]:h-12"
+              sufijo={texto ? <button type="button" aria-label="Borrar el filtro" onClick={() => setTexto('')} className="grid h-8 w-8 place-items-center rounded-lg text-coffee-400 hover:bg-cream-200 hover:text-coffee-800"><Icono nombre="cerrar" tam={14} /></button> : undefined}
+            />
+            {/* La banda de cifras de siempre */}
+            <div className="flex flex-wrap items-baseline gap-x-5 gap-y-1 pt-1 text-[0.8125rem] text-coffee-400">
+              <span><strong className="tnum text-[0.9375rem] font-semibold text-coffee-800">{numero(todos.length)}</strong> documentos</span>
+              <span><strong className="tnum text-[0.9375rem] font-semibold text-coffee-800">{numero(bibliotecas.length)}</strong> colecciones</span>
+              <span><strong className="tnum text-[0.9375rem] font-semibold text-coffee-800">{numero(paginas)}</strong> páginas</span>
+              {horas >= 0.1 ? <span><strong className="tnum text-[0.9375rem] font-semibold text-coffee-800">{numero(horas, { maximumFractionDigits: 1 })}</strong> horas de audio y vídeo</span> : null}
+              <span className="ml-auto text-coffee-300">{bytes(ocupado)}</span>
+            </div>
+            <div className="flex flex-wrap items-center gap-2 border-b border-cream-300 pb-4">
+              <div className="sin-barra -mx-4 flex flex-1 gap-2 overflow-x-auto px-4 sm:mx-0 sm:flex-wrap sm:px-0">
+                <Chip activo={!busqueda.grupo} onClick={() => fijar({ grupo: undefined })}>Todo</Chip>
+                {GRUPOS.map((g) => { const n = recuento(g); return n ? <Chip key={g.id} punto={g.punto} activo={busqueda.grupo === g.id} recuento={n} onClick={() => fijar({ grupo: busqueda.grupo === g.id ? undefined : g.id })}>{g.nombre}</Chip> : null; })}
+              </div>
+              <div className="flex items-center gap-1">
                 <MenuRaiz>
                   <MenuDisparador asChild>
-                    <Boton variante="fantasma" tam="m" icono="ordenar">{ORDENES[orden]}</Boton>
+                    <Boton variante="fantasma" tam="p" icono="ordenar">{ORDENES[orden]}</Boton>
                   </MenuDisparador>
                   <MenuContenido>
                     {(Object.keys(ORDENES) as Orden[]).map((o) => (
@@ -122,65 +143,98 @@ function PaginaBiblioteca() {
                     ))}
                   </MenuContenido>
                 </MenuRaiz>
-                <div role="group" aria-label="Vista" className="flex rounded-s border border-filete-fuerte p-0.5">
-                  <button type="button" aria-pressed={vista === 'rejilla'} aria-label="Rejilla" onClick={() => fijar({ vista: undefined })} className={cx('grid h-8 w-8 place-items-center rounded-[2px]', vista === 'rejilla' ? 'bg-tinta text-sobre-tinta' : 'text-tinta-2 hover:text-tinta')}><Icono nombre="cuadricula" tam={15} /></button>
-                  <button type="button" aria-pressed={vista === 'lista'} aria-label="Lista" onClick={() => fijar({ vista: 'lista' })} className={cx('grid h-8 w-8 place-items-center rounded-[2px]', vista === 'lista' ? 'bg-tinta text-sobre-tinta' : 'text-tinta-2 hover:text-tinta')}><Icono nombre="lista" tam={15} /></button>
+                <div role="group" aria-label="Vista" className="flex rounded-lg border border-cream-400 bg-cream-200/70 p-0.5 shadow-[var(--hundido)]">
+                  <button type="button" aria-pressed={vista === 'rejilla'} aria-label="Rejilla" onClick={() => fijar({ vista: undefined })} className={cx('grid h-7 w-7 place-items-center rounded-md', vista === 'rejilla' ? 'bg-cream-50 text-coffee-800 shadow-[var(--relieve)]' : 'text-coffee-400 hover:text-coffee-800')}><Icono nombre="cuadricula" tam={14} /></button>
+                  <button type="button" aria-pressed={vista === 'lista'} aria-label="Lista" onClick={() => fijar({ vista: 'lista' })} className={cx('grid h-7 w-7 place-items-center rounded-md', vista === 'lista' ? 'bg-cream-50 text-coffee-800 shadow-[var(--relieve)]' : 'text-coffee-400 hover:text-coffee-800')}><Icono nombre="lista" tam={14} /></button>
                 </div>
               </div>
             </div>
-            <div className="sin-barra -mx-5 flex gap-2 overflow-x-auto px-5 md:mx-0 md:flex-wrap md:px-0">
-              <Chip activo={!busqueda.grupo} onClick={() => fijar({ grupo: undefined })}>Todo</Chip>
-              {GRUPOS.map((g) => { const n = recuento(g); return n ? <Chip key={g.id} activo={busqueda.grupo === g.id} recuento={n} onClick={() => fijar({ grupo: busqueda.grupo === g.id ? undefined : g.id })}>{g.nombre}</Chip> : null; })}
+            {/* Colecciones en el móvil: en fila, como las acciones de siempre */}
+            <div className="sin-barra -mx-4 flex gap-2 overflow-x-auto px-4 pb-1 lg:hidden">
+              <Chip activo={!busqueda.col} onClick={() => fijar({ col: undefined })}>Toda la biblioteca</Chip>
+              {bibliotecas.map((b) => <Chip key={b.id} punto={(b.color as 'rojo') ?? 'tinta'} activo={busqueda.col === b.id} onClick={() => fijar({ col: busqueda.col === b.id ? undefined : b.id })}>{b.nombre}</Chip>)}
+              <Chip icono="mas" onClick={() => setNueva(true)}>Nueva</Chip>
             </div>
           </div>
         ) : null}
-      </Cabecera>
 
-      <div className="px-5 pb-16 md:px-12">
-        {/* Colecciones */}
-        {!vacia ? (
-          <div className="sin-barra -mx-5 mb-8 flex items-center gap-2 overflow-x-auto border-y border-filete px-5 py-3 md:mx-0 md:px-0">
-            <Rotulo className="mr-2 shrink-0">Colecciones</Rotulo>
-            <Chip activo={!busqueda.col} onClick={() => fijar({ col: undefined })}>Toda la biblioteca</Chip>
-            {bibliotecas.map((b) => (
-              <Chip key={b.id} activo={busqueda.col === b.id} recuento={b.documentos} onClick={() => fijar({ col: busqueda.col === b.id ? undefined : b.id })}>
-                <span className="flex items-center gap-1.5"><span className={cx('h-2 w-2 rounded-full', puntoColeccion(b.color))} />{b.nombre}{b.compartida ? <Icono nombre="enlace" tam={12} titulo="Compartida" /> : null}</span>
-              </Chip>
-            ))}
-            <Chip icono="mas" onClick={() => setNueva(true)}>Nueva</Chip>
-            {coleccion && coleccion.permiso === 'propietario' ? <Chip icono="enlace" onClick={() => setCompartir(true)}>Compartir</Chip> : null}
-            {coleccion && coleccion.permiso !== 'propietario' ? <Rotulo className="ml-1 shrink-0">compartida contigo · {coleccion.permiso === 'edicion' ? 'puedes editar' : 'solo lectura'}</Rotulo> : null}
+        <div className={cx('mt-6 grid grid-cols-1 gap-8', !vacia && 'lg:grid-cols-[minmax(0,1fr)_13.5rem]')}>
+          <div className="min-w-0">
+            {/* La mesa de entrada */}
+            {ingestas.length ? (
+              <section aria-label="En la imprenta" className="mb-8">
+                <div className="mb-3 flex items-center gap-3">
+                  <h2 className="rotulo text-[0.75rem] text-coffee-700">En la imprenta</h2>
+                  <span className="text-[0.75rem] text-coffee-400">{ingestas.filter((i) => i.etapa !== 'listo').length} en curso<span className="hidden sm:inline"> · las páginas se pueden leer en cuanto aparecen</span></span>
+                </div>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  {ingestas.map((i) => <TarjetaIngesta key={i.id} i={i} />)}
+                </div>
+              </section>
+            ) : null}
+
+            {!vacia ? (
+              <div className="mb-3 flex items-center justify-between">
+                <h2 className="rotulo text-[0.75rem] text-coffee-700">{coleccion ? coleccion.nombre : busqueda.grupo ? GRUPOS.find((g) => g.id === busqueda.grupo)?.nombre : 'Documentos'}</h2>
+                <span className="text-[0.75rem] text-coffee-400">{numero(visibles.length)} {visibles.length === 1 ? 'documento' : 'documentos'}</span>
+              </div>
+            ) : null}
+
+            {isPending ? (
+              <div className="grid grid-cols-2 gap-x-5 gap-y-8 sm:grid-cols-3 md:grid-cols-4">
+                {Array.from({ length: 8 }, (_, i) => <div key={i}><Esqueleto className="aspect-[3/4] rounded-xl" /><Esqueleto className="mt-3 h-4 w-4/5" /><Esqueleto className="mt-2 h-3 w-1/2" /></div>)}
+              </div>
+            ) : vacia ? (
+              <BibliotecaVacia />
+            ) : !visibles.length ? (
+              <Vacio estilo="kandinsky" titulo="Nada coincide con el filtro." accion={<Boton variante="linea" onClick={() => { setTexto(''); fijar({ grupo: undefined, col: undefined, q: undefined }); }}>Quitar los filtros</Boton>}>
+                {diferido ? <>Ningún título ni autor contiene «{diferido}». Para buscar dentro de los textos, usa <strong>Buscar</strong>.</> : 'Prueba con otra colección o tipo.'}
+              </Vacio>
+            ) : vista === 'lista' ? (
+              <ListaVirtual docs={visibles} bibliotecas={bibliotecas} />
+            ) : (
+              <RejillaVirtual docs={visibles} bibliotecas={bibliotecas} />
+            )}
           </div>
-        ) : null}
 
-        {/* La mesa de entrada */}
-        {ingestas.length ? (
-          <section aria-label="En la imprenta" className="mb-10">
-            <div className="mb-3 flex items-baseline gap-3">
-              <h2 className="text-[1.375rem] italic tracking-[-0.01em]">En la imprenta</h2>
-              <Rotulo>{ingestas.filter((i) => i.etapa !== 'listo').length} en curso<span className="hidden sm:inline"> · las páginas se pueden leer en cuanto aparecen</span></Rotulo>
-            </div>
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-              {ingestas.map((i) => <TarjetaIngesta key={i.id} i={i} />)}
-            </div>
-          </section>
-        ) : null}
-
-        {isPending ? (
-          <div className="grid grid-cols-2 gap-x-5 gap-y-8 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 2xl:grid-cols-6">
-            {Array.from({ length: 12 }, (_, i) => <div key={i}><Esqueleto className="aspect-[3/4]" /><Esqueleto className="mt-3 h-4 w-4/5" /><Esqueleto className="mt-2 h-3 w-1/2" /></div>)}
-          </div>
-        ) : vacia ? (
-          <BibliotecaVacia />
-        ) : !visibles.length ? (
-          <Vacio forma="triangulo" titulo="Nada coincide con el filtro." accion={<Boton variante="linea" onClick={() => { setTexto(''); fijar({ grupo: undefined, col: undefined, q: undefined }); }}>Quitar los filtros</Boton>}>
-            {diferido ? <>Ningún título ni autor contiene «{diferido}». Para buscar dentro de los textos, usa <strong>Buscar</strong>.</> : 'Prueba con otra colección o tipo.'}
-          </Vacio>
-        ) : vista === 'lista' ? (
-          <ListaVirtual docs={visibles} bibliotecas={bibliotecas} />
-        ) : (
-          <RejillaVirtual docs={visibles} bibliotecas={bibliotecas} />
-        )}
+          {/* La columna de siempre: acciones y colecciones */}
+          {!vacia ? (
+            <aside className="hidden space-y-6 lg:block">
+              <div>
+                <h2 className="rotulo mb-2.5 text-[0.75rem] text-coffee-700">Acciones</h2>
+                <div className="space-y-0.5">
+                  {([['subir', 'Añadir documentos', () => disparar('archivos')], ['enlace', 'Desde un enlace', () => disparar('enlace')], ['pila', 'Importar un .spdf', () => disparar('spdf')], ['buscar', 'Búsqueda semántica', () => disparar('paleta')]] as const).map(([i, t, f]) => (
+                    <button key={t} type="button" onClick={f} className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-[0.8125rem] text-coffee-600 transition-colors hover:bg-cream-200 hover:text-coffee-800">
+                      <Icono nombre={i} tam={16} className="text-coffee-400" />{t}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <div className="mb-2.5 flex items-center justify-between">
+                  <h2 className="rotulo text-[0.75rem] text-coffee-700">Colecciones</h2>
+                  <button type="button" onClick={() => setNueva(true)} className="text-[0.75rem] text-coffee-400 hover:text-coffee-700">Nueva</button>
+                </div>
+                <div className="space-y-0.5">
+                  <button type="button" onClick={() => fijar({ col: undefined })} className={cx('flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-[0.8125rem] transition-colors', !busqueda.col ? 'bg-cream-50 font-semibold text-coffee-800 shadow-[var(--relieve)]' : 'text-coffee-600 hover:bg-cream-200')}>
+                    <Icono nombre="biblioteca" tam={15} className="text-coffee-400" /><span className="flex-1">Toda la biblioteca</span><span className="tnum text-[0.75rem] text-coffee-300">{todos.length}</span>
+                  </button>
+                  {bibliotecas.map((b) => (
+                    <button key={b.id} type="button" onClick={() => fijar({ col: busqueda.col === b.id ? undefined : b.id })} className={cx('flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-[0.8125rem] transition-colors', busqueda.col === b.id ? 'bg-cream-50 font-semibold text-coffee-800 shadow-[var(--relieve)]' : 'text-coffee-600 hover:bg-cream-200')}>
+                      <span className={cx('h-2.5 w-2.5 shrink-0 rounded-full', puntoColeccion(b.color))} />
+                      <span className="min-w-0 flex-1 truncate">{b.nombre}</span>
+                      {b.compartida ? <Icono nombre="enlace" tam={12} titulo="Compartida" className="text-coffee-300" /> : null}
+                      <span className="tnum text-[0.75rem] text-coffee-300">{b.documentos}</span>
+                    </button>
+                  ))}
+                  {!bibliotecas.length ? <p className="px-3 py-2 text-[0.75rem] text-coffee-400">Aún no hay colecciones.</p> : null}
+                </div>
+                {coleccion && coleccion.permiso === 'propietario' ? <Boton variante="linea" tam="p" icono="enlace" className="mt-3 w-full" onClick={() => setCompartir(true)}>Compartir «{coleccion.nombre}»</Boton> : null}
+                {coleccion && coleccion.permiso !== 'propietario' ? <p className="mt-3 px-3 text-[0.75rem] text-coffee-400">Compartida contigo · {coleccion.permiso === 'edicion' ? 'puedes editar' : 'solo lectura'}</p> : null}
+              </div>
+            </aside>
+          ) : null}
+        </div>
       </div>
 
       <NuevaColeccion abierta={nueva} alCambiar={setNueva} />
@@ -236,10 +290,10 @@ function ListaVirtual({ docs, bibliotecas }: { docs: ResumenDocumento[]; bibliot
   const v = useWindowVirtualizer({ count: docs.length, estimateSize: () => 64, overscan: 10, scrollMargin: margen });
   return (
     <div>
-      <div className="hidden grid-cols-[2.5rem_minmax(0,3fr)_minmax(0,2fr)_4.5rem_11rem_8.5rem] gap-4 border-b border-tinta px-1 pb-2 sm:grid">
+      <div className="hidden grid-cols-[2.5rem_minmax(0,3fr)_minmax(0,2fr)_4.5rem_11rem_8.5rem] gap-4 rounded-t-xl border border-b-0 border-cream-300 bg-cream-200/60 px-4 py-2.5 sm:grid">
         <span /><Rotulo>Título</Rotulo><Rotulo>Autoría</Rotulo><Rotulo>Año</Rotulo><Rotulo>Tipo</Rotulo><Rotulo className="text-right">Añadido</Rotulo>
       </div>
-      <div ref={ref} className="relative" style={{ height: v.getTotalSize() }}>
+      <div ref={ref} className="relative overflow-hidden rounded-b-xl border border-cream-300 shadow-[var(--shadow-soft)] max-sm:rounded-t-xl" style={{ height: v.getTotalSize() + 2 }}>
         {v.getVirtualItems().map((f) => (
           <div key={f.key} className="absolute inset-x-0" style={{ transform: `translateY(${f.start - v.options.scrollMargin}px)` }}>
             <FilaDocumento doc={docs[f.index]!} bibliotecas={bibliotecas} />
@@ -250,25 +304,28 @@ function ListaVirtual({ docs, bibliotecas }: { docs: ResumenDocumento[]; bibliot
   );
 }
 
+/** La biblioteca vacía: una zona de soltar hundida en el papel, con su composición. */
 function BibliotecaVacia() {
   return (
-    <div className="relative grid gap-10 overflow-hidden rounded-m border-2 border-dashed border-filete-fuerte p-8 md:grid-cols-[1.2fr_1fr] md:p-14">
+    <div className="relative grid gap-8 overflow-hidden rounded-2xl border-2 border-dashed border-cream-500 bg-cream-200/50 p-8 shadow-[var(--hundido)] md:grid-cols-[1.1fr_1fr] md:p-12">
       <div>
-        <p className="rotulo text-rojo">Empieza por aquí</p>
-        <h2 className="titular mt-3 text-[clamp(2.5rem,6vw,4.5rem)]">Suelta cualquier cosa en esta ventana.</h2>
-        <p className="mt-5 max-w-md text-[1.0625rem] text-tinta-2">Un PDF, un libro escaneado, las fotos de un capítulo, la grabación de una clase, un DOCX, un enlace. Lo leemos y cada cita apuntará a la página impresa o al segundo exacto.</p>
-        <div className="mt-8 flex flex-wrap gap-2">
-          <Boton variante="rojo" tam="g" icono="subir" onClick={() => disparar('archivos')}>Elegir archivos</Boton>
+        <Composicion estilo="malevich" className="mb-6 h-24 w-36" />
+        <h2 className="text-[1.5rem] font-bold tracking-[-0.01em] text-coffee-800">Suelta cualquier cosa en esta ventana.</h2>
+        <p className="mt-3 max-w-md text-[0.9375rem] text-coffee-600">Un PDF, un libro escaneado, las fotos de un capítulo, la grabación de una clase, un DOCX, un enlace. Lo leemos y cada cita apuntará a la página impresa o al segundo exacto.</p>
+        <div className="mt-6 flex flex-wrap gap-2">
+          <Boton variante="tinta" tam="g" icono="subir" onClick={() => disparar('archivos')}>Elegir archivos</Boton>
           <Boton variante="linea" tam="g" icono="enlace" onClick={() => disparar('enlace')}>Pegar un enlace</Boton>
         </div>
-        <p className="mt-4 text-[0.8125rem] text-apagado">También puedes pegar con <Teclas>{TECLA_MOD} V</Teclas> en cualquier parte.</p>
+        <p className="mt-4 text-[0.8125rem] text-apagado">También puedes pegar con <Teclas>{TECLA_MOD}</Teclas> <Teclas>V</Teclas> en cualquier parte.</p>
       </div>
-      <ul className="grid grid-cols-2 content-center gap-3 text-[0.9375rem]">
+      <ul className="grid grid-cols-2 content-center gap-3">
         {[['documento', 'PDF y escaneos', 'p. 145'], ['camara', 'Fotos de un libro', 'p. 23'], ['audio', 'Audio', '12:04'], ['video', 'Vídeo', '1:02:41'], ['lector', 'EPUB y DOCX', 'cap. 3, párr. 2'], ['diapositiva', 'Diapositivas', 'diap. 7']].map(([i, n, f]) => (
-          <li key={n} className="flex flex-col gap-2 rounded-s border border-filete bg-hoja p-3">
-            <Icono nombre={i as 'documento'} tam={20} className="text-tinta-2" />
-            <span>{n}</span>
-            <span className="border-l-2 border-rojo pl-1.5 font-mono text-[0.75rem]">{f}</span>
+          <li key={n}>
+            <Tarjeta className="flex flex-col gap-2 p-3.5">
+              <IconoTipo nombre={i as 'documento'} />
+              <span className="text-[0.875rem] font-medium">{n}</span>
+              <Folio className="self-start">{f}</Folio>
+            </Tarjeta>
           </li>
         ))}
       </ul>

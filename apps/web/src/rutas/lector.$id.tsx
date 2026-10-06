@@ -113,14 +113,14 @@ function Lector() {
   return (
     <div className="min-h-dvh">
       {/* Barra del lector */}
-      <div className="sticky top-14 z-30 border-b border-filete bg-papel/95 backdrop-blur md:top-0">
+      <div className="sticky top-14 z-30 border-b border-cream-300 bg-cream-50/90 shadow-[var(--shadow-soft)] backdrop-blur lg:top-0">
         <div className="flex h-[4.25rem] items-center gap-2 px-3 md:gap-3 md:px-6">
           <Consejo texto="Volver a la biblioteca">
-            <Link to="/" aria-label="Volver a la biblioteca" className="grid h-10 w-10 shrink-0 place-items-center rounded-s text-tinta-2 hover:bg-hondo hover:text-tinta"><Icono nombre="izquierda" tam={18} /></Link>
+            <Link to="/" aria-label="Volver a la biblioteca" className="grid h-9 w-9 shrink-0 place-items-center rounded-xl text-coffee-500 hover:bg-cream-200 hover:text-coffee-800"><Icono nombre="izquierda" tam={18} /></Link>
           </Consejo>
           <div className="min-w-0 flex-1">
-            <h1 className="truncate text-[1.0625rem] leading-tight tracking-[-0.01em]"><em className="not-italic md:italic">{doc.metadatos.titulo}</em></h1>
-            <p className="truncate text-[0.8125rem] text-tinta-2">{autores(doc.metadatos) || 'Sin autor'} · {anioVisible(doc.metadatos)}{contenedorVisible(doc.metadatos) ? <> · <em>{contenedorVisible(doc.metadatos)}</em></> : null} · <span className="text-apagado">{NOMBRE_TIPO[doc.tipo]}</span></p>
+            <h1 className="truncate text-[0.9375rem] font-semibold leading-tight text-coffee-800">{doc.metadatos.titulo}</h1>
+            <p className="truncate text-[0.75rem] text-coffee-500">{autores(doc.metadatos) || 'Sin autor'} · {anioVisible(doc.metadatos)}{contenedorVisible(doc.metadatos) ? <> · <em>{contenedorVisible(doc.metadatos)}</em></> : null} · <span className="text-apagado">{NOMBRE_TIPO[doc.tipo]}</span></p>
           </div>
 
           <IrA etiqueta={etiquetaActual} total={medio ? tiempoACadena(doc.duracion ?? 0) : String(Math.max(doc.unidades, ingesta?.unidades ?? 0))} alIr={irA} medio={medio} />
@@ -128,7 +128,7 @@ function Lector() {
           {paginado ? (
             <div role="group" aria-label="Modo de lectura" className="hidden rounded-s border border-filete-fuerte p-0.5 md:flex">
               {(['pagina', 'ambas', 'texto'] as const).map((m) => (
-                <button key={m} type="button" aria-pressed={modo === m} onClick={() => { setModo(m); ponerPreferencia('modo', m); }} className={cx('h-8 rounded-[2px] px-2.5 text-[0.8125rem]', modo === m ? 'bg-tinta text-sobre-tinta' : 'text-tinta-2 hover:text-tinta')}>
+                <button key={m} type="button" aria-pressed={modo === m} onClick={() => { setModo(m); ponerPreferencia('modo', m); }} className={cx('h-8 rounded-md px-2.5 text-[0.8125rem]', modo === m ? 'bg-tinta text-sobre-tinta' : 'text-tinta-2 hover:text-tinta')}>
                   {m === 'pagina' ? 'Página' : m === 'ambas' ? 'Página y texto' : 'Texto'}
                 </button>
               ))}
@@ -141,7 +141,7 @@ function Lector() {
             <BotonPanel activo={panel === 'ficha'} icono="editar" etiqueta="Ficha" alPulsar={() => abrirPanel('ficha')} />
           </div>
           <MenuDocumento doc={resumen} bibliotecas={bibliotecas}>
-            <button type="button" aria-label="Más acciones" className="grid h-10 w-10 shrink-0 place-items-center rounded-s text-tinta-2 hover:bg-hondo hover:text-tinta"><Icono nombre="opciones" tam={18} /></button>
+            <button type="button" aria-label="Más acciones" className="grid h-9 w-9 shrink-0 place-items-center rounded-xl text-coffee-500 hover:bg-cream-200 hover:text-coffee-800"><Icono nombre="opciones" tam={18} /></button>
           </MenuDocumento>
         </div>
         {doc.avisos?.some((a) => a.codigo === 'vectores_pendientes') && doc.estado === 'listo' ? (
@@ -158,7 +158,7 @@ function Lector() {
           </div>
         ) : null}
         {ingesta || doc.estado === 'procesando' ? (
-          <div className="flex items-center gap-3 border-t border-filete bg-amarillo-suave/60 px-4 py-2 text-[0.8125rem] md:px-6">
+          <div className="flex items-center gap-3 border-t border-cream-300 bg-amarillo-suave/70 px-4 py-2 text-[0.8125rem] text-coffee-700 md:px-6">
             <span className="h-2 w-2 shrink-0 rounded-full bg-rojo anim-pulso" />
             <span>{ingesta?.preparadas && !ingesta.leidas ? 'Estás viendo la vista previa de tu navegador. Scholaris sigue leyendo; en cuanto termine se podrá buscar y citar.' : `Se está leyendo${ingesta?.leidas ? `: ${ingesta.leidas} de ${ingesta.unidades ?? doc.unidades}` : ''}. Ya puedes leerlo; se podrá buscar y citar en cuanto termine.`}</span>
           </div>
@@ -176,7 +176,7 @@ function Lector() {
           )}
         </div>
         {panel ? (
-          <aside aria-label="Panel del documento" className="sticky top-[4.25rem] hidden h-[calc(100dvh-4.25rem)] w-[23rem] shrink-0 flex-col border-l border-filete bg-papel xl:flex">
+          <aside aria-label="Panel del documento" className="sticky top-[4.25rem] hidden h-[calc(100dvh-4.25rem)] w-[23rem] shrink-0 flex-col border-l border-cream-300 bg-cream-50/95 shadow-[-4px_0_16px_rgb(44_24_16/0.05)] xl:flex">
             <PanelDocumento doc={doc} panel={panel} setPanel={setPanel} irA={(o) => flujo.current?.irA(o, true)} irT={(t) => reproductor.current?.irA(t)} actual={actual} />
           </aside>
         ) : null}
@@ -186,7 +186,7 @@ function Lector() {
       <Dialog.Root open={!!panel && typeof window !== 'undefined' && window.innerWidth < 1280} onOpenChange={(v) => !v && setPanel(null)}>
         <Dialog.Portal>
           <Dialog.Overlay className="fixed inset-0 z-50 bg-[rgb(26_21_17/0.38)] xl:hidden anim-aparece" />
-          <Dialog.Content aria-describedby={undefined} className="fixed inset-x-0 bottom-0 z-50 flex max-h-[82dvh] flex-col rounded-t-l border-t border-filete-fuerte bg-papel shadow-flota xl:hidden anim-tostada">
+          <Dialog.Content aria-describedby={undefined} className="fixed inset-x-0 bottom-0 z-50 flex max-h-[82dvh] flex-col rounded-t-2xl border-t border-cream-400 bg-cream-50 shadow-[var(--levantado-alto)] xl:hidden anim-tostada">
             <Dialog.Title className="sr-only">Panel del documento</Dialog.Title>
             {panel ? <PanelDocumento doc={doc} panel={panel} setPanel={setPanel} irA={(o) => { setPanel(null); flujo.current?.irA(o, true); }} irT={(t) => { setPanel(null); reproductor.current?.irA(t); }} actual={actual} /> : null}
           </Dialog.Content>
@@ -207,7 +207,7 @@ function Lector() {
 
 function BotonPanel({ activo, icono, etiqueta, alPulsar }: { activo: boolean; icono: 'indice' | 'editar'; etiqueta: string; alPulsar: () => void }) {
   return (
-    <button type="button" aria-pressed={activo} onClick={alPulsar} className={cx('flex h-10 items-center gap-1.5 rounded-s px-2.5 text-[0.875rem]', activo ? 'bg-tinta text-sobre-tinta' : 'text-tinta-2 hover:bg-hondo hover:text-tinta')}>
+    <button type="button" aria-pressed={activo} onClick={alPulsar} className={cx('flex h-9 items-center gap-1.5 rounded-xl border px-2.5 text-[0.8125rem] font-medium transition-[background,box-shadow]', activo ? 'border-[#1a0f0a] bg-coffee-800 text-cream-50 shadow-[inset_0_1px_3px_rgb(0_0_0/0.35)]' : 'border-transparent text-coffee-500 hover:bg-cream-200 hover:text-coffee-800')}>
       <Icono nombre={icono} tam={16} /><span className="hidden lg:inline">{etiqueta}</span>
     </button>
   );
@@ -223,14 +223,14 @@ function IrA({ etiqueta, total, alIr, medio }: { etiqueta: string; total: string
       <form onSubmit={(e) => { e.preventDefault(); if (alIr(texto)) { setEditando(false); setTexto(''); setError(false); } else setError(true); }} className="flex items-center gap-1">
         <label className="sr-only" htmlFor="ir-a">{medio ? 'Ir al minuto' : 'Ir a la página impresa'}</label>
         <input id="ir-a" autoFocus value={texto} onChange={(e) => { setTexto(e.target.value); setError(false); }} onBlur={() => !texto && setEditando(false)} onKeyDown={(e) => e.key === 'Escape' && setEditando(false)}
-          placeholder={medio ? '12:04' : '145, xiv o [153]'} className={cx('h-10 w-32 rounded-s border bg-hoja px-2 font-mono text-[0.9375rem] outline-none', error ? 'border-rojo' : 'border-tinta')} aria-invalid={error} />
+          placeholder={medio ? '12:04' : '145, xiv o [153]'} className={cx('h-9 w-32 rounded-xl border bg-cream-50 px-3 font-mono text-[0.875rem] shadow-[var(--hundido)] outline-none', error ? 'border-rojo' : 'border-coffee-500')} aria-invalid={error} />
         {error ? <span role="alert" className="sr-only">No existe esa página.</span> : null}
       </form>
     );
   }
   return (
     <Consejo texto={medio ? 'Ir a un instante' : 'Ir a una página impresa (145, xiv) o física ([153])'}>
-      <button type="button" onClick={() => setEditando(true)} className="flex h-10 shrink-0 items-baseline gap-1.5 rounded-s px-2 hover:bg-hondo" aria-label={`${etiqueta} / ${total}: ir a otra ${medio ? 'posición' : 'página'}`}>
+      <button type="button" onClick={() => setEditando(true)} className="flex h-9 shrink-0 items-center gap-1.5 rounded-xl px-2 hover:bg-cream-200" aria-label={`${etiqueta} / ${total}: ir a otra ${medio ? 'posición' : 'página'}`}>
         <Folio grande>{etiqueta}</Folio>
         <span className="hidden font-mono text-[0.75rem] text-apagado sm:inline">/ {total}</span>
       </button>
@@ -244,7 +244,7 @@ function EstiloCita() {
   return (
     <MenuRaiz>
       <MenuDisparador asChild>
-        <button type="button" className="hidden h-10 shrink-0 items-center gap-1.5 rounded-s px-2.5 text-[0.8125rem] text-tinta-2 hover:bg-hondo hover:text-tinta lg:flex" aria-label={`Estilo de cita: ${actual.nombre}`}>
+        <button type="button" className="hidden h-9 shrink-0 items-center gap-1.5 rounded-xl px-2.5 text-[0.8125rem] font-medium text-coffee-500 hover:bg-cream-200 hover:text-coffee-800 lg:flex" aria-label={`Estilo de cita: ${actual.nombre}`}>
           <Icono nombre="citar" tam={15} />{actual.nombre}
         </button>
       </MenuDisparador>
@@ -269,12 +269,13 @@ function PanelDocumento({ doc, panel, setPanel, irA, irT, actual }: { doc: Detal
   const enCurso = secciones ? [...secciones].reverse().find((s) => s.unidadDesde <= actual) : undefined;
   return (
     <>
-      <div className="flex items-center gap-1 border-b border-filete px-3">
+      <div className="flex items-center gap-1 border-b border-cream-300 px-3 py-2.5"><div className="flex gap-1 rounded-xl border border-cream-400 bg-cream-200/70 p-1 shadow-[var(--hundido)]">
         {pestanas.map(([p, n]) => (
-          <button key={p} type="button" onClick={() => setPanel(p)} aria-pressed={panel === p} className={cx('relative h-12 px-3 text-[0.9375rem]', panel === p ? 'italic text-tinta' : 'text-tinta-2 hover:text-tinta')}>
+          <button key={p} type="button" onClick={() => setPanel(p)} aria-pressed={panel === p} className={cx('relative h-12 px-3 text-[0.9375rem]', panel === p ? ' text-tinta' : 'text-tinta-2 hover:text-tinta')}>
             {n}{panel === p ? <span className="absolute inset-x-2 bottom-0 h-[3px] bg-tinta" /> : null}
           </button>
         ))}
+        </div>
         <button type="button" onClick={() => setPanel(null)} aria-label="Cerrar el panel" className="ml-auto grid h-9 w-9 place-items-center rounded-s text-apagado hover:bg-hondo hover:text-tinta"><Icono nombre="cerrar" tam={15} /></button>
       </div>
       <div className="flex-1 overflow-y-auto overscroll-contain px-4 py-4">
@@ -286,9 +287,9 @@ function PanelDocumento({ doc, panel, setPanel, irA, irT, actual }: { doc: Detal
               {secciones.map((s) => (
                 <li key={s.id}>
                   <button type="button" onClick={() => (esMedio(doc.tipo) ? irT(folios?.folios[s.unidadDesde - 1]?.t0 ?? 0) : irA(s.unidadDesde))}
-                    className={cx('group flex w-full items-baseline gap-3 rounded-s py-2 pr-2 text-left hover:bg-hondo', s.nivel > 1 ? 'pl-5 text-[0.875rem] text-tinta-2' : 'pl-2 text-[0.9375rem]', enCurso?.id === s.id && 'bg-hondo text-tinta')}>
+                    className={cx('group flex w-full items-baseline gap-3 rounded-lg py-2 pr-2 text-left transition-colors hover:bg-cream-200', s.nivel > 1 ? 'pl-5 text-[0.8125rem] text-coffee-500' : 'pl-2 text-[0.875rem] font-medium text-coffee-700', enCurso?.id === s.id && 'bg-cream-50 text-coffee-800 shadow-[var(--relieve)]')}>
                     <span className="min-w-0 flex-1">{enCurso?.id === s.id ? <span className="mr-1.5 inline-block h-1.5 w-1.5 rounded-full bg-rojo align-middle" /> : null}{s.titulo}</span>
-                    <span className="shrink-0 font-mono text-[0.75rem] text-apagado tnum">{etiqueta(s.unidadDesde, folios)}</span>
+                    <span className="dato shrink-0 text-coffee-400">{etiqueta(s.unidadDesde, folios)}</span>
                   </button>
                 </li>
               ))}

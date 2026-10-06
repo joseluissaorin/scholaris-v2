@@ -37,12 +37,12 @@ function Marco() {
 
   return (
     <div className="flex min-h-dvh">
-      <a href="#contenido" className="sr-only z-[90] rounded-s bg-tinta px-3 py-2 text-sobre-tinta focus:not-sr-only focus:fixed focus:left-3 focus:top-3">Saltar al contenido</a>
+      <a href="#contenido" className="sr-only z-[90] rounded-xl bg-coffee-800 px-3 py-2 text-cream-50 focus:not-sr-only focus:fixed focus:left-3 focus:top-3">Saltar al contenido</a>
       <IndicadorCarga />
       <Riel />
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div className="fondo-bauhaus flex min-w-0 flex-1 flex-col">
         <BarraMovil />
-        <main id="contenido" tabIndex={-1} className="flex-1 pb-[calc(5rem+env(safe-area-inset-bottom))] outline-none md:pb-0">
+        <main id="contenido" tabIndex={-1} className="flex-1 pb-[calc(6rem+env(safe-area-inset-bottom))] outline-none lg:pb-10">
           <Outlet />
         </main>
       </div>

@@ -76,7 +76,7 @@ export interface PropsIcono extends Omit<SVGProps<SVGSVGElement>, 'name'> {
   grosor?: number;
 }
 
-export function Icono({ nombre, tam = 18, titulo, grosor = 1.6, ...resto }: PropsIcono) {
+export function Icono({ nombre, tam = 18, titulo, grosor = 1.75, ...resto }: PropsIcono) {
   const relleno = nombre === 'play' || nombre === 'marcador' ? 'currentColor' : 'none';
   return (
     <svg
@@ -86,8 +86,8 @@ export function Icono({ nombre, tam = 18, titulo, grosor = 1.6, ...resto }: Prop
       fill={relleno}
       stroke="currentColor"
       strokeWidth={grosor}
-      strokeLinecap="square"
-      strokeLinejoin="miter"
+      strokeLinecap="round"
+      strokeLinejoin="round"
       aria-hidden={titulo ? undefined : true}
       role={titulo ? 'img' : undefined}
       focusable="false"

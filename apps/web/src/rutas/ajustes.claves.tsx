@@ -49,7 +49,7 @@ function Claves() {
       <section>
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
-            <h2 className="text-[1.625rem] tracking-[-0.015em]">Claves de API</h2>
+            <h2 className="text-[1.125rem] font-semibold text-coffee-800">Claves de API</h2>
             <p className="mt-1 max-w-xl text-tinta-2">Para usar tu biblioteca desde el SDK de Python o desde cualquier agente por MCP (Claude, por ejemplo), con citas verificadas.</p>
           </div>
           <Boton variante="tinta" icono="mas" onClick={() => setCrear(true)}>Nueva clave</Boton>

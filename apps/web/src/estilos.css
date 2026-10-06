@@ -2,13 +2,27 @@
 @import '@scholaris/ui/tema.css';
 @source '../../../packages/ui/src';
 
-/* Coincidencias de búsqueda: subrayado amarillo de lápiz, no fondo chillón. */
+/* Coincidencias: el subrayado amarillo de lápiz. */
 mark {
-  background: linear-gradient(transparent 58%, var(--s-amarillo-suave) 58%, var(--s-amarillo-suave) 92%, transparent 92%);
+  background: linear-gradient(transparent 55%, rgb(232 168 56 / 0.38) 55%, rgb(232 168 56 / 0.38) 92%, transparent 92%);
   color: inherit;
   padding: 0 0.04em;
+  border-radius: 2px;
 }
-.oscuro mark { background: linear-gradient(transparent 55%, color-mix(in oklab, var(--s-amarillo) 38%, transparent) 55%); }
+
+/*
+ * El fondo Bauhaus de siempre: retícula de cruces, puntos y una diagonal roja
+ * muy tenue, detrás del contenido. Fijo: el papel no se mueve al desplazarse.
+ */
+.fondo-bauhaus {
+  background-color: var(--s-cream-100);
+  background-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cline x1='0' y1='120' x2='120' y2='0' stroke='%23C1453B' stroke-width='.5' opacity='.05'/%3E%3C/svg%3E"),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='48' height='48'%3E%3Crect x='20' y='23' width='8' height='2' rx='.5' fill='%232C1810' opacity='.045'/%3E%3Crect x='23' y='20' width='2' height='8' rx='.5' fill='%232C1810' opacity='.045'/%3E%3C/svg%3E"),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24'%3E%3Ccircle cx='12' cy='12' r='.9' fill='%232C1810' opacity='.05'/%3E%3C/svg%3E");
+  background-attachment: fixed;
+}
+.oscuro .fondo-bauhaus { filter: none; background-blend-mode: screen; }
 
 /* Texto leído en Markdown ligero. */
 .prosa p + p { margin-top: 0.85em; text-indent: 1.4em; }
@@ -17,16 +31,16 @@ mark {
 .prosa h3 { font-size: 1.2em; font-style: italic; }
 .prosa ul { list-style: none; padding: 0; }
 .prosa li { position: relative; padding-left: 1.1em; margin: 0.35em 0; }
-.prosa li::before { content: ''; position: absolute; left: 0; top: 0.62em; width: 0.42em; height: 0.42em; background: var(--s-rojo); }
+.prosa li::before { content: ''; position: absolute; left: 0; top: 0.6em; width: 0.4em; height: 0.4em; border-radius: 1px; background: var(--s-rojo); }
 .prosa table { width: 100%; border-collapse: collapse; font-size: 0.86em; font-variant-numeric: tabular-nums lining-nums; }
 .prosa th, .prosa td { border-bottom: 1px solid var(--s-filete); padding: 0.4em 0.6em; text-align: left; }
-.prosa th { font-family: var(--font-mono); font-size: 0.78em; text-transform: uppercase; letter-spacing: 0.06em; color: var(--s-apagado); font-weight: 400; }
+.prosa th { font-family: var(--font-sans); font-size: 0.72em; text-transform: uppercase; letter-spacing: 0.06em; color: var(--s-apagado); font-weight: 600; }
 
 /* Facsímil: la página como objeto impreso cuando no hay imagen. */
 .facsimil {
-  background: #fbf8f1;
+  background: #fdfaf3;
   color: #2a1d14;
-  box-shadow: 0 1px 0 var(--s-filete), 0 18px 40px -26px rgb(34 22 15 / 0.55);
+  box-shadow: inset 0 1px 0 #fff, 0 4px 16px rgb(44 24 16 / 0.10), 0 2px 6px rgb(44 24 16 / 0.06);
   container-type: inline-size;
 }
 .oscuro .facsimil { background: #e9e1d1; color: #2a1d14; }
@@ -37,8 +51,8 @@ mark {
 
 /* Karaoke: la palabra que suena. */
 .palabra { border-radius: 2px; transition: background-color 0.12s, color 0.12s; cursor: pointer; }
-.palabra:hover { background: var(--s-hondo); }
-.palabra[data-ahora='true'] { background: var(--s-tinta); color: var(--s-papel); }
+.palabra:hover { background: var(--s-cream-200); }
+.palabra[data-ahora='true'] { background: rgb(232 168 56 / 0.45); color: var(--s-coffee-800); box-shadow: 0 0 0 2px rgb(232 168 56 / 0.45); }
 .palabra[data-dicha='true'] { color: var(--s-tinta); }
 .tramo-futuro .palabra { color: var(--s-tinta-2); }
 

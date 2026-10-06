@@ -7,7 +7,7 @@ import { forwardRef, memo, useCallback, useEffect, useImperativeHandle, useLayou
 import { useQuery } from '@tanstack/react-query';
 import { useWindowVirtualizer } from '@tanstack/react-virtual';
 import type { DetalleDocumento, UnidadVista } from '@scholaris/contrato';
-import { Chip, cx, EsqueletoTexto, Icono, Rotulo } from '@scholaris/ui';
+import { Chip, cx, EsqueletoTexto, Folio, Icono, Rotulo } from '@scholaris/ui';
 import { BLOQUE, q } from '../../datos/consultas';
 import { tiempoACadena } from '../../lib/formato';
 import { raicesDe } from './markdown';
@@ -123,7 +123,7 @@ export const Medio = forwardRef<ManejadorMedio, { doc: DetalleDocumento; url?: s
 
     return (
       <div>
-        <div className="sticky top-[7.75rem] z-20 -mx-5 border-b border-filete bg-papel/95 px-5 pb-4 pt-2 backdrop-blur md:top-[4.25rem] md:-mx-12 md:px-12">
+        <div className="sticky top-[7.75rem] z-20 -mx-5 border-b border-cream-300 bg-cream-50/90 px-5 pb-4 pt-3 shadow-[var(--shadow-soft)] backdrop-blur lg:top-[4.25rem] md:-mx-12 md:px-12">
           {doc.tipo === 'video' ? (
             url ? <video ref={setEl} src={url} className="mx-auto max-h-[24vh] w-full max-w-3xl rounded-s bg-black md:max-h-[38vh]" playsInline preload="metadata" /> : (
               <div className="relative mx-auto grid aspect-video max-h-[22vh] w-full max-w-3xl md:max-h-[34vh] place-items-center overflow-hidden rounded-s bg-tinta text-sobre-tinta">
@@ -157,7 +157,7 @@ function Controles({ r }: { r: Reloj }) {
   return (
     <div className="mx-auto mt-3 flex max-w-3xl items-center gap-3">
       <button type="button" onClick={() => r.ir(r.t - 10)} aria-label="Atrás 10 segundos" className="tactil-grande hidden sm:grid h-10 w-10 place-items-center rounded-s text-tinta-2 hover:bg-hondo hover:text-tinta"><span className="font-mono text-[0.75rem]">−10</span></button>
-      <button type="button" onClick={r.sonando ? r.pausa : r.play} aria-label={r.sonando ? 'Pausa' : 'Reproducir'} className="grid h-12 w-12 shrink-0 place-items-center rounded-full bg-tinta text-sobre-tinta hover:bg-tinta-2">
+      <button type="button" onClick={r.sonando ? r.pausa : r.play} aria-label={r.sonando ? 'Pausa' : 'Reproducir'} className="grid h-12 w-12 shrink-0 place-items-center rounded-full border border-[#1a0f0a] bg-[linear-gradient(180deg,#4a2e1a_0%,#2c1810_100%)] text-cream-50 shadow-[var(--relieve-oscuro)] transition-transform hover:-translate-y-px active:translate-y-px active:shadow-[var(--pulsado)]">
         <Icono nombre={r.sonando ? 'pausa' : 'play'} tam={18} grosor={2.4} />
       </button>
       <button type="button" onClick={() => r.ir(r.t + 10)} aria-label="Adelante 10 segundos" className="tactil-grande hidden sm:grid h-10 w-10 place-items-center rounded-s text-tinta-2 hover:bg-hondo hover:text-tinta"><span className="font-mono text-[0.75rem]">+10</span></button>
@@ -165,11 +165,11 @@ function Controles({ r }: { r: Reloj }) {
       <input
         type="range" min={0} max={Math.round(r.dur)} step={1} value={Math.round(r.t)} onChange={(e) => r.ir(Number(e.target.value))}
         aria-label="Posición" aria-valuetext={tiempoACadena(r.t)}
-        className="h-1 min-w-0 flex-1 cursor-pointer appearance-none bg-hondo accent-[var(--s-rojo)] [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-rojo"
-        style={{ background: `linear-gradient(to right, var(--s-rojo) ${(r.t / r.dur) * 100}%, var(--s-hondo) ${(r.t / r.dur) * 100}%)` }}
+        className="h-1.5 min-w-0 flex-1 cursor-pointer appearance-none rounded-full shadow-[var(--hundido)] [&::-webkit-slider-thumb]:h-[18px] [&::-webkit-slider-thumb]:w-[18px] [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border [&::-webkit-slider-thumb]:border-cream-400 [&::-webkit-slider-thumb]:bg-[linear-gradient(180deg,#fff,#ede6d6)] [&::-webkit-slider-thumb]:shadow-[0_1px_3px_rgb(44_24_16/0.35)]"
+        style={{ background: `linear-gradient(to right, var(--s-rojo) ${(r.t / r.dur) * 100}%, var(--s-cream-200) ${(r.t / r.dur) * 100}%)` }}
       />
       <span className="tnum hidden w-16 shrink-0 font-mono text-[0.875rem] text-apagado sm:block">{tiempoACadena(r.dur)}</span>
-      <button type="button" onClick={() => r.ponerVel(VELS[(VELS.indexOf(r.vel) + 1) % VELS.length]!)} aria-label={`Velocidad ${r.vel}×`} className="h-8 shrink-0 rounded-full border border-filete-fuerte px-2.5 font-mono text-[0.75rem] hover:border-tinta">{numero(r.vel)}×</button>
+      <button type="button" onClick={() => r.ponerVel(VELS[(VELS.indexOf(r.vel) + 1) % VELS.length]!)} aria-label={`Velocidad ${r.vel}×`} className="h-8 shrink-0 rounded-lg border border-cream-400 bg-cream-50 px-2.5 font-mono text-[0.75rem] shadow-[var(--relieve)] hover:-translate-y-px active:translate-y-px active:shadow-[var(--pulsado)]">{numero(r.vel)}×</button>
     </div>
   );
 }
@@ -185,7 +185,7 @@ const Tramo = memo(function Tramo({ docId, orden, t, futuro, ir, resaltar }: { d
   return (
     <section data-orden={orden} className={cx('grid grid-cols-[4.75rem_minmax(0,1fr)] gap-4 border-l-[3px] py-4 pl-3 md:grid-cols-[6rem_minmax(0,44rem)] md:gap-8', t != null ? 'border-rojo' : 'border-transparent', futuro && 'tramo-futuro')}>
       <div className="flex flex-col items-start gap-1">
-        <button type="button" onClick={() => ir(ancla.t0)} className="border-l-2 border-rojo pl-1.5 font-mono text-[0.8125rem] tnum hover:bg-hondo" aria-label={`Ir a ${tiempoACadena(ancla.t0)}`}>{tiempoACadena(ancla.t0)}</button>
+        <button type="button" onClick={() => ir(ancla.t0)} className="rounded-md hover:shadow-[var(--relieve)]" aria-label={`Ir a ${tiempoACadena(ancla.t0)}`}><Folio>{tiempoACadena(ancla.t0)}</Folio></button>
         {ancla.hablante && !palabras.some((w) => w.turno) ? <span className="rotulo text-[0.625rem] leading-tight text-apagado">{ancla.hablante}</span> : null}
       </div>
       <p className="lectura">
@@ -195,7 +195,7 @@ const Tramo = memo(function Tramo({ docId, orden, t, futuro, ir, resaltar }: { d
           const marcada = raices.length && raices.some((r) => norm(w.p).startsWith(r));
           return (
             <span key={i}>
-              {w.turno ? <><br className={i ? undefined : 'hidden'} /><span className="rotulo mr-2 inline-block pt-2 text-tinta-2">{w.turno}</span></> : null}
+              {w.turno ? <><br className={i ? undefined : 'hidden'} /><span className="mr-2 inline-block pt-2 font-sans text-[0.6875rem] font-semibold uppercase tracking-[0.05em] text-azul">{w.turno}</span></> : null}
               <span className="palabra" data-ahora={ahora || undefined} data-dicha={dicha || undefined} onClick={() => ir(w.t0)}>{marcada ? <mark>{w.p}</mark> : w.p}</span>{' '}
             </span>
           );

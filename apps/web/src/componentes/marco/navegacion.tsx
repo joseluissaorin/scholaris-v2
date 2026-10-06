@@ -1,18 +1,26 @@
-import { Link } from '@tanstack/react-router';
+/**
+ * La barra lateral de siempre: café oscuro, el logo dibujado a mano, los
+ * lugares con su icono y la marca amarilla del activo, y abajo la cuenta.
+ * En el móvil, la cabecera oscura con el menú que se despliega, y un botón
+ * redondo para añadir.
+ */
+import { cloneElement, lazy, Suspense, useEffect, useState, type ReactElement } from 'react';
+import { Link, useRouterState } from '@tanstack/react-router';
 import { useQuery } from '@tanstack/react-query';
-import { cloneElement, lazy, Suspense, useState, type ReactElement } from 'react';
 import { cx, Icono, type NombreIcono } from '@scholaris/ui';
 import { disparar } from '../../lib/acciones';
 import { useSesion } from '../../sesion';
 import { esSimulado } from '../../datos/api';
 import { q } from '../../datos/consultas';
-import { Monograma } from './monograma';
+import { Logo } from './logo';
 
-export const SECCIONES: Array<{ a: '/' | '/buscar' | '/escribir' | '/explorar'; etiqueta: string; icono: NombreIcono; n: string }> = [
-  { a: '/', etiqueta: 'Biblioteca', icono: 'biblioteca', n: '01' },
-  { a: '/buscar', etiqueta: 'Buscar', icono: 'buscar', n: '02' },
-  { a: '/escribir', etiqueta: 'Escribir', icono: 'escribir', n: '03' },
-  { a: '/explorar', etiqueta: 'Explorar', icono: 'explorar', n: '04' },
+type Destino = '/' | '/buscar' | '/escribir' | '/explorar' | '/ajustes';
+
+export const SECCIONES: Array<{ a: Destino; etiqueta: string; icono: NombreIcono; sub?: Array<{ a: string; etiqueta: string }> }> = [
+  { a: '/', etiqueta: 'Biblioteca', icono: 'biblioteca' },
+  { a: '/buscar', etiqueta: 'Buscar', icono: 'buscar', sub: [{ a: '/buscar/vigilantes', etiqueta: 'Vigilantes' }, { a: '/buscar/historial', etiqueta: 'Historial' }] },
+  { a: '/escribir', etiqueta: 'Escribir', icono: 'escribir', sub: [{ a: '/escribir', etiqueta: 'Autocita' }, { a: '/escribir/cuadernos', etiqueta: 'Cuadernos' }] },
+  { a: '/explorar', etiqueta: 'Explorar', icono: 'explorar', sub: [{ a: '/explorar', etiqueta: 'Mapa de conceptos' }, { a: '/explorar/grafo', etiqueta: 'Grafo de citas' }, { a: '/explorar/entidades', etiqueta: 'Personas y obras' }, { a: '/explorar/conceptos', etiqueta: 'Conceptos' }, { a: '/explorar/perspectivas', etiqueta: 'Perspectivas' }, { a: '/explorar/corpus', etiqueta: 'Corpus' }] },
 ];
 
 const esMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform);
@@ -23,10 +31,7 @@ function useAlertasPendientes() {
   return data?.filter((a) => !a.vista).length ?? 0;
 }
 
-/**
- * Los menús del marco se cargan con la intención (al pasar, enfocar o pulsar) y
- * en cuanto el navegador queda ocioso: Radix no pesa en el primer pintado.
- */
+/** Menús del marco: se cargan con la intención y en tiempo ocioso (Radix no pesa en el primer pintado). */
 const Menus = lazy(() => import('./menus'));
 const precargarMenus = () => void import('./menus');
 if (typeof window !== 'undefined') {
@@ -54,112 +59,159 @@ export function useNombre() {
   return s.usuario?.nombre ?? yo?.usuario.nombre;
 }
 
-function Iniciales() {
+function useCorreo() {
   const s = useSesion();
-  const n = useNombre() ?? 'Tú';
-  if (s.usuario?.imagen) return <img src={s.usuario.imagen} alt="" className="h-9 w-9 rounded-full object-cover" />;
-  return <span className="grid h-9 w-9 place-items-center rounded-full border border-filete-fuerte bg-hoja text-[0.9375rem] italic text-tinta">{n.charAt(0)}</span>;
+  const { data: yo } = useQuery({ ...q.yo(), enabled: !s.usuario });
+  return s.usuario?.correo || (s.modo === 'local' ? (esSimulado() ? 'Demostración' : 'Versión local') : yo?.usuario.correo);
 }
 
-/** El riel de escritorio: monograma, cuatro lugares, añadir, buscar y la cuenta. */
-export function Riel() {
+/** El contenido de la barra: el mismo en escritorio y en el cajón del móvil. */
+function ContenidoBarra({ alNavegar }: { alNavegar?: () => void }) {
+  const ruta = useRouterState({ select: (s) => s.location.pathname });
   const pendientes = useAlertasPendientes();
+  const nombre = useNombre();
+  const correo = useCorreo();
+  const sesion = useSesion();
+  const activa = (a: Destino) => (a === '/' ? ruta === '/' || ruta.startsWith('/lector') : ruta.startsWith(a));
+
   return (
-    <nav aria-label="Principal" className="sticky top-0 hidden h-dvh w-[5.5rem] shrink-0 flex-col items-center border-r border-filete bg-papel/80 py-5 backdrop-blur md:flex">
-      <Link to="/" aria-label="Scholaris, ir a la biblioteca" className="mb-7">
-        <Monograma />
-      </Link>
-
-      <MenuAnadir lado="right">
-        <button type="button" aria-label="Añadir a la biblioteca" className="group mb-6 grid h-12 w-12 place-items-center rounded-full bg-rojo text-[#fbf5ec] transition-transform duration-150 hover:scale-105 active:scale-95 dark:text-papel">
-          <Icono nombre="mas" tam={22} grosor={2} className="transition-transform duration-200 group-data-[state=open]:rotate-45" />
-        </button>
-      </MenuAnadir>
-
-      <ul className="flex flex-col gap-1">
-        {SECCIONES.map((s) => (
-          <li key={s.a}>
-            <Link
-              to={s.a}
-              activeOptions={{ exact: s.a === '/' }}
-              className="group relative flex w-[4.5rem] flex-col items-center gap-1 rounded-s py-2.5 text-tinta-2 transition-colors hover:bg-hondo/70 hover:text-tinta data-[status=active]:text-tinta"
-            >
-              <span aria-hidden className="absolute -left-2 top-2 bottom-2 w-[3px] bg-rojo opacity-0 transition-opacity group-data-[status=active]:opacity-100" />
-              <span className="relative">
-                <Icono nombre={s.icono} tam={21} />
-                {s.a === '/buscar' && pendientes ? <span className="absolute -right-1.5 -top-1 h-2.5 w-2.5 rounded-full bg-amarillo ring-2 ring-papel" aria-label={`${pendientes} alertas sin ver`} /> : null}
-              </span>
-              <span className="text-[0.75rem] leading-none group-data-[status=active]:italic">{s.etiqueta}</span>
-            </Link>
-          </li>
-        ))}
-      </ul>
-
-      <div className="mt-auto flex flex-col items-center gap-3">
-          <button type="button" onClick={() => disparar('paleta')} aria-label={`Buscar en todo (${TECLA_MOD} K)`} title={`Buscar en todo (${TECLA_MOD} K)`} className="grid h-10 w-10 place-items-center rounded-s text-tinta-2 hover:bg-hondo hover:text-tinta">
-            <Icono nombre="teclado" tam={19} />
-          </button>
-        <Link to="/ajustes" aria-label="Ajustes" className="grid h-10 w-10 place-items-center rounded-s text-tinta-2 hover:bg-hondo hover:text-tinta data-[status=active]:bg-hondo data-[status=active]:text-tinta">
-          <Icono nombre="ajustes" tam={19} />
-        </Link>
-        <MenuCuenta lado="right">
-          <button type="button" aria-label="Cuenta y tema" className="rounded-full"><Iniciales /></button>
-        </MenuCuenta>
-        <span className="rotulo mt-2 select-none text-[0.625rem] text-apagado [writing-mode:vertical-rl] rotate-180">
-          {esSimulado() ? 'Demostración · v2' : 'Scholaris · v2'}
-        </span>
+    <>
+      <div className="flex h-14 shrink-0 items-center gap-2.5 border-b border-barra-2 px-5">
+        <Logo tam={32} sobreOscuro />
+        <span className="text-[1.125rem] font-semibold tracking-wide text-sobre-barra">Scholaris</span>
       </div>
-    </nav>
-  );
-}
 
-/** Barra superior en el móvil: monograma, título del lugar, buscar y cuenta. */
-export function BarraMovil() {
-  return (
-    <header className="sticky top-0 z-30 flex h-14 items-center gap-3 border-b border-filete bg-papel/90 px-4 pt-[env(safe-area-inset-top)] backdrop-blur md:hidden">
-      <Link to="/" aria-label="Scholaris"><Monograma tam={30} /></Link>
-      <span className="flex-1 truncate text-[1.25rem] italic tracking-[-0.01em]">Scholaris</span>
-      <button type="button" onClick={() => disparar('paleta')} aria-label="Buscar en todo" className="tactil-grande grid h-10 w-10 place-items-center rounded-s text-tinta-2">
-        <Icono nombre="buscar" tam={20} />
-      </button>
-      <MenuCuenta>
-        <button type="button" aria-label="Cuenta y tema" className="rounded-full"><Iniciales /></button>
-      </MenuCuenta>
-    </header>
-  );
-}
-
-/** Pestañas inferiores en el móvil, con «Añadir» en el centro. */
-export function PieMovil() {
-  const pendientes = useAlertasPendientes();
-  const [a, b, c, d] = SECCIONES as [typeof SECCIONES[0], typeof SECCIONES[0], typeof SECCIONES[0], typeof SECCIONES[0]];
-  const enlace = (s: typeof a) => (
-    <Link
-      to={s.a}
-      activeOptions={{ exact: s.a === '/' }}
-      className="group relative flex flex-1 flex-col items-center justify-center gap-1 text-tinta-2 data-[status=active]:text-tinta"
-    >
-      <span aria-hidden className="absolute top-0 h-[3px] w-8 bg-rojo opacity-0 group-data-[status=active]:opacity-100" />
-      <span className="relative">
-        <Icono nombre={s.icono} tam={22} />
-        {s.a === '/buscar' && pendientes ? <span className="absolute -right-1.5 -top-1 h-2.5 w-2.5 rounded-full bg-amarillo ring-2 ring-papel" /> : null}
-      </span>
-      <span className="text-[0.6875rem] leading-none group-data-[status=active]:italic">{s.etiqueta}</span>
-    </Link>
-  );
-  return (
-    <nav aria-label="Principal" className="fixed inset-x-0 bottom-0 z-30 flex h-[calc(4rem+env(safe-area-inset-bottom))] items-stretch border-t border-filete bg-papel/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden">
-      {enlace(a)}
-      {enlace(b)}
-      <div className="flex flex-1 items-center justify-center">
-        <MenuAnadir alinear="center">
-          <button type="button" aria-label="Añadir a la biblioteca" className={cx('-mt-6 grid h-14 w-14 place-items-center rounded-full bg-rojo text-[#fbf5ec] shadow-flota ring-4 ring-papel dark:text-papel')}>
-            <Icono nombre="mas" tam={24} grosor={2} />
+      <div className="flex flex-col gap-2 px-3 pt-4">
+        <MenuAnadir lado="right">
+          <button type="button" className="flex h-10 items-center gap-2.5 rounded-xl border border-[#9a3128] bg-[linear-gradient(180deg,#cc5246_0%,#b83e33_100%)] px-3 text-[0.875rem] font-semibold text-[#fdf8f1] shadow-[inset_0_1px_0_rgb(255_255_255/0.22),0_2px_6px_rgb(0_0_0/0.35)] transition-transform hover:-translate-y-px active:translate-y-px active:shadow-[inset_0_2px_5px_rgb(0_0_0/0.3)]">
+            <Icono nombre="mas" tam={17} grosor={2.2} />
+            Añadir documentos
           </button>
         </MenuAnadir>
+        <button type="button" onClick={() => { disparar('paleta'); alNavegar?.(); }} className="flex h-9 items-center gap-2.5 rounded-xl border border-black/30 bg-black/20 px-3 text-[0.8125rem] text-sobre-barra-2 shadow-[inset_0_2px_4px_rgb(0_0_0/0.35)] hover:text-sobre-barra">
+          <Icono nombre="buscar" tam={15} />
+          <span className="flex-1 text-left">Buscar en todo</span>
+          <kbd className="dato rounded-md border border-white/15 px-1.5 py-0.5 text-[0.625rem] text-sobre-barra-2">{TECLA_MOD} K</kbd>
+        </button>
       </div>
-      {enlace(c)}
-      {enlace(d)}
-    </nav>
+
+      <nav aria-label="Principal" className="sin-barra flex-1 overflow-y-auto px-3 py-3">
+        {SECCIONES.map((s, i) => (
+          <div key={s.a} className={cx(i > 0 && 'mt-0.5')}>
+            <Link
+              to={s.a}
+              onClick={alNavegar}
+              className={cx('relative flex items-center rounded-xl px-3 py-2 text-[0.875rem] font-medium transition-colors duration-150', activa(s.a) ? 'bg-barra-2 text-sobre-barra shadow-[inset_0_1px_0_rgb(255_255_255/0.06)]' : 'text-sobre-barra-2 hover:bg-barra-2 hover:text-sobre-barra')}
+              aria-current={activa(s.a) ? 'page' : undefined}
+            >
+              {activa(s.a) ? <span aria-hidden className="absolute left-0 top-1/2 h-5 w-1 -translate-y-1/2 rounded-full bg-amarillo" /> : null}
+              <Icono nombre={s.icono} tam={16} className="mr-3" />
+              <span className="flex-1">{s.etiqueta}</span>
+              {s.a === '/buscar' && pendientes ? <span className="grid h-5 min-w-5 place-items-center rounded-full bg-amarillo px-1 text-[0.625rem] font-bold text-coffee-800" aria-label={`${pendientes} alertas sin ver`}>{pendientes}</span> : null}
+            </Link>
+            {s.sub && activa(s.a) ? (
+              <ul className="mb-1 ml-[1.375rem] mt-0.5 border-l border-barra-2 pl-3">
+                {s.sub.map((x) => (
+                  <li key={x.a}>
+                    <Link to={x.a} onClick={alNavegar} activeOptions={{ exact: true, includeSearch: false }} className="block rounded-lg px-2.5 py-1.5 text-[0.8125rem] text-sobre-barra-2 hover:text-sobre-barra data-[status=active]:font-semibold data-[status=active]:text-sobre-barra">
+                      {x.etiqueta}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+          </div>
+        ))}
+        <div className="mt-3 border-t border-barra-2/70 pt-3">
+          <Link to="/ajustes" onClick={alNavegar} className={cx('relative flex items-center rounded-xl px-3 py-2 text-[0.875rem] font-medium transition-colors', activa('/ajustes') ? 'bg-barra-2 text-sobre-barra' : 'text-sobre-barra-2 hover:bg-barra-2 hover:text-sobre-barra')}>
+            {activa('/ajustes') ? <span aria-hidden className="absolute left-0 top-1/2 h-5 w-1 -translate-y-1/2 rounded-full bg-amarillo" /> : null}
+            <Icono nombre="ajustes" tam={16} className="mr-3" />Ajustes
+          </Link>
+        </div>
+      </nav>
+
+      <div className="shrink-0 space-y-3 border-t border-barra-2 p-4">
+        <div className="flex items-center gap-2">
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-[0.8125rem] font-semibold text-sobre-barra">{nombre ?? 'Tu biblioteca'}</p>
+            <p className="truncate text-[0.6875rem] text-sobre-barra-2">{correo}</p>
+          </div>
+          <Link to="/buscar/vigilantes" onClick={alNavegar} className="relative grid h-8 w-8 place-items-center rounded-xl text-sobre-barra-2 hover:bg-barra-2 hover:text-sobre-barra" aria-label="Alertas">
+            <Icono nombre="vigilante" tam={16} />
+            {pendientes ? <span className="absolute right-1 top-1 h-2 w-2 rounded-full bg-amarillo" /> : null}
+          </Link>
+          <MenuCuenta lado="right">
+            <button type="button" className="grid h-8 w-8 place-items-center rounded-xl text-sobre-barra-2 hover:bg-barra-2 hover:text-sobre-barra" aria-label={sesion.salir ? 'Cuenta, tema y salir' : 'Cuenta y tema'}>
+              <Icono nombre="opciones" tam={16} />
+            </button>
+          </MenuCuenta>
+        </div>
+        <div>
+          <div className="mb-2 h-px bg-rojo/30" />
+          <p className="text-[0.6875rem] text-sobre-barra-2/80">Scholaris v2{esSimulado() ? ' · demostración' : sesion.modo === 'local' ? ' · versión local' : ''}</p>
+        </div>
+      </div>
+    </>
+  );
+}
+
+/** Escritorio: la barra lateral fija. */
+export function Riel() {
+  return (
+    <aside className="sticky top-0 hidden h-dvh w-56 shrink-0 flex-col bg-barra lg:flex">
+      <ContenidoBarra />
+    </aside>
+  );
+}
+
+/** Móvil: la cabecera oscura con el menú desplegable. */
+export function BarraMovil() {
+  const [abierta, setAbierta] = useState(false);
+  const ruta = useRouterState({ select: (s) => s.location.pathname });
+  useEffect(() => setAbierta(false), [ruta]);
+  useEffect(() => {
+    if (!abierta) return;
+    const k = (e: KeyboardEvent) => e.key === 'Escape' && setAbierta(false);
+    document.addEventListener('keydown', k);
+    document.body.style.overflow = 'hidden';
+    return () => { document.removeEventListener('keydown', k); document.body.style.overflow = ''; };
+  }, [abierta]);
+  return (
+    <>
+      <header className="sticky top-0 z-40 flex h-14 items-center gap-2 bg-barra px-4 pt-[env(safe-area-inset-top)] lg:hidden">
+        <Link to="/" className="flex items-center gap-2" aria-label="Scholaris, ir a la biblioteca">
+          <Logo tam={28} sobreOscuro />
+          <span className="text-[1.0625rem] font-semibold text-sobre-barra">Scholaris</span>
+        </Link>
+        <span className="flex-1" />
+        <button type="button" onClick={() => disparar('paleta')} aria-label="Buscar en todo" className="grid h-10 w-10 place-items-center rounded-xl text-sobre-barra-2 hover:bg-barra-2 hover:text-sobre-barra">
+          <Icono nombre="buscar" tam={20} />
+        </button>
+        <button type="button" onClick={() => setAbierta(!abierta)} aria-expanded={abierta} aria-label="Menú" className="-mr-2 grid h-10 w-10 place-items-center rounded-xl text-sobre-barra-2 hover:bg-barra-2 hover:text-sobre-barra">
+          <Icono nombre={abierta ? 'cerrar' : 'menu'} tam={22} />
+        </button>
+      </header>
+      {abierta ? (
+        <>
+          <div className="fixed inset-0 z-40 bg-[rgb(26_15_10/0.6)] backdrop-blur-sm lg:hidden anim-aparece" onClick={() => setAbierta(false)} />
+          <aside className="fixed inset-y-0 left-0 z-50 flex w-72 flex-col bg-barra shadow-[var(--shadow-lifted)] lg:hidden anim-entra">
+            <ContenidoBarra alNavegar={() => setAbierta(false)} />
+          </aside>
+        </>
+      ) : null}
+    </>
+  );
+}
+
+/** Móvil: el botón redondo de añadir, levantado sobre el papel. */
+export function PieMovil() {
+  return (
+    <div className="fixed bottom-[calc(1.25rem+env(safe-area-inset-bottom))] right-5 z-30 lg:hidden">
+      <MenuAnadir alinear="end" lado="top">
+        <button type="button" aria-label="Añadir a la biblioteca" className="grid h-14 w-14 place-items-center rounded-full border border-[#9a3128] bg-[linear-gradient(180deg,#cc5246_0%,#b83e33_100%)] text-[#fdf8f1] shadow-[inset_0_1px_0_rgb(255_255_255/0.25),0_6px_18px_rgb(120_30_20/0.35),0_2px_4px_rgb(44_24_16/0.2)] active:translate-y-px active:shadow-[inset_0_2px_6px_rgb(0_0_0/0.3)]">
+          <Icono nombre="mas" tam={24} grosor={2.2} />
+        </button>
+      </MenuAnadir>
+    </div>
   );
 }

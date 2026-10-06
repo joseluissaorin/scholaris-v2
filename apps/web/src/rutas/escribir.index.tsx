@@ -87,7 +87,7 @@ function Editor({ alListo }: { alListo: (id: string) => void }) {
     <Lienzo>
       <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_19rem]">
         <div>
-          <h2 className="text-[1.625rem] tracking-[-0.015em]">Pega tu texto. Cada afirmación recibirá su cita verificada.</h2>
+          <h2 className="text-[1.125rem] font-semibold text-coffee-800">Pega tu texto. Cada afirmación recibirá su cita verificada.</h2>
           <p className="mt-2 max-w-2xl text-tinta-2">Buscamos en tu biblioteca el pasaje que respalda cada frase, un juez comprueba que de verdad la respalda y la cita sale con su página impresa o su minuto. Si no hay respaldo, no hay cita.</p>
           <div className="relative mt-6">
             <AreaTexto value={texto} onChange={(e) => setTexto(e.target.value)} placeholder="Escribe o pega aquí tu borrador. Separa los párrafos con una línea en blanco." aria-label="Texto a citar" className="lectura min-h-[22rem] resize-y bg-hoja p-5" />
@@ -277,7 +277,7 @@ function Propuesta({ p, alDecidir }: { p: PropuestaCita; alDecidir: (d: 'aceptad
     <Tarjeta className="overflow-hidden">
       <div className="border-b border-filete p-4">
         <Rotulo>Afirmación</Rotulo>
-        <p className="mt-1 italic">«{p.afirmacion}»</p>
+        <p className="mt-1">«{p.afirmacion}»</p>
       </div>
       <div className="p-4">
         <div className="flex items-center gap-2">
@@ -288,7 +288,7 @@ function Propuesta({ p, alDecidir }: { p: PropuestaCita; alDecidir: (d: 'aceptad
         <Pasaje texto={textoLimpio(p.cita.pasaje)} />
         <div className="mt-3 flex items-center gap-2 text-[0.8125rem] text-tinta-2">
           <Folio className="shrink-0">{etiquetaCorta(p.cita.ancla, anclaACita(p.cita.ancla, p.cita.anclaFin))}</Folio>
-          <span className="min-w-0 flex-1 truncate italic">{doc?.metadatos.titulo ?? '…'}</span>
+          <span className="min-w-0 flex-1 truncate">{doc?.metadatos.titulo ?? '…'}</span>
           <Link to="/lector/$id" params={{ id: p.cita.documento }} search={anclaABusqueda(p.cita.ancla)} className="shrink-0 underline underline-offset-4">Ver en el libro</Link>
         </div>
         <p className="mt-3 font-mono text-[0.8125rem]">{p.textoCita}</p>

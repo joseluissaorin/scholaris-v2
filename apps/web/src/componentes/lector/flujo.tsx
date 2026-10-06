@@ -134,11 +134,11 @@ const Fila = memo(function Fila({ docId, orden, modo, texto, apaisada, resaltar,
   const pagina = (
     <div className={cx('relative', modo === 'pagina' && 'mx-auto w-full max-w-[46rem]')}>
       {pendiente ? (
-        <div className={cx('grid w-full place-items-center rounded-[2px] border border-dashed border-filete-fuerte bg-hondo/40', apaisada ? 'aspect-[16/9]' : 'aspect-[1/1.414]')}>
+        <div className={cx('grid w-full place-items-center rounded-md border border-dashed border-filete-fuerte bg-hondo/40', apaisada ? 'aspect-[16/9]' : 'aspect-[1/1.414]')}>
           <span className="flex items-center gap-2 text-[0.875rem] text-apagado"><span className="h-1.5 w-1.5 rounded-full bg-rojo anim-pulso" />Leyendo esta página…</span>
         </div>
       ) : u?.imagenUrl && !imagenRota ? (
-        <img src={u.imagenUrl} alt={`Imagen de la página ${u.etiqueta}`} loading="lazy" decoding="async" onError={() => setImagenRota(true)} className={cx('w-full rounded-[2px] bg-white object-contain shadow-hoja', apaisada ? 'aspect-[16/9]' : 'aspect-[1/1.414]')} />
+        <img src={u.imagenUrl} alt={`Imagen de la página ${u.etiqueta}`} loading="lazy" decoding="async" onError={() => setImagenRota(true)} className={cx('w-full rounded-md bg-white object-contain shadow-hoja', apaisada ? 'aspect-[16/9]' : 'aspect-[1/1.414]')} />
       ) : u ? (
         <Facsimil texto={u.texto} folio={folio?.impresa} titulillo={orden % 2 ? titulillo : undefined} apaisada={apaisada} />
       ) : (
@@ -152,12 +152,12 @@ const Fila = memo(function Fila({ docId, orden, modo, texto, apaisada, resaltar,
 
   const columnaTexto = (
     <div className="min-w-0">
-      <div className="folio-pegado z-10 mb-4 flex items-baseline gap-3 bg-papel/85 py-1 backdrop-blur-sm">
+      <div className="folio-pegado z-10 mb-4 flex items-center gap-3 rounded-xl bg-cream-100/85 py-1 backdrop-blur-sm">
         {u ? <Folio grande dudoso={!!folio && folio.confianza < 0.75}>{u.etiqueta}</Folio> : <Esqueleto className="h-5 w-14" />}
         {folio ? <Rotulo>física {folio.fisica}{folio.origen === 'deducido' ? ' · folio deducido' : ''}</Rotulo> : null}
         {esPrevia ? <Rotulo className="ml-auto text-rojo">Vista previa · aún se está leyendo</Rotulo> : null}
       </div>
-      {pendiente ? <p className="text-apagado">El texto llegará en cuanto se lea esta página.</p> : u && !u.texto.trim() && !esPrevia ? <p className="italic text-apagado">Página sin texto: en blanco, guarda o lámina.</p> : u ? <Markdown texto={u.texto} q={resaltar} destacar={destacar} className="lectura" /> : <EsqueletoTexto lineas={9} />}
+      {pendiente ? <p className="text-[0.875rem] text-apagado">El texto llegará en cuanto se lea esta página.</p> : u && !u.texto.trim() && !esPrevia ? <p className=" text-apagado">Página sin texto: en blanco, guarda o lámina.</p> : u ? <Markdown texto={u.texto} q={resaltar} destacar={destacar} className="lectura" /> : <EsqueletoTexto lineas={9} />}
     </div>
   );
 

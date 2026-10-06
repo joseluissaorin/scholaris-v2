@@ -88,7 +88,7 @@ function PaginaBuscar() {
         <div role="radiogroup" aria-label="Modo" className="mb-3 inline-flex rounded-s border border-filete-fuerte p-0.5">
           {(['buscar', 'preguntar'] as const).map((m) => (
             <button key={m} type="button" role="radio" aria-checked={modo === m} onClick={() => { fijar({ modo: m === 'buscar' ? undefined : m }); caja.current?.focus(); }}
-              className={cx('flex h-9 items-center gap-2 rounded-[2px] px-3.5 text-[0.9375rem]', modo === m ? 'bg-tinta text-sobre-tinta' : 'text-tinta-2 hover:text-tinta')}>
+              className={cx('flex h-9 items-center gap-2 rounded-md px-3.5 text-[0.9375rem]', modo === m ? 'bg-tinta text-sobre-tinta' : 'text-tinta-2 hover:text-tinta')}>
               <Icono nombre={m === 'buscar' ? 'buscar' : 'chispa'} tam={15} />{m === 'buscar' ? 'Buscar pasajes' : 'Preguntar'}
             </button>
           ))}
@@ -194,7 +194,7 @@ function Inicio({ modo, alElegir }: { modo: Modo; alElegir: (t: string) => void 
           {ejemplos.map((e) => (
             <li key={e}><button type="button" onClick={() => alElegir(e)} className="group flex w-full items-center gap-3 rounded-s py-2 text-left text-[1.0625rem] hover:bg-hondo md:-ml-2 md:px-2">
               <Icono nombre={modo === 'preguntar' ? 'chispa' : 'buscar'} tam={16} className="shrink-0 text-apagado" />
-              <span className="italic">{e}</span>
+              <span className="">{e}</span>
               <Icono nombre="derecha" tam={15} className="ml-auto opacity-0 group-hover:opacity-60" />
             </button></li>
           ))}
@@ -271,7 +271,7 @@ function Respuesta({ pregunta, filtros }: { pregunta: string; filtros: Filtros }
     <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_20rem]">
       <section aria-live="polite" aria-busy={estado !== 'hecho'}>
         <p className="rotulo text-apagado">Pregunta</p>
-        <h2 className="mt-1 text-[1.625rem] italic leading-tight tracking-[-0.015em]">{pregunta}</h2>
+        <h2 className="mt-1 text-[1.625rem] leading-tight tracking-[-0.015em]">{pregunta}</h2>
         <div className="mt-6 border-l-[3px] border-tinta pl-5">
           {estado === 'pensando' ? (
             <div><p className="mb-3 flex items-center gap-2 text-[0.875rem] text-tinta-2"><span className="h-2 w-2 rounded-full bg-rojo anim-pulso" />{fuentes.length ? `Leyendo ${fuentes.length} pasajes…` : 'Buscando en tu biblioteca…'}</p><EsqueletoTexto lineas={4} /></div>
@@ -316,7 +316,7 @@ function Respuesta({ pregunta, filtros }: { pregunta: string; filtros: Filtros }
                 <Link to="/lector/$id" params={{ id: f.documento.id }} search={anclaABusqueda(f.fragmento.ancla, { q: pregunta })} className="group block rounded-s border border-filete bg-hoja p-3 hover:border-filete-fuerte">
                   <div className="flex items-center gap-2">
                     {n ? <span className="grid h-5 w-5 place-items-center rounded-full bg-tinta font-mono text-[0.6875rem] text-sobre-tinta">{n}</span> : null}
-                    <span className="min-w-0 flex-1 truncate text-[0.8125rem] italic">{f.documento.metadatos.titulo}</span>
+                    <span className="min-w-0 flex-1 truncate text-[0.8125rem]">{f.documento.metadatos.titulo}</span>
                     <Folio className="shrink-0">{etiquetaCorta(f.fragmento.ancla, f.etiqueta)}</Folio>
                   </div>
                   <p className="mt-2 line-clamp-3 text-[0.8125rem] text-tinta-2">{textoLimpio(f.fragmento.texto)}</p>

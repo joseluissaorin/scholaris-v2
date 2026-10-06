@@ -40,7 +40,7 @@ function Apariencia() {
           <button key={t.id} type="button" role="radio" aria-checked={tema === t.id} onClick={() => { ponerTema(t.id); void api().ajustes.preferencias({ tema: t.id }).catch(() => undefined); }}
             className={cx('group overflow-hidden rounded-m border text-left', tema === t.id ? 'border-tinta ring-2 ring-tinta ring-offset-2 ring-offset-papel' : 'border-filete hover:border-filete-fuerte')}>
             <div className="relative h-24" style={{ background: t.papel }}>
-              <span className="absolute left-3 top-3 text-[1.75rem] italic" style={{ color: t.tinta, fontFamily: 'Georgia, serif' }}>Aa</span>
+              <span className="absolute left-3 top-3 text-[1.75rem]" style={{ color: t.tinta, fontFamily: 'Georgia, serif' }}>Aa</span>
               <span className="absolute -bottom-6 -right-6 h-16 w-16 rounded-full bg-rojo" />
             </div>
             <p className="px-3 py-2 text-[0.9375rem]">{t.nombre}</p>
@@ -59,7 +59,7 @@ function Apariencia() {
           <Rotulo className="text-tinta-2">Densidad de la interfaz</Rotulo>
           <div role="radiogroup" aria-label="Densidad" className="mt-3 flex rounded-s border border-filete-fuerte p-0.5">
             {[['compacta', 'Compacta'], ['normal', 'Normal'], ['amplia', 'Amplia']].map(([d, n]) => (
-              <button key={d} type="button" role="radio" aria-checked={densidad === d} onClick={() => cambiarDensidad(d!)} className={cx('h-9 flex-1 rounded-[2px] text-[0.875rem]', densidad === d ? 'bg-tinta text-sobre-tinta' : 'text-tinta-2 hover:text-tinta')}>{n}</button>
+              <button key={d} type="button" role="radio" aria-checked={densidad === d} onClick={() => cambiarDensidad(d!)} className={cx('h-9 flex-1 rounded-md text-[0.875rem]', densidad === d ? 'bg-tinta text-sobre-tinta' : 'text-tinta-2 hover:text-tinta')}>{n}</button>
             ))}
           </div>
         </div>

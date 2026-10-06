@@ -62,7 +62,7 @@ function Cuenta() {
   return (
     <Lienzo ancho="estrecho">
       <section className="flex flex-wrap items-center gap-5">
-        {yo.usuario.imagen ? <img src={yo.usuario.imagen} alt="" className="h-16 w-16 rounded-full" /> : <span className="grid h-16 w-16 place-items-center rounded-full bg-tinta text-[1.75rem] italic text-sobre-tinta">{yo.usuario.nombre.charAt(0)}</span>}
+        {yo.usuario.imagen ? <img src={yo.usuario.imagen} alt="" className="h-16 w-16 rounded-full" /> : <span className="grid h-16 w-16 place-items-center rounded-full bg-tinta text-[1.75rem] text-sobre-tinta">{yo.usuario.nombre.charAt(0)}</span>}
         <div className="min-w-0 flex-1">
           <h2 className="text-[1.75rem] leading-tight">{yo.usuario.nombre}</h2>
           <p className="text-tinta-2">{yo.usuario.correo}</p>

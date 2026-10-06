@@ -60,7 +60,7 @@ function Grafo() {
 
   return (
     <Lienzo>
-      <h2 className="text-[1.625rem] tracking-[-0.015em]">Quién cita a quién dentro de tu biblioteca.</h2>
+      <h2 className="text-[1.125rem] font-semibold text-coffee-800">Quién cita a quién dentro de tu biblioteca.</h2>
       <p className="mt-1 max-w-2xl text-tinta-2">El tamaño es cuántas veces lo citan tus documentos; el grosor de la línea, cuántas veces aparece la cita.</p>
       <div className="mt-6 grid gap-8 xl:grid-cols-[minmax(0,1fr)_22rem]">
         {isPending ? <Esqueleto className="aspect-[16/10]" /> : !data?.nodos.length ? <Vacio forma="triangulo" titulo="Sin citas que enlazar todavía." accion={<Boton variante="linea" icono="rayo" cargando={reconstruyendo} onClick={() => void reconstruir()}>Buscar citas entre mis documentos</Boton>}>El grafo aparece cuando tus documentos se citan entre sí. Se rehace solo al añadir documentos; también puedes pedirlo ahora.</Vacio> : (
@@ -83,7 +83,7 @@ function Grafo() {
                 <g key={x.documento} transform={`translate(${p.x * 1000} ${p.y * 620})`} className="cursor-pointer" opacity={atenuado ? 0.25 : 1}
                   onClick={() => setFoco(foco === x.documento ? null : x.documento)} onKeyDown={(e) => e.key === 'Enter' && setFoco(x.documento)} tabIndex={0} role="button" aria-label={`${x.titulo}, citado ${x.citadoPor} veces`}>
                   <circle r={r} fill={foco === x.documento ? 'var(--s-rojo)' : x.citadoPor >= 3 ? 'var(--s-tinta)' : x.citadoPor ? 'var(--s-azul)' : 'var(--s-hoja)'} stroke="var(--s-tinta)" strokeWidth="1.5" />
-                  <text y={r + 18} textAnchor="middle" paintOrder="stroke" stroke="var(--s-hoja)" strokeWidth="5" strokeLinejoin="round" fontFamily="Georgia, serif" fontStyle="italic" fontSize="15" fill="var(--s-tinta)">{x.titulo.length > 28 ? `${x.titulo.slice(0, 27)}…` : x.titulo}</text>
+                  <text y={r + 18} textAnchor="middle" paintOrder="stroke" stroke="var(--s-hoja)" strokeWidth="5" strokeLinejoin="round" fontFamily="Georgia, serif" fontStyle="" fontSize="15" fill="var(--s-tinta)">{x.titulo.length > 28 ? `${x.titulo.slice(0, 27)}…` : x.titulo}</text>
                   <text y={r + 34} textAnchor="middle" paintOrder="stroke" stroke="var(--s-hoja)" strokeWidth="4" fontFamily="ui-monospace, monospace" fontSize="10" letterSpacing="0.06em" fill="var(--s-apagado)">{x.autores.toUpperCase()}{x.anio ? ` · ${x.anio}` : ''}</text>
                 </g>
               );
@@ -116,11 +116,11 @@ function FichaNodo({ nodo, data }: { nodo: NodoGrafo; data: GrafoCitas }) {
   const cita = data.aristas.filter((e) => e.desde === nodo.documento);
   const citadoPor = data.aristas.filter((e) => e.hacia === nodo.documento);
   const lista = (es: typeof cita, campo: 'desde' | 'hacia') => (
-    <ul className="mt-2 flex flex-col gap-1">{es.map((e) => <li key={e[campo]}><Link to="/lector/$id" params={{ id: e[campo] }} className="flex items-baseline gap-2 text-[0.9375rem] italic hover:underline"><span className="min-w-0 flex-1 truncate">{titulo(e[campo])}</span><span className="tnum font-mono text-[0.75rem] not-italic text-apagado">×{e.peso}</span></Link></li>)}</ul>
+    <ul className="mt-2 flex flex-col gap-1">{es.map((e) => <li key={e[campo]}><Link to="/lector/$id" params={{ id: e[campo] }} className="flex items-baseline gap-2 text-[0.9375rem] hover:underline"><span className="min-w-0 flex-1 truncate">{titulo(e[campo])}</span><span className="tnum font-mono text-[0.75rem] not- text-apagado">×{e.peso}</span></Link></li>)}</ul>
   );
   return (
     <div className="anim-entra">
-      <h3 className="text-[1.375rem] italic leading-tight">{nodo.titulo}</h3>
+      <h3 className="text-[1.375rem] leading-tight">{nodo.titulo}</h3>
       <Rotulo className="mt-1 block">{nodo.autores}{nodo.anio ? ` · ${nodo.anio}` : ''}</Rotulo>
       <Link to="/lector/$id" params={{ id: nodo.documento }} className="mt-3 inline-block text-[0.875rem] underline decoration-rojo decoration-2 underline-offset-4">Abrir</Link>
       <div className={cx('mt-5 grid gap-5')}>

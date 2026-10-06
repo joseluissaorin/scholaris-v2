@@ -5,9 +5,16 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <title>Scholaris</title>
     <meta name="description" content="Tu biblioteca, leída y citable. Cualquier archivo se vuelve buscable y cada cita apunta a la página impresa o al segundo exacto." />
-    <meta name="theme-color" content="#F3EEE3" media="(prefers-color-scheme: light)" />
-    <meta name="theme-color" content="#1B1612" media="(prefers-color-scheme: dark)" />
-    <link rel="icon" href="/monograma.svg" type="image/svg+xml" />
+    <meta name="theme-color" content="#2C1810" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#140D09" media="(prefers-color-scheme: dark)" />
+    <link rel="icon" href="/favicon.ico" sizes="any" />
+    <link rel="icon" href="/favicon-64.png" type="image/png" sizes="64x64" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <meta property="og:title" content="Scholaris" />
+    <meta property="og:description" content="Has leído los libros. Scholaris recuerda las páginas." />
+    <meta property="og:image" content="/og.png" />
+    <meta property="og:type" content="website" />
+    <meta name="twitter:card" content="summary_large_image" />
     <script>
       // Tema antes del primer pintado: sin parpadeo ni salto.
       (function () {
@@ -24,9 +31,9 @@
     </script>
   </head>
   <body>
-    <!-- Primer pintado sin JavaScript: el papel y el riel con el monograma, en su sitio definitivo. React lo sustituye. -->
-    <div id="raiz"><div style="display:flex;min-height:100dvh;font-family:Georgia,serif"><div class="pre-riel" style="width:5.5rem;border-right:1px solid var(--s-filete);display:flex;justify-content:center;padding-top:1.25rem"><svg viewBox="0 0 40 40" width="40" height="40" aria-hidden="true"><rect width="40" height="40" fill="var(--s-tinta)"/><path d="M40 22v18H22A18 18 0 0140 22z" fill="var(--s-rojo)"/><text x="17" y="29" text-anchor="middle" font-family="Georgia,serif" font-style="italic" font-size="27" fill="var(--s-papel)">S</text></svg></div></div></div>
-    <style>@media (max-width:767px){.pre-riel{display:none!important}}</style>
+    <!-- Primer pintado sin JavaScript: la barra café con el logo, en su sitio definitivo. React lo sustituye. -->
+    <div id="raiz"><div style="display:flex;min-height:100dvh"><div class="pre-barra" style="width:14rem;background:#2c1810"><div style="height:3.5rem;display:flex;align-items:center;gap:.625rem;padding:0 1.25rem;border-bottom:1px solid #4a2e1a"><img src="/logo.webp" width="32" height="32" alt="" style="filter:invert(1) sepia(.2) brightness(.95);mix-blend-mode:lighten" /><span style="font:600 1.125rem system-ui,sans-serif;letter-spacing:.025em;color:#faf7f0">Scholaris</span></div></div></div></div>
+    <style>@media (max-width:1023px){.pre-barra{display:none!important}}</style>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

@@ -116,23 +116,23 @@ export const FichaDocumento = memo(function FichaDocumento({ doc, bibliotecas, i
         params={{ id: doc.id }}
         className="block rounded-s outline-offset-4"
       >
-        <div className={cx('relative aspect-[3/4] overflow-hidden rounded-s border border-filete shadow-hoja transition-transform duration-200 [container-type:inline-size] group-hover:-translate-y-1 group-hover:rotate-[-0.6deg]')}>
+        <div className={cx('relative aspect-[3/4] overflow-hidden rounded-r-xl rounded-l-md border border-cream-400 shadow-[var(--levantado)] transition-[transform,box-shadow] duration-200 ease-out [container-type:inline-size] group-hover:-translate-y-1 group-hover:shadow-[var(--levantado-alto)]')}>
           <Portada id={doc.id} titulo={doc.titulo} autores={doc.autores} tipo={doc.tipo} url={doc.portadaUrl} />
           {doc.estado === 'procesando' ? (
-            <span className="rotulo absolute left-2 top-2 flex items-center gap-1.5 rounded-full bg-papel/95 px-2 py-1 text-tinta"><span className="h-1.5 w-1.5 rounded-full bg-rojo anim-pulso" />Leyendo</span>
+            <span className="absolute left-2 top-2 flex items-center gap-1.5 rounded-lg bg-cream-50/95 px-2 py-1 text-[0.6875rem] font-semibold text-coffee-800 shadow-[var(--relieve)]"><span className="h-1.5 w-1.5 rounded-full bg-rojo anim-pulso" />Leyendo</span>
           ) : null}
-          {doc.estado === 'error' ? <span className="rotulo absolute left-2 top-2 rounded-full bg-rojo px-2 py-1 text-[#fbf5ec]">No se pudo leer</span> : null}
-          {doc.estado === 'pendiente' ? <span className="rotulo absolute left-2 top-2 rounded-full bg-amarillo px-2 py-1 text-tinta">Sin leer</span> : null}
+          {doc.estado === 'error' ? <span className="absolute left-2 top-2 rounded-lg bg-rojo px-2 py-1 text-[0.6875rem] font-semibold text-[#fdf8f1] shadow-[var(--relieve-oscuro)]">No se pudo leer</span> : null}
+          {doc.estado === 'pendiente' ? <span className="absolute left-2 top-2 rounded-lg bg-amarillo px-2 py-1 text-[0.6875rem] font-semibold text-coffee-800 shadow-[var(--relieve)]">Sin leer</span> : null}
           <span className="absolute bottom-2 right-2 grid h-6 w-6 place-items-center rounded-full bg-papel/90 text-tinta-2"><Icono nombre={ICONO_TIPO[doc.tipo]} tam={14} /></span>
         </div>
-        <h3 className="mt-3 line-clamp-2 text-[1rem] leading-[1.2] tracking-[-0.01em] text-tinta">{doc.titulo}</h3>
+        <h3 className="mt-3 line-clamp-2 text-[0.875rem] font-semibold leading-snug text-coffee-800 group-hover:text-coffee-900">{doc.titulo}</h3>
       </Link>
-      <p className="mt-1 truncate text-[0.8125rem] text-tinta-2">{doc.autores || 'Sin autor'}{doc.anio ? `, ${doc.anio}` : ''}</p>
+      <p className="mt-0.5 truncate text-[0.8125rem] text-coffee-500">{doc.autores || 'Sin autor'}{doc.anio ? `, ${doc.anio}` : ''}</p>
       {doc.estado === 'error' || doc.estado === 'pendiente' ? <ReintentarFicha id={doc.id} /> : null}
       <div className="mt-1 flex items-center gap-2">
-        <Rotulo className="truncate">{lineaMeta(doc)}</Rotulo>
+        <span className="truncate text-[0.6875rem] font-medium uppercase tracking-[0.04em] text-coffee-400">{lineaMeta(doc)}</span>
         <MenuDocumento doc={doc} bibliotecas={bibliotecas}>
-          <button type="button" aria-label={`Acciones de «${doc.titulo}»`} className="ml-auto grid h-7 w-7 shrink-0 place-items-center rounded-s text-apagado opacity-100 hover:bg-hondo hover:text-tinta md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100 md:data-[state=open]:opacity-100">
+          <button type="button" aria-label={`Acciones de «${doc.titulo}»`} className="ml-auto grid h-7 w-7 shrink-0 place-items-center rounded-lg text-apagado opacity-100 hover:bg-hondo hover:text-tinta md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100 md:data-[state=open]:opacity-100">
             <Icono nombre="opciones" tam={16} />
           </button>
         </MenuDocumento>
@@ -149,12 +149,12 @@ function ReintentarFicha({ id }: { id: string }) {
 /** Fila en la vista de lista: densa, alineada en columnas. */
 export const FilaDocumento = memo(function FilaDocumento({ doc, bibliotecas }: { doc: ResumenDocumento; bibliotecas: Biblioteca[] }) {
   return (
-    <div className="group grid h-16 grid-cols-[2.5rem_1fr_auto] items-center gap-4 border-b border-filete px-1 sm:grid-cols-[2.5rem_minmax(0,3fr)_minmax(0,2fr)_4.5rem_11rem_8.5rem]">
-      <div className="h-[3.25rem] w-10 overflow-hidden rounded-[2px] border border-filete [container-type:inline-size]">
+    <div className="group grid h-16 grid-cols-[2.5rem_1fr_auto] items-center gap-4 border-b border-cream-200 bg-cream-50 px-4 transition-colors hover:bg-[#fffdf8] sm:grid-cols-[2.5rem_minmax(0,3fr)_minmax(0,2fr)_4.5rem_11rem_8.5rem]">
+      <div className="h-[3.25rem] w-10 overflow-hidden rounded-r-md rounded-l-sm border border-cream-400 shadow-[var(--shadow-soft)] [container-type:inline-size]">
         <Portada id={doc.id} titulo="" tipo={doc.tipo} url={doc.portadaUrl} />
       </div>
       <Link to="/lector/$id" params={{ id: doc.id }} className="min-w-0">
-        <p className="truncate text-[0.9375rem] text-tinta group-hover:underline group-hover:decoration-filete-fuerte group-hover:underline-offset-4">{doc.titulo}</p>
+        <p className="truncate text-[0.875rem] font-medium text-coffee-800">{doc.titulo}</p>
         <p className="truncate text-[0.8125rem] text-tinta-2 sm:hidden">{doc.autores}{doc.anio ? `, ${doc.anio}` : ''}</p>
       </Link>
       <p className="hidden truncate text-[0.875rem] text-tinta-2 sm:block">{doc.autores || '—'}</p>
@@ -165,7 +165,7 @@ export const FilaDocumento = memo(function FilaDocumento({ doc, bibliotecas }: {
         {doc.estado === 'pendiente' ? <span className="rotulo rounded-full bg-amarillo px-1.5 py-0.5 text-tinta">sin leer</span> : null}
         <span className="hidden text-[0.75rem] text-apagado lg:inline">{haceCuanto(doc.creado)}</span>
         <MenuDocumento doc={doc} bibliotecas={bibliotecas}>
-          <button type="button" aria-label={`Acciones de «${doc.titulo}»`} className="grid h-8 w-8 place-items-center rounded-s text-apagado hover:bg-hondo hover:text-tinta">
+          <button type="button" aria-label={`Acciones de «${doc.titulo}»`} className="grid h-8 w-8 place-items-center rounded-lg text-coffee-400 hover:bg-cream-200 hover:text-coffee-800">
             <Icono nombre="opciones" tam={16} />
           </button>
         </MenuDocumento>

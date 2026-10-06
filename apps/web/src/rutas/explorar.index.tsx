@@ -63,7 +63,7 @@ function Mapa() {
     <Lienzo>
       <div className="flex flex-wrap items-end gap-4">
         <div className="max-w-2xl">
-          <h2 className="text-[1.625rem] tracking-[-0.015em]">Cada punto es un pasaje; cada mancha, un tema.</h2>
+          <h2 className="text-[1.125rem] font-semibold text-coffee-800">Cada punto es un pasaje; cada mancha, un tema.</h2>
           <p className="mt-1 text-tinta-2">Los pasajes que dicen cosas parecidas quedan cerca, vengan del libro que vengan. Pulsa un tema para leer sus pasajes.</p>
         </div>
         <div className="ml-auto flex items-center gap-3">
@@ -86,7 +86,7 @@ function Mapa() {
                   <li key={g.indice}>
                     <button type="button" onClick={() => setElegido(g.indice)} className="flex w-full items-center gap-3 border-b border-filete py-2.5 text-left hover:bg-hondo/60">
                       <span className="h-3 w-3 shrink-0" style={{ background: TINTAS[g.indice % TINTAS.length] }} />
-                      <span className="min-w-0 flex-1 truncate italic">{g.etiqueta ?? `Tema ${g.indice + 1}`}</span>
+                      <span className="min-w-0 flex-1 truncate">{g.etiqueta ?? `Tema ${g.indice + 1}`}</span>
                       <span className="tnum font-mono text-[0.75rem] text-apagado">{g.tamano}</span>
                     </button>
                   </li>
@@ -140,7 +140,7 @@ function Lamina({ mapa, elegido, alElegir }: { mapa: MapaConceptos; elegido: num
       <canvas ref={lienzo} className="absolute inset-0 h-full w-full" onClick={() => alElegir(null)} aria-hidden />
       {mapa.grupos.map((g) => (
         <button key={g.indice} type="button" onClick={(e) => { e.stopPropagation(); alElegir(elegido === g.indice ? null : g.indice); }}
-          className={cx('absolute -translate-x-1/2 -translate-y-1/2 whitespace-nowrap rounded-s px-2 py-1 text-[0.8125rem] italic transition-[opacity,background-color] md:text-[0.9375rem]',
+          className={cx('absolute -translate-x-1/2 -translate-y-1/2 whitespace-nowrap rounded-s px-2 py-1 text-[0.8125rem] transition-[opacity,background-color] md:text-[0.9375rem]',
             elegido === g.indice ? 'bg-tinta text-sobre-tinta' : 'bg-papel/85 text-tinta hover:bg-tinta hover:text-sobre-tinta', elegido != null && elegido !== g.indice && 'opacity-40')}
           style={{ left: `${g.x * 100}%`, top: `${g.y * 100}%` }} aria-pressed={elegido === g.indice}>
           {g.etiqueta ?? `Tema ${g.indice + 1}`}
@@ -156,13 +156,13 @@ function Grupo({ grupo, color, alCerrar }: { grupo: GrupoMapa; color: string; al
   return (
     <div className="anim-entra">
       <button type="button" onClick={alCerrar} className="text-[0.8125rem] text-tinta-2 underline underline-offset-4">← Todos los temas</button>
-      <div className="mt-3 flex items-center gap-2"><span className="h-4 w-4" style={{ background: color }} /><h3 className="text-[1.5rem] italic leading-tight">{grupo.etiqueta}</h3></div>
+      <div className="mt-3 flex items-center gap-2"><span className="h-4 w-4" style={{ background: color }} /><h3 className="text-[1.5rem] leading-tight">{grupo.etiqueta}</h3></div>
       <Rotulo className="mt-1 block">{grupo.tamano} pasajes</Rotulo>
       <ul className="mt-4 flex flex-col gap-3">
         {isPending ? [0, 1, 2].map((i) => <EsqueletoTexto key={i} lineas={3} />) : data?.miembros.map((m) => (
           <li key={m.id}>
             <Link to="/lector/$id" params={{ id: m.documento }} className="block rounded-s border border-filete bg-hoja p-3 hover:border-filete-fuerte">
-              <div className="flex items-center gap-2"><span className="min-w-0 flex-1 truncate text-[0.8125rem] italic">{m.titulo}</span>{m.etiqueta ? <Folio>{m.etiqueta}</Folio> : null}</div>
+              <div className="flex items-center gap-2"><span className="min-w-0 flex-1 truncate text-[0.8125rem]">{m.titulo}</span>{m.etiqueta ? <Folio>{m.etiqueta}</Folio> : null}</div>
               {m.texto ? <p className="mt-1.5 line-clamp-3 text-[0.875rem] text-tinta-2">{m.texto}</p> : null}
             </Link>
           </li>

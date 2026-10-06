@@ -128,7 +128,7 @@ export function Entrada() {
           <FormaBauhaus forma="triangulo" color="#22160f" className="absolute -left-16 top-16 h-72 w-72 opacity-90" />
           <div className="relative flex h-full flex-col justify-end p-8 md:p-16">
             <p className="rotulo">PDF · escaneos · fotos · audio · vídeo · DOCX · EPUB · diapositivas · hojas</p>
-            <p className="titular mt-4 text-[clamp(4rem,14vw,12rem)]">Suelta.</p>
+            <p className="mt-4 text-[1.5rem] font-bold tracking-[-0.01em]">Suelta.</p>
             <p className="mt-2 max-w-md text-[1.125rem]">Lo leemos y, en cuanto haya páginas, las verás aparecer.</p>
           </div>
         </div>

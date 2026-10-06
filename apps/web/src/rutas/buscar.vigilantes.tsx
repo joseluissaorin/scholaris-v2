@@ -57,7 +57,7 @@ function Vigilantes() {
         <section>
           <div className="flex items-end justify-between gap-4">
             <div>
-              <h2 className="text-[1.625rem] tracking-[-0.015em]">Vigilantes</h2>
+              <h2 className="text-[1.125rem] font-semibold text-coffee-800">Vigilantes</h2>
               <p className="mt-1 max-w-lg text-[0.9375rem] text-tinta-2">Preguntas que se quedan haciendo guardia. Cuando entra algo en tu biblioteca que las responde, te avisan.</p>
             </div>
             <Boton variante="tinta" icono="mas" onClick={() => setEditar({ modo: 'al_ingerir', alertas: true })}>Nuevo</Boton>
@@ -77,7 +77,7 @@ function Vigilantes() {
                         <h3 className="truncate text-[1.125rem]">{v.nombre}</h3>
                         {v.pendientes ? <span className="rotulo rounded-full bg-amarillo px-2 py-0.5 text-tinta">{v.pendientes} sin ver</span> : null}
                       </div>
-                      <p className="mt-0.5 truncate italic text-tinta-2">«{v.consulta}»</p>
+                      <p className="mt-0.5 truncate text-tinta-2">«{v.consulta}»</p>
                       <Rotulo className="mt-2 block">{MODOS[v.modo]}{v.ultimaEjecucion ? ` · mirado ${haceCuanto(v.ultimaEjecucion)}` : ''}</Rotulo>
                     </div>
                     <div className="flex shrink-0 flex-col items-end gap-2">
@@ -97,7 +97,7 @@ function Vigilantes() {
         </section>
 
         <section aria-label="Alertas">
-          <h2 className="text-[1.625rem] tracking-[-0.015em]">Alertas</h2>
+          <h2 className="text-[1.125rem] font-semibold text-coffee-800">Alertas</h2>
           <p className="mt-1 text-[0.9375rem] text-tinta-2">{pendientes.length ? `${pendientes.length} sin ver.` : 'Estás al día.'}</p>
           <ol className="mt-6 flex flex-col gap-3">
             {alertas.map((a) => (
@@ -107,7 +107,7 @@ function Vigilantes() {
                 {a.cambio ? <p className="mt-2 text-[0.9375rem]">{a.cambio}</p> : null}
                 <ul className="mt-2 flex flex-col gap-1">
                   {a.documentosNuevos.map((d) => (
-                    <li key={d}><Link to="/lector/$id" params={{ id: d }} onClick={() => void visto(a)} className="flex items-center gap-2 text-[0.875rem] italic underline decoration-filete-fuerte underline-offset-4 hover:decoration-tinta"><Icono nombre="lector" tam={14} className="not-italic" />{titulo(d)}</Link></li>
+                    <li key={d}><Link to="/lector/$id" params={{ id: d }} onClick={() => void visto(a)} className="flex items-center gap-2 text-[0.875rem] underline decoration-filete-fuerte underline-offset-4 hover:decoration-tinta"><Icono nombre="lector" tam={14} className="not-" />{titulo(d)}</Link></li>
                   ))}
                 </ul>
                 {!a.vista ? <button type="button" onClick={() => void visto(a)} className="mt-3 text-[0.8125rem] text-tinta-2 underline underline-offset-4">Marcar como vista</button> : null}

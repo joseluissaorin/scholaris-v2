@@ -179,7 +179,7 @@ function DondeAparece({ f }: { f: FichaEntidad }) {
         {f.porDocumento.map((d) => (
           <li key={d.documento}>
             <div className="flex items-baseline gap-2">
-              <Link to="/lector/$id" params={{ id: d.documento }} className="min-w-0 truncate text-[1rem] font-semibold italic text-coffee-800 hover:underline">{d.titulo || 'Sin título'}</Link>
+              <Link to="/lector/$id" params={{ id: d.documento }} className="min-w-0 truncate text-[1rem] font-semibold text-coffee-800 hover:underline">{d.titulo || 'Sin título'}</Link>
               <span className="shrink-0 text-[0.8125rem] text-coffee-500">{[d.autores, d.anio].filter(Boolean).join(', ')}</span>
               <span className="tnum ml-auto shrink-0 font-mono text-[0.6875rem] text-coffee-500">{menciones(d.total)}</span>
             </div>
@@ -218,7 +218,7 @@ function LineaTemporal({ id }: { id: string }) {
             <li key={a} className="grid grid-cols-[3.5rem_minmax(0,1fr)] items-baseline gap-3">
               <span className="tnum font-mono text-[0.8125rem] font-semibold text-coffee-800">{a}</span>
               <Link to="/lector/$id" params={{ id: x.documento }} search={anclaABusqueda(x.ancla, { f: x.fragmento })} className="text-[0.875rem] text-coffee-700 hover:underline">
-                <span className="italic">{x.titulo}</span>, {etiquetaCorta(x.ancla, x.etiqueta)}{x.fecha ? ` (el pasaje dice ${x.fecha})` : ''}
+                <span className="">{x.titulo}</span>, {etiquetaCorta(x.ancla, x.etiqueta)}{x.fecha ? ` (el pasaje dice ${x.fecha})` : ''}
                 {del.length > 1 ? <span className="text-coffee-500"> y {del.length - 1} {del.length === 2 ? 'pasaje' : 'pasajes'} más</span> : null}
               </Link>
             </li>
@@ -263,7 +263,7 @@ function Camino({ desde, alElegir }: { desde: Entidad; alElegir: (id: string) =>
                   {p.via ? (
                     <Link to="/lector/$id" params={{ id: p.via.documento }} search={anclaABusqueda(p.via.ancla, { f: p.via.fragmento })} className="mt-0.5 block text-[0.8125rem] leading-snug text-coffee-600 hover:text-coffee-800">
                       {p.via.relacion ? <span className="block font-medium text-coffee-700">{p.via.relacion}</span> : null}
-                      <span className="italic">{p.via.titulo}</span>, {etiquetaCorta(p.via.ancla, p.via.etiqueta)}: <Pasaje texto={p.via.contexto} />
+                      <span className="">{p.via.titulo}</span>, {etiquetaCorta(p.via.ancla, p.via.etiqueta)}: <Pasaje texto={p.via.contexto} />
                     </Link>
                   ) : i === 0 ? null : <span className="block text-[0.8125rem] text-coffee-500">Aparecen juntas.</span>}
                 </div>

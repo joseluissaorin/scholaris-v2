@@ -56,7 +56,7 @@ function Corpus() {
       <dl className="mt-4 grid grid-cols-2 border-y border-tinta md:grid-cols-4">
         {cifras.map(([k, v], i) => (
           <div key={k} className={`py-6 ${i ? 'md:border-l md:border-filete md:pl-6' : ''} ${i % 2 ? 'max-md:border-l max-md:border-filete max-md:pl-5' : ''} ${i > 1 ? 'max-md:border-t max-md:border-filete' : ''}`}>
-            <dd className="titular text-[clamp(2.75rem,6vw,4.5rem)] tnum">{v}</dd>
+            <dd className="text-[1.5rem] font-bold tracking-[-0.01em] tnum">{v}</dd>
             <dt className="rotulo mt-2 text-apagado">{k}</dt>
           </div>
         ))}

@@ -7,6 +7,7 @@ import { arrancar } from './datos/api';
 import { clienteConsultas } from './datos/consultas';
 import { ProveedorSesion } from './sesion';
 import { EsperaMarco, FalloArranque } from './componentes/marco/espera';
+import '@fontsource-variable/dm-sans/wght.css';
 import './estilos.css';
 
 export const enrutador = createRouter({
