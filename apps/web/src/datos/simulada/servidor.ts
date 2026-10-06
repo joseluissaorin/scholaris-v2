@@ -9,6 +9,7 @@ import type {
   Ajustes, Alerta, Biblioteca, Buscar, ClaveApi, ConfigPublica, Cuaderno, DetalleAutocita, DetalleDocumento, EventoBusqueda,
   EventoRespuesta, EventoTiempoReal, GrafoCitas, InstantaneaCorpus, MapaConceptos, PropuestaCita, ResultadoVista, ResumenDocumento,
   SeccionVista, Tarea, Tarjeta, UnidadVista, Vigilante, Concepto, Yo, EstiloCsl, MiembrosGrupo, Responder,
+  Entidad, MencionEntidad, TipoEntidad,
 } from '@scholaris/contrato';
 import { anclaDe, BIBLIOTECAS, DOCUMENTOS, textoDe, type DocDemo } from './corpus';
 
@@ -550,6 +551,74 @@ ruta('POST', '/busqueda/multilingue', async (_m, c: Buscar) => { await espera(30
 ruta('POST', '/privacidad/purgar', () => json({ borrados: { documentos: docs.size, historial: historial.length } }));
 ruta('POST', '/auth/borrar', () => ok());
 ruta('GET', '/grafo', () => json(grafo()));
+
+// --- Entidades (personas y obras): un grafo pequeño escrito a mano --------
+type EntDemo = { id: string; nombre: string; tipo: TipoEntidad; descripcion?: string; wikidata?: string; alias?: string[]; en: Array<[string, number, string]> };
+const ENTIDADES_DEMO: EntDemo[] = [
+  { id: 'e-foucault', nombre: 'Michel Foucault', tipo: 'persona', descripcion: 'filósofo francés (1926-1984)', wikidata: 'Q44272', alias: ['Foucault'], en: [['d-foucault', 12, 'la tesis de ⟦Foucault⟧ sobre la mirada que disciplina'], ['d-web', 3, 'releer a ⟦Foucault⟧ desde la vigilancia digital'], ['d-heterotopias', 2, '⟦Foucault⟧ propone los «otros espacios»'], ['d-deleuze', 40, 'el diagrama, que ⟦Foucault⟧ llamaba dispositivo']] },
+  { id: 'e-bentham', nombre: 'Jeremy Bentham', tipo: 'persona', descripcion: 'filósofo británico (1748-1832)', wikidata: 'Q132524', alias: ['Bentham'], en: [['d-foucault', 200, 'el proyecto de ⟦Bentham⟧ para una casa de inspección'], ['d-web', 4, 'del panóptico de ⟦Bentham⟧ a la cámara del teléfono']] },
+  { id: 'e-panoptico', nombre: 'Panóptico', tipo: 'obra', descripcion: 'proyecto arquitectónico de Jeremy Bentham (1791)', alias: ['panóptico'], en: [['d-foucault', 201, 'el ⟦panóptico⟧ como máquina de ver sin ser visto'], ['d-web', 4, 'el ⟦panóptico⟧ se ha vuelto portátil']] },
+  { id: 'e-kristeva', nombre: 'Julia Kristeva', tipo: 'persona', descripcion: 'filósofa y psicoanalista francobúlgara', wikidata: 'Q159876', alias: ['Kristeva'], en: [['d-kristeva', 9, 'para ⟦Kristeva⟧, lo abyecto no es ni sujeto ni objeto'], ['d-llanos', 5, 'leídas con ⟦Kristeva⟧, las cartas guardan lo que se expulsa'], ['d-clase', 12, 'en la clase de hoy, ⟦Kristeva⟧ y el duelo']] },
+  { id: 'e-borges', nombre: 'Jorge Luis Borges', tipo: 'persona', descripcion: 'escritor argentino (1899-1986)', wikidata: 'Q909', alias: ['Borges'], en: [['d-borges', 3, 'una biblioteca total imaginada por ⟦Borges⟧'], ['d-kristeva', 40, 'la enciclopedia china que cita ⟦Borges⟧']] },
+  { id: 'e-babel', nombre: 'La biblioteca de Babel', tipo: 'obra', descripcion: 'cuento de Jorge Luis Borges (1941)', en: [['d-borges', 40, 'en ⟦La biblioteca de Babel⟧ todos los libros existen ya']] },
+  { id: 'e-paris', nombre: 'París', tipo: 'lugar', wikidata: 'Q90', en: [['d-foucault', 150, 'la peste en ⟦París⟧ y el reglamento de la ciudad'], ['d-kristeva', 2, 'el seminario de ⟦París⟧ en los setenta']] },
+];
+const CO_DEMO: Array<[string, string, number, string?]> = [
+  ['e-foucault', 'e-bentham', 4.2, 'Michel Foucault analiza el panóptico de Jeremy Bentham'], ['e-bentham', 'e-panoptico', 5.1, 'Jeremy Bentham diseñó el Panóptico'],
+  ['e-foucault', 'e-panoptico', 3.4], ['e-foucault', 'e-paris', 1.2], ['e-kristeva', 'e-paris', 0.9], ['e-borges', 'e-babel', 3.8, 'La biblioteca de Babel es un cuento de Jorge Luis Borges'],
+  ['e-kristeva', 'e-borges', 0.7], ['e-foucault', 'e-borges', 0.6],
+];
+function entidadDemo(e: EntDemo): Entidad {
+  return { id: e.id, nombre: e.nombre, tipo: e.tipo, alias: e.alias ?? [], ...(e.descripcion ? { descripcion: e.descripcion } : {}), ...(e.wikidata ? { wikidata: e.wikidata } : {}), menciones: e.en.length * 3, documentos: new Set(e.en.map((x) => x[0])).size };
+}
+function mencionDemo(e: EntDemo, [doc, orden, contexto]: [string, number, string], i: number): MencionEntidad {
+  const d = docs.get(doc)!;
+  const ancla = anclaDe(d, Math.min(orden, d.unidades));
+  return { id: `${e.id}-m${i}`, documento: doc, fragmento: `${doc}-f${orden}`, unidad: orden - 1, ancla, etiqueta: anclaACita(ancla), texto: contexto.match(/⟦(.+?)⟧/)?.[1] ?? e.nombre, contexto };
+}
+const vecinosDemo = (id: string) => CO_DEMO.filter(([a, b]) => a === id || b === id).map(([a, b, peso, relacion]) => ({ otro: a === id ? b : a, peso, relacion }));
+const entPorId = (id: string) => ENTIDADES_DEMO.find((e) => e.id === id);
+ruta('GET', '/entidades', (_m, _c, q) => {
+  const n = normalizar(q.get('q') ?? ''); const tipo = q.get('tipo');
+  const lista = ENTIDADES_DEMO.filter((e) => (!tipo || e.tipo === tipo) && (!n || normalizar([e.nombre, ...(e.alias ?? [])].join(' ')).includes(n))).map(entidadDemo).sort((a, b) => b.documentos - a.documentos);
+  return json({ elementos: lista, total: lista.length });
+});
+ruta('GET', '/entidades/estado', () => json({ documentos: [], entidades: ENTIDADES_DEMO.length, menciones: 60, aristas: CO_DEMO.length }));
+ruta('POST', '/entidades/reanudar', () => json({ reanudados: [] }));
+ruta('GET', '/entidades/camino', (_m, _c, q) => {
+  const desde = q.get('desde') ?? '', hasta = q.get('hasta') ?? '';
+  const previo = new Map<string, string | null>([[desde, null]]); const cola = [desde];
+  while (cola.length && !previo.has(hasta)) { const x = cola.shift()!; for (const v of vecinosDemo(x)) if (!previo.has(v.otro)) { previo.set(v.otro, x); cola.push(v.otro); } }
+  if (!previo.has(hasta)) return json({ pasos: [] });
+  const lista: string[] = []; for (let x: string | null = hasta; x; x = previo.get(x) ?? null) lista.unshift(x);
+  return json({ pasos: lista.map((id, i) => {
+    const e = entPorId(id)!; if (!i) return { entidad: entidadDemo(e) };
+    const v = vecinosDemo(lista[i - 1]!).find((x) => x.otro === id)!; const m = mencionDemo(e, e.en[0]!, 0);
+    return { entidad: entidadDemo(e), via: { peso: v.peso, ...(v.relacion ? { relacion: v.relacion } : {}), documento: m.documento, titulo: docs.get(m.documento)!.meta.titulo, fragmento: m.fragmento, ancla: m.ancla, etiqueta: m.etiqueta, contexto: m.contexto } };
+  }) });
+});
+ruta('GET', '/entidades/documentos/:documento/lector', (m) => {
+  const es = ENTIDADES_DEMO.filter((e) => e.en.some((x) => x[0] === m[1]));
+  return json({ documento: m[1], entidades: Object.fromEntries(es.map((e) => { const x = entidadDemo(e); return [e.id, { nombre: x.nombre, tipo: x.tipo, documentos: x.documentos, menciones: x.menciones, ...(x.descripcion ? { descripcion: x.descripcion } : {}) }]; })),
+    formas: es.flatMap((e) => [e.nombre, ...(e.alias ?? [])].map((texto) => ({ texto, entidad: e.id, unidades: e.en.filter((x) => x[0] === m[1]).map((x) => x[1] - 1) }))) });
+});
+ruta('GET', '/entidades/documentos/:documento', (m) => json({ documento: m[1], entidades: ENTIDADES_DEMO.filter((e) => e.en.some((x) => x[0] === m[1])).map((e) => ({ ...entidadDemo(e), aqui: 3 })) }));
+ruta('GET', '/entidades/:id', (m) => {
+  const e = entPorId(m[1]!); if (!e) return error(404, 'no_encontrado', 'No existe esa entidad.');
+  const porDoc = [...new Set(e.en.map((x) => x[0]))].map((doc) => { const d = docs.get(doc)!; const ms = e.en.filter((x) => x[0] === doc).map((x, i) => mencionDemo(e, x, i));
+    return { documento: doc, titulo: d.meta.titulo, autores: autoresCorto(d.meta), ...(d.meta.anio ? { anio: d.meta.anio } : {}), tipo: d.tipo, total: ms.length, menciones: ms }; });
+  return json({ ...entidadDemo(e), porDocumento: porDoc, vecinos: vecinosDemo(e.id).map((v) => ({ entidad: entidadDemo(entPorId(v.otro)!), peso: v.peso, documentos: 1, ...(v.relacion ? { relacion: v.relacion } : {}) })) });
+});
+ruta('GET', '/entidades/:id/vecinos', (m) => {
+  const ids = new Set([m[1]!, ...vecinosDemo(m[1]!).map((v) => v.otro)]);
+  return json({ centro: m[1], nodos: [...ids].map((id) => entidadDemo(entPorId(id)!)), aristas: CO_DEMO.filter(([a, b]) => ids.has(a) && ids.has(b)).map(([desde, hacia, peso, relacion]) => ({ desde, hacia, peso, ...(relacion ? { relacion } : {}) })) });
+});
+ruta('GET', '/entidades/:id/linea', (m) => {
+  const e = entPorId(m[1]!); if (!e) return error(404, 'no_encontrado', 'No existe esa entidad.');
+  return json({ entidad: entidadDemo(e), elementos: e.en.map((x, i) => { const mm = mencionDemo(e, x, i); const d = docs.get(x[0])!; const anio = d.meta.anioOriginal ?? d.meta.anio;
+    return { ...(anio ? { anio } : {}), documento: mm.documento, titulo: d.meta.titulo, fragmento: mm.fragmento, ancla: mm.ancla, etiqueta: mm.etiqueta, contexto: mm.contexto }; }).sort((a, b) => (a.anio ?? 1e9) - (b.anio ?? 1e9)) });
+});
+
 ruta('GET', '/grafo/huerfanas', () => json([
   { referencia: 'Bentham, J. (1791). Panopticon; or, the Inspection-House.', anio: 1791, citadaPor: ['d-foucault', 'd-web'] },
   { referencia: 'Lacan, J. (1966). Écrits.', anio: 1966, citadaPor: ['d-kristeva', 'd-clase'] },

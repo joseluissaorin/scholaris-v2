@@ -243,7 +243,7 @@ function Camino({ desde, alElegir }: { desde: Entidad; alElegir: (id: string) =>
         <Campo icono="buscar" placeholder={`De ${desde.nombre} a…`} value={hasta ? hasta.nombre : texto} aria-label="Entidad de destino"
           onChange={(e) => { setHasta(null); setTexto(e.target.value); }} />
         {!hasta && sugerencias.data?.elementos.length ? (
-          <ul className="absolute inset-x-0 top-full z-20 mt-1 max-h-64 overflow-y-auto rounded-lg border border-cream-400 bg-cream-50 p-1 shadow-[var(--relieve-alto)]">
+          <ul className="absolute inset-x-0 top-full z-20 mt-1 max-h-64 overflow-y-auto rounded-lg border border-cream-400 bg-cream-50 p-1 shadow-[var(--levantado-alto)]">
             {sugerencias.data.elementos.filter((e) => e.id !== desde.id).slice(0, 8).map((e) => (
               <li key={e.id}><button type="button" className="w-full rounded-md px-2.5 py-1.5 text-left text-[0.875rem] hover:bg-cream-200" onClick={() => setHasta(e)}>{e.nombre} <span className="text-coffee-500">· {NOMBRE_TIPO_ENTIDAD[e.tipo]}</span></button></li>
             ))}
