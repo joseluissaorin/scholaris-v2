@@ -1,0 +1,43 @@
+# Core dependencies
+python-dotenv>=1.0.0
+requests>=2.31.0
+
+# Academic tools (Phase 1 & 2)
+bibtexparser>=1.4.0
+PyPaperBot>=1.2.0
+selenium>=4.0.0
+undetected-chromedriver>=3.5.0
+
+# LLM providers (Phase 3)
+google-generativeai>=0.3.0
+google-api-python-client>=2.0.0
+
+# Document processing (Phase 4)
+python-docx>=0.8.11
+markdown>=3.4.0
+beautifulsoup4>=4.11.0
+
+# Auto-citation system dependencies
+PyMuPDF>=1.23.0  # PDF text extraction (primary)
+pdfplumber>=0.10.0  # PDF text extraction (fallback for complex layouts)
+Pillow>=10.0.0  # Image processing for vision OCR
+chromadb>=0.4.0  # Vector database for RAG
+mistralai>=0.0.11  # Mistral Pixtral for OCR (optional fallback)
+
+# Multi-format document support
+pypdf>=3.17.0  # PDF reading (input)
+pypandoc>=1.12  # RTF support (requires pandoc system-wide)
+odfpy>=1.4.1  # OpenDocument Text (.odt) support
+weasyprint>=60.0  # PDF export (high quality, preferred)
+reportlab>=4.0.0  # PDF export (fallback)
+
+# Optional dependencies
+# Uncomment if you want to use pdf2bib for BibTeX extraction
+# pdf2bib>=1.7
+
+# Development dependencies (optional)
+# Uncomment for development
+# pytest>=7.0.0
+# black>=22.0.0
+# mypy>=0.990
+# flake8>=5.0.0

@@ -1,0 +1,15 @@
+import { writeFileSync } from 'node:fs';
+import { crearSpdf } from '@scholaris/spdf';
+const a = await crearSpdf({ generador: 'fixtura de pruebas' });
+const ahora = '2026-10-06T00:00:00Z';
+await a.escribirDocumento({ id: 'doc_mini', tipo: 'pdf', metadatos: { titulo: 'Vigilar y castigar', autores: [{ nombre: 'Michel', apellidos: 'Foucault' }], anio: 1975, idioma: 'es' }, estado: 'listo', huella: 'abc', original: 'original.pdf', mime: 'application/pdf', bytes: 3, unidades: 3, creado: ahora, actualizado: ahora, bibliotecas: [] });
+const pag = (f: number, impresa: string | null) => ({ tipo: 'pagina' as const, fisica: f, impresa, romana: false, origen: 'leido' as const, confianza: 1 });
+const textos = ['Prefacio sin número.', 'El panóptico de Bentham es la figura arquitectónica de esta composición.', 'La disciplina fabrica individuos.'];
+await a.escribirUnidades(textos.map((t, i) => ({ id: `u${i}`, documento: 'doc_mini', orden: i, ancla: pag(i + 1, i === 0 ? null : String(i + 22)), texto: t, lector: 'prueba', confianza: 1 })));
+await a.escribirFragmentos(textos.map((t, i) => ({ id: `f${i}`, documento: 'doc_mini', unidad: `u${i}`, orden: i, texto: t, contexto: 'Del libro de Foucault.', seccion: ['Vigilar'], ancla: pag(i + 1, i === 0 ? null : String(i + 22)) })));
+await a.escribirEspacio({ id: 'prueba@4', proveedor: 'pruebas', modelo: 'prueba', dims: 4, normalizado: true, modalidades: ['texto'] });
+await a.escribirVectores(textos.map((_, i) => ({ objetivo: 'fragmento' as const, id: `f${i}`, espacio: 'prueba@4', documento: 'doc_mini', valores: new Float32Array([i === 1 ? 1 : 0, i === 2 ? 1 : 0, i === 0 ? 1 : 0, 0]) })));
+await a.ponerBlob('original.pdf', 'application/pdf', new Uint8Array([37, 80, 68]));
+writeFileSync(process.argv[2]!, a.exportar());
+a.cerrar();
+console.log('ok');
