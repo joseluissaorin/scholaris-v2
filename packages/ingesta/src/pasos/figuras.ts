@@ -31,6 +31,8 @@ export function reunirFiguras(paquete: PaqueteConversion, unidades: UnidadLeida[
     const parte = paginasPdf?.get(u.fisica)?.imagen ?? paginasImg?.get(u.fisica)?.imagen;
     if (u.figuras.length) {
       for (const f of u.figuras) {
+        // Una «figura» que ocupa la página entera sin pie es la página (cubierta, guarda): no aporta.
+        if (!f.pie && f.region && f.region.w * f.region.h >= 0.85) continue;
         figuras.push({ id: nuevoId('fg'), unidad: u.orden, fisica: u.fisica, ancla: u.ancla, ...(f.pie ? { pie: f.pie } : {}), ...(f.descripcion ? { descripcion: f.descripcion } : {}), ...(f.region ? { region: f.region } : {}), ...(parte ? { parte } : {}) });
       }
       continue;

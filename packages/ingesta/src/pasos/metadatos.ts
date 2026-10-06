@@ -132,14 +132,27 @@ const ESQUEMA_METADATOS = {
 } as const;
 
 export function textoParaMetadatos(unidades: UnidadLeida[], maxCaracteres = 9000): string {
+  const llenas = unidades.filter((u) => !u.vacia);
+  const medio = llenas.some((u) => u.ancla?.tipo === 'tiempo');
+  const bloque = (u: UnidadLeida) => {
+    if (u.ancla?.tipo === 'tiempo') {
+      const t = Math.round(u.t0 ?? 0);
+      return `[${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}${u.hablante ? ` ${u.hablante}` : ''}]\n${u.texto}`;
+    }
+    return `[página física ${u.fisica}]\n${u.cabecera ? `(cabecera: ${u.cabecera})\n` : ''}${u.texto}`;
+  };
+  // En un medio, el principio puede ser una canción o una sintonía: se toman también
+  // muestras del medio y del final, donde suelen decirse nombres y títulos.
+  const elegidas = medio && llenas.length > 8
+    ? [...llenas.slice(0, 5), llenas[Math.floor(llenas.length / 3)], llenas[Math.floor(llenas.length / 2)], llenas[Math.floor((2 * llenas.length) / 3)], ...llenas.slice(-2)]
+    : llenas;
   const partes: string[] = [];
   let total = 0;
-  for (const u of unidades) {
-    if (u.vacia) continue;
-    const etiqueta = u.ancla?.tipo === 'tiempo' ? `[${Math.round(u.t0 ?? 0)} s]` : `[página física ${u.fisica}]`;
-    const bloque = `${etiqueta}\n${u.cabecera ? `(cabecera: ${u.cabecera})\n` : ''}${u.texto}`;
-    partes.push(bloque.slice(0, maxCaracteres - total));
-    total += bloque.length;
+  const porPieza = medio ? Math.floor(maxCaracteres / Math.max(1, Math.min(elegidas.length, 10))) : maxCaracteres;
+  for (const u of elegidas) {
+    const b = bloque(u).slice(0, Math.min(porPieza, maxCaracteres - total));
+    partes.push(b);
+    total += b.length;
     if (total >= maxCaracteres) break;
   }
   return partes.join('\n\n');
@@ -148,21 +161,28 @@ export function textoParaMetadatos(unidades: UnidadLeida[], maxCaracteres = 9000
 export async function leerMetadatos(
   redactor: Redactor,
   entrada: { texto: string; nombreArchivo: string; ficha: MetadatosIncrustados; tipo: string; duracion?: number },
-): Promise<Partial<MetadatosDocumento>> {
+): Promise<Partial<MetadatosDocumento> & { hablantes?: Array<{ etiqueta: string; nombre: string }> }> {
+  const medio = entrada.tipo === 'audio' || entrada.tipo === 'video';
+  const esquema = medio
+    ? { ...ESQUEMA_METADATOS, properties: { ...ESQUEMA_METADATOS.properties, hablantes: { type: 'array', description: 'Quién es cada etiqueta de hablante (H0, H1…), solo si el texto lo deja claro.', items: { type: 'object', properties: { etiqueta: { type: 'string' }, nombre: { type: 'string' } }, required: ['etiqueta', 'nombre'] } } } }
+    : ESQUEMA_METADATOS;
   const ficha = Object.entries(entrada.ficha).filter(([, v]) => v !== undefined && v !== '' && !(Array.isArray(v) && !v.length)).map(([k, v]) => `${k}: ${typeof v === 'string' ? v : JSON.stringify(v)}`).join('\n');
-  const r = await redactor.generar<Partial<MetadatosDocumento>>({
+  const r = await redactor.generar<Partial<MetadatosDocumento> & { hablantes?: Array<{ etiqueta: string; nombre: string }> }>({
     sistema:
       'Eres un bibliotecario experto en catalogación. Extraes la ficha bibliográfica de un documento a partir de su principio. ' +
       'Reglas: no inventes nada que no esté en el texto o la ficha; deja fuera los campos que no consten. ' +
       'El nombre del archivo y la ficha del PDF suelen ser basura (nombres de archivo, «Microsoft Word - …», programas): úsalos solo si el texto los confirma. ' +
       'Autores: separa nombre y apellidos («C. S.» / «Lewis»; «Lope» / «de Vega Carpio»; «Joaquín» / «Soler Serrano»). En entrevistas y programas, el entrevistador y el entrevistado son autores. ' +
       'En un libro, el año es el de la edición que se tiene delante (página de créditos); el de la primera edición va en anioOriginal. ' +
-      'En un artículo, revista, volumen, número y páginas si constan.',
+      'En un artículo, revista, volumen, número y páginas si constan. ' +
+      'El nombre del archivo puede ser una clave de cita «apellidoAñoPalabra» (serrano1977fondo = Soler Serrano, 1977, «A fondo»): úsala como pista, no como título. ' +
+      'En audio y vídeo: el título es el del programa, la conferencia o la entrevista (no el de una canción que suene); los autores son quien la dirige y quien interviene; ' +
+      'di quién es cada etiqueta de hablante (H0, H1…) si se deduce del texto.',
     mensajes: [{
       rol: 'usuario',
       partes: [{ texto: `Tipo de entrada: ${entrada.tipo}${entrada.duracion ? ` (${Math.round(entrada.duracion / 60)} min)` : ''}\nNombre del archivo: ${entrada.nombreArchivo}\nFicha incrustada:\n${ficha || '(vacía)'}\n\nPrincipio del documento:\n${entrada.texto}` }],
     }],
-    esquema: ESQUEMA_METADATOS as unknown as Record<string, unknown>,
+    esquema: esquema as unknown as Record<string, unknown>,
     temperatura: 0,
     maxTokens: 1500,
     calidad: 'rapida',
@@ -383,8 +403,9 @@ export async function pasoMetadatos(
   entrada: EntradaMetadatos,
   puertos: { redactor?: Redactor; http?: Http; correo?: string; reloj?: () => number },
   opciones: { sinVerificacion?: boolean } = {},
-): Promise<{ metadatos: MetadatosDocumento; procedencia: Procedencia[] }> {
+): Promise<{ metadatos: MetadatosDocumento; procedencia: Procedencia[]; hablantes?: Record<string, string> }> {
   const reloj = puertos.reloj ?? Date.now;
+  let hablantes: Record<string, string> | undefined;
   const procedencia: Procedencia[] = [];
   const candidatos = candidatosLocales(entrada.ficha, entrada.nombreArchivo, entrada.epub);
   let lectura: Partial<MetadatosDocumento> = {};
@@ -392,6 +413,9 @@ export async function pasoMetadatos(
     const t = reloj();
     try {
       lectura = await leerMetadatos(puertos.redactor, { texto: textoParaMetadatos(entrada.unidades), nombreArchivo: entrada.nombreArchivo, ficha: entrada.ficha, tipo: entrada.tipo, ...(entrada.duracion ? { duracion: entrada.duracion } : {}) });
+      const conHablantes = lectura as typeof lectura & { hablantes?: Array<{ etiqueta: string; nombre: string }> };
+      if (conHablantes.hablantes?.length) hablantes = Object.fromEntries(conHablantes.hablantes.filter((h) => h.etiqueta && h.nombre?.trim()).map((h) => [h.etiqueta.trim(), h.nombre.trim()]));
+      delete conHablantes.hablantes;
       lectura = normalizarLectura(lectura);
       procedencia.push({ fase: 'metadatos', proveedor: puertos.redactor.nombre, ms: reloj() - t, detalle: { campos: Object.keys(lectura) } });
     } catch (e) {
@@ -419,7 +443,7 @@ export async function pasoMetadatos(
     }
   }
   if (entrada.usuario) candidatos.push({ fuente: 'usuario', confianza: 1, datos: entrada.usuario });
-  return { metadatos: fusionarMetadatos(candidatos, entrada.nombreArchivo), procedencia };
+  return { metadatos: fusionarMetadatos(candidatos, entrada.nombreArchivo), procedencia, ...(hablantes && Object.keys(hablantes).length ? { hablantes } : {}) };
 }
 
 /** Repara la salida del Redactor: autores sin partir, años como texto, DOI con prefijo. */

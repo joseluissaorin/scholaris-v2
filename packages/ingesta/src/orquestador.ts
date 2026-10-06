@@ -190,7 +190,7 @@ export async function ejecutarIngesta(paquete: PaqueteConversion, puertos: Puert
 
   // --- metadatos (arrancó con las primeras páginas) ----------------------
   const tMeta = reloj();
-  const metadatosP = primeras.then(async (prim) => {
+  const metadatosP = (plan.modo === 'medio' ? Promise.resolve(unidades) : primeras).then(async (prim) => {
     const r = await pasoMetadatos(
       {
         ficha: paquete.metadatos,
@@ -198,7 +198,7 @@ export async function ejecutarIngesta(paquete: PaqueteConversion, puertos: Puert
         tipo: paquete.tipo,
         epub: paquete.contenido.clase === 'documento' && paquete.contenido.formato === 'epub',
         ...(paquete.duracion ? { duracion: paquete.duracion } : {}),
-        unidades: prim.length ? prim : unidades.slice(0, nPrimeras),
+        unidades: plan.modo === 'medio' ? unidades : prim.length ? prim : unidades.slice(0, nPrimeras),
         ...(opciones.metadatosUsuario ? { usuario: opciones.metadatosUsuario } : {}),
       },
       { redactor: ia.redactor, ...(puertos.http ? { http: puertos.http } : {}), ...(puertos.correoContacto ? { correo: puertos.correoContacto } : {}), reloj },
@@ -207,7 +207,7 @@ export async function ejecutarIngesta(paquete: PaqueteConversion, puertos: Puert
     procedencia.push(...r.procedencia);
     marcar('metadatos', tMeta);
     emitir('metadatos', 1, r.metadatos.titulo);
-    return r.metadatos;
+    return r;
   });
 
   // --- folios -------------------------------------------------------------
@@ -234,7 +234,7 @@ export async function ejecutarIngesta(paquete: PaqueteConversion, puertos: Puert
   // --- figuras (en paralelo con contexto) ---------------------------------
   const tFig = reloj();
   const figurasP = (async () => {
-    const meta = await metadatosP.catch(() => null);
+    const meta = (await metadatosP.catch(() => null))?.metadatos ?? null;
     const r = await pasoFiguras(paquete, unidades, puertos.fuente, ia.redactor, {
       reloj,
       describir: opciones.describirFiguras !== false,
@@ -257,7 +257,21 @@ export async function ejecutarIngesta(paquete: PaqueteConversion, puertos: Puert
   figurasP.catch(() => {});
 
   // --- contexto y vectores de texto ---------------------------------------
-  const metadatos = await metadatosP;
+  const { metadatos, hablantes } = await metadatosP;
+  // Hablantes con nombre: «H0» → «Facundo Cabral» en el texto y en el ancla.
+  if (hablantes) {
+    const nombre = (h?: string) => (h && hablantes[h.split('·')[0] as string]) || h;
+    for (const u of unidades) {
+      if (u.hablante) u.hablante = nombre(u.hablante);
+      if (u.ancla?.tipo === 'tiempo' && u.ancla.hablante) u.ancla = { ...u.ancla, hablante: nombre(u.ancla.hablante) as string };
+      u.texto = u.texto.replace(/\*\*([^*:]+):\*\*/g, (m, h: string) => `**${nombre(h) ?? h}:**`);
+    }
+    for (const f of fragmentos) {
+      if (f.ancla.tipo === 'tiempo' && f.ancla.hablante) f.ancla = { ...f.ancla, hablante: nombre(f.ancla.hablante) as string };
+      f.texto = f.texto.replace(/\*\*([^*:]+):\*\*/g, (m, h: string) => `**${nombre(h) ?? h}:**`);
+    }
+    procedencia.push({ fase: 'metadatos', proveedor: 'hablantes', ms: 0, detalle: { hablantes } });
+  }
   if (!opciones.sinContexto && fragmentos.length) {
     const t = reloj();
     const r = await pasoContexto(fragmentos, metadatos, ia.redactor, { concurrencia: plan.concurrencia, reloj, alGrupo: (h, n) => emitir('contexto', h / n) });
@@ -291,6 +305,7 @@ export async function ejecutarIngesta(paquete: PaqueteConversion, puertos: Puert
   const tVec = reloj();
   await vectorizarEnTodos(fragmentos.map((f) => ({ objetivo: 'fragmento', id: f.id, texto: textoVectorizable(f) })), 'fragmentos');
   const figuras = await figurasP;
+  if (hablantes) for (const g of figuras) if (g.ancla.tipo === 'tiempo' && g.ancla.hablante) g.ancla = { ...g.ancla, hablante: hablantes[g.ancla.hablante.split('·')[0] as string] ?? g.ancla.hablante };
   await vistaPaginas;
   marcar('vectores', tVec);
   emitir('vectores', 1);
