@@ -1,11 +1,11 @@
 import type { Pagina } from './tipos';
-import { maniculaSuelta } from '../../bocetos/dibujos/manicula-suelta';
+import { manecilla } from '../../portada/dibujo/dibujos/manicula';
 
 export const queEs: Pagina = {
   clave: 'que-es',
   rutas: { es: '/saber/que-es', en: '/en/knowledge/what-it-is' },
   tipo: 'AboutPage',
-  boceto: maniculaSuelta,
+  boceto: manecilla,
   es: {
     titulo: 'Qué es Scholaris y qué no hará nunca',
     corto: 'Qué es',

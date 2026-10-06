@@ -226,8 +226,21 @@ export function enlacesParaMd(md: string): string {
   });
 }
 
-function boceto(d: Dibujo | undefined, l: Lengua): string {
-  if (!d) return '';
+/** Las notas a lápiz de los bocetos de la aplicación están en castellano; en inglés, se traducen. */
+const NOTAS_EN: Record<string, string> = {
+  'aquí': 'here', 'aquí irán\ntus libros': 'your books\nwill go here', 'se lee…': 'reading…', 'guárdala bien': 'keep it safe',
+  'suéltalo\naquí': 'drop it\nhere', 'faltan\nestrellas': 'stars\nmissing', '¿con cuál?': 'which one?',
+  'aquí faltaba una hoja': 'a leaf was missing here', 'el centro,\nquieto': 'the centre,\nstill', '12°, a ojo': '12°, by eye',
+  '¡ojo!': 'look!', 'a escuadra': 'square', 'mide dos\nveces': 'measure\ntwice', 'para ti': 'for you', 'sin línea': 'no line',
+  'vuelve a intentarlo': 'try again', 'nada por\naquí…': 'nothing\nhere…', 'todavía': 'yet', 'empieza por\nuna frase': 'start with\na sentence',
+};
+
+function boceto(d0: Dibujo | undefined, l: Lengua): string {
+  if (!d0) return '';
+  const d: Dibujo = l === 'es' ? d0 : {
+    ...d0,
+    elementos: d0.elementos.map((e) => (e.tipo === 'nota' && typeof e.texto === 'string' && NOTAS_EN[e.texto] ? { ...e, texto: { es: e.texto, en: NOTAS_EN[e.texto]! } } : e)),
+  };
   return `<div class="boceto-margen" aria-hidden="true">${aSvg(d, { lengua: l, decorativo: true })}</div>`;
 }
 

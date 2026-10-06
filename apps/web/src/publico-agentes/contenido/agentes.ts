@@ -32,7 +32,8 @@ export const agentes: Pagina = {
   clave: 'agentes',
   rutas: { es: '/agentes', en: '/en/agents' },
   tipo: 'TechArticle',
-  boceto: maniculaSuelta,
+  // La mano que señala, sin la nota a lápiz («suéltalo aquí»), que aquí no viene a cuento.
+  boceto: { ...maniculaSuelta, id: 'manicula-agentes', elementos: maniculaSuelta.elementos.filter((e) => e.tipo !== 'nota') },
   es: {
     titulo: 'Para agentes: cómo leer Scholaris y cómo usarlo en nombre de alguien',
     corto: 'Para agentes',
