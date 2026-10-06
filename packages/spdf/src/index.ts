@@ -15,3 +15,4 @@ export * from './repositorio.js';
 export * from './archivo.js';
 export * from './migrar-v3.js';
 export * from './limpieza.js';
+export * from './folios.js';
