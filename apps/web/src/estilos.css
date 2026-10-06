@@ -27,13 +27,13 @@ mark {
   background: #fbf8f1;
   color: #2a1d14;
   box-shadow: 0 1px 0 var(--s-filete), 0 18px 40px -26px rgb(34 22 15 / 0.55);
-  font-size: clamp(7px, 1.25cqi, 13px);
   container-type: inline-size;
 }
 .oscuro .facsimil { background: #e9e1d1; color: #2a1d14; }
 
 /* El lector: el folio se queda pegado arriba mientras su página está a la vista. */
-.folio-pegado { position: sticky; top: 0.75rem; }
+.folio-pegado { position: sticky; top: 5rem; }
+@media (max-width: 767px) { .folio-pegado { top: 8.25rem; } }
 
 /* Karaoke: la palabra que suena. */
 .palabra { border-radius: 2px; transition: background-color 0.12s, color 0.12s; cursor: pointer; }

@@ -21,19 +21,21 @@ function disponer(g: GrafoCitas) {
       if (a === b) continue;
       const pa = pos.get(a.documento)!, pb = pos.get(b.documento)!;
       const dx = pa.x - pb.x, dy = pa.y - pb.y, d2 = Math.max(0.002, dx * dx + dy * dy);
-      const f = fuerza.get(a.documento)!; f.x += (dx / d2) * 0.0009; f.y += (dy / d2) * 0.0009;
+      const f = fuerza.get(a.documento)!; f.x += (dx / d2) * 0.0011; f.y += (dy / d2) * 0.0011;
     }
     for (const e of g.aristas) {
       const pa = pos.get(e.desde), pb = pos.get(e.hacia);
       if (!pa || !pb) continue;
-      const dx = pb.x - pa.x, dy = pb.y - pa.y;
+      const dx = pb.x - pa.x, dy = pb.y - pa.y, d = Math.max(0.01, Math.hypot(dx, dy));
+      // Muelle con longitud natural: ni pegados ni en las esquinas.
+      const k = ((d - 0.3) / d) * 0.035;
       const fa = fuerza.get(e.desde)!, fb = fuerza.get(e.hacia)!;
-      fa.x += dx * 0.02; fa.y += dy * 0.02; fb.x -= dx * 0.02; fb.y -= dy * 0.02;
+      fa.x += dx * k; fa.y += dy * k; fb.x -= dx * k; fb.y -= dy * k;
     }
     for (const x of g.nodos) {
       const p = pos.get(x.documento)!, f = fuerza.get(x.documento)!;
-      p.x = Math.min(0.92, Math.max(0.08, p.x + f.x + (0.5 - p.x) * 0.01));
-      p.y = Math.min(0.9, Math.max(0.1, p.y + f.y + (0.5 - p.y) * 0.01));
+      p.x = Math.min(0.85, Math.max(0.15, p.x + f.x + (0.5 - p.x) * 0.012));
+      p.y = Math.min(0.8, Math.max(0.14, p.y + f.y + (0.5 - p.y) * 0.012));
     }
   }
   return pos;
@@ -54,12 +56,15 @@ function Grafo() {
       <div className="mt-6 grid gap-8 xl:grid-cols-[minmax(0,1fr)_22rem]">
         {isPending ? <Esqueleto className="aspect-[16/10]" /> : !data?.nodos.length ? <Vacio forma="triangulo" titulo="Sin citas que enlazar todavía.">El grafo aparece cuando tus documentos se citan entre sí.</Vacio> : (
           <svg viewBox="0 0 1000 620" className="w-full rounded-m border border-filete bg-hoja" role="img" aria-label="Grafo de citas">
-            <defs><marker id="punta" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="var(--s-tinta-2)" /></marker></defs>
+            <defs><marker id="punta" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="11" markerHeight="11" markerUnits="userSpaceOnUse" orient="auto"><path d="M0 0L10 5L0 10z" fill="var(--s-tinta-2)" /></marker></defs>
             {data.aristas.map((e, i) => {
               const a = pos!.get(e.desde), b = pos!.get(e.hacia);
               if (!a || !b) return null;
               const activo = !foco || e.desde === foco || e.hacia === foco;
-              return <line key={i} x1={a.x * 1000} y1={a.y * 620} x2={b.x * 1000} y2={b.y * 620} stroke={activo && foco ? 'var(--s-rojo)' : 'var(--s-tinta-2)'} strokeOpacity={activo ? 0.7 : 0.12} strokeWidth={1 + e.peso * 0.5} markerEnd="url(#punta)" />;
+              // La flecha termina en el borde del círculo de destino, no en su centro.
+              const rb = 10 + (data.nodos.find((n) => n.documento === e.hacia)?.citadoPor ?? 0) * 7 + 4;
+              const ax = a.x * 1000, ay = a.y * 620, bx = b.x * 1000, by = b.y * 620, dd = Math.hypot(bx - ax, by - ay) || 1;
+              return <line key={i} x1={ax} y1={ay} x2={bx - ((bx - ax) / dd) * rb} y2={by - ((by - ay) / dd) * rb} stroke={activo && foco ? 'var(--s-rojo)' : 'var(--s-tinta-2)'} strokeOpacity={activo ? 0.7 : 0.12} strokeWidth={1 + e.peso * 0.5} markerEnd="url(#punta)" />;
             })}
             {data.nodos.map((x) => {
               const p = pos!.get(x.documento)!;
@@ -69,8 +74,8 @@ function Grafo() {
                 <g key={x.documento} transform={`translate(${p.x * 1000} ${p.y * 620})`} className="cursor-pointer" opacity={atenuado ? 0.25 : 1}
                   onClick={() => setFoco(foco === x.documento ? null : x.documento)} onKeyDown={(e) => e.key === 'Enter' && setFoco(x.documento)} tabIndex={0} role="button" aria-label={`${x.titulo}, citado ${x.citadoPor} veces`}>
                   <circle r={r} fill={foco === x.documento ? 'var(--s-rojo)' : x.citadoPor >= 3 ? 'var(--s-tinta)' : x.citadoPor ? 'var(--s-azul)' : 'var(--s-hoja)'} stroke="var(--s-tinta)" strokeWidth="1.5" />
-                  <text y={r + 18} textAnchor="middle" fontFamily="Georgia, serif" fontStyle="italic" fontSize="15" fill="var(--s-tinta)">{x.titulo.length > 28 ? `${x.titulo.slice(0, 27)}…` : x.titulo}</text>
-                  <text y={r + 34} textAnchor="middle" fontFamily="ui-monospace, monospace" fontSize="10" letterSpacing="0.06em" fill="var(--s-apagado)">{x.autores.toUpperCase()}{x.anio ? ` · ${x.anio}` : ''}</text>
+                  <text y={r + 18} textAnchor="middle" paintOrder="stroke" stroke="var(--s-hoja)" strokeWidth="5" strokeLinejoin="round" fontFamily="Georgia, serif" fontStyle="italic" fontSize="15" fill="var(--s-tinta)">{x.titulo.length > 28 ? `${x.titulo.slice(0, 27)}…` : x.titulo}</text>
+                  <text y={r + 34} textAnchor="middle" paintOrder="stroke" stroke="var(--s-hoja)" strokeWidth="4" fontFamily="ui-monospace, monospace" fontSize="10" letterSpacing="0.06em" fill="var(--s-apagado)">{x.autores.toUpperCase()}{x.anio ? ` · ${x.anio}` : ''}</text>
                 </g>
               );
             })}

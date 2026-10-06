@@ -50,8 +50,8 @@ export const Portada = memo(function Portada({ id, titulo, autores, tipo, url, c
         )}
       </svg>
       <div className="relative flex h-full flex-col p-[9%]">
-        <p className="line-clamp-4 text-[clamp(0.8rem,7cqi,1.35rem)] leading-[1.05] tracking-[-0.02em]" style={{ textWrap: 'balance' }}>{titulo}</p>
-        {autores ? <p className="mt-auto truncate font-mono text-[clamp(0.5rem,4.2cqi,0.65rem)] uppercase tracking-[0.08em] opacity-85">{autores}</p> : null}
+        <p className="line-clamp-4 text-[clamp(0.85rem,10.5cqi,1.6rem)] leading-[1.04] tracking-[-0.02em]" style={{ textWrap: 'balance' }}>{titulo}</p>
+        {autores ? <p className="mt-auto truncate font-mono text-[clamp(0.5rem,4.4cqi,0.7rem)] pr-[18%] uppercase tracking-[0.08em] opacity-85">{autores}</p> : null}
       </div>
     </div>
   );

@@ -110,7 +110,7 @@ export const Medio = forwardRef<ManejadorMedio, { doc: DetalleDocumento; url?: s
 
     return (
       <div>
-        <div className="sticky top-[7.5rem] z-20 -mx-5 border-b border-filete bg-papel/95 px-5 pb-4 pt-2 backdrop-blur md:top-[4.25rem] md:-mx-12 md:px-12">
+        <div className="sticky top-[7.75rem] z-20 -mx-5 border-b border-filete bg-papel/95 px-5 pb-4 pt-2 backdrop-blur md:top-[4.25rem] md:-mx-12 md:px-12">
           {doc.tipo === 'video' ? (
             url ? <video ref={setEl} src={url} className="mx-auto max-h-[38vh] w-full max-w-3xl rounded-s bg-black" playsInline preload="metadata" /> : (
               <div className="relative mx-auto grid aspect-video max-h-[34vh] w-full max-w-3xl place-items-center overflow-hidden rounded-s bg-tinta text-sobre-tinta">
@@ -122,12 +122,12 @@ export const Medio = forwardRef<ManejadorMedio, { doc: DetalleDocumento; url?: s
           <Controles r={r} />
         </div>
 
-        <div className="mt-2 flex items-center gap-2 py-3">
+        <div className="mx-auto mt-2 flex max-w-[52rem] items-center gap-2 py-3">
           <Rotulo>{doc.unidades} tramos · transcripción con marcas por palabra</Rotulo>
           {!seguir ? <Chip icono="audio" className="ml-auto" onClick={() => setSeguir(true)}>Seguir la voz</Chip> : null}
         </div>
 
-        <div ref={contenedor} className="relative" style={{ height: v.getTotalSize() }}>
+        <div ref={contenedor} className="relative mx-auto max-w-[52rem]" style={{ height: v.getTotalSize() }}>
           {v.getVirtualItems().map((it) => (
             <div key={it.key} data-index={it.index} ref={v.measureElement} className="absolute inset-x-0" style={{ transform: `translateY(${it.start - v.options.scrollMargin}px)` }}>
               <Tramo docId={doc.id} orden={it.index + 1} t={actual === it.index + 1 ? r.t : null} futuro={it.index + 1 > actual} ir={ir} resaltar={resaltar} />

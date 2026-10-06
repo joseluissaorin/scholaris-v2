@@ -211,14 +211,17 @@ function buscarEn(q: string, filtros: Buscar['filtros'] = {}, k = 20): Resultado
   if (!terminos.length) return [];
   const raices = terminos.map((t) => t.slice(0, Math.max(4, t.length - 2)));
   const vistos = new Map<string, { p: Pieza; s: number }>();
-  for (const p of piezas()) {
+  // Peso por rareza (IDF): «panóptico» pesa más que «tiene».
+  const todas = piezas();
+  const idf = raices.map((r) => Math.log(1 + todas.length / (1 + todas.filter((p) => p.norm.includes(r)).length)));
+  for (const p of todas) {
     if (filtros.documentos?.length && !filtros.documentos.includes(p.d.id)) continue;
     if (filtros.tipos?.length && !filtros.tipos.includes(p.d.tipo)) continue;
     if (filtros.bibliotecas?.length && !p.d.bibliotecas.some((b) => filtros.bibliotecas!.includes(b))) continue;
     let s = 0;
-    for (const r of raices) { const n = p.norm.split(r).length - 1; if (n) s += 1 + Math.log(1 + n); }
+    raices.forEach((r, i) => { const n = p.norm.split(r).length - 1; if (n) s += (1 + Math.log(1 + n)) * idf[i]!; });
     if (!s) continue;
-    s *= raices.filter((r) => p.norm.includes(r)).length / raices.length;
+    s *= 0.5 + (0.5 * raices.filter((r) => p.norm.includes(r)).length) / raices.length;
     if (p.d.fijos[p.orden] === p.texto) s *= 1.6;
     const clave = `${p.d.id}-${p.orden}`;
     const prev = vistos.get(clave);
@@ -228,10 +231,7 @@ function buscarEn(q: string, filtros: Buscar['filtros'] = {}, k = 20): Resultado
   const max = orden[0]?.s ?? 1;
   return orden.map(({ p, s }) => {
     const ancla = anclaDe(p.d, p.orden);
-    let resaltado = p.texto;
-    for (const r of raices) {
-      resaltado = resaltado.replace(new RegExp(`(\\p{L}*${r.split('').map((c) => `${c}\\p{M}*`).join('').replace(/([.*+?^${}()|[\]\\])/g, '\\$1')}\\p{L}*)`, 'giu'), '<mark>$1</mark>');
-    }
+    const resaltado = p.texto.replace(/[\p{L}\p{M}]+/gu, (w) => (raices.some((r) => normalizar(w).startsWith(r)) ? `<mark>${w}</mark>` : w));
     const sec = [...p.d.secciones].reverse().find((x) => x.unidad <= p.orden);
     const r: ResultadoVista = {
       fragmento: { id: `f-${p.d.id}-${p.orden}-${p.parrafo}`, documento: p.d.id, unidad: `u-${p.d.id}-${p.orden}`, orden: p.parrafo, texto: p.texto, contexto: `De «${p.d.meta.titulo}»${sec ? `, ${sec.titulo}` : ''}.`, seccion: sec ? [sec.titulo] : [], ancla },

@@ -7,7 +7,7 @@ import { api } from '../../datos/api';
 import { q } from '../../datos/consultas';
 import { anclaABusqueda } from '../../lib/anclas';
 import { Resaltado } from '../../lib/resaltado';
-import { autoresCorto, ICONO_TIPO } from '../../lib/formato';
+import { autoresCorto, etiquetaCorta, ICONO_TIPO } from '../../lib/formato';
 
 const VIA: Record<string, string> = { lexica: 'léxica', densa: 'semántica', visual: 'visual' };
 
@@ -43,7 +43,7 @@ export const Resultado = memo(function Resultado({ r, consulta, indice, compacto
   return (
     <article className={cx('group relative grid grid-cols-[minmax(0,1fr)] gap-3 border-b border-filete py-5 anim-entra md:grid-cols-[7rem_minmax(0,1fr)] md:gap-6', compacto && 'py-4')} style={{ animationDelay: `${Math.min(indice, 8) * 25}ms` }}>
       <div className="flex items-center gap-3 md:flex-col md:items-start md:gap-2">
-        <Folio grande>{r.etiqueta}</Folio>
+        <Folio grande>{etiquetaCorta(r.fragmento.ancla, r.etiqueta)}</Folio>
         <Rotulo className="hidden md:block">{r.vias.map((v) => VIA[v] ?? v).join(' · ')}</Rotulo>
       </div>
       <div className="min-w-0">

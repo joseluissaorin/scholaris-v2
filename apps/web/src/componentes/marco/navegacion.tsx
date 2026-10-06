@@ -43,13 +43,14 @@ export function MenuAnadir({ children, alinear = 'start' }: { children: React.Re
 
 function MenuCuenta({ children }: { children: React.ReactNode }) {
   const sesion = useSesion();
+  const nombre = useNombre();
   const tema = useTema();
   return (
     <MenuRaiz>
       <MenuDisparador asChild>{children}</MenuDisparador>
       <MenuContenido alinear="start" className="w-64">
         <div className="px-2.5 pb-2 pt-1.5">
-          <p className="text-[0.9375rem] text-tinta">{sesion.usuario?.nombre ?? 'Tu biblioteca'}</p>
+          <p className="text-[0.9375rem] text-tinta">{nombre ?? 'Tu biblioteca'}</p>
           <p className="rotulo mt-0.5 text-apagado">{sesion.modo === 'local' ? (esSimulado() ? 'Demostración' : 'Versión local') : sesion.usuario?.correo}</p>
         </div>
         <MenuSeparador />
@@ -67,9 +68,15 @@ function MenuCuenta({ children }: { children: React.ReactNode }) {
   );
 }
 
+function useNombre() {
+  const s = useSesion();
+  const { data: yo } = useQuery({ ...q.yo(), enabled: !s.usuario });
+  return s.usuario?.nombre ?? yo?.usuario.nombre;
+}
+
 function Iniciales() {
   const s = useSesion();
-  const n = s.usuario?.nombre ?? 'Tú';
+  const n = useNombre() ?? 'Tú';
   if (s.usuario?.imagen) return <img src={s.usuario.imagen} alt="" className="h-9 w-9 rounded-full object-cover" />;
   return <span className="grid h-9 w-9 place-items-center rounded-full border border-filete-fuerte bg-hoja text-[0.9375rem] italic text-tinta">{n.charAt(0)}</span>;
 }

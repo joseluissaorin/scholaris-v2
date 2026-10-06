@@ -271,6 +271,10 @@ export function anclaDe(d: DocDemo, orden: number): Ancla {
 export function textoDe(d: DocDemo, orden: number): string {
   const r = aleatorio(hash(d.id) + orden * 7919);
   const fijo = d.fijos[orden];
+  // Portadillas y preliminares sin folio: lo que hay de verdad en ellas.
+  if ((d.tipo === 'pdf' || d.tipo === 'pdf_escaneado') && orden <= (d.sinFolio ?? 0)) {
+    return orden === 1 ? `## ${d.meta.titulo}\n\n${d.meta.autores.map((x) => `${x.nombre} ${x.apellidos}`).join(' y ')}` : `${d.meta.editorial ?? ''}${d.meta.lugar ? `, ${d.meta.lugar}` : ''}${d.meta.anio ? `, ${d.meta.anio}` : ''}`;
+  }
   if (d.tipo === 'hoja') return d.banco[orden % d.banco.length] as string;
   if (d.tipo === 'presentacion') {
     const sec = [...d.secciones].reverse().find((s) => s.unidad <= orden);

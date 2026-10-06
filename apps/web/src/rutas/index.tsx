@@ -140,7 +140,7 @@ function PaginaBiblioteca() {
             <Chip activo={!busqueda.col} onClick={() => fijar({ col: undefined })}>Toda la biblioteca</Chip>
             {bibliotecas.map((b) => (
               <Chip key={b.id} activo={busqueda.col === b.id} recuento={b.documentos} onClick={() => fijar({ col: busqueda.col === b.id ? undefined : b.id })}>
-                <span className="flex items-center gap-1.5"><span className={cx('h-2 w-2 rounded-full', puntoColeccion(b.color))} />{b.nombre}{b.compartida ? <Icono nombre="idiomas" tam={12} titulo="Compartida" /> : null}</span>
+                <span className="flex items-center gap-1.5"><span className={cx('h-2 w-2 rounded-full', puntoColeccion(b.color))} />{b.nombre}{b.compartida ? <Icono nombre="enlace" tam={12} titulo="Compartida" /> : null}</span>
               </Chip>
             ))}
             <Chip icono="mas" onClick={() => setNueva(true)}>Nueva</Chip>
@@ -229,8 +229,8 @@ function ListaVirtual({ docs, bibliotecas }: { docs: ResumenDocumento[]; bibliot
   const v = useWindowVirtualizer({ count: docs.length, estimateSize: () => 64, overscan: 10, scrollMargin: margen });
   return (
     <div>
-      <div className="hidden grid-cols-[2.5rem_minmax(0,3fr)_minmax(0,2fr)_6rem_9rem_auto] gap-4 border-b border-tinta px-1 pb-2 sm:grid">
-        <span /><Rotulo>Título</Rotulo><Rotulo>Autoría</Rotulo><Rotulo>Año</Rotulo><Rotulo>Tipo</Rotulo><span className="w-8" />
+      <div className="hidden grid-cols-[2.5rem_minmax(0,3fr)_minmax(0,2fr)_4.5rem_11rem_8.5rem] gap-4 border-b border-tinta px-1 pb-2 sm:grid">
+        <span /><Rotulo>Título</Rotulo><Rotulo>Autoría</Rotulo><Rotulo>Año</Rotulo><Rotulo>Tipo</Rotulo><Rotulo className="text-right">Añadido</Rotulo>
       </div>
       <div ref={ref} className="relative" style={{ height: v.getTotalSize() }}>
         {v.getVirtualItems().map((f) => (

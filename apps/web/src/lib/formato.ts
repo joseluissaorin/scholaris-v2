@@ -101,3 +101,10 @@ export function etiquetaLarga(a: Ancla): string {
   if (a.tipo === 'tiempo') return `${tiempoACadena(a.t0)}${a.hablante ? ` · ${a.hablante}` : ''}`;
   return anclaACita(a);
 }
+
+/** Etiqueta corta para columnas estrechas: «p. 145», «12:04», «párr. 3». */
+export function etiquetaCorta(a: Ancla, etiqueta: string): string {
+  if ((a.tipo === 'seccion' && !a.impresa) || a.tipo === 'web') return `párr. ${a.parrafo}`;
+  if (a.tipo === 'hoja') return `filas ${a.filaDesde}-${a.filaHasta}`;
+  return etiqueta;
+}

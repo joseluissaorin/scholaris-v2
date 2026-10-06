@@ -100,7 +100,7 @@ export const FichaDocumento = memo(function FichaDocumento({ doc, bibliotecas, i
             <span className="rotulo absolute left-2 top-2 flex items-center gap-1.5 rounded-full bg-papel/95 px-2 py-1 text-tinta"><span className="h-1.5 w-1.5 rounded-full bg-rojo anim-pulso" />Leyendo</span>
           ) : null}
           {doc.estado === 'error' ? <span className="rotulo absolute left-2 top-2 rounded-full bg-rojo px-2 py-1 text-[#fbf5ec]">Con errores</span> : null}
-          <span className="absolute bottom-2 right-2 grid h-7 w-7 place-items-center rounded-full bg-papel/90 text-tinta-2"><Icono nombre={ICONO_TIPO[doc.tipo]} tam={14} /></span>
+          <span className="absolute bottom-2 right-2 grid h-6 w-6 place-items-center rounded-full bg-papel/90 text-tinta-2"><Icono nombre={ICONO_TIPO[doc.tipo]} tam={14} /></span>
         </div>
         <h3 className="mt-3 line-clamp-2 text-[1rem] leading-[1.2] tracking-[-0.01em] text-tinta">{doc.titulo}</h3>
       </Link>
@@ -120,7 +120,7 @@ export const FichaDocumento = memo(function FichaDocumento({ doc, bibliotecas, i
 /** Fila en la vista de lista: densa, alineada en columnas. */
 export const FilaDocumento = memo(function FilaDocumento({ doc, bibliotecas }: { doc: ResumenDocumento; bibliotecas: Biblioteca[] }) {
   return (
-    <div className="group grid h-16 grid-cols-[2.5rem_1fr_auto] items-center gap-4 border-b border-filete px-1 sm:grid-cols-[2.5rem_minmax(0,3fr)_minmax(0,2fr)_6rem_9rem_auto]">
+    <div className="group grid h-16 grid-cols-[2.5rem_1fr_auto] items-center gap-4 border-b border-filete px-1 sm:grid-cols-[2.5rem_minmax(0,3fr)_minmax(0,2fr)_4.5rem_11rem_8.5rem]">
       <div className="h-[3.25rem] w-10 overflow-hidden rounded-[2px] border border-filete [container-type:inline-size]">
         <Portada id={doc.id} titulo="" tipo={doc.tipo} url={doc.portadaUrl} />
       </div>
@@ -131,7 +131,7 @@ export const FilaDocumento = memo(function FilaDocumento({ doc, bibliotecas }: {
       <p className="hidden truncate text-[0.875rem] text-tinta-2 sm:block">{doc.autores || '—'}</p>
       <p className="tnum hidden font-mono text-[0.8125rem] text-tinta-2 sm:block">{doc.anio ?? 's. f.'}</p>
       <p className="hidden truncate sm:block"><Rotulo>{lineaMeta(doc)}</Rotulo></p>
-      <div className="flex items-center gap-2">
+      <div className="flex items-center justify-end gap-2">
         {doc.estado === 'procesando' ? <span className="h-1.5 w-1.5 rounded-full bg-rojo anim-pulso" aria-label="Leyendo" /> : null}
         <span className="hidden text-[0.75rem] text-apagado lg:inline">{haceCuanto(doc.creado)}</span>
         <MenuDocumento doc={doc} bibliotecas={bibliotecas}>

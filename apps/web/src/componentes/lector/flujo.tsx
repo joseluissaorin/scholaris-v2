@@ -11,6 +11,7 @@ import { cx, EsqueletoTexto, Esqueleto, Folio, Rotulo } from '@scholaris/ui';
 import { BLOQUE, q } from '../../datos/consultas';
 import { Markdown } from './markdown';
 import { Facsimil } from './facsimil';
+import { etiquetaCorta } from '../../lib/formato';
 
 export type ModoLectura = 'ambas' | 'pagina' | 'texto';
 
@@ -47,7 +48,8 @@ export const Flujo = memo(forwardRef<ManejadorFlujo, {
     return col * (apaisada ? 0.5625 : 1.414) + 64;
   }, [modoReal, texto, apaisada]);
 
-  const v = useWindowVirtualizer({ count: doc.unidades, estimateSize: estimar, overscan: 2, scrollMargin: margen });
+  // El margen superior descuenta la barra del lector, que va pegada arriba.
+  const v = useWindowVirtualizer({ count: doc.unidades, estimateSize: estimar, overscan: 2, scrollMargin: margen, scrollPaddingStart: 84 });
 
   // La página que se está leyendo: la que cruza una línea a 30 % de la ventana.
   useEffect(() => {
@@ -84,7 +86,8 @@ export const Flujo = memo(forwardRef<ManejadorFlujo, {
   return (
     <div ref={contenedor} className="relative" style={{ height: v.getTotalSize() }}>
       {v.getVirtualItems().map((it) => (
-        <div key={it.key} data-index={it.index} ref={v.measureElement} className="absolute inset-x-0" style={{ transform: `translateY(${it.start - v.options.scrollMargin}px)` }}>
+        // `top` y no `transform`: el folio pegado (sticky) no ve las transformaciones.
+        <div key={it.key} data-index={it.index} ref={v.measureElement} className="absolute inset-x-0" style={{ top: it.start - v.options.scrollMargin }}>
           <Fila docId={doc.id} orden={it.index + 1} modo={modoReal} texto={texto} apaisada={apaisada} resaltar={resaltar} destacar={inicial === it.index + 1 ? destacar : undefined} pendiente={leidas != null && it.index + 1 > leidas} titulillo={doc.metadatos.titulo} />
         </div>
       ))}
@@ -101,7 +104,7 @@ const Fila = memo(function Fila({ docId, orden, modo, texto, apaisada, resaltar,
   if (texto) {
     return (
       <section data-orden={orden} className="grid grid-cols-[4.5rem_minmax(0,1fr)] gap-4 py-3 md:grid-cols-[7rem_minmax(0,42rem)] md:gap-8">
-        <div className="pt-1 text-right">{u ? <Folio className="justify-end">{u.etiqueta}</Folio> : <Esqueleto className="ml-auto h-3 w-12" />}</div>
+        <div className="pt-1 text-right">{u ? <Folio className="justify-end">{etiquetaCorta(u.ancla, u.etiqueta)}</Folio> : <Esqueleto className="ml-auto h-3 w-12" />}</div>
         <div className="lectura min-w-0">{u ? <Markdown texto={u.texto} q={resaltar} destacar={destacar} /> : <EsqueletoTexto lineas={4} />}</div>
       </section>
     );
