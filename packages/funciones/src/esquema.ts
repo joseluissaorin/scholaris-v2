@@ -287,6 +287,7 @@ export const SENTENCIAS_FUNCIONES: readonly string[] = [
   `CREATE TABLE IF NOT EXISTS grafo_referencias (
     id        INTEGER PRIMARY KEY AUTOINCREMENT,
     origen    TEXT NOT NULL,
+    fragmento TEXT,                   -- fragmento donde aparece la referencia
     texto     TEXT NOT NULL,
     doi       TEXT,
     titulo    TEXT,
