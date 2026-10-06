@@ -14,3 +14,4 @@ bench/resultados/
 bench/src/estado-tmp*.ts
 # Operación de la instancia alojada (solo en local)
 deploy/produccion/
+deploy/cloudflare/wrangler.propio.jsonc

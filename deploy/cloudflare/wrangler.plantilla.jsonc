@@ -1,0 +1,89 @@
+// Plantilla de Scholaris en Cloudflare para tu propia cuenta. El bootstrap la
+// copia a wrangler.propio.jsonc (fuera de git), crea los recursos que falten,
+// rellena los REPLACE_… y despliega en workers.dev:
+//
+//   export CLOUDFLARE_ACCOUNT_ID=…
+//   node deploy/cloudflare/bootstrap.mjs --secretos-de mis-claves.env
+//
+// Respecto a la instancia alojada (wrangler.jsonc), esta no trae el contenedor
+// de conversión (la web convierte en el navegador; para activarlo, véase
+// deploy/contenedor/LEEME.md y pon CONVERSOR_ACTIVO a "1") ni el correo de las
+// invitaciones (añade "send_email": [{ "name": "CORREO" }] si tienes Email
+// Routing en un dominio de la cuenta).
+{
+  "$schema": "../../apps/api/node_modules/wrangler/config-schema.json",
+  "name": "scholaris",
+  "main": "../../apps/api/src/cloudflare/worker.ts",
+  "compatibility_date": "2026-08-15",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+  "preview_urls": false,
+
+  "assets": {
+    "directory": "../../apps/web/dist",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/", "/api/*", "/mcp", "/oauth/*", "/.well-known/*"]
+  },
+
+  "durable_objects": {
+    "bindings": [
+      { "name": "ESTANTERIA", "class_name": "Estanteria" },
+      { "name": "TAREA", "class_name": "Tarea" },
+      { "name": "LIMITADOR", "class_name": "Limitador" },
+      { "name": "CONVERSOR", "class_name": "Conversor" },
+      { "name": "TRABAJADOR", "class_name": "Trabajador" }
+    ]
+  },
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["Estanteria", "Tarea", "Limitador"] },
+    { "tag": "v2", "new_sqlite_classes": ["Conversor"] },
+    { "tag": "v3", "new_sqlite_classes": ["Trabajador"] }
+  ],
+
+  "workflows": [
+    { "binding": "INGESTA", "name": "scholaris-ingesta", "class_name": "FlujoIngesta" }
+  ],
+
+  "d1_databases": [
+    { "binding": "DB", "database_name": "scholaris", "database_id": "REPLACE_D1_ID" }
+  ],
+
+  "kv_namespaces": [
+    { "binding": "OAUTH_KV", "id": "REPLACE_KV_ID" }
+  ],
+
+  "r2_buckets": [
+    { "binding": "BUCKET", "bucket_name": "scholaris" }
+  ],
+
+  "vectorize": [
+    { "binding": "VECTORES", "index_name": "scholaris-gemini-1536" }
+  ],
+
+  "queues": {
+    "producers": [{ "binding": "COLA", "queue": "scholaris-fondo" }],
+    "consumers": [{ "queue": "scholaris-fondo", "max_batch_size": 10, "max_batch_timeout": 5, "max_retries": 5 }]
+  },
+
+  "ai": { "binding": "AI" },
+
+  "triggers": { "crons": ["17 6 * * *"] },
+
+  // CPU por invocación (pasos del Workflow que cortan PDF o arman un .spdf): plan Workers de pago.
+  "limits": { "cpu_ms": 300000 },
+
+  "vars": {
+    "ESPACIO_VECTORIAL": "gemini-embedding-2@1536",
+    "CLOUDFLARE_ACCOUNT_ID": "REPLACE_ACCOUNT_ID",
+    "R2_BUCKET_NAME": "scholaris",
+    "CONVERSOR_ACTIVO": "0"
+  },
+
+  "observability": { "enabled": true, "head_sampling_rate": 1 }
+
+  // Secretos (el bootstrap los genera o los toma de --secretos-de):
+  //   SECRETO, CLAVE_MAESTRA   se generan
+  //   GEMINI_API_KEY (obligatoria), OPENROUTER_API_KEY, TYPESAFE_API_KEY
+  //   CLERK_PUBLISHABLE_KEY    cuentas de usuario con Clerk
+}

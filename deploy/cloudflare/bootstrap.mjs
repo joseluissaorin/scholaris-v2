@@ -5,7 +5,10 @@
  * y despliega en workers.dev. Volver a ejecutarlo = actualizar.
  *
  *   export CLOUDFLARE_ACCOUNT_ID=…
- *   node deploy/cloudflare/bootstrap.mjs [--sin-desplegar] [--sin-web] [--secretos-de <fichero.env>…]
+ *   node deploy/cloudflare/bootstrap.mjs [--config <wrangler.jsonc>] [--sin-desplegar] [--sin-web] [--secretos-de <fichero.env>…]
+ *
+ * En una cuenta que no es la de la instancia alojada usa wrangler.propio.jsonc,
+ * creado desde wrangler.plantilla.jsonc.
  *
  * Recursos: D1 «scholaris», R2 «scholaris» (con CORS para subidas directas),
  * Vectorize «scholaris-gemini-1536» (1536, coseno) con sus índices de
@@ -23,9 +26,26 @@ import { randomBytes } from 'node:crypto';
 
 const aqui = dirname(fileURLToPath(import.meta.url));
 const raiz = resolve(aqui, '../..');
-const config = join(aqui, 'wrangler.jsonc');
 const args = process.argv.slice(2);
 const bandera = (b) => args.includes(b);
+
+/**
+ * Qué configuración se usa: `--config <fichero>` si se da; wrangler.jsonc si es
+ * la de esta misma cuenta (la instancia alojada); si no, wrangler.propio.jsonc,
+ * que se crea la primera vez desde wrangler.plantilla.jsonc y no entra en git.
+ */
+function elegirConfig() {
+  const i = args.indexOf('--config');
+  if (i >= 0 && args[i + 1]) return resolve(process.env.INIT_CWD ?? process.cwd(), args[i + 1]);
+  const alojada = join(aqui, 'wrangler.jsonc');
+  if (existsSync(alojada) && readFileSync(alojada, 'utf8').includes(`"CLOUDFLARE_ACCOUNT_ID": "${process.env.CLOUDFLARE_ACCOUNT_ID}"`)) return alojada;
+  const propia = join(aqui, 'wrangler.propio.jsonc');
+  if (!existsSync(propia)) {
+    writeFileSync(propia, readFileSync(join(aqui, 'wrangler.plantilla.jsonc'), 'utf8').replace('REPLACE_ACCOUNT_ID', process.env.CLOUDFLARE_ACCOUNT_ID));
+    console.log(`Configuración nueva para tu cuenta: ${propia}`);
+  }
+  return propia;
+}
 
 const D1 = 'scholaris';
 const BUCKET = 'scholaris';
@@ -38,6 +58,8 @@ if (!process.env.CLOUDFLARE_ACCOUNT_ID) {
   console.error('Define CLOUDFLARE_ACCOUNT_ID antes de ejecutar el bootstrap.');
   process.exit(1);
 }
+const config = elegirConfig();
+console.log(`Configuración: ${config}`);
 
 function wrangler(argumentos, o = {}) {
   const r = spawnSync('npx', ['wrangler', ...argumentos], {
