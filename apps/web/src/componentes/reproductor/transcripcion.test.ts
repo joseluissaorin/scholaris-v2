@@ -125,3 +125,15 @@ describe('transcripción', () => {
     expect(consultas).toBeLessThan(50); // 10 000 fotogramas en menos de 50 ms
   });
 });
+
+describe('instantes exactos por palabra', () => {
+  it('usa los instantes de la ingesta cuando casan con el texto y estima si no', async () => {
+    const { construirTranscripcion } = await import('./transcripcion');
+    const base = { id: 'u', orden: 0, etiqueta: '0:00', lector: 'x', confianza: 1, ancla: { tipo: 'tiempo' as const, t0: 10, t1: 20 } };
+    const exacta = construirTranscripcion([{ ...base, texto: '**Ana:** hola qué tal', palabras: { v: 1, t0: 10, cs: [0, 50, 100, 30, 300, 40] } }]);
+    expect(exacta.palabras.map((w) => [w.t0, +w.t1.toFixed(2)])).toEqual([[10, 10.5], [11, 11.3], [13, 13.4]]);
+    const estimada = construirTranscripcion([{ ...base, texto: 'hola qué tal', palabras: { v: 1, t0: 10, cs: [0, 50] } }]);
+    expect(estimada.palabras[0]!.t0).toBe(10);
+    expect(estimada.palabras[2]!.t1).toBeCloseTo(20);
+  });
+});

@@ -3,6 +3,7 @@
  * o un vídeo, y sigue sonando mientras se navega por la aplicación. Pulsar el
  * título vuelve al lector en el instante en que va.
  */
+import { AccesoReferencia } from '../comunes/boton-referencia';
 import { useLayoutEffect, useRef } from 'react';
 import { Link } from '@tanstack/react-router';
 import { cx, Icono } from '@scholaris/ui';
@@ -50,6 +51,7 @@ export default function MiniReproductor() {
         <button type="button" onClick={() => m.alternar()} aria-label={inst.quiere ? 'Pausa' : 'Reproducir'} className="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-[#1a0f0a] bg-[linear-gradient(180deg,#4a2e1a_0%,#2c1810_100%)] text-cream-50 shadow-[var(--relieve-oscuro)] active:translate-y-px">
           <Icono nombre={inst.quiere ? 'pausa' : 'play'} tam={15} grosor={2.4} />
         </button>
+        <AccesoReferencia documento={inst.documento} className="h-9 px-2" />
         <button type="button" onClick={() => m.cerrarMini()} aria-label="Cerrar el reproductor" className="grid h-9 w-9 shrink-0 place-items-center rounded-xl text-apagado hover:bg-cream-200 hover:text-coffee-800"><Icono nombre="cerrar" tam={16} /></button>
       </div>
     </aside>

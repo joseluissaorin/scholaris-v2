@@ -98,6 +98,22 @@ export function lineaEn(tr: Transcripcion, t: number): number {
 }
 
 /** Construye la transcripción a partir de las unidades (en cualquier orden; solo las de tiempo). */
+/**
+ * `UnidadVista.palabras` ({ v: 1, t0, cs: [inicio, duración, …] } en centésimas
+ * desde t0) → [inicio, fin] en segundos por palabra. Solo si hay tantas entradas
+ * como palabras; si no, null y se estima por sílabas.
+ */
+export function instantesExactos(u: Pick<UnidadVista, 'palabras'>, cuantas: number): Array<[number, number]> | null {
+  const pt = u.palabras;
+  if (!pt || pt.v !== 1 || !Array.isArray(pt.cs) || pt.cs.length !== cuantas * 2 || !cuantas) return null;
+  const out: Array<[number, number]> = [];
+  for (let i = 0; i < cuantas; i++) {
+    const a = pt.t0 + pt.cs[2 * i]! / 100;
+    out.push([a, a + Math.max(0.01, pt.cs[2 * i + 1]! / 100)]);
+  }
+  return out;
+}
+
 export function construirTranscripcion(unidades: UnidadVista[]): Transcripcion {
   const us = unidades.filter((u) => u.ancla.tipo === 'tiempo').sort((a, b) => a.orden - b.orden);
   const hablantes: string[] = [];
@@ -132,11 +148,16 @@ export function construirTranscripcion(unidades: UnidadVista[]): Transcripcion {
     const pesos = trozos.map((x) => x.ps.map(peso));
     const total = pesos.flat().reduce((a, b) => a + b, 0) || 1;
     const dur = Math.max(0, t1 - t0);
+    // Instantes exactos de la ingesta, si los hay y casan palabra a palabra con el texto.
+    const exactos = instantesExactos(u, trozos.reduce((n, x) => n + x.ps.length, 0));
     let acum = 0;
+    let n = 0;
     trozos.forEach((x, k) => {
       const desde = palabras.length;
       const p = parrafos.length;
       x.ps.forEach((texto, j) => {
+        const e = exactos?.[n++];
+        if (e) { palabras.push({ texto, t0: e[0], t1: e[1], p, h: x.h }); return; }
         const a = t0 + (dur * acum) / total;
         acum += pesos[k]![j]!;
         palabras.push({ texto, t0: a, t1: t0 + (dur * acum) / total, p, h: x.h });
