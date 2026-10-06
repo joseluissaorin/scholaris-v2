@@ -15,7 +15,7 @@ import { leerDocumentos } from '../estanteria.js';
 import type { AlProgreso, PuertosFunciones } from '../puertos.js';
 import { ahora, deJSON, num } from '../util.js';
 import { CARACTERES_LOTE, extraerLote, formarLotes, localizarMenciones, usdAprox, type FragmentoEntidades, type UsoLote } from './extraer.js';
-import { guardarMenciones, recontar, resolverBiblioteca } from './resolver.js';
+import { completarMenciones, guardarMenciones, recontar, resolverBiblioteca } from './resolver.js';
 import { enlazarWikidata, type OpcionesWikidata } from './wikidata.js';
 import { etiquetarRelaciones, reconstruirAristasDocumento } from './aristas.js';
 
@@ -188,6 +188,7 @@ export async function extraerEntidadesDocumento(p: PuertosFunciones, documento: 
     }
   }));
   await recontar(sql, tocadas);
+  if (!errores.length) await completarMenciones(sql, documento, fragmentos);
 
   if (errores.length) {
     await sql.ejecutar("UPDATE entidades_trabajos SET estado = 'error', error = ?, actualizado = ? WHERE documento = ?", errores.slice(0, 3).join(' · ').slice(0, 500), ahora(), documento);

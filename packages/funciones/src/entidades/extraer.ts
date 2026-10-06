@@ -52,8 +52,8 @@ export interface UsoLote {
   llamadas: number;
 }
 
-/** Caracteres por lote: unos 8500 tokens de entrada, lo bastante para que el sistema y la salida pesen poco. */
-export const CARACTERES_LOTE = 32_000;
+/** Caracteres por lote: unos 13 000 tokens de entrada, lo bastante para que el sistema y la salida pesen poco. */
+export const CARACTERES_LOTE = 48_000;
 /** Un fragmento muy largo se recorta para el redactor (sus menciones se buscan en el texto entero). */
 const MAX_FRAGMENTO = 4_000;
 

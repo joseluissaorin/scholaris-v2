@@ -40,8 +40,8 @@ const ES_OBRA = /novela|cuento|relato|libro|obra|ensayo|poema|poemario|película
 
 /**
  * El candidato de Wikidata para un nombre, o nada. Los personajes de ficción
- * solo enlazan con personajes; las personas reales, nunca con personajes; las
- * obras, solo con algo cuya descripción diga que es una obra.
+ * no se enlazan; las personas reales, nunca con personajes; las obras, solo
+ * con algo cuya descripción diga que es una obra.
  */
 export function elegirCandidato(nombre: string, tipo: TipoEntidad, cs: readonly CandidatoWikidata[], ficticia = false): CandidatoWikidata | null {
   const clave = normalizarClave(nombre);
@@ -50,9 +50,10 @@ export function elegirCandidato(nombre: string, tipo: TipoEntidad, cs: readonly 
     if (!exacta) continue;
     const d = c.descripcion ?? '';
     if (DESAMBIGUACION.test(d)) continue;
-    if (tipo === 'persona' && ficticia) {
-      if (!FICCION.test(d)) continue;
-    } else if (NO_ES[tipo]?.test(d) || (tipo === 'persona' && FICCION.test(d))) continue;
+    // Los personajes de ficción no se enlazan: los homónimos en Wikidata son casi siempre otros.
+    if (tipo === 'persona' && ficticia) return null;
+    if (/videojuego|video game/i.test(d) && tipo !== 'obra') continue;
+    if (NO_ES[tipo]?.test(d) || (tipo === 'persona' && FICCION.test(d))) continue;
     if (tipo === 'obra' && !ES_OBRA.test(d)) continue;
     // Sin descripción no hay forma de saber si es lo que buscamos.
     if (!d) continue;
@@ -109,7 +110,7 @@ export async function enlazarWikidata(sql: SQL, o: OpcionesWikidata = {}): Promi
   let consultadas = 0, enlazadas = 0;
   for (const e of filas) {
     if (consultadas >= maximo) break;
-    if (e.tipo === 'persona' && palabrasSignificativas(e.clave).length < 2) {
+    if (e.descripcion === DESCRIPCION_FICCION || (e.tipo === 'persona' && palabrasSignificativas(e.clave).length < 2)) {
       await sql.ejecutar('UPDATE entidades SET wikidata_visto = 1 WHERE id = ?', e.id);
       continue;
     }

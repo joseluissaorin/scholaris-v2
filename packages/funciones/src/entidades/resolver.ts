@@ -275,3 +275,60 @@ export async function resolverBiblioteca(sql: SQL): Promise<{ fusiones: number; 
   if (tocadas.size) await recontar(sql, tocadas);
   return { fusiones: fusiones.length, documentos, tocadas };
 }
+
+/** Tipos cuyas formas se buscan en todo el documento (los conceptos y las fechas, no: son demasiado comunes). */
+const TIPOS_COMPLETABLES = new Set<TipoEntidad>(['persona', 'obra', 'lugar', 'organizacion', 'evento']);
+
+/** ¿Una forma es lo bastante específica para buscarla en todo el documento? */
+export function formaCompletable(forma: string): boolean {
+  const f = forma.trim();
+  if (!/^\p{Lu}/u.test(f)) return false;
+  return f.split(/\s+/).length >= 2 || f.length >= 5;
+}
+
+/**
+ * Pasada sin coste: el redactor ve cada lote por separado y a veces calla una
+ * entidad que ya conocía de otro lote. Aquí se buscan las formas de las
+ * entidades del documento en todos sus fragmentos y se añaden las menciones
+ * que falten (sin solaparse con las que hay). Una forma que reclaman dos
+ * entidades no se usa. Idempotente.
+ */
+export async function completarMenciones(sql: SQL, documento: string, fragmentos: ReadonlyArray<{ id: string; orden: number; texto: string; ancla: unknown }>): Promise<number> {
+  const filas = await sql.ejecutar<{ entidad: string; texto: string; normalizado: string; tipo: TipoEntidad; fragmento: string; ini: number; fin: number }>(
+    'SELECT entidad, texto, normalizado, tipo, fragmento, ini, fin FROM menciones WHERE documento = ?', documento,
+  );
+  const duenos = new Map<string, Set<string>>();
+  const datos = new Map<string, { normalizado: string; tipo: TipoEntidad }>();
+  const ocupado = new Map<string, Array<[number, number]>>();
+  for (const f of filas) {
+    (ocupado.get(f.fragmento) ?? ocupado.set(f.fragmento, []).get(f.fragmento)!).push([num(f.ini), num(f.fin)]);
+    if (!TIPOS_COMPLETABLES.has(f.tipo) || !formaCompletable(f.texto)) continue;
+    (duenos.get(f.texto) ?? duenos.set(f.texto, new Set()).get(f.texto)!).add(f.entidad);
+    datos.set(f.entidad, { normalizado: f.normalizado, tipo: f.tipo });
+  }
+  const formas = [...duenos].filter(([, d]) => d.size === 1).map(([forma, d]) => ({ forma, entidad: [...d][0]! }))
+    .sort((a, b) => b.forma.length - a.forma.length);
+  if (!formas.length) return 0;
+  const { buscarFormas, rangosExcluidos } = await import('./normalizar.js');
+  const nuevas: Array<readonly [string, string, string, string, number, string, string, string, number, number, string]> = [];
+  for (const fr of fragmentos) {
+    const usados = [...(ocupado.get(fr.id) ?? []), ...rangosExcluidos(fr.texto)];
+    for (const { forma, entidad } of formas) {
+      if (!fr.texto.includes(forma.split(/\s+/)[0]!)) continue;
+      for (const c of buscarFormas(fr.texto, [forma], true, usados)) {
+        usados.push([c.ini, c.fin]);
+        const d = datos.get(entidad)!;
+        nuevas.push([nuevoId('m'), entidad, documento, fr.id, fr.orden, fr.texto.slice(c.ini, c.fin), d.normalizado, d.tipo, c.ini, c.fin, JSON.stringify(fr.ancla)] as const);
+      }
+    }
+  }
+  for (let i = 0; i < nuevas.length; i += 9) {
+    const lote = nuevas.slice(i, i + 9);
+    await sql.ejecutar(
+      `INSERT INTO menciones (id, entidad, documento, fragmento, orden, texto, normalizado, tipo, ini, fin, ancla) VALUES ${lote.map(() => '(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').join(', ')}`,
+      ...lote.flat(),
+    );
+  }
+  if (nuevas.length) await recontar(sql, new Set(nuevas.map((n) => n[1])));
+  return nuevas.length;
+}

@@ -111,9 +111,9 @@ describe('normalizar y localizar', () => {
     expect(elegirCandidato('Charlie Parker', 'persona', cs)?.id).toBe('Q103767');
     expect(elegirCandidato('Parker', 'persona', cs)).toBeNull();
     expect(elegirCandidato('Charlie Parker', 'obra', [{ id: 'Q9', etiqueta: 'Charlie Parker', descripcion: 'ciudad de Texas' }])).toBeNull();
-    // Personajes con personajes; personas reales nunca con personajes; obras solo si lo son.
+    // Personajes de ficción, sin enlace; personas reales nunca con personajes; obras solo si lo son.
     const johnny = [{ id: 'Q1', etiqueta: 'Johnny Carter', descripcion: 'cantante estadounidense' }, { id: 'Q2', etiqueta: 'Johnny Carter', descripcion: 'personaje de El perseguidor' }];
-    expect(elegirCandidato('Johnny Carter', 'persona', johnny, true)?.id).toBe('Q2');
+    expect(elegirCandidato('Johnny Carter', 'persona', johnny, true)).toBeNull();
     expect(elegirCandidato('Johnny Carter', 'persona', johnny.slice(1))).toBeNull();
     expect(elegirCandidato('Amorous', 'obra', [{ id: 'Q3', etiqueta: 'Amorous', descripcion: 'videojuego de 2018' }])).toBeNull();
     expect(elegirCandidato('Rayuela', 'obra', [{ id: 'Q4', etiqueta: 'Rayuela', descripcion: 'novela de Julio Cortázar' }])?.id).toBe('Q4');
@@ -202,6 +202,20 @@ async function idDe(sql: SQL, nombre: string): Promise<string> {
 }
 
 describe('grafo de entidades de la biblioteca', () => {
+  it('la pasada de todo el documento añade lo que el redactor calló en otro lote, sin duplicar', async () => {
+    const sql = await estanteria();
+    await sembrar(sql, { id: 'd', titulo: 'Novela', paginas: ['Johnny Carter toca.', 'Más tarde Johnny Carter y Bruno; Johnny Carter otra vez.', 'Nada.'] });
+    const redactor = redactorFalso((t) => (t.includes(' · B = ') ? { r: [] } : { e: t.includes('toca') ? ['q|Johnny Carter'] : [] }));
+    const p = puertos(sql, { inteligencia: { redactor } });
+    await extraerEntidadesDocumento(p, 'd', { caracteresLote: 30, wikidata: false });
+    const filas = await sql.ejecutar<{ orden: number }>('SELECT orden FROM menciones ORDER BY orden, ini');
+    expect(filas.map((f) => f.orden)).toEqual([0, 1, 1]);
+    const { completarMenciones } = await import('../src/entidades/resolver.js');
+    const frs = (await sql.ejecutar<{ id: string; orden: number; texto: string; ancla: string }>('SELECT id, orden, texto, ancla FROM fragmentos')).map((f) => ({ ...f, ancla: JSON.parse(f.ancla) }));
+    expect(await completarMenciones(sql, 'd', frs)).toBe(0);
+  });
+
+
   it('extrae, resuelve, enlaza con Wikidata y teje el grafo entre documentos', async () => {
     const sql = await biblioteca();
     const redactor = redactorCatalogo();
