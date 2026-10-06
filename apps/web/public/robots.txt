@@ -1,0 +1,5 @@
+User-agent: *
+Allow: /
+Disallow: /api/
+
+Sitemap: https://scholaris-v2.jlsf2005.workers.dev/sitemap.xml

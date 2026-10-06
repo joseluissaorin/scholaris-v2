@@ -165,7 +165,7 @@ export function rutasSubidas(app: Hono<Entorno>): void {
       metadatos: { autores: [], titulo: b.metadatos?.titulo ?? url.hostname + url.pathname, url: url.toString(), ...b.metadatos },
       bibliotecas: b.bibliotecas ?? [],
     });
-    const r = await lanzarIngesta(p, { documento, prefijo, original: '', url: url.toString(), tipo, mime: '', nombre: url.toString(), bibliotecas: b.bibliotecas });
+    const r = await lanzarIngesta(p, { documento, prefijo, original: '', url: url.toString(), tipo, mime: '', nombre: url.toString(), bibliotecas: b.bibliotecas, ...(b.modo ? { modo: b.modo } : {}) });
     return c.json(r, 202);
   });
 
@@ -230,7 +230,7 @@ export function rutasSubidas(app: Hono<Entorno>): void {
     if (cab) await p.sql.ejecutar('UPDATE documentos SET bytes = ? WHERE id = ?', cab.bytes, s.documento);
     const r = await lanzarIngesta(p, {
       documento: s.documento, prefijo: s.prefijo, original: s.clave, paquete, tipo: s.tipo, mime: s.mime, nombre: s.nombre,
-      forzarVision: b.forzarVision, pista: b.pista, bibliotecas: JSON.parse(s.bibliotecas) as string[],
+      forzarVision: b.forzarVision, pista: b.pista, bibliotecas: JSON.parse(s.bibliotecas) as string[], ...(b.modo ? { modo: b.modo } : {}),
     });
     return c.json(r, 202);
   });

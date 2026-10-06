@@ -2,11 +2,27 @@
 <html lang="es">
   <head>
     <meta charset="utf-8" />
+    <script>
+      // La portada (src/portada): quien llega a «/» sin sesión de Clerk ve /acerca (o /en), que es HTML
+      // estático y no carga ni la aplicación ni Clerk. «/?entrar» y «/?demostracion» entran siempre; la
+      // versión local (localhost, red de casa, Tailscale) va directa a la Biblioteca.
+      (function () {
+        try {
+          var l = location, c = document.cookie;
+          if (l.pathname !== '/' || l.search || l.hash) return;
+          if (/^(localhost|127\.|\[::1\]|10\.|192\.168\.|100\.)|\.(local|ts\.net)$/.test(l.hostname)) return;
+          if (/(?:^|;\s*)__session(?:_[^=]*)?=/.test(c) || /(?:^|;\s*)__client_uat(?:_[^=]*)?=(?!0(?:;|$))/.test(c)) return;
+          if (sessionStorage.getItem('scholaris.demostracion') === '1') return;
+          l.replace(/^es\b/i.test(navigator.language || 'es') ? '/acerca' : '/en');
+        } catch (e) {}
+      })();
+    </script>
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <title>Scholaris</title>
     <meta name="description" content="Tu biblioteca, leída y citable. Cualquier archivo se vuelve buscable y cada cita apunta a la página impresa o al segundo exacto." />
     <meta name="theme-color" content="#2C1810" media="(prefers-color-scheme: light)" />
     <meta name="theme-color" content="#140D09" media="(prefers-color-scheme: dark)" />
+    <link rel="preload" href="/fuentes/dm-sans-latin.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="icon" href="/favicon.ico" sizes="any" />
     <link rel="icon" href="/favicon-64.png" type="image/png" sizes="64x64" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />

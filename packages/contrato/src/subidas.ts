@@ -86,7 +86,15 @@ export interface RecursosFirmados {
  */
 export type ManifiestoConversion = PaqueteConversion;
 
+/**
+ * 'rapido' (por defecto): todo en línea, cuanto antes. 'economico': la mitad de
+ * precio, con la API por lotes de Gemini (entrega en horas) y un lector barato
+ * (Workers AI) para las páginas fáciles; el texto ya legible se indexa enseguida.
+ */
+export type ModoIngesta = 'rapido' | 'economico';
+
 export interface Ingestar {
+  modo?: ModoIngesta;
   /**
    * Ruta (relativa al prefijo) del paquete JSON ya subido con /recursos, p. ej.
    * «paquete.json». Es lo recomendable: un libro de 600 páginas con su capa de
@@ -104,6 +112,7 @@ export interface Ingestar {
 
 export interface SubidaUrl {
   url: string;
+  modo?: ModoIngesta;
   /** web | video | audio | pdf: si no se da, se deduce. */
   tipo?: TipoEntrada;
   bibliotecas?: string[];

@@ -125,7 +125,7 @@ function PaginaBiblioteca() {
               <span><strong className="tnum text-[0.9375rem] font-semibold text-coffee-800">{numero(bibliotecas.length)}</strong> colecciones</span>
               <span><strong className="tnum text-[0.9375rem] font-semibold text-coffee-800">{numero(paginas)}</strong> páginas</span>
               {horas >= 0.1 ? <span><strong className="tnum text-[0.9375rem] font-semibold text-coffee-800">{numero(horas, { maximumFractionDigits: 1 })}</strong> horas de audio y vídeo</span> : null}
-              <span className="ml-auto text-coffee-300">{bytes(ocupado)}</span>
+              <span className="ml-auto text-coffee-400">{bytes(ocupado)}</span>
             </div>
             <div className="flex flex-wrap items-center gap-2 border-b border-cream-300 pb-4">
               <div className="sin-barra -mx-4 flex min-w-0 basis-full gap-2 overflow-x-auto px-4 sm:mx-0 sm:flex-1 sm:basis-0 sm:flex-wrap sm:px-0">
@@ -217,14 +217,14 @@ function PaginaBiblioteca() {
                 </div>
                 <div className="space-y-0.5">
                   <button type="button" onClick={() => fijar({ col: undefined })} className={cx('flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-[0.8125rem] transition-colors', !busqueda.col ? 'bg-cream-50 font-semibold text-coffee-800 shadow-[var(--relieve)]' : 'text-coffee-600 hover:bg-cream-200')}>
-                    <Icono nombre="biblioteca" tam={15} className="text-coffee-400" /><span className="flex-1">Toda la biblioteca</span><span className="tnum text-[0.75rem] text-coffee-300">{todos.length}</span>
+                    <Icono nombre="biblioteca" tam={15} className="text-coffee-400" /><span className="flex-1">Toda la biblioteca</span><span className="tnum text-[0.75rem] text-coffee-400">{todos.length}</span>
                   </button>
                   {bibliotecas.map((b) => (
                     <button key={b.id} type="button" onClick={() => fijar({ col: busqueda.col === b.id ? undefined : b.id })} className={cx('flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-[0.8125rem] transition-colors', busqueda.col === b.id ? 'bg-cream-50 font-semibold text-coffee-800 shadow-[var(--relieve)]' : 'text-coffee-600 hover:bg-cream-200')}>
                       <span className={cx('h-2.5 w-2.5 shrink-0 rounded-full', puntoColeccion(b.color))} />
                       <span className="min-w-0 flex-1 truncate">{b.nombre}</span>
                       {b.compartida ? <Icono nombre="enlace" tam={12} titulo="Compartida" className="text-coffee-300" /> : null}
-                      <span className="tnum text-[0.75rem] text-coffee-300">{b.documentos}</span>
+                      <span className="tnum text-[0.75rem] text-coffee-400">{b.documentos}</span>
                     </button>
                   ))}
                   {!bibliotecas.length ? <p className="px-3 py-2 text-[0.75rem] text-coffee-400">Aún no hay colecciones.</p> : null}

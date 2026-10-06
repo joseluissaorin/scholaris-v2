@@ -55,7 +55,8 @@ export type EventoTiempoReal =
   | { tipo: 'hola'; usuario: string; tarea?: string }
   | { tipo: 'progreso'; progreso: Progreso }
   /** Unidades nuevas ya legibles (la interfaz enseña páginas mientras se procesa). */
-  | { tipo: 'unidades'; tarea: string; documento: string; desde: number; hasta: number }
+  /** Unidades [desde, hasta] (orden base 0) ya legibles; con `buscables`, su texto ya está en el índice. */
+  | { tipo: 'unidades'; tarea: string; documento: string; desde: number; hasta: number; buscables?: boolean }
   | { tipo: 'fase'; tarea: string; documento: string; fase: FaseIngesta; ms?: number }
   | { tipo: 'fin'; tarea: string; documento?: string; estado: EstadoTarea; error?: string }
   | { tipo: 'alerta'; alerta: Alerta }

@@ -46,6 +46,8 @@ export interface RespuestaBusqueda {
   /** Evento del historial (para fijar, anotar, repetir). */
   evento?: string;
   ms: number;
+  /** Milisegundos por fase (comprension, lexica, densa, fusion, hidratacion, reordenacion…), para diagnosticar. */
+  tiempos?: Record<string, number>;
 }
 
 export interface Responder extends Buscar {

@@ -80,7 +80,7 @@ const OPCIONES_PLAN = { paginasPorPliego: 2 } as const; // pliegos cortos: la sa
 export { ErrorReserva };
 
 /** Por documento: un reintento (tarea nueva) reaprovecha las lecturas ya pagadas. */
-const trabajo = (p: ParamsIngesta) => `${p.prefijo}trabajo/`;
+export const trabajo = (p: ParamsIngesta) => `${p.prefijo}trabajo/`;
 
 // ---------------------------------------------------------------------------
 // Paquete y fuente
@@ -115,13 +115,13 @@ export function leerPaquete(almacen: AlmacenAmpliado, clave: string): Promise<Pa
 }
 
 /** Quita la maquetación línea a línea (la ingesta trabaja con bloques, cabecera y pie). */
-function adelgazar(p: PaqueteConversion): PaqueteConversion {
+export function adelgazar(p: PaqueteConversion): PaqueteConversion {
   if (p.contenido.clase !== 'pdf') return p;
   return { ...p, contenido: { ...p.contenido, paginas: p.contenido.paginas.map((x) => ({ ...x, lineas: [] })) } };
 }
 
 /** El paquete con solo las páginas [desde, hasta] (las demás, vacías para conservar los índices). */
-function miniPaquete(p: PaqueteConversion, desde: number, hasta: number): PaqueteConversion {
+export function miniPaquete(p: PaqueteConversion, desde: number, hasta: number): PaqueteConversion {
   const enRango = (f?: number) => f !== undefined && f >= desde && f <= hasta;
   if (p.contenido.clase === 'pdf') {
     return { ...p, partes: p.partes.filter((x) => enRango(x.unidad)), contenido: { ...p.contenido, esquema: [], paginas: p.contenido.paginas.filter((x) => enRango(x.fisica)) } };
@@ -241,7 +241,7 @@ export function transcriptorConMemoria(t: Transcriptor, almacen: AlmacenAmpliado
   };
 }
 
-function inteligenciaConMemoria(ia: Inteligencia, almacen: AlmacenAmpliado, raiz: string, gemini?: ConfigGemini): Inteligencia {
+export function inteligenciaConMemoria(ia: Inteligencia, almacen: AlmacenAmpliado, raiz: string, gemini?: ConfigGemini): Inteligencia {
   return {
     ...ia,
     lector: lectorConMemoria(ia.lector, almacen, raiz),
@@ -332,7 +332,11 @@ function provisionalDePagina(u: { orden: number; fisica: number; texto: string; 
 // Pasos
 // ---------------------------------------------------------------------------
 
-export async function preparar(ctx: ContextoMotor, params: ParamsIngesta): Promise<InfoPlan> {
+/**
+ * Deja el paquete de conversión en el almacén: el que subió el navegador, o el
+ * que se hace aquí (imprenta del servidor, reserva mínima, YouTube, pódcast).
+ */
+export async function asegurarPaquete(ctx: ContextoMotor, params: ParamsIngesta): Promise<{ clave: string; descargado?: { original: string; mime: string; bytes: number } }> {
   let clave = params.paquete;
   let descargado: { original: string; mime: string; bytes: number } | undefined;
   // Pódcast, Vimeo o enlace directo: se baja el medio y se trata como si se hubiera subido.
@@ -381,6 +385,11 @@ export async function preparar(ctx: ContextoMotor, params: ParamsIngesta): Promi
     clave = `${params.prefijo}paquete.json`;
     await ctx.almacen.poner(clave, JSON.stringify(paquete), 'application/json');
   }
+  return { clave: clave!, ...(descargado ? { descargado } : {}) };
+}
+
+export async function preparar(ctx: ContextoMotor, params: ParamsIngesta): Promise<InfoPlan> {
+  const { clave, descargado } = await asegurarPaquete(ctx, params);
   const completo = await leerPaquete(ctx.almacen, clave);
   // Paquete ligero (sin la maquetación línea a línea, que la ingesta no usa) y un fichero
   // pequeño por pliego: cada paso de lectura carga solo lo suyo (límite de 128 MB por aislamiento).

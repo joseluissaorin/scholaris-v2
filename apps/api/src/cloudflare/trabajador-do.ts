@@ -9,6 +9,7 @@ import { DurableObject } from 'cloudflare:workers';
 import type { Progreso } from '@scholaris/nucleo';
 import type { ParamsIngesta } from '../puertos.js';
 import { leerPrimeraPagina, leerUnPliego, transcribirUnTramo, type ContextoMotor, type InfoPlan } from '../compartido/motor-ingesta.js';
+import { consolidarTuberia, enviarLoteTuberia, procesarTanda, recogerLoteTuberia, type InfoTuberia, type ResultadoTanda, type ResumenConsolidacion } from '../compartido/tuberia-plataforma.js';
 import type { Env } from './env.js';
 import { SqlRemoto } from './sql.js';
 import { almacenDesdeEnv, cuentasDesdeEnv, emisorDesdeEnv, geminiPara, indiceDesdeEnv, inteligenciaPara, origenDe } from './puertos-cf.js';
@@ -29,6 +30,8 @@ export class Trabajador extends DurableObject<Env> {
       indice: indiceDesdeEnv(env, ia),
       espacioNombres: espacioNombresDe(p.usuario),
       ...(gemini ? { gemini } : {}),
+      ...(env.SIN_VERIFICACION === '1' ? { sinVerificacion: true } : {}),
+      ...(env.CORREO_CONTACTO ? { correoContacto: env.CORREO_CONTACTO } : {}),
       alProgreso: async (pr: Progreso) => { await emisor.emitir(`usuario:${p.usuario}`, { tipo: 'progreso', progreso: pr }); },
       alUnidades: async (desde: number, hasta: number) => { await emisor.emitir(`usuario:${p.usuario}`, { tipo: 'unidades', tarea: p.tarea, documento: p.documento, desde, hasta }); },
     };
@@ -40,6 +43,28 @@ export class Trabajador extends DurableObject<Env> {
 
   async tramo(p: ParamsIngesta, info: InfoPlan, n: number): Promise<number> {
     return transcribirUnTramo(await this.contexto(p), p, info, n);
+  }
+
+  async tanda(p: ParamsIngesta, info: InfoTuberia, id: number): Promise<ResultadoTanda> {
+    const ctx = await this.contexto(p);
+    const emisor = emisorDesdeEnv(this.env, p.usuario);
+    return procesarTanda(ctx, p, info, id, {
+      alBuscables: async (r) => {
+        if (r.legibles) await emisor.emitir(`usuario:${p.usuario}`, { tipo: 'unidades', tarea: p.tarea, documento: p.documento, desde: r.legibles[0], hasta: r.legibles[1], buscables: true });
+      },
+    });
+  }
+
+  async consolidar(p: ParamsIngesta, info: InfoTuberia): Promise<ResumenConsolidacion> {
+    return consolidarTuberia(await this.contexto(p), p, info);
+  }
+
+  async enviarLote(p: ParamsIngesta, info: InfoTuberia): Promise<string | null> {
+    return enviarLoteTuberia(await this.contexto(p), p, info);
+  }
+
+  async recogerLote(p: ParamsIngesta, info: InfoTuberia, id: string): Promise<{ listo: boolean; error?: string }> {
+    return recogerLoteTuberia(await this.contexto(p), p, info, id);
   }
 
   async primeraPagina(p: ParamsIngesta, info: InfoPlan): Promise<number> {

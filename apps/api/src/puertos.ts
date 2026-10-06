@@ -59,6 +59,8 @@ export interface ParamsIngesta {
   nombre: string;
   forzarVision?: boolean;
   pista?: string;
+  /** 'rapido' (por defecto) o 'economico' (API por lotes y lector barato). */
+  modo?: 'rapido' | 'economico';
   /** Fases a rehacer (reproceso); sin valor, todas. */
   fases?: string[];
   bibliotecas?: string[];

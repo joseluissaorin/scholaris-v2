@@ -10,6 +10,7 @@ import { NonRetryableError } from 'cloudflare:workflows';
 import type { Progreso } from '@scholaris/nucleo';
 import type { ParamsIngesta } from '../puertos.js';
 import { enParalelo } from '@scholaris/nucleo';
+import { prepararTuberia, type InfoTuberia } from '../compartido/tuberia-plataforma.js';
 import { componer, ErrorReserva, leerPrimeraPagina, leerUnPliego, limpiarTrabajo, preparar, revectorizar, soloVectores, transcribirUnTramo, type ContextoMotor, type InfoPlan } from '../compartido/motor-ingesta.js';
 import type { Env } from './env.js';
 import { SqlRemoto } from './sql.js';
@@ -18,6 +19,8 @@ import { espacioNombresDe } from './indice-vectorize.js';
 import { conversorCF } from './conversor.js';
 
 const REINTENTOS = { limit: 5, delay: '10 seconds', backoff: 'exponential' } as const;
+/** Tandas a la vez (cada una en su trabajador, con su propio cupo de conexiones). */
+const OLEADA = 24;
 
 export class FlujoIngesta extends WorkflowEntrypoint<Env, ParamsIngesta> {
   private async contexto(p: ParamsIngesta): Promise<ContextoMotor & { emitir(pr: Progreso): Promise<void> }> {
@@ -71,13 +74,13 @@ export class FlujoIngesta extends WorkflowEntrypoint<Env, ParamsIngesta> {
         return r;
       }
 
-      const info: InfoPlan = await step.do('preparar', { retries: { limit: 3, delay: '5 seconds', backoff: 'exponential' }, timeout: '30 minutes' }, async () => {
+      const info: InfoTuberia = await step.do('preparar', { retries: { limit: 3, delay: '5 seconds', backoff: 'exponential' }, timeout: '30 minutes' }, async () => {
         const ctx = await this.contexto(p);
         await ctx.emitir(progreso('conversion', 0, 0.01, p.paquete ? 'Planificando la lectura' : 'Convirtiendo en el servidor'));
         // Latido mientras se convierte (el contenedor puede tardar): el vigilante no la da por parada.
         const latido = setInterval(() => { void ctx.emitir(progreso('conversion', 0.5, 0.02, 'Convirtiendo…')).catch(() => undefined); }, 60_000);
         try {
-          const i = await preparar(ctx, p);
+          const i = await prepararTuberia(ctx, p);
           // Cuota de páginas (o minutos) del mes: se consume antes de leer.
           const cuentas = cuentasDesdeEnv(this.env);
           if (!(await cuentas.consumir(p.usuario, p.plan, 'paginasMes', i.coste))) {
@@ -85,7 +88,7 @@ export class FlujoIngesta extends WorkflowEntrypoint<Env, ParamsIngesta> {
               ? `Este documento necesita ${i.coste} páginas de lectura y no te quedan suficientes este mes en el plan gratuito.`
               : `Este documento necesita ${i.coste} páginas de lectura y has llegado al máximo de tu plan este mes.`);
           }
-          await ctx.emitir(progreso('lectura', 0, 0.03, `${i.unidades} unidades; ${i.pliegos.length} pliegos de visión`));
+          await ctx.emitir(progreso('lectura', 0, 0.03, `${i.unidades} unidades en ${i.tandas.length} tandas`));
           return i;
         } catch (e) {
           if (e instanceof ErrorReserva) throw new NonRetryableError(e.message);
@@ -95,48 +98,43 @@ export class FlujoIngesta extends WorkflowEntrypoint<Env, ParamsIngesta> {
         }
       });
 
-      // Lectura y transcripción: un paso por pliego o tramo, todos a la vez.
-      const total = info.pliegos.length + info.tramos.length;
+      // Modo económico: lo difícil, a la API por lotes (mitad de precio); se espera durmiendo.
+      if (info.economico) {
+        const lote = await step.do('enviar-lote', { retries: { limit: 3, delay: '30 seconds', backoff: 'exponential' }, timeout: '30 minutes' }, async () =>
+          this.env.TRABAJADOR.getByName(`${p.tarea}:lote`).enviarLote(p, info));
+        if (lote) {
+          for (let i = 0; i < 288; i++) {
+            await step.sleep(`espera-lote-${i}`, i < 6 ? '2 minutes' : '5 minutes');
+            const r = await step.do(`recoger-lote-${i}`, { retries: { limit: 3, delay: '30 seconds' }, timeout: '10 minutes' }, async () =>
+              this.env.TRABAJADOR.getByName(`${p.tarea}:lote`).recogerLote(p, info, lote));
+            if (r.listo) break;
+          }
+        }
+      }
+
+      // Las tandas: cada una en su trabajador (su propio cupo de conexiones), muchas a la vez.
+      // Al terminar cada una, sus páginas se pueden leer y su texto buscar.
       const contador = this.env.TAREA.getByName(`tarea:${p.usuario}:${p.tarea}`);
-      const avisar = async (ctx: Awaited<ReturnType<FlujoIngesta['contexto']>>) => {
-        const hechos = await contador.sumar('lectura');
-        await ctx.emitir(progreso('lectura', hechos / Math.max(1, total), 0.03 + 0.22 * (hechos / Math.max(1, total)), `${hechos} de ${total}`));
-      };
-      // Como mucho OLEADA pasos a la vez: los pasos en paralelo de una instancia comparten aislamiento (128 MB).
-      const OLEADA = 24;
-      const pasosLectura: Array<() => Promise<unknown>> = [
-        // La primera página, sola y la primera: se ve en unos segundos.
-        ...(info.modo === 'paginas' && info.pliegos.length ? [() => step.do('primera-pagina', { retries: { limit: 2, delay: '2 seconds' }, timeout: '2 minutes' }, async () => this.env.TRABAJADOR.getByName(`${p.tarea}:primera`).primeraPagina(p, info).catch(() => 0))] : []),
-        ...info.pliegos.map((id) => () => step.do(`pliego-${id}`, { retries: REINTENTOS, timeout: '6 minutes' }, async () => {
-          const t0 = Date.now();
-          const ctx = await this.contexto(p);
-          const t1 = Date.now();
-          // La lectura, en su propio trabajador (su propio cupo de conexiones).
-          const n = await this.env.TRABAJADOR.getByName(`${p.tarea}:p${id}`).pliego(p, info, id);
-          const t2 = Date.now();
-          await avisar(ctx);
-          console.log(JSON.stringify({ que: 'paso', paso: `pliego-${id}`, contexto: t1 - t0, leer: t2 - t1, avisar: Date.now() - t2 }));
-          return n;
-        })),
-        ...info.tramos.map((n) => () => step.do(`tramo-${n}`, { retries: REINTENTOS, timeout: '12 minutes' }, async () => {
-          const ctx = await this.contexto(p);
-          const palabras = await this.env.TRABAJADOR.getByName(`${p.tarea}:t${n}`).tramo(p, info, n);
-          await avisar(ctx);
-          return palabras;
-        })),
-      ];
-      await enParalelo(pasosLectura, OLEADA, (f) => f());
+      const emisor = emisorDesdeEnv(this.env, p.usuario);
+      const total = info.tandas.length;
+      let vectoresPendientes = false;
+      await enParalelo(info.tandas, OLEADA, (t) => step.do(`tanda-${t.id}`, { retries: REINTENTOS, timeout: '10 minutes' }, async () => {
+        const r = await this.env.TRABAJADOR.getByName(`${p.tarea}:t${t.id}`).tanda(p, info, t.id);
+        const hechos = await contador.sumar('tandas');
+        const pr = progreso('lectura', hechos / Math.max(1, total), 0.03 + 0.67 * (hechos / Math.max(1, total)), `${hechos} de ${total}`);
+        await estanteria.progreso({ ...pr, unidadesBuscables: undefined } as Progreso);
+        await emisor.emitir(`usuario:${p.usuario}`, { tipo: 'progreso', progreso: pr });
+        return { legibles: r.legibles, vectoresPendientes: !!r.vectoresPendientes };
+      }).then((r) => { if (r.vectoresPendientes) vectoresPendientes = true; }));
 
       const metadatosUsuario = await step.do('metadatos-usuario', async () => (await estanteria.metadatosSubida(p.documento)) ?? null);
 
-      // El resto de fases, con las lecturas ya grabadas (no se repite ninguna).
-      // Plazo a la medida del documento: si algo se cuelga, el reintento llega pronto
-      // (la lectura ya está grabada, así que reintentar cuesta segundos).
-      const plazo = Math.min(3600, 90 + 2 * info.unidades + 30 * info.tramos.length);
-      const resumen = await step.do('componer', { retries: { limit: 4, delay: '5 seconds', backoff: 'exponential' }, timeout: `${plazo} seconds` }, async () => {
-        const ctx = await this.contexto(p);
-        return componer(ctx, p, info, metadatosUsuario as Record<string, unknown> | null);
+      const plazo = Math.min(3600, 120 + 2 * info.unidades);
+      const resumen = await step.do('consolidar', { retries: { limit: 4, delay: '5 seconds', backoff: 'exponential' }, timeout: `${plazo} seconds` }, async () => {
+        await emisor.emitir(`usuario:${p.usuario}`, { tipo: 'progreso', progreso: progreso('indexado', 0, 0.72, 'Consolidando: folios, secciones y vectores') });
+        return this.env.TRABAJADOR.getByName(`${p.tarea}:consolidar`).consolidar(p, info);
       });
+      if (resumen.vectoresPendientes) vectoresPendientes = true;
 
       // El original pudo seguir subiendo mientras se leía el paquete: se espera hasta 2 h.
       const bytesOriginal = (info.original ?? p.original) ? await step.do('original', { retries: { limit: 720, delay: '10 seconds', backoff: 'constant' } }, async () => {
@@ -149,12 +147,12 @@ export class FlujoIngesta extends WorkflowEntrypoint<Env, ParamsIngesta> {
         await estanteria.cerrar({ id: p.usuario, plan: p.plan }, {
           ...(bytesOriginal ? { bytes: bytesOriginal } : {}),
           tarea: p.tarea, documento: p.documento, ok: true, original: info.original ?? p.original, bibliotecas: p.bibliotecas ?? [], unidades: resumen.unidades,
-          ...(info.mime ? { mime: info.mime } : {}), ...(info.bytes ? { bytes: info.bytes } : {}),
-          ...(resumen.vectoresPendientes ? { avisos: [{ codigo: 'vectores_pendientes', mensaje: 'Los vectores aún no están en el índice: ya se puede leer y buscar por texto, y la búsqueda semántica llegará en unos minutos.' }] } : {}),
+          ...(info.mime ? { mime: info.mime } : {}),
+          ...(vectoresPendientes ? { avisos: [{ codigo: 'vectores_pendientes', mensaje: 'Los vectores aún no están en el índice: ya se puede leer y buscar por texto, y la búsqueda semántica llegará en unos minutos.' }] } : {}),
           ...(metadatosUsuario ? { metadatosUsuario: metadatosUsuario as Record<string, unknown> } : {}),
         });
         await limpiarTrabajo(almacenDesdeEnv(this.env, origenDe(this.env)), p);
-        if (resumen.vectoresPendientes) await this.env.COLA.send({ tipo: 'reindexar', usuario: p.usuario, documento: p.documento }, { delaySeconds: 120 });
+        if (vectoresPendientes) await this.env.COLA.send({ tipo: 'reindexar', usuario: p.usuario, documento: p.documento }, { delaySeconds: 120 });
       });
       return resumen;
     } catch (e) {

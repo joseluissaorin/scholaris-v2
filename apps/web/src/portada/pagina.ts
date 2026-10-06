@@ -66,9 +66,9 @@ function cabeza(t: Textos): string {
 <link rel="alternate" hreflang="x-default" href="${ORIGEN}/acerca">
 <meta name="theme-color" content="#F5F0E8">
 <meta name="color-scheme" content="light">
-<link rel="icon" href="/portada/logo.webp" type="image/webp">
-<link rel="apple-touch-icon" href="/portada/logo.webp">
-<link rel="preload" href="/portada/mano.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="icon" href="/favicon.ico" sizes="any">
+<link rel="icon" href="/favicon-64.png" type="image/png" sizes="64x64">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Scholaris">
 <meta property="og:url" content="${url}">
