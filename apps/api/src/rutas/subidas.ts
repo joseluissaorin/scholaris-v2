@@ -38,7 +38,7 @@ export function deducirTipo(nombre: string, mime: string): TipoEntrada | null {
 }
 
 /** Ruta relativa segura dentro del prefijo de la subida. */
-function rutaSegura(ruta: string): string {
+export function rutaSegura(ruta: string): string {
   const limpia = ruta.replace(/^\/+/, '');
   exigir(limpia && !limpia.split('/').some((p) => p === '..' || p === '.' || p === '') && limpia.length <= 200 && /^[\w./-]+$/.test(limpia),
     `La ruta «${ruta}» no es válida: usa letras, números, «-», «_», «.» y «/».`);

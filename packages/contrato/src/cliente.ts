@@ -16,7 +16,8 @@ import type {
   CompletarSubida, IngestaIniciada, Ingestar, NuevaSubida, PedirRecursos, RecursosFirmados, SubidaCreada, SubidaUrl, UrlsPartes,
 } from './subidas.js';
 import type {
-  DetalleDocumento, FiguraVista, FiltrosDocumentos, FoliosRehechos, FragmentoVista, ImportacionSpdf, MapaFolios, ParcheMetadatos, RehacerFolios,
+  CompletarPartesImportacion, DetalleDocumento, FiguraVista, FiltrosDocumentos, FoliosRehechos, FragmentoVista, ImportacionSpdf, ImportarRecursos, MapaFolios,
+  ParcheMetadatos, PedirPartesImportacion, RehacerFolios,
   Reprocesar, ResumenDocumento, SeccionVista, UnidadVista, VolcadoDocumento,
 } from './documentos.js';
 import type { AnadirDocumentos, Biblioteca, Compartir, Miembro, NuevaBiblioteca } from './bibliotecas.js';
@@ -186,6 +187,10 @@ export function crearCliente(opciones: OpcionesCliente) {
       spdf: async (id: string) => new Uint8Array(await (await bruto('GET', `/documentos/${e(id)}/spdf`)).arrayBuffer()),
       importar: (spdf: Uint8Array | Blob, opciones: { biblioteca?: string } = {}) =>
         bruto('POST', '/documentos/importar', spdf, opciones, { 'content-type': 'application/x-spdf' }).then((r) => r.json() as Promise<ImportacionSpdf>),
+      /** Importación por el almacén (.spdf grandes): binarios primero, luego el .spdf ligero. */
+      importarRecursos: (p: ImportarRecursos) => post<RecursosFirmados>('/documentos/importar/recursos', p),
+      importarPartes: (p: PedirPartesImportacion) => post<UrlsPartes>('/documentos/importar/partes', p),
+      importarCompletar: (p: CompletarPartesImportacion) => post<Ok>('/documentos/importar/completar', p),
       cita: (id: string, p: { estilo?: string; idioma?: string } = {}) => get<CitaDocumento>(`/documentos/${e(id)}/cita`, p),
     },
 

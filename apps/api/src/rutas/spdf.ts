@@ -6,13 +6,13 @@
 import type { Hono } from 'hono';
 import { nuevoId, type Documento } from '@scholaris/nucleo';
 import { abrirSpdf, crearSpdf, leerDocumento } from '@scholaris/spdf';
-import type { ImportacionSpdf } from '@scholaris/contrato';
+import type { CompletarPartesImportacion, ImportacionSpdf, ImportarRecursos, Ok, PedirPartesImportacion, RecursosFirmados, UrlsPartes } from '@scholaris/contrato';
 import type { Entorno } from '../entorno.js';
-import { exigir, fallo, noEncontrado } from '../compartido/errores.js';
+import { cuerpoJson, exigir, fallo, noEncontrado } from '../compartido/errores.js';
 import { ahora, totalesEstanteria } from '../compartido/estanteria.js';
 import { invalidarBuscador } from '../compartido/servicios.js';
 import { volcarDocumento } from './documentos.js';
-import { lanzarIngesta, prefijoDocumento } from './subidas.js';
+import { lanzarIngesta, prefijoDocumento, rutaSegura } from './subidas.js';
 import { claveDe, exigirEscritura, prm, puertos, type Ctx } from './util.js';
 import type { PuertosUsuario } from '../puertos.js';
 
@@ -67,6 +67,52 @@ export function rutasSpdf(app: Hono<Entorno>): void {
     return new Response(bytes as Uint8Array<ArrayBuffer>, { headers: { 'content-type': 'application/x-spdf', 'content-disposition': `attachment; filename*=UTF-8''${encodeURIComponent(nombre)}` } });
   });
 
+  // Importación por el almacén: los binarios de un .spdf grande se suben directos
+  // (por partes si pasan de 64 MB) y luego se importa el .spdf ligero que los nombra.
+  const clavePropia = (c: Ctx, clave: string) => {
+    const p = puertos(c);
+    exigir(typeof clave === 'string' && clave.startsWith(`u/${p.usuario.id}/d/`) && !clave.includes('..'), 'Clave fuera de tu estantería.');
+    return p;
+  };
+
+  app.post('/documentos/importar/recursos', async (c: Ctx) => {
+    exigirEscritura(c);
+    const p = puertos(c);
+    const b = await cuerpoJson<ImportarRecursos>(c);
+    exigir(typeof b.documento === 'string' && /^[\w-]{3,80}$/.test(b.documento), 'Id de documento no válido.');
+    if (await leerDocumento(p.sql, b.documento)) fallo('conflicto', 'Ese documento ya está en tu estantería.');
+    exigir(Array.isArray(b.recursos) && b.recursos.length > 0 && b.recursos.length <= 2000, 'Pide entre 1 y 2000 recursos a la vez.');
+    const prefijo = prefijoDocumento(p.usuario.id, b.documento);
+    const recursos = await Promise.all(b.recursos.map(async (r) => {
+      const ruta = rutaSegura(r.ruta);
+      const clave = `${prefijo}${ruta}`;
+      return { ruta, clave, subida: await p.almacen.subidaDirecta(clave, { tipo: r.mime, bytes: r.bytes, partes: (r.bytes ?? 0) > 64 * 1024 * 1024 }) };
+    }));
+    return c.json<RecursosFirmados>({ recursos });
+  });
+
+  app.post('/documentos/importar/partes', async (c: Ctx) => {
+    exigirEscritura(c);
+    const b = await cuerpoJson<PedirPartesImportacion>(c);
+    const p = clavePropia(c, b.clave);
+    exigir(typeof b.idSubida === 'string' && b.idSubida.length > 0, 'Falta idSubida.');
+    exigir(Array.isArray(b.numeros) && b.numeros.length > 0 && b.numeros.length <= 100, 'Pide entre 1 y 100 partes a la vez.');
+    const partes = await Promise.all(b.numeros.map(async (numero) => {
+      exigir(Number.isInteger(numero) && numero >= 1 && numero <= 10000, `Número de parte no válido: ${numero}.`);
+      return { numero, ...(await p.almacen.urlParte(b.clave, b.idSubida, numero)) };
+    }));
+    return c.json<UrlsPartes>({ partes });
+  });
+
+  app.post('/documentos/importar/completar', async (c: Ctx) => {
+    exigirEscritura(c);
+    const b = await cuerpoJson<CompletarPartesImportacion>(c);
+    const p = clavePropia(c, b.clave);
+    exigir(Array.isArray(b.partes) && b.partes.length > 0, 'Faltan las partes.');
+    await p.almacen.completarPartes(b.clave, b.idSubida, b.partes);
+    return c.json<Ok>({ ok: true });
+  });
+
   app.post('/documentos/importar', async (c: Ctx) => {
     exigirEscritura(c);
     const p = puertos(c);
@@ -113,7 +159,7 @@ export function rutasSpdf(app: Hono<Entorno>): void {
         const mapaUnidad = new Map(unidades.map((u) => [u.id, remap(u).id]));
         const mapaFrag = new Map(fragmentos.map((f) => [f.id, remap(f).id]));
         await p.sql.transaccion(async (tx) => {
-          await escribirDocumento(tx, { ...d0, id, original: k(d0.original) ?? '', estado: 'listo', bibliotecas: [], actualizado: ahora() });
+          await escribirDocumento(tx, { ...d0, id, original: k(d0.original) ?? claves.get('original') ?? '', estado: 'listo', bibliotecas: [], actualizado: ahora() });
           await escribirUnidades(tx, unidades.map((u) => ({ ...remap(u), documento: id, imagen: k(u.imagen), miniatura: k(u.miniatura) })));
           await escribirSecciones(tx, secciones.map((s) => ({ ...remap(s), documento: id, unidadDesde: mapaUnidad.get(s.unidadDesde) ?? s.unidadDesde, unidadHasta: s.unidadHasta ? mapaUnidad.get(s.unidadHasta) ?? s.unidadHasta : s.unidadHasta })));
           await escribirFragmentos(tx, fragmentos.map((f) => ({ ...remap(f), documento: id, unidad: mapaUnidad.get(f.unidad) ?? f.unidad })));

@@ -92,7 +92,64 @@
     "CONVERSOR_INSTANCIAS": "3"
   },
 
-  "observability": { "enabled": true, "head_sampling_rate": 1 }
+  "observability": { "enabled": true, "head_sampling_rate": 1 },
+
+  // Producción: scholaris.joseluissaorin.com, con recursos propios (D1, R2,
+  // Vectorize, KV, cola, Workflow y Durable Objects del script «scholaris-produccion»).
+  // El preview de arriba sigue siendo el banco de pruebas y no comparte datos.
+  //   pnpm --filter @scholaris/api desplegar:produccion   (desde un commit limpio)
+  "env": {
+    "produccion": {
+      "name": "scholaris-produccion",
+      "workers_dev": true,
+      // RUTA_PRODUCCION (se activa al cambiar el DNS)
+      "durable_objects": {
+        "bindings": [
+          { "name": "ESTANTERIA", "class_name": "Estanteria" },
+          { "name": "TAREA", "class_name": "Tarea" },
+          { "name": "LIMITADOR", "class_name": "Limitador" },
+          { "name": "CONVERSOR", "class_name": "Conversor" },
+          { "name": "TRABAJADOR", "class_name": "Trabajador" }
+        ]
+      },
+      "containers": [
+        {
+          "class_name": "Conversor",
+          "image": "registry.cloudflare.com/f22c7a728ddc8e41cefd2644f8fb7632/scholaris-conversor:20261006e",
+          "instance_type": "standard-4",
+          "max_instances": 3
+        }
+      ],
+      "workflows": [
+        { "binding": "INGESTA", "name": "scholaris-produccion-ingesta", "class_name": "FlujoIngesta" }
+      ],
+      "d1_databases": [
+        { "binding": "DB", "database_name": "scholaris-produccion", "database_id": "ceffae35-e07d-45a2-a926-00cabb700f9c" }
+      ],
+      "kv_namespaces": [
+        { "binding": "OAUTH_KV", "id": "5d5334abed454b01904fa031eb203fde" }
+      ],
+      "r2_buckets": [
+        { "binding": "BUCKET", "bucket_name": "scholaris-produccion" }
+      ],
+      "vectorize": [
+        { "binding": "VECTORES", "index_name": "scholaris-produccion-gemini-1536" }
+      ],
+      "queues": {
+        "producers": [{ "binding": "COLA", "queue": "scholaris-produccion-fondo" }],
+        "consumers": [{ "queue": "scholaris-produccion-fondo", "max_batch_size": 10, "max_batch_timeout": 5, "max_retries": 5 }]
+      },
+      "ai": { "binding": "AI" },
+      "vars": {
+        "ESPACIO_VECTORIAL": "gemini-embedding-2@1536",
+        "AI_GATEWAY": "scholaris",
+        "CLOUDFLARE_ACCOUNT_ID": "f22c7a728ddc8e41cefd2644f8fb7632",
+        "R2_BUCKET_NAME": "scholaris-produccion",
+        "CONVERSOR_ACTIVO": "1",
+        "CONVERSOR_INSTANCIAS": "3"
+      }
+    }
+  }
 
   // Secretos (wrangler secret put; el bootstrap los pide o los genera):
   //   SECRETO              HMAC de URLs firmadas y billetes (se genera)
