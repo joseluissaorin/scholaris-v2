@@ -8,7 +8,7 @@
  *   scheduled  Cron: encola los vigilantes diarios (y los semanales los lunes).
  */
 import type { MensajeCorreo } from '../rutas/social.js';
-import { recordarDemostracion, redireccionPortada } from './portada.js';
+import { recordarDemostracion, servirPortadaEnRaiz } from './portada.js';
 import { servirPublica } from '../compartido/markdown-publico.js';
 import { prepararMotorWorkers } from '@scholaris/spdf/workers';
 import { PREFIJO_API, PREFIJO_V1 } from '@scholaris/contrato';
@@ -111,8 +111,8 @@ const normal: ExportedHandler<Env> = {
     // Páginas públicas: Markdown con «Accept: text/markdown» y cabecera Link en el HTML.
     const publica = await servirPublica(peticion, (ruta, p) => env.ASSETS!.fetch(new Request(new URL(ruta, p.url), p)));
     if (publica) return publica;
-    // «/» sin sesión de Clerk: directo a la portada estática, sin cargar la aplicación.
-    const portada = redireccionPortada(peticion);
+    // «/» sin sesión de Clerk: la portada estática servida en la propia raíz (200, sin redirección).
+    const portada = await servirPortadaEnRaiz(peticion, (ruta) => env.ASSETS!.fetch(new Request(new URL(ruta, peticion.url), { method: 'GET', headers: peticion.headers })));
     if (portada) return portada;
     const r = recordarDemostracion(peticion, await env.ASSETS.fetch(peticion));
     if (r.status === 404 && peticion.method === 'GET' && esPagina(url.pathname)) {

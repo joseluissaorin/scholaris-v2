@@ -27,3 +27,22 @@ describe('portada', () => {
     expect(recordarDemostracion(pide('/'), new Response('x')).headers.get('set-cookie')).toBeNull();
   });
 });
+
+import { servirPortadaEnRaiz } from '../src/cloudflare/portada.js';
+
+describe('portada en la raíz', () => {
+  const estaticos = async (ruta: string) => new Response(`<html>${ruta}</html>`, { status: 200, headers: { 'content-type': 'text/html' } });
+  it('sirve la portada con 200 y su canónica, sin redirigir', async () => {
+    const r = await servirPortadaEnRaiz(new Request('https://ejemplo.org/'), estaticos);
+    expect(r?.status).toBe(200);
+    expect(await r?.text()).toContain('/acerca');
+    expect(r?.headers.get('link')).toContain('<https://ejemplo.org/acerca>; rel="canonical"');
+  });
+  it('en inglés sirve /en', async () => {
+    const r = await servirPortadaEnRaiz(new Request('https://ejemplo.org/', { headers: { 'accept-language': 'en-US' } }), estaticos);
+    expect(await r?.text()).toContain('/en');
+  });
+  it('con sesión no interviene', async () => {
+    expect(await servirPortadaEnRaiz(new Request('https://ejemplo.org/', { headers: { cookie: '__session=abc' } }), estaticos)).toBeNull();
+  });
+});
