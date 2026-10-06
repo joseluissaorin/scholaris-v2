@@ -55,7 +55,7 @@ export function MenuContenido({ children, className, alinear = 'end', lado = 'bo
         align={alinear}
         side={lado}
         sideOffset={6}
-        className={cx('z-50 min-w-48 rounded-xl border border-cream-400 bg-cream-50 p-1.5 shadow-[var(--levantado-alto)] anim-dialogo', className)}
+        className={cx('z-50 min-w-48 rounded-xl border border-cream-400 bg-cream-50 p-1.5 shadow-[var(--levantado-alto)] anim-menu', className)}
       >
         {children}
       </DropdownMenu.Content>
@@ -96,9 +96,10 @@ export function Interruptor({ activo, alCambiar, etiqueta, id, disabled }: { act
       onCheckedChange={alCambiar}
       aria-label={etiqueta}
       disabled={disabled}
-      className="relative h-6 w-11 shrink-0 rounded-full border border-cream-400 bg-cream-200 shadow-[var(--hundido)] transition-colors data-[state=checked]:border-coffee-700 data-[state=checked]:bg-coffee-700 disabled:opacity-50"
+      className="group relative h-6 w-11 shrink-0 rounded-full border border-cream-400 bg-cream-200 shadow-[var(--hundido)] transition-colors duration-[var(--dur-media)] data-[state=checked]:border-coffee-700 data-[state=checked]:bg-coffee-700 disabled:opacity-50"
     >
-      <Switch.Thumb className="block h-[18px] w-[18px] translate-x-[2px] rounded-full bg-[linear-gradient(180deg,#fff_0%,#ede6d6_100%)] shadow-[inset_0_1px_0_#fff,0_1px_3px_rgb(44_24_16/0.35)] transition-transform duration-150 data-[state=checked]:translate-x-[22px]" />
+      {/* La bola corre con muelle y, mientras se pulsa, se aplasta hacia donde va. */}
+      <Switch.Thumb className="tactil block h-[18px] w-[18px] origin-left translate-x-[2px] rounded-full bg-[linear-gradient(180deg,#fff_0%,#ede6d6_100%)] shadow-[inset_0_1px_0_#fff,0_1px_3px_rgb(44_24_16/0.35)] group-active:scale-x-[1.22] data-[state=checked]:origin-right data-[state=checked]:translate-x-[22px]" />
     </Switch.Root>
   );
 }
@@ -112,7 +113,7 @@ export function Consejo({ texto, children, lado = 'top' }: { texto: ReactNode; c
     <Tooltip.Root>
       <Tooltip.Trigger asChild>{children}</Tooltip.Trigger>
       <Tooltip.Portal>
-        <Tooltip.Content side={lado} sideOffset={6} className="z-50 rounded-lg bg-coffee-800 px-2.5 py-1.5 text-[0.75rem] font-medium text-cream-50 shadow-[var(--shadow-card)] anim-aparece">
+        <Tooltip.Content side={lado} sideOffset={6} className="z-50 rounded-lg bg-coffee-800 px-2.5 py-1.5 text-[0.75rem] font-medium text-cream-50 shadow-[var(--shadow-card)] anim-menu">
           {texto}
         </Tooltip.Content>
       </Tooltip.Portal>

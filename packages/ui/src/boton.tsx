@@ -55,7 +55,8 @@ export const Boton = forwardRef<HTMLButtonElement, PropsBoton>(function Boton(
   const tamIcono = tam === 'g' ? 20 : tam === 'p' ? 15 : 17;
   const clases = cx(
     'relative inline-flex select-none items-center justify-center whitespace-nowrap font-sans font-semibold leading-none',
-    'transition-[background,border-color,color,transform,box-shadow,filter] duration-150 ease-out',
+    // Táctil: se hunde en un instante al pulsar y sube con muelle al soltar (tema.css).
+    'tactil active:scale-[0.97]',
     'disabled:pointer-events-none disabled:opacity-50',
     VARIANTES[variante],
     soloIcono ? TAMANOS_ICONO[tam] : TAMANOS[tam],

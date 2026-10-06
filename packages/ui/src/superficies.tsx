@@ -13,7 +13,8 @@ export const Tarjeta = forwardRef<HTMLDivElement, HTMLAttributes<HTMLDivElement>
       ref={ref}
       className={cx(
         'rounded-2xl border border-cream-400 bg-cream-50 shadow-[var(--levantado)]',
-        viva && 'transition-[transform,box-shadow,border-color] duration-200 ease-out hover:-translate-y-0.5 hover:border-cream-500 hover:shadow-[var(--levantado-alto)]',
+        // Viva: se despega del papel al pasar (la sombra grande ya está pintada; solo cambia su opacidad).
+        viva && 'levanta hover:border-cream-500',
         className,
       )}
       {...resto}
@@ -49,7 +50,7 @@ export function Chip({ activo, icono, punto, alQuitar, recuento, className, chil
     </>
   );
   const clases = cx(
-    'inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg border px-3 font-sans text-[0.8125rem] font-medium leading-none transition-[background,border-color,box-shadow,transform] duration-150',
+    'tactil inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg border px-3 font-sans text-[0.8125rem] font-medium leading-none active:scale-[0.96]',
     activo
       ? 'border-[#1a0f0a] bg-coffee-800 text-cream-50 shadow-[inset_0_1px_3px_rgb(0_0_0/0.35)] dark:border-cream-500 dark:text-[#1f1712]'
       : 'border-cream-400 bg-cream-50 text-coffee-600 shadow-[var(--relieve)] hover:-translate-y-px hover:border-cream-500 hover:text-coffee-800 active:translate-y-px active:shadow-[var(--pulsado)]',
@@ -124,7 +125,7 @@ export function Composicion({ estilo, className, semilla = 0 }: { estilo: Estilo
   const g = (semilla % 4) * 7;
   if (estilo === 'kandinsky') {
     return (
-      <svg viewBox="0 0 240 160" className={className} aria-hidden>
+      <svg viewBox="0 0 240 160" className={cx('deriva', className)} aria-hidden>
         <circle cx={150 + g} cy="80" r="62" fill="var(--s-azul)" />
         <circle cx={150 + g} cy="80" r="44" fill="var(--s-cream-50)" />
         <circle cx={150 + g} cy="80" r="30" fill="var(--s-amarillo)" />
@@ -141,7 +142,7 @@ export function Composicion({ estilo, className, semilla = 0 }: { estilo: Estilo
   }
   if (estilo === 'malevich') {
     return (
-      <svg viewBox="0 0 240 160" className={className} aria-hidden>
+      <svg viewBox="0 0 240 160" className={cx('deriva', className)} aria-hidden>
         <rect x={112 + g} y="22" width="96" height="96" fill="var(--s-coffee-800)" transform={`rotate(-8 ${160 + g} 70)`} />
         <rect x="24" y="96" width="150" height="14" fill="var(--s-rojo)" transform="rotate(-24 99 103)" />
         <rect x="40" y="124" width="90" height="8" fill="var(--s-azul)" transform="rotate(-24 85 128)" />
@@ -165,12 +166,16 @@ export function Composicion({ estilo, className, semilla = 0 }: { estilo: Estilo
   );
 }
 
-/** El estado vacío: tarjeta hundida con borde discontinuo, una composición, un titular, una frase y una acción. */
-export function Vacio({ forma = 'circulo', estilo, titulo, children, accion, className }: { forma?: FormaVacio; estilo?: Estilo; titulo: ReactNode; children?: ReactNode; accion?: ReactNode; className?: string }) {
+/**
+ * El estado vacío: tarjeta hundida con borde discontinuo, una composición (o un
+ * boceto a mano, si la web le pasa uno en `dibujo`), un titular, una frase y
+ * una acción. Entra asentándose; las formas derivan al pasar.
+ */
+export function Vacio({ forma = 'circulo', estilo, titulo, children, accion, className, dibujo }: { forma?: FormaVacio; estilo?: Estilo; titulo: ReactNode; children?: ReactNode; accion?: ReactNode; className?: string; dibujo?: ReactNode }) {
   const e: Estilo = estilo ?? (forma === 'triangulo' ? 'kandinsky' : forma === 'cuadrado' || forma === 'cuarto' ? 'malevich' : 'bauhaus');
   return (
-    <div className={cx('relative flex flex-col items-center gap-3 overflow-hidden rounded-2xl border border-dashed border-cream-500 bg-cream-100/60 px-6 py-10 text-center shadow-[var(--hundido)] sm:px-10', className)}>
-      <Composicion estilo={e} className="mb-2 h-24 w-36" />
+    <div className={cx('con-deriva anim-sube relative flex flex-col items-center gap-3 overflow-hidden rounded-2xl border border-dashed border-cream-500 bg-cream-100/60 px-6 py-10 text-center shadow-[var(--hundido)] sm:px-10', className)}>
+      {dibujo ? <div className="mb-1 w-[min(15rem,70vw)]">{dibujo}</div> : <Composicion estilo={e} className="mb-2 h-24 w-36" />}
       <h3 className="text-[1.0625rem] font-semibold text-coffee-800">{titulo}</h3>
       {children ? <div className="max-w-[48ch] text-[0.875rem] text-coffee-600">{children}</div> : null}
       {accion ? <div className="mt-2 flex flex-wrap justify-center gap-2">{accion}</div> : null}
@@ -201,12 +206,16 @@ export function Teclas({ children, className }: { children: ReactNode; className
 }
 
 /**
- * Barra de avance: un carril hundido con la tinta llenándolo. Sin valor es indeterminada.
+ * Barra de avance: un carril hundido que se llena de tinta. La tinta avanza con
+ * transform (sin repintar el ancho), se asienta con muelle y lleva en la punta
+ * una gota más oscura, como la pluma que aún no se ha levantado. Sin valor es
+ * indeterminada: un trazo que corre por el carril.
  * Es `relative` (su relleno se posiciona dentro): para fijarla arriba, envuélvela en un
  * contenedor `fixed`; una clase `fixed` aquí perdería contra `relative`.
  */
 export function BarraAvance({ valor, className, etiqueta, tono = 'rojo' }: { valor?: number; className?: string; etiqueta?: string; tono?: 'rojo' | 'azul' | 'tinta' }) {
   const color = tono === 'azul' ? 'bg-azul' : tono === 'tinta' ? 'bg-coffee-800' : 'bg-rojo';
+  const v = valor == null ? 0 : Math.max(0.02, Math.min(1, valor));
   return (
     <div
       role="progressbar"
@@ -217,9 +226,15 @@ export function BarraAvance({ valor, className, etiqueta, tono = 'rojo' }: { val
       className={cx('relative h-1.5 w-full overflow-hidden rounded-full bg-cream-200 shadow-[var(--hundido)]', className)}
     >
       {valor == null ? (
-        <div className={cx('absolute inset-y-0 w-1/3 rounded-full anim-pulso', color)} />
+        <div className={cx('absolute inset-y-0 left-0 w-2/5 rounded-full opacity-90 [animation:s-tinta-corre_1.5s_var(--ease-tinta)_infinite]', color)} />
       ) : (
-        <div className={cx('h-full rounded-full transition-[width] duration-300 ease-out', color)} style={{ width: `${Math.max(2, Math.min(100, valor * 100))}%` }} />
+        <div
+          className={cx('absolute inset-0 rounded-full transition-transform duration-[var(--dur-asentar)] ease-[var(--muelle-asentar)]', color)}
+          style={{ transform: `translateX(${(v - 1) * 100}%)` }}
+        >
+          <span aria-hidden className="absolute inset-y-0 right-0 w-2 rounded-full bg-black/25 opacity-70" />
+          <span aria-hidden className="absolute inset-x-0 top-0 h-px bg-white/30" />
+        </div>
       )}
     </div>
   );
