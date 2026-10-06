@@ -3,8 +3,8 @@
  * junto al esquema SPDF v4 y el de `@scholaris/funciones`.
  */
 import type { SQL } from '@scholaris/nucleo';
-import { aplicarEsquema } from '@scholaris/spdf';
-import { aplicarEsquemaFunciones } from '@scholaris/funciones';
+import { aplicarEsquema, ESQUEMA_V4 } from '@scholaris/spdf';
+import { aplicarEsquemaFunciones, esquemaFunciones } from '@scholaris/funciones';
 
 export const ESQUEMA_PLATAFORMA = [
   `CREATE TABLE IF NOT EXISTS pl_bibliotecas (
@@ -38,7 +38,21 @@ export const ESQUEMA_PLATAFORMA = [
 ];
 
 /** Aplica los tres esquemas (SPDF, funciones, plataforma). Idempotente. */
-export async function prepararEstanteria(sql: SQL): Promise<void> {
+/**
+ * Huella de todos los esquemas que aplica `prepararEstanteria` (SPDF, funciones y
+ * plataforma). Si una estantería ya los aplicó con esta misma huella, despertar
+ * no tiene que repetirlos (cientos de sentencias en frío).
+ */
+export const HUELLA_ESQUEMA = (() => {
+  const texto = [ESQUEMA_V4, esquemaFunciones, ...ESQUEMA_PLATAFORMA].join('\u0000');
+  let h = 0x811c9dc5;
+  for (let i = 0; i < texto.length; i++) h = Math.imul(h ^ texto.charCodeAt(i), 0x01000193) >>> 0;
+  return `${texto.length.toString(36)}-${h.toString(36)}`;
+})();
+
+/** Devuelve si todo quedó aplicado (si falló el de funciones, hay que volver a intentarlo al despertar). */
+export async function prepararEstanteria(sql: SQL): Promise<boolean> {
+  let completo = true;
   await aplicarEsquema(sql, { generador: 'scholaris-plataforma' });
   // Un fallo en el esquema de las funciones no puede dejar sin biblioteca a nadie:
   // se registra y la estantería sigue (las funciones afectadas fallarán solas).
@@ -46,6 +60,8 @@ export async function prepararEstanteria(sql: SQL): Promise<void> {
     await aplicarEsquemaFunciones(sql);
   } catch (e) {
     console.error(JSON.stringify({ nivel: 'error', que: 'esquema_funciones', error: (e as Error).message }));
+    completo = false;
   }
   for (const s of ESQUEMA_PLATAFORMA) await sql.ejecutar(s);
+  return completo;
 }

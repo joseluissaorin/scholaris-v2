@@ -9,7 +9,7 @@ import type { Progreso, ValorSQL } from '@scholaris/nucleo';
 import { ejecutarVigilantesProgramados } from '@scholaris/funciones';
 import { crearAppUsuario } from '../app.js';
 import type { PuertosUsuario, UsuarioSesion, ParamsIngesta } from '../puertos.js';
-import { prepararEstanteria } from '../compartido/esquema-plataforma.js';
+import { HUELLA_ESQUEMA, prepararEstanteria } from '../compartido/esquema-plataforma.js';
 import { apuntarProgreso, leerTarea, limpiarTemporales } from '../compartido/estanteria.js';
 import { cerrarIngesta, type DatosCierre } from '../compartido/cierre.js';
 import { puertosFunciones } from '../compartido/servicios.js';
@@ -30,7 +30,9 @@ export class Estanteria extends DurableObject<Env> {
     super(ctx, env);
     this.base = new SqlDO(ctx.storage);
     void ctx.blockConcurrencyWhile(async () => {
-      await prepararEstanteria(this.base);
+      // Despertar en frío: los esquemas solo se aplican si cambiaron desde la última vez.
+      if ((await ctx.storage.get<string>('esquema')) === HUELLA_ESQUEMA) return;
+      if (await prepararEstanteria(this.base)) await ctx.storage.put('esquema', HUELLA_ESQUEMA);
     });
   }
 
@@ -63,7 +65,7 @@ export class Estanteria extends DurableObject<Env> {
       segundoPlano: (pr) => this.ctx.waitUntil(pr.catch((e: unknown) => console.error('segundo plano', e))),
       vaciarEstanteria: async () => {
         await this.ctx.storage.deleteAll();
-        await prepararEstanteria(this.base);
+        if (await prepararEstanteria(this.base)) await this.ctx.storage.put('esquema', HUELLA_ESQUEMA);
       },
     };
     // El índice depende del espacio del embebedor: se resuelve al primer uso.
