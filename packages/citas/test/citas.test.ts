@@ -1,7 +1,7 @@
 import { strFromU8, unzipSync } from 'fflate';
 import { beforeAll, describe, expect, it } from 'vitest';
 import type { AnclaPagina } from '@scholaris/nucleo';
-import {
+import { emisionEnEspanol,
   aBibtex, aCSLJSON, aItemCSL, aRIS, analizarTemporal, autocitar, bibliografia, citaDocumento, combinarRPr, detectarAfirmacionNegativa, dividirAfirmaciones, dividirParrafos,
   extraerAnios, extraerTexto, fundirRangos, importarBibtex, insertarCitasDocx, insertarCitasTexto, latexAUnicode, leerDocx, listarEstilos, MotorCitas, nombreBibtex,
   puntoDeInsercion, terminosClaveAusentes, verificarAfirmacion, type DocumentoCitable, type ResultadoAutocita,
@@ -272,6 +272,23 @@ describe('CSL', () => {
     const apa = await MotorCitas.crear({ estilo: 'apa', documentos: [comedia, traducido] });
     expect(apa.citarUno([{ documento: 'doc-casamiento' }])).toContain('s. f. [1760-1780]');
     expect(apa.citarUno([{ documento: 'doc-trad' }])).toBe('(Lewis, 1964/1997)');
+  });
+
+  it('Chicago en español: «Emitido el…» con fecha y sin «Aired» colgando cuando solo hay año', async () => {
+    const tv: DocumentoCitable = { id: 'doc-tv', tipo: 'video', metadatos: { titulo: 'Entrevista a Julio Cortázar',
+      autores: [{ nombre: 'Joaquín', apellidos: 'Soler Serrano' }], anio: 1977, fecha: '1977-03-20', contenedor: 'A fondo', tipoCSL: 'broadcast', editorial: 'RTVE', idioma: 'es' } };
+    const yt: DocumentoCitable = { id: 'doc-yt', tipo: 'video', metadatos: { titulo: 'Vectors',
+      autores: [{ nombre: 'Grant', apellidos: 'Sanderson' }], anio: 2016, contenedor: 'Essence of linear algebra', tipoCSL: 'broadcast', editorial: '3Blue1Brown', idioma: 'es' } };
+    for (const estilo of ['chicago-author-date', 'chicago-note-bibliography']) {
+      const m = await MotorCitas.crear({ estilo, documentos: [tv, yt] });
+      const todo = m.citar([[{ documento: 'doc-tv' }], [{ documento: 'doc-yt' }]]).bibliografia.join('\n');
+      expect(todo).not.toMatch(/aired/i);
+      expect(todo).not.toMatch(/\. en 3Blue1Brown/);
+      expect(todo).not.toMatch(/\.\s*\./);
+    }
+    expect(emisionEnEspanol('Algebra. Aired, en 3Blue1Brown.')).toBe('Algebra. En 3Blue1Brown.');
+    expect(emisionEnEspanol('A fondo. Aired 20 de marzo, en RTVE.')).toBe('A fondo. Emitido el 20 de marzo, en RTVE.');
+    expect(emisionEnEspanol('Algebra. Aired.')).toBe('Algebra.');
   });
 
   it('el motor se reutiliza: la segunda creación es inmediata', async () => {

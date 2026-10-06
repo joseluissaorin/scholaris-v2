@@ -261,5 +261,21 @@ const MESES = 'enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octu
 export function fechasEnEspanol(s: string): string {
   // «Vega, L. de. (s. f.)»: el punto tras la partícula sobra delante del año.
   s = s.replace(/\b(de la|de los|del|de|van|von)\. \(/g, '$1 (');
-  return s.replace(new RegExp(`\\b(${MESES}) (\\d{1,2})\\b(?!\\d)`, 'g'), '$2 de $1');
+  s = s.replace(new RegExp(`\\b(${MESES}) (\\d{1,2})\\b(?!\\d)`, 'g'), '$2 de $1');
+  return emisionEnEspanol(s);
+}
+
+/**
+ * Chicago escribe «Aired» como literal (no es un término del locale, así que
+ * parchearLocale no lo alcanza). Con fecha: «Emitido el 20 de marzo». Sin día
+ * ni mes (solo el año, que ya va tras el autor) queda colgando y se quita.
+ */
+export function emisionEnEspanol(s: string): string {
+  // Colgando: «Aired.», «Aired, en X», «, aired.» o «, aired, en X».
+  s = s.replace(/(^|[.>]\s*)Aired(?:\.|,\s*([^\s<]))/g, (_m, antes: string, sig?: string) => (sig ? antes + sig.toLocaleUpperCase('es') : antes.trimEnd()));
+  s = s.replace(/,\s*aired(?=[.,])/g, '');
+  // Con fecha detrás.
+  s = s.replace(/\b([Aa])ired (?=\d{1,2} de )/g, (_m, a: string) => (a === 'A' ? 'Emitido el ' : 'emitido el '));
+  s = s.replace(/\b([Aa])ired (?=\d{4}\b)/g, (_m, a: string) => (a === 'A' ? 'Emitido en ' : 'emitido en '));
+  return s.replace(/\bAired\b/g, 'Emitido').replace(/\baired\b/g, 'emitido');
 }
