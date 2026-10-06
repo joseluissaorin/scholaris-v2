@@ -3,7 +3,7 @@ import { Link } from '@tanstack/react-router';
 import type { FaseIngesta } from '@scholaris/nucleo';
 import { cx, Icono, Rotulo } from '@scholaris/ui';
 import { cancelarIngesta, retirarIngesta, type Ingesta } from '../../datos/ingesta';
-import { bytes, ICONO_TIPO, NOMBRE_TIPO, nombreUnidad, esMedio } from '../../lib/formato';
+import { bytes, duracion, ICONO_TIPO, NOMBRE_TIPO, nombreUnidad, esMedio } from '../../lib/formato';
 
 const FASES: Partial<Record<FaseIngesta, string>> = {
   subida: 'Subiendo', conversion: 'Convirtiendo', lectura: 'Leyendo', folios: 'Buscando los folios impresos', metadatos: 'Identificando la obra',
@@ -95,7 +95,7 @@ export function TarjetaIngesta({ i }: { i: Ingesta }) {
 
       <div className="flex items-center gap-3">
         <Rotulo className="truncate">
-          {NOMBRE_TIPO[i.tipo]}{total ? ` · ${nombreUnidad(i.tipo, total)}` : ''}{i.bytes ? ` · ${bytes(i.bytes)}` : ''} · <Cronometro desde={i.inicio} hasta={i.fin} />
+          {NOMBRE_TIPO[i.tipo]}{esMedio(i.tipo) ? (i.duracion ? ` · ${duracion(i.duracion)}` : '') : total ? ` · ${nombreUnidad(i.tipo, total)}` : ''}{i.bytes ? ` · ${bytes(i.bytes)}` : ''} · <Cronometro desde={i.inicio} hasta={i.fin} />
         </Rotulo>
         {abierta ? (
           <Link to="/lector/$id" params={{ id: i.documento! }} className="ml-auto flex shrink-0 items-center gap-1 text-[0.875rem] text-tinta underline decoration-rojo decoration-2 underline-offset-4 hover:decoration-tinta">

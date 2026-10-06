@@ -32,6 +32,8 @@ export interface Ingesta {
   /** 0-1 de la subida del original. */
   subido: number;
   unidades: number | null;
+  /** Segundos (audio y vídeo). */
+  duracion?: number;
   /** Unidades rasterizadas en el navegador. */
   preparadas: number;
   /** Unidades ya leídas por el servidor (buscables). */
@@ -273,8 +275,9 @@ async function correr(i: Ingesta, archivo: File, biblioteca?: string, fotos?: Fi
       const partes = crearSubidorPartes(sub.subida);
       for await (const e of conversion.eventos) {
         if (e.tipo === 'no_disponible') break;
-        if (e.tipo === 'inicio') poner(i.id, (x) => ({ unidades: e.unidades ?? x.unidades, tipo: e.entrada, ...(e.metadatos.titulo?.trim() ? { nombre: e.metadatos.titulo.trim() } : {}) }));
-        else if (e.tipo === 'progreso') poner(i.id, (x) => ({ preparadas: Math.max(x.preparadas, e.hechas), unidades: x.unidades ?? e.total, avance: Math.max(x.avance, 0.3 * (e.total ? e.hechas / e.total : 0)), mensaje: e.mensaje ?? x.mensaje }));
+        if (e.tipo === 'inicio') poner(i.id, (x) => ({ unidades: e.unidades ?? x.unidades, ...(e.duracion ? { duracion: e.duracion } : {}), tipo: e.entrada, ...(e.metadatos.titulo?.trim() ? { nombre: e.metadatos.titulo.trim() } : {}) }));
+        // En audio y vídeo `total` son segundos, no unidades: no se confunden.
+        else if (e.tipo === 'progreso') poner(i.id, (x) => ({ preparadas: Math.max(x.preparadas, e.hechas), unidades: x.unidades ?? (e.fase === 'paginas' ? e.total : null), avance: Math.max(x.avance, 0.3 * (e.total ? e.hechas / e.total : 0)), mensaje: e.mensaje ?? x.mensaje }));
         else if (e.tipo === 'parte') {
           partes.anadir(e.parte, e.datos);
           if (e.parte.clase === 'miniatura') {
