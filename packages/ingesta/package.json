@@ -18,5 +18,6 @@
     "@scholaris/normalizacion": "workspace:*",
     "@scholaris/nucleo": "workspace:*",
     "@scholaris/spdf": "workspace:^"
-  }
+  },
+  "license": "EUPL-1.2"
 }

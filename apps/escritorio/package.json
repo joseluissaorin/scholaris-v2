@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "description": "Scholaris de escritorio: un solo ejecutable (Bun) con el servidor y la web dentro; los datos en ~/Scholaris.",
+  "license": "EUPL-1.2",
   "scripts": {
     "dev": "bun run src/main.ts",
     "build": "bun run build.ts",

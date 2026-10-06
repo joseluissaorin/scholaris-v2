@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "description": "Scholaris en casa: la misma API sobre Node, SQLite y el disco.",
+  "license": "EUPL-1.2",
   "exports": {
     ".": "./src/index.ts",
     "./servidor": "./src/servidor.ts"

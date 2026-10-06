@@ -14,5 +14,6 @@
   },
   "dependencies": {
     "@scholaris/nucleo": "workspace:*"
-  }
+  },
+  "license": "EUPL-1.2"
 }

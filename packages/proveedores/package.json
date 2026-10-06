@@ -18,5 +18,6 @@
   },
   "devDependencies": {
     "undici": "^8.11.2"
-  }
+  },
+  "license": "EUPL-1.2"
 }

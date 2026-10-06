@@ -27,5 +27,6 @@
   },
   "sideEffects": [
     "*.css"
-  ]
+  ],
+  "license": "EUPL-1.2"
 }

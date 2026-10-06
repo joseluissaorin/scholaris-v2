@@ -25,5 +25,6 @@
   },
   "peerDependencies": {
     "hono": "^4.9.0"
-  }
+  },
+  "license": "EUPL-1.2"
 }

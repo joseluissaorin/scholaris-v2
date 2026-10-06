@@ -19,5 +19,6 @@
     "@scholaris/spdf": "workspace:^",
     "citeproc": "^2.4.63",
     "fflate": "^0.8.3"
-  }
+  },
+  "license": "EUPL-1.2"
 }

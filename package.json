@@ -3,7 +3,7 @@
   "version": "0.2.0",
   "private": true,
   "description": "Scholaris: tu biblioteca, leída y citable. Un SPDF de cualquier cosa, en Cloudflare o en casa.",
-  "license": "UNLICENSED",
+  "license": "EUPL-1.2",
   "author": "José Luis Saorín Ferrer <jl@joseluissaorin.com> (https://joseluissaorin.com)",
   "packageManager": "pnpm@10.5.2",
   "engines": {
