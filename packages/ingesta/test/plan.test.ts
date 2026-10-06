@@ -10,7 +10,18 @@ describe('planificar', () => {
     expect(plan.modo).toBe('paginas');
     expect(plan.vias).toEqual(['capa', 'capa', 'capa']);
     expect(plan.pliegos).toEqual([]);
-    expect(plan.paginasImagen.map((p) => p.fisica)).toEqual([1, 2, 3]);
+    // Páginas digitales de solo texto: sin vector de imagen (repite lo que dice el texto).
+    expect(plan.paginasImagen).toEqual([]);
+    expect(planificar(paquetePdf([1, 2, 3].map((f) => paginaPdf(f, texto))), { vistaPaginas: 'todas' }).paginasImagen.map((p) => p.fisica)).toEqual([1, 2, 3]);
+    expect(plan.tandas).toEqual([{ id: 0, clase: 'capa', desde: 1, hasta: 3 }]);
+  });
+
+  it('tandas: lotes de capa primero, luego los pliegos por orden', () => {
+    const ps = [paginaPdf(1, texto), paginaPdf(2, '', { clase: 'pdf_escaneado' }), paginaPdf(3, texto), paginaPdf(4, texto)];
+    const plan = planificar(paquetePdf(ps), { paginasPorTandaCapa: 2 });
+    expect(plan.tandas.map((t) => [t.id, t.clase, t.desde, t.hasta])).toEqual([[0, 'capa', 1, 1], [2, 'capa', 3, 4], [1, 'pliego', 2, 2]]);
+    // La página escaneada lleva vector de imagen; las digitales de texto, no.
+    expect(plan.paginasImagen.map((p) => p.fisica)).toEqual([2]);
   });
 
   it('las páginas escaneadas y las de capa mala van por visión; las blancas no', () => {
@@ -80,17 +91,17 @@ describe('limpieza de la capa', () => {
 describe('presentaciones', () => {
   it('las diapositivas con imagen se vectorizan y la unidad lleva su imagen', async () => {
     const { ejecutarIngesta } = await import('../src/orquestador.js');
-    const { inteligenciaFalsa, fuenteFalsa, SqlFalso } = await import('./fakes.js');
+    const { inteligenciaFalsa, fuenteFalsa, baseReal } = await import('./fakes.js');
     const paquete = paquetePdf([], {
       tipo: 'presentacion',
       contenido: { clase: 'presentacion', diapositivas: [{ n: 1, titulo: 'Uno', texto: 'Texto de la primera diapositiva con bastante contenido.', notas: '', imagen: 'diapositivas/0001.jpg' }, { n: 2, titulo: 'Dos', texto: 'Segunda.', notas: '' }] },
       partes: [{ id: 'miniaturas/0001.jpg', clase: 'miniatura', mime: 'image/jpeg', bytes: 1, unidad: 1 }],
     });
-    const sql = new SqlFalso();
+    const { sql, filas } = await baseReal();
     const r = await ejecutarIngesta(paquete, { inteligencia: inteligenciaFalsa(), fuente: fuenteFalsa, sql }, { sinVerificacion: true });
     expect(r.unidades[0]?.imagen).toBe('diapositivas/0001.jpg');
     expect(r.unidades[0]?.miniatura).toBe('miniaturas/0001.jpg');
-    const vistas = sql.filas.vectores?.filter((v) => v[0] === 'unidad') ?? [];
-    expect(vistas.map((v) => v[1])).toEqual([r.unidades[0]?.id]);
+    const vistas = await filas<{ id: string }>("SELECT id FROM vectores WHERE objetivo = 'unidad'");
+    expect(vistas.map((v) => v.id)).toEqual([r.unidades[0]?.id]);
   });
 });

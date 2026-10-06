@@ -90,3 +90,11 @@ export class SqlFalso implements SQL {
   }
   async transaccion<T>(fn: (sql: SQL) => Promise<T>): Promise<T> { return fn(this); }
 }
+
+/** Una base SPDF 4.0 de verdad (sqlite-wasm en memoria) para probar la tubería. */
+export async function baseReal() {
+  const { crearSpdf } = await import('@scholaris/spdf');
+  const archivo = await crearSpdf();
+  const filas = async <T = Record<string, unknown>>(q: string, ...p: Array<string | number | null>) => archivo.sql.ejecutar<T>(q, ...p);
+  return { archivo, sql: archivo.sql, filas };
+}

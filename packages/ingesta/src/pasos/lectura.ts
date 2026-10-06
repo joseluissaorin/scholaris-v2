@@ -21,6 +21,24 @@ export interface OpcionesLectura {
   cobertura?: Cobertura;
 }
 
+/** La entrada de un lector para las páginas físicas [desde, hasta]: sub-PDF si se puede, si no las imágenes. */
+export async function entradaDePaginas(paquete: PaqueteConversion, fuente: FuentePaquete, desde: number, hasta: number, envio: Pliego['envio']): Promise<{ pdf?: Uint8Array; imagenes?: Array<{ bytes: Uint8Array; mime: string }>; primeraFisica: number }> {
+  if (envio === 'pdf' && fuente.subPdf) {
+    const pdf = await fuente.subPdf(desde, hasta);
+    if (pdf) return { pdf, primeraFisica: desde };
+  }
+  const paginasPdf = paquete.contenido.clase === 'pdf' ? paquete.contenido.paginas : null;
+  const imagenes = paquete.contenido.clase === 'imagenes' ? paquete.contenido.paginas : null;
+  const imgs: Array<{ bytes: Uint8Array; mime: string }> = [];
+  for (let f = desde; f <= hasta; f++) {
+    const id = paginasPdf?.find((p) => p.fisica === f)?.imagen ?? imagenes?.find((p) => p.fisica === f)?.imagen;
+    const b = id ? await fuente.parte(id) : null;
+    if (!b) throw new Error(`Falta la imagen de la página ${f}`);
+    imgs.push(b);
+  }
+  return { imagenes: imgs, primeraFisica: desde };
+}
+
 /** Resultado de un pliego: serializable, lo que devuelve un paso de Workflow. */
 export interface ResultadoPliego {
   pliego: number;
@@ -94,20 +112,7 @@ export async function leerPliego(
   const etiqueta = (f: number) => porFisica.get(f)?.etiqueta ?? null;
   const llamadas: Array<{ lector: string; desde: number; hasta: number; ms: number; ok: boolean; error?: string }> = [];
 
-  const entradaPara = async (desde: number, hasta: number, envio: Pliego['envio']) => {
-    if (envio === 'pdf' && fuente.subPdf) {
-      const pdf = await fuente.subPdf(desde, hasta);
-      if (pdf) return { pdf, primeraFisica: desde };
-    }
-    const imgs: Array<{ bytes: Uint8Array; mime: string }> = [];
-    for (let f = desde; f <= hasta; f++) {
-      const id = porFisica.get(f)?.imagen ?? imagenes?.find((p) => p.fisica === f)?.imagen;
-      const b = id ? await fuente.parte(id) : null;
-      if (!b) throw new Error(`Falta la imagen de la página ${f}`);
-      imgs.push(b);
-    }
-    return { imagenes: imgs, primeraFisica: desde };
-  };
+  const entradaPara = (desde: number, hasta: number, envio: Pliego['envio']) => entradaDePaginas(paquete, fuente, desde, hasta, envio);
 
   const valida = (p: PaginaLeida): string | null => {
     if (enBucle(p.texto ?? '')) return 'bucle';

@@ -15,7 +15,9 @@ import type {
   EspacioVectorial,
   FaseIngesta,
   Inteligencia,
+  Lector,
   MetadatosDocumento,
+  PaginaLeida,
   Progreso,
   SQL,
   EntradaIndice,
@@ -72,10 +74,30 @@ export interface Pliego {
   /** Cómo se manda: sub-PDF (más barato y limpio) o imágenes sueltas. */
   envio: 'pdf' | 'imagenes';
   motivo: 'sin_capa' | 'capa_mala' | 'capa_ocr' | 'maquetacion' | 'todo_vision' | 'fotos';
+  /** Modo económico: páginas fáciles (lector barato) o difíciles (API por lotes). */
+  dificultad?: 'facil' | 'dificil';
+}
+
+/**
+ * Una tanda de la tubería: un trozo del documento que se lee y se vuelve
+ * buscable por su cuenta (un pliego de visión, un lote de páginas con capa de
+ * texto, un tramo de audio, todos los bloques de un DOCX).
+ */
+export interface Tanda {
+  id: number;
+  clase: 'pliego' | 'capa' | 'tramo' | 'bloques';
+  /** Unidades físicas [desde, hasta] (páginas desde 1); en medios, el número de tramo. */
+  desde: number;
+  hasta: number;
+  /** Id del pliego (clase 'pliego') o número de tramo (clase 'tramo'). */
+  pliego?: number;
+  tramo?: number;
 }
 
 export interface Plan {
   modo: 'paginas' | 'medio' | 'bloques';
+  /** Las tandas de la tubería, en el orden en que conviene procesarlas (lo barato primero). */
+  tandas: Tanda[];
   tipo: TipoEntrada;
   unidades: number;
   /** Vía de lectura de cada página física (índice = fisica - 1). */
@@ -101,6 +123,20 @@ export interface OpcionesPlan {
   concurrencia?: number;
   /** Vectorizar la imagen de cada página. */
   vectorPorPagina?: boolean;
+  /**
+   * Qué páginas llevan vector de imagen: 'todas'; 'utiles' (escaneadas, fotos,
+   * diapositivas y páginas con figuras; no las digitales de solo texto, cuyo
+   * vector repite lo que ya dice el texto); 'ninguna'. Por defecto 'utiles'.
+   */
+  vistaPaginas?: 'todas' | 'utiles' | 'ninguna';
+  /** Páginas por tanda de capa de texto. */
+  paginasPorTandaCapa?: number;
+  /**
+   * 'rapido' (por defecto): todo en línea, cuanto antes. 'economico': API por
+   * lotes (mitad de precio, entrega en horas), lector barato para las páginas
+   * fáciles y la capa de OCR buena se aprovecha en vez de releerla.
+   */
+  modo?: 'rapido' | 'economico';
 }
 
 // ---------------------------------------------------------------------------
@@ -192,13 +228,27 @@ export interface FiguraPlana {
 /** Acceso HTTP (Crossref, OpenAlex). Por defecto, `fetch` global. */
 export type Http = (url: string, init?: { headers?: Record<string, string>; signal?: AbortSignal }) => Promise<{ ok: boolean; status: number; json(): Promise<unknown> }>;
 
+/**
+ * La API por lotes de un proveedor (Gemini Batch: mitad de precio, entrega en
+ * horas). Se mandan muchas lecturas de golpe y se recogen después.
+ */
+export interface LotesLectura {
+  readonly nombre: string;
+  enviar(peticiones: Array<{ clave: string; entrada: { pdf?: Uint8Array; imagenes?: Array<{ bytes: Uint8Array; mime: string }>; primeraFisica: number; pista?: string } }>): Promise<string>;
+  consultar(id: string): Promise<{ estado: 'pendiente' | 'listo' | 'error'; resultados?: Record<string, PaginaLeida[]>; error?: string }>;
+}
+
 export interface PuertosIngesta {
   inteligencia: Inteligencia;
+  /** Modo económico: lector barato para las páginas fáciles (Workers AI, si hay credenciales). */
+  lectorEconomico?: Lector;
+  /** Modo económico: API por lotes para las páginas difíciles. */
+  lotes?: LotesLectura;
   fuente: FuentePaquete;
   /** Base SQLite con el esquema v4 aplicado (el SPDF o la estantería). */
   sql?: SQL;
   /** Índice vectorial (Vectorize) por espacio; opcional. */
-  indice?: { insertar(espacio: EspacioVectorial, entradas: EntradaIndice[]): Promise<void> };
+  indice?: { insertar(espacio: EspacioVectorial, entradas: EntradaIndice[]): Promise<void>; borrar?(espacio: EspacioVectorial, ids: string[]): Promise<void> };
   /** Guarda binarios derivados (miniaturas, recortes de figuras). */
   guardarBlob?(clave: string, datos: Binario): Promise<void>;
   http?: Http;

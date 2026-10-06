@@ -20,7 +20,17 @@ export interface OpcionesTroceado {
   minimo?: number;
   objetivo?: number;
   maximo?: number;
+  /**
+   * Unidades donde empieza una tanda de la tubería (un pliego, un lote de capa).
+   * Ahí se cierra el grupo aunque siga la sección, igual al trocear la tanda sola
+   * que al trocear el documento entero: así los fragmentos de dentro de cada tanda
+   * salen idénticos en las dos pasadas y la consolidación solo rehace las costuras.
+   */
+  cortes?: Iterable<number>;
 }
+
+/** ¿Empieza como continuación de la página anterior (minúscula, coma, paréntesis)? */
+const pareceCabo = (texto: string) => /^[\p{Ll}(«"“,;]/u.test(texto);
 
 /** Una frase con la unidad donde empieza y donde acaba. */
 interface Frase { texto: string; u0: number; u1: number; p0: number; titulo?: boolean }
@@ -51,14 +61,17 @@ function partirLarga(f: Frase, maximo: number): Frase[] {
 }
 
 /** Corriente de párrafos lógicos de todo el documento, con su sección. */
-function corriente(unidades: UnidadLeida[], secciones: Seccion[]): Array<{ seccion: Seccion | undefined; parrafos: Parrafo[] }> {
+function corriente(unidades: UnidadLeida[], secciones: Seccion[], cortes: Set<number> = new Set()): Array<{ seccion: Seccion | undefined; parrafos: Parrafo[] }> {
   const inicios = [...secciones].sort((a, b) => a.desde.unidad - b.desde.unidad || a.desde.parrafo - b.desde.parrafo);
   const grupos: Array<{ seccion: Seccion | undefined; parrafos: Parrafo[] }> = [{ seccion: undefined, parrafos: [] }];
   let si = 0;
   let anterior: Parrafo | null = null;
+  /** Tras una costura cuyo primer párrafo se unió al anterior (o se aisló), el siguiente abre grupo. */
+  let cortePendiente = false;
   for (const u of unidades) {
     const ps = parrafosDeUnidad(u);
     ps.forEach((texto, i) => {
+      const enCorte = i === 0 && cortes.has(u.orden);
       // ¿Empieza aquí una sección (o varias seguidas)?
       let cambio = false;
       while (si < inicios.length && ((inicios[si] as Seccion).desde.unidad < u.orden || ((inicios[si] as Seccion).desde.unidad === u.orden && (inicios[si] as Seccion).desde.parrafo <= i))) {
@@ -66,8 +79,22 @@ function corriente(unidades: UnidadLeida[], secciones: Seccion[]): Array<{ secci
         si++;
         cambio = true;
       }
-      const grupo = grupos.at(-1) as (typeof grupos)[number];
+      let grupo = grupos.at(-1) as (typeof grupos)[number];
+      const abrir = () => { grupo = { seccion: grupo.seccion, parrafos: [] }; grupos.push(grupo); };
       const titulo = esTituloMarkdown(texto);
+      if (enCorte && !cambio) {
+        // Costura de tanda: si el párrafo sigue al anterior, se une y el grupo se cierra
+        // después; si no, se abre grupo aquí (y un «cabo» en minúscula va solo).
+        const ultimaPrevia = anterior?.frases.at(-1);
+        const sigue = !titulo && anterior && anterior.u0 < u.orden && !anterior.verso && !texto.includes('\n') && ultimaPrevia && !terminaFrase(ultimaPrevia.texto) && pareceCabo(texto);
+        if (!sigue) {
+          if (grupo.parrafos.length) abrir();
+          cortePendiente = !titulo && pareceCabo(texto);
+        }
+      } else if (cortePendiente && !cambio) {
+        if (grupo.parrafos.length) abrir();
+        cortePendiente = false;
+      } else if (cambio) cortePendiente = false;
       if (titulo) {
         grupo.parrafos.push({ frases: [{ texto: titulo.texto, u0: u.orden, u1: u.orden, p0: i, titulo: true }], titulo: true, verso: false, u0: u.orden, p0: i });
         anterior = null;
@@ -78,7 +105,7 @@ function corriente(unidades: UnidadLeida[], secciones: Seccion[]): Array<{ secci
       // inicial y el anterior no acabó frase.
       if (!cambio && i === 0 && anterior && anterior.u0 < u.orden && !anterior.verso && !verso) {
         const ultima = anterior.frases.at(-1) as Frase;
-        if (!terminaFrase(ultima.texto) && /^[\p{Ll}(«"“,;]/u.test(texto)) {
+        if (!terminaFrase(ultima.texto) && pareceCabo(texto)) {
           const nuevas = frasesDe(texto, u.orden, i);
           const primera = nuevas.shift();
           if (primera) {
@@ -86,6 +113,7 @@ function corriente(unidades: UnidadLeida[], secciones: Seccion[]): Array<{ secci
             anterior.frases[anterior.frases.length - 1] = { texto: unida, u0: ultima.u0, u1: u.orden, p0: ultima.p0 };
           }
           anterior.frases.push(...nuevas);
+          if (enCorte) cortePendiente = true;
           return;
         }
       }
@@ -123,7 +151,7 @@ export function trocear(unidades: UnidadLeida[], secciones: Seccion[], opciones:
     return a.tipo === 'seccion' || a.tipo === 'web' ? { ...a, parrafo: a.parrafo + p } : a;
   };
 
-  for (const grupo of corriente(unidades, secciones)) {
+  for (const grupo of corriente(unidades, secciones, new Set(opciones.cortes ?? []))) {
     const ruta = rutaDe(grupo.seccion, porId);
     const seccionId = grupo.seccion?.id ?? null;
     const delGrupo: Array<{ frases: Frase[]; partes: string[] }> = [];
@@ -247,6 +275,13 @@ export function trocear(unidades: UnidadLeida[], secciones: Seccion[], opciones:
     let pos = todos.length;
     for (let i = todos.length - 1; i >= 0; i--) if ((todos[i] as FragmentoPlano).unidad <= h.unidad) { pos = i + 1; break; }
     todos.splice(pos, 0, h);
+  }
+  // Páginas repetidas (un escaneo con hojas duplicadas): el mismo fragmento solo una vez.
+  const vistos = new Set<string>();
+  for (let i = 0; i < todos.length; i++) {
+    const f = todos[i] as FragmentoPlano;
+    const clave = `${f.seccion.join('›')}|${f.texto}`;
+    if (f.texto.length > 200 && vistos.has(clave)) { todos.splice(i, 1); i--; } else vistos.add(clave);
   }
   // Fuera los fragmentos sin contenido (llamadas de nota sueltas, «† ‡»).
   for (let i = todos.length - 1; i >= 0; i--) if (((todos[i] as FragmentoPlano).texto.match(/\p{L}/gu)?.length ?? 0) < 12) todos.splice(i, 1);

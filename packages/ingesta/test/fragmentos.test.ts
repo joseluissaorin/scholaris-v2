@@ -106,3 +106,26 @@ describe('titulillos', () => {
     expect(us[1]?.texto.startsWith('This is')).toBe(true);
   });
 });
+
+describe('costuras de tanda', () => {
+  it('trocear por tandas y el documento entero dan los mismos fragmentos salvo en las costuras', () => {
+    const textos = Array.from({ length: 12 }, (_, i) => {
+      const cuerpo = Array.from({ length: 3 }, (_, k) => parrafo(4 + ((i + k) % 5), i * 100 + k * 10)).join('\n\n');
+      // Algunas páginas acaban a media frase y la siguiente sigue en minúscula.
+      return (i % 3 === 1 ? 'continúa la frase de la página anterior hasta aquí. ' : '') + cuerpo + (i % 3 === 0 ? ' and the sentence goes on to the' : '');
+    });
+    const us = textos.map((t, i) => unidad(i, t));
+    const cortes = [0, 4, 8];
+    const tandas = cortes.map((c, k) => us.slice(c, cortes[k + 1] ?? us.length));
+    const porTanda = tandas.flatMap((t) => trocear(t, [], { cortes: [t[0]!.orden] }));
+    const entero = trocear(us, [], { cortes });
+    const claves = (fs: typeof entero) => fs.map((f) => f.texto);
+    const a = new Set(claves(porTanda)), b = new Set(claves(entero));
+    const comunes = [...b].filter((x) => a.has(x)).length;
+    // Solo cambian los fragmentos que tocan las dos costuras (4 y 8).
+    expect(entero.length - comunes).toBeLessThanOrEqual(4);
+    expect(comunes).toBeGreaterThan(entero.length * 0.6);
+    // El documento entero une el párrafo partido en la costura de la página 4.
+    expect(entero.some((f) => f.texto.includes('goes on to the continúa la frase'))).toBe(true);
+  });
+});

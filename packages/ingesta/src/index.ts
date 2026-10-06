@@ -7,7 +7,7 @@ export * from './tipos.js';
 export * from './texto.js';
 export { planificar, cortarPliegos, PAGINAS_POR_PLIEGO, CONCURRENCIA } from './planificar.js';
 export { leerCapa, leerCapaPagina, cuerpoDominante, folioVisible } from './pasos/capa.js';
-export { leerPliego, leerPaginas, enBucle, type ResultadoPliego, type OpcionesLectura } from './pasos/lectura.js';
+export { leerPliego, leerPaginas, enBucle, entradaDePaginas, type ResultadoPliego, type OpcionesLectura } from './pasos/lectura.js';
 export { transcribirTramo, transcribirMedio, segmentarTranscripcion, frasesDe } from './pasos/medios.js';
 export { unidadesDeBloques } from './pasos/bloques.js';
 export { atribuirHablantes, frasesIndexadas, reconocerReparto, asignarVentana, type Persona, type FraseIndexada } from './pasos/hablantes.js';
@@ -21,3 +21,10 @@ export { vectorizar, textoVectorizable, type PiezaVector } from './pasos/vectore
 export { pasoFiguras, reunirFiguras, describirFiguras, piesEnTexto, type FiguraConAncla } from './pasos/figuras.js';
 export { escribirDocumento, escribirVectores, escribirEspacio, entradasIndice, metadatosIndice } from './pasos/indexado.js';
 export { ejecutarIngesta, type ResultadoIngesta, type OpcionesOrquestador } from './orquestador.js';
+export {
+  prepararDocumento, leerTanda, indexarTanda, metadatosTempranos, consolidar, enviarLote, recogerLote,
+  seccionesDeTanda, anclaProvisional, documentoProvisional, idUnidadDe, huellaCorta, claveLote,
+  type ContextoTuberia, type OpcionesTuberia, type EstadoTanda, type ResumenTanda, type ResultadoConsolidacion,
+} from './tuberia.js';
+export { Cobertura } from './cobertura.js';
+export { planificar as planificarTandas, tandasDePaginas } from './planificar.js';

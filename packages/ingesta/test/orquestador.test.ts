@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Progreso } from '@scholaris/nucleo';
 import { ejecutarIngesta } from '../src/orquestador.js';
-import { inteligenciaFalsa, lectorFalso, paginaLeida, paginaPdf, paquetePdf, redactorFalso, SqlFalso, fuenteFalsa } from './fakes.js';
+import { baseReal, inteligenciaFalsa, lectorFalso, paginaLeida, paginaPdf, paquetePdf, redactorFalso, fuenteFalsa } from './fakes.js';
 
 const texto = (n: number) => Array.from({ length: 30 }, (_, i) => `Sentence ${i} on page ${n} about the medieval model of the universe.`).join(' ');
 
@@ -14,29 +14,36 @@ describe('ejecutarIngesta', () => {
     const paquete = paquetePdf(paginas, { metadatos: { titulo: 'The_Discarded_Image_z_library_sk' } });
     paquete.contenido = { ...paquete.contenido, esquema: [{ titulo: 'I. The Medieval Situation', nivel: 1, fisica: 2 }, { titulo: 'II. Selected Materials', nivel: 1, fisica: 4 }] } as typeof paquete.contenido;
     const lector = lectorFalso('vision', (d, h) => Array.from({ length: h - d + 1 }, (_, i) => paginaLeida(d + i, '# THE DISCARDED IMAGE\n\nC. S. LEWIS', { idioma: 'en' })));
-    const redactor = redactorFalso((t) => (t.includes('Principio del documento')
+    const redactor = redactorFalso((t) => (t.includes('Nombre del archivo')
       ? { titulo: 'The Discarded Image', autores: [{ nombre: 'C. S.', apellidos: 'Lewis' }], idioma: 'en', tipoCSL: 'book', anio: 1964 }
       : { contextos: Array.from({ length: 40 }, (_, i) => ({ n: i + 1, contexto: `Contexto ${i + 1}` })) }));
-    const sql = new SqlFalso();
+    const { sql, filas } = await baseReal();
     const progreso: Progreso[] = [];
-    const r = await ejecutarIngesta(paquete, { inteligencia: inteligenciaFalsa({ lector, redactor }), fuente: fuenteFalsa, sql }, { sinVerificacion: true, onProgreso: (p) => progreso.push(p) });
+    const r = await ejecutarIngesta(paquete, { inteligencia: inteligenciaFalsa({ lector, redactor }), fuente: fuenteFalsa, sql }, { sinVerificacion: true, documentoId: 'd1', onProgreso: (p) => progreso.push(p) });
 
     expect(r.unidades).toHaveLength(5);
     expect(r.unidades[0]?.lector).toBe('vision');
     expect(r.unidades[1]?.lector).toBe('capa-pdf');
     expect(r.unidades.map((u) => (u.ancla?.tipo === 'pagina' ? u.ancla.impresa : '?'))).toEqual([null, '10', '11', '12', '13']);
     expect(r.documento.metadatos.titulo).toBe('The Discarded Image');
+    expect(r.documento.estado).toBe('listo');
     expect(r.secciones.map((s) => s.titulo)).toEqual(['I. The Medieval Situation', 'II. Selected Materials']);
     expect(r.fragmentos.length).toBeGreaterThan(3);
     expect(r.fragmentos.every((f) => f.contexto.startsWith('Contexto'))).toBe(true);
-    expect(r.vectores['falso@4']).toBe(r.fragmentos.length + 5);
-    expect(sql.filas.fragmentos?.length).toBe(r.fragmentos.length);
-    expect(sql.filas.unidades?.length).toBe(5);
-    expect(sql.filas.vectores?.length).toBe(r.fragmentos.length + 5);
-    // Los vectores de página llevan el id de la unidad escrita.
-    const idsUnidad = new Set(sql.filas.unidades?.map((f) => f[0]));
-    expect(sql.filas.vectores?.filter((v) => v[0] === 'unidad').every((v) => idsUnidad.has(v[1]))).toBe(true);
+    // Vectores: un fragmento, uno; y la imagen de la página escaneada (las digitales de texto, no).
+    expect(r.vectores['falso@4']).toBe(r.fragmentos.length + 1);
+    const enBase = await filas<{ n: number }>('SELECT count(*) AS n FROM fragmentos WHERE documento = ?', 'd1');
+    expect(Number(enBase[0]?.n)).toBe(r.fragmentos.length);
+    expect(Number((await filas<{ n: number }>('SELECT count(*) AS n FROM unidades WHERE documento = ?', 'd1'))[0]?.n)).toBe(5);
+    // La búsqueda léxica encuentra el texto.
+    expect((await filas('SELECT rowid FROM fragmentos_fts WHERE fragmentos_fts MATCH ?', 'medieval')).length).toBeGreaterThan(0);
+    // Sin estado de trabajo al terminar.
+    expect((await filas('SELECT clave FROM blobs')).length).toBe(0);
     expect(progreso.at(-1)?.fase).toBe('listo');
+    // Legible antes que buscable, y buscable antes de «listo».
+    const primeraBuscable = progreso.findIndex((p) => (p.unidadesBuscables ?? 0) > 0);
+    expect(primeraBuscable).toBeGreaterThan(-1);
+    expect(primeraBuscable).toBeLessThan(progreso.length - 1);
     expect(progreso.some((p) => (p.unidadesListas ?? 0) > 0 && p.fase === 'lectura')).toBe(true);
   });
 });
