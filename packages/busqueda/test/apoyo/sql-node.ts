@@ -1,10 +1,10 @@
-/** Adaptador del puerto SQL sobre node:sqlite (SQLite con FTS5), en memoria, con el esquema SPDF 4.0. */
+/** Adaptador del puerto SQL sobre node:sqlite (SQLite con FTS5), en memoria, con el esquema SPDF 4.1. */
 import { readFileSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import { fileURLToPath } from 'node:url';
 import type { SQL, ValorSQL } from '@scholaris/nucleo';
 
-const ESQUEMA = fileURLToPath(new URL('../../../spdf/esquema/v4.0.sql', import.meta.url));
+const ESQUEMA = fileURLToPath(new URL('../../../spdf/esquema/v4.1.sql', import.meta.url));
 
 export interface SQLMedido extends SQL {
   consultas: number;

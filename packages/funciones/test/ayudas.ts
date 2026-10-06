@@ -19,7 +19,7 @@ import {
 import { aplicarEsquemaFunciones } from '../src/esquema.js';
 import type { PuertosFunciones } from '../src/puertos.js';
 
-const RUTA_ESQUEMA = fileURLToPath(new URL('../../spdf/esquema/v4.0.sql', import.meta.url));
+const RUTA_ESQUEMA = fileURLToPath(new URL('../../spdf/esquema/v4.1.sql', import.meta.url));
 
 function aParametro(v: ValorSQL): unknown {
   if (v instanceof Uint8Array) return Buffer.from(v.buffer, v.byteOffset, v.byteLength);
@@ -58,7 +58,7 @@ export function sqlMemoria(db = new Database(':memory:')): SQL & { db: Database.
   return sql;
 }
 
-/** Estantería vacía con el esquema SPDF 4.0 y el de las funciones. */
+/** Estantería vacía con el esquema SPDF 4.1 y el de las funciones. */
 export async function estanteria() {
   const sql = sqlMemoria();
   sql.db.exec(readFileSync(RUTA_ESQUEMA, 'utf8'));

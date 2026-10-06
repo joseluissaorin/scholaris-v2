@@ -107,8 +107,9 @@ export class Buscador {
   // -------------------------------------------------------------------------
 
   private async viaLexica(textos: Array<{ texto: string; peso: number }>, k: number, permitidos: Set<string> | null): Promise<ListaVia[]> {
+    const normalizada = await this.estanteria.capaNormalizada();
     const listas = await Promise.all(textos.map(async ({ texto, peso }): Promise<ListaVia | null> => {
-      const match = consultaFts(texto);
+      const match = consultaFts(texto, { normalizada });
       if (!match) return null;
       try {
         const filas = await this.estanteria.lexica(match, k, permitidos);

@@ -3,6 +3,8 @@
  * posiciones, términos de consulta, consultas FTS5 bien escapadas y resaltado.
  */
 
+import { variantesConsulta } from '@scholaris/normalizacion';
+
 /** Pliega un carácter: minúscula y sin diacríticos. Devuelve siempre un carácter. */
 function plegarCaracter(c: string): string {
   const base = c.normalize('NFD').replace(/\p{M}+/gu, '').toLowerCase();
@@ -90,9 +92,28 @@ export function escaparFts(termino: string): string {
 }
 
 /**
+ * Variantes de ortografía antigua de un término o frase, solo en la capa
+ * `texto_busqueda` (SPDF 4.1): `texto_busqueda : ("onra" OR "honr")`. null si no hay.
+ */
+export function filtroNormalizado(termino: string): string | null {
+  const vs = variantesConsulta(termino);
+  return vs.length ? `texto_busqueda : (${vs.map(escaparFts).join(' OR ')})` : null;
+}
+
+/** Un término (o frase) y, si las hay, sus variantes antiguas en la capa normalizada. */
+function conVariantes(fts: string, termino: string, normalizada: boolean): string {
+  const extra = normalizada ? filtroNormalizado(termino) : null;
+  return extra ? `(${fts} OR ${extra})` : fts;
+}
+
+/**
  * Construye una expresión MATCH de FTS5 a partir de una consulta libre.
  *
  * - Las frases entre comillas se buscan como frase exacta.
+ * - Con `normalizada` (estanterías SPDF 4.1), cada término y cada frase casan
+ *   también con sus claves de ortografía antigua en `texto_busqueda`: «así es la
+ *   muerte» encuentra «aſsi es la muerte». La frase literal sigue buscándose en
+ *   el texto fiel.
  * - El resto de términos se combinan con OR (BM25 premia a quien casa más) y se
  *   escapan siempre: nada de lo que escribe el usuario llega como sintaxis FTS.
  * - Los acentos no importan: el índice usa `remove_diacritics 2` y aquí se
@@ -100,12 +121,13 @@ export function escaparFts(termino: string): string {
  *
  * Devuelve null si no queda nada que buscar.
  */
-export function consultaFts(consulta: string, opciones: { modo?: 'o' | 'y'; extra?: string[]; prefijo?: boolean } = {}): string | null {
+export function consultaFts(consulta: string, opciones: { modo?: 'o' | 'y'; extra?: string[]; prefijo?: boolean; normalizada?: boolean } = {}): string | null {
+  const normalizada = opciones.normalizada ?? false;
   const frases = citasLiterales(consulta);
   const partes: string[] = [];
   for (const f of frases) {
     const ts = terminos(f, { conVacias: true, minimo: 1 });
-    if (ts.length) partes.push(ts.length === 1 ? escaparFts(ts[0] as string) : escaparFts(ts.join(' ')));
+    if (ts.length) partes.push(conVariantes(escaparFts(ts.join(' ')), ts.join(' '), normalizada));
   }
   if (partes.length) return partes.join(' AND ');
   const vistos = new Set<string>();
@@ -122,7 +144,7 @@ export function consultaFts(consulta: string, opciones: { modo?: 'o' | 'y'; extr
     for (const t of terminos(consulta, { conVacias: true })) if (!vistos.has(t)) { vistos.add(t); sueltos.push(t); }
   }
   const unir = opciones.modo === 'y' ? ' AND ' : ' OR ';
-  const sueltosFts = sueltos.map((t, i) => (opciones.prefijo && i === sueltos.length - 1 && t.length >= 3 ? `${escaparFts(t)}*` : escaparFts(t)));
+  const sueltosFts = sueltos.map((t, i) => conVariantes(opciones.prefijo && i === sueltos.length - 1 && t.length >= 3 ? `${escaparFts(t)}*` : escaparFts(t), t, normalizada));
   return sueltosFts.length ? sueltosFts.join(unir) : null;
 }
 

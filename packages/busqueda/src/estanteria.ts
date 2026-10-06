@@ -38,6 +38,9 @@ export function marcadores(n: number): string {
   return Array.from({ length: n }, () => '?').join(', ');
 }
 
+/** Peso BM25 de la capa normalizada (texto_busqueda) frente al texto fiel (1.0). */
+export const PESO_NORMALIZADA = 0.9;
+
 export class Estanteria {
   private docs?: { cuando: number; filas: DocumentoBreve[]; porId: Map<string, DocumentoBreve> };
   private columnasDoc?: Set<string>;
@@ -54,6 +57,20 @@ export class Estanteria {
 
   /** Olvida la caché de documentos (tras una ingesta o un borrado). */
   invalidar(): void { this.docs = undefined; }
+
+  private capa?: Promise<boolean>;
+
+  /**
+   * ¿El índice FTS5 tiene la capa de ortografía modernizada (SPDF 4.1)? Una base
+   * sin migrar sigue buscando como antes en vez de fallar por una columna que no existe.
+   */
+  capaNormalizada(): Promise<boolean> {
+    this.capa ??= this.sql
+      .ejecutar<{ sql: string | null }>("SELECT sql FROM sqlite_master WHERE name = 'fragmentos_fts'")
+      .then((f) => !!f[0]?.sql?.includes('texto_busqueda'))
+      .catch(() => false);
+    return this.capa;
+  }
 
   /** Todos los documentos listos, con caché corta: la estantería de un usuario cabe en memoria. */
   async documentos(): Promise<{ filas: DocumentoBreve[]; porId: Map<string, DocumentoBreve> }> {
@@ -136,7 +153,7 @@ export class Estanteria {
     }
     params.push(permitidos && permitidos.size > 500 ? k * 4 : k);
     const filas = await this.sql.ejecutar<{ id: string; documento: string; puntos: number }>(
-      `SELECT f.id AS id, f.documento AS documento, bm25(fragmentos_fts, 1.0, 0.35, 0.6) AS puntos
+      `SELECT f.id AS id, f.documento AS documento, bm25(fragmentos_fts, 1.0, 0.35, 0.6${(await this.capaNormalizada()) ? `, ${PESO_NORMALIZADA}` : ''}) AS puntos
          FROM fragmentos_fts JOIN fragmentos f ON f.rowid = fragmentos_fts.rowid
         WHERE fragmentos_fts MATCH ?${filtro}
         ORDER BY puntos LIMIT ?`,

@@ -14,6 +14,7 @@
   },
   "dependencies": {
     "@scholaris/folios": "workspace:^",
+    "@scholaris/normalizacion": "workspace:*",
     "@scholaris/nucleo": "workspace:*",
     "@scholaris/spdf": "workspace:^"
   }
