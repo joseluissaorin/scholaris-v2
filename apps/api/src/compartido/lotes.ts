@@ -61,6 +61,7 @@ export async function estimar(p: PuertosUsuario, elementos: ElementoNuevo[], con
   const vistas = new Map<string, number>();
   let sinMedir = 0;
   let trabajo = 0; // segundos de trabajo en modo rápido, uno detrás de otro
+  let mayor = 0; // lo que tarda el elemento más largo: con la cola en paralelo, nadie acaba antes
   for (const [i, e] of elementos.entries()) {
     const tipo = tipoDe(e);
     salida.porTipo[tipo] = (salida.porTipo[tipo] ?? 0) + 1;
@@ -83,17 +84,19 @@ export async function estimar(p: PuertosUsuario, elementos: ElementoNuevo[], con
     salida.nuevos++;
     salida.paginas += m.paginas;
     salida.minutos += m.minutos;
-    trabajo += 12 + m.paginas * 0.8 + m.minutos * 6;
+    // Medido en la prueba real: ~0,8 s por página y ~11 s por minuto de audio o vídeo.
+    const t = 12 + m.paginas * 0.8 + m.minutos * 11;
+    trabajo += t;
+    mayor = Math.max(mayor, t);
   }
   salida.minutos = Math.round(salida.minutos * 10) / 10;
   const euros = salida.paginas * TARIFAS.pagina + salida.minutos * TARIFAS.minuto;
-  const rapido: CifrasModo = { segundos: Math.round(trabajo / Math.max(1, concurrencia)), euros: Math.round(euros * 100) / 100 };
+  const rapido: CifrasModo = { segundos: Math.round(Math.max(trabajo / Math.max(1, concurrencia), mayor)), euros: Math.round(euros * 100) / 100 };
   // La API por lotes entrega en horas: el texto ya legible se indexa enseguida, lo demás llega después.
   const economico: CifrasModo = { segundos: Math.max(rapido.segundos, 2 * 3600 + Math.round(salida.paginas * 0.3)), euros: Math.round(euros * TARIFAS.economico * 100) / 100 };
   salida.modos = { rapido, economico };
   salida.recomendado = salida.nuevos > 20 || salida.paginas > 1500 || salida.minutos > 120 ? 'economico' : 'rapido';
   if (sinMedir) salida.avisos.push(`${sinMedir === 1 ? 'Un elemento se ha medido' : `${sinMedir} elementos se han medido`} por su tamaño: las páginas y los minutos son aproximados.`);
-  if (salida.duplicados.length) salida.avisos.push(`${salida.duplicados.length === 1 ? 'Uno ya estaba' : `${salida.duplicados.length} ya estaban`} en tu Scholaris: no se vuelve${salida.duplicados.length === 1 ? '' : 'n'} a leer.`);
   return salida;
 }
 

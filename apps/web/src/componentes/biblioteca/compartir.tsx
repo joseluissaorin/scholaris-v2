@@ -11,7 +11,7 @@ import { AreaTexto, avisar, Boton, Campo, cx, Dialogo, Icono, Rotulo, Selector }
 import { api } from '../../datos/api';
 import { fecha } from '../../lib/formato';
 
-const PAPEL: Record<Miembro['permiso'], string> = { propietario: 'Propietaria', administrador: 'Administra', edicion: 'Edita', lectura: 'Lee' };
+const PAPEL: Record<Miembro['permiso'], string> = { propietario: 'Propietario', administrador: 'Administra', edicion: 'Edita', lectura: 'Lee' };
 const PAPELES: Array<[PermisoInvitado, string, string]> = [
   ['lectura', 'Lector', 'Lee, busca y cita'],
   ['edicion', 'Editor', 'Además añade documentos y corrige fichas'],
