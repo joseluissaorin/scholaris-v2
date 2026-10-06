@@ -80,7 +80,7 @@ if (orden === 'subir') {
         const cuerpo = f.ruta === 'paquete.json' ? json : (datos.get(f.ruta) as Uint8Array);
         for (let intento = 0; ; intento++) {
           try {
-            const r = await fetch(f.subida.url as string, { method: 'PUT', body: cuerpo, headers: f.subida.cabeceras });
+            const r = await fetch(f.subida.url as string, { method: 'PUT', body: cuerpo as unknown as BodyInit, headers: f.subida.cabeceras });
             if (!r.ok) throw new Error(`Recurso ${f.ruta}: ${r.status}`);
             break;
           } catch (e) {
