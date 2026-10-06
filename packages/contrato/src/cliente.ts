@@ -178,7 +178,7 @@ export function crearCliente(opciones: OpcionesCliente) {
       listar: (p: FiltrosDocumentos = {}) => get<Pagina<ResumenDocumento>>('/documentos', p),
       obtener: (id: string) => get<DetalleDocumento>(`/documentos/${e(id)}`),
       metadatos: (id: string, p: ParcheMetadatos) => patch<DetalleDocumento>(`/documentos/${e(id)}/metadatos`, p),
-      rehacerMetadatos: (id: string) => post<DetalleDocumento>(`/documentos/${e(id)}/metadatos/rehacer`),
+      rehacerMetadatos: (id: string, p: { simular?: boolean } = {}) => post<DetalleDocumento>(`/documentos/${e(id)}/metadatos/rehacer`, p),
       /** Recalcula los folios desde las unidades guardadas, sin volver a leer el documento. */
       rehacerFolios: (id: string, p: RehacerFolios = {}) => post<FoliosRehechos>(`/documentos/${e(id)}/folios/rehacer`, p),
       borrar: (id: string) => del(`/documentos/${e(id)}`),

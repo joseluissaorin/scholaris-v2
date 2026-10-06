@@ -4,7 +4,7 @@
  *   GET    /documentos?…FiltrosDocumentos         → Pagina<ResumenDocumento>
  *   GET    /documentos/:id                        → DetalleDocumento
  *   PATCH  /documentos/:id/metadatos  Partial<MetadatosDocumento> → DetalleDocumento
- *   POST   /documentos/:id/metadatos/rehacer   → DetalleDocumento  (solo la ficha, sin releer; respeta lo que editó el usuario)
+ *   POST   /documentos/:id/metadatos/rehacer  { simular? } → DetalleDocumento  (solo la ficha, sin releer; respeta lo que editó el usuario; con simular, la que saldría sin escribirla)
  *   POST   /documentos/:id/folios/rehacer  { juez?, simular? } → FoliosRehechos  (solo los folios, sin releer: desde las unidades guardadas)
  *   DELETE /documentos/:id                        → Ok
  *   POST   /documentos/:id/reprocesar  { fases? } → IngestaIniciada

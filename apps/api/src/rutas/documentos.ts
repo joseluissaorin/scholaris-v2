@@ -184,6 +184,9 @@ export function rutasDocumentos(app: Hono<Entorno>): void {
       redactor: ia.redactor, correo: 'jl@joseluissaorin.com', cache: cacheEnAlmacen(p.almacen),
       ...((c.env as { OPENALEX_API_KEY?: string } | undefined)?.OPENALEX_API_KEY ? { claveOpenAlex: (c.env as { OPENALEX_API_KEY: string }).OPENALEX_API_KEY } : {}),
     });
+    // { simular: true }: devuelve la ficha que saldría, sin escribir nada.
+    const simular = await c.req.json<{ simular?: boolean }>().then((b) => !!b?.simular).catch(() => false);
+    if (simular) return c.json({ ...d, metadatos: r.metadatos, espacios: [], cuentas: { fragmentos: 0, secciones: 0, figuras: 0 } } satisfies DetalleDocumento);
     await escribirDocumento(p.sql, { ...d, metadatos: r.metadatos, actualizado: ahora() });
     const nuevo = (await leerDocumento(p.sql, d.id))!;
     return c.json({ ...nuevo, espacios: [], cuentas: { fragmentos: 0, secciones: 0, figuras: 0 } } satisfies DetalleDocumento);
