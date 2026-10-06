@@ -4,8 +4,9 @@
 #   (con GPU NVIDIA, añade además -f deploy/docker/compose.sin-conexion.gpu.yml)
 #
 # Servicios:
-#   ollama          lector de visión (Qwen2.5-VL 7B), redactor y juez
-#   embeddinggemma  EmbeddingGemma 2: texto, imagen, audio y vídeo en un espacio (768)
+#   ollama          lector de visión (Qwen3-VL 8B Instruct), redactor y juez
+#   embeddinggemma  EmbeddingGemma 2: texto, imagen, audio y vídeo en un espacio (768),
+#                   y el reordenador bge-reranker-v2-m3
 #   whisper         whisper.cpp large-v3-turbo con marcas por palabra
 #   modelos         una sola vez: baja los modelos (la ÚNICA salida a internet, y no es de Scholaris)
 #
@@ -29,6 +30,7 @@ services:
       INFERENCIA_SABOR: ollama
       INFERENCIA_MODELO_LECTOR: ${INFERENCIA_MODELO_LECTOR:-qwen3-vl:8b-instruct}
       INFERENCIA_EMBEBEDOR_URL: http://embeddinggemma:8812
+      INFERENCIA_REORDENADOR_URL: http://embeddinggemma:8812
       INFERENCIA_TRANSCRIPCION_URL: http://whisper:8080
       INFERENCIA_CONCURRENCIA: ${INFERENCIA_CONCURRENCIA:-2}
       # Las claves de nube, aunque estén en el .env, se ignoran en este modo.
@@ -57,6 +59,8 @@ services:
     restart: unless-stopped
     environment:
       EMBEDDINGGEMMA_MODALIDADES: texto,imagen,audio,video
+      # Ollama no tiene reordenador: bge-reranker-v2-m3 (568M, Apache 2.0) vive aquí.
+      EMBEDDINGGEMMA_REORDENADOR: BAAI/bge-reranker-v2-m3
     volumes:
       - embeddinggemma-modelos:/modelos
 

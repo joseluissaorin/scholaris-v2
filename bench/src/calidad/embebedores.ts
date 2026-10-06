@@ -9,6 +9,8 @@
  *   --modelos ollama:embeddinggemma-2,ollama:embeddinggemma-2@256,ollama:bge-m3,inferbox:qwen3-vl-embed,servidor:embeddinggemma-2
  *   --servidor http://localhost:8812     (INFERENCIA_EMBEBEDOR_URL: EmbeddingGemma 2 multimodal)
  *   --reordenador http://localhost:8812  (un /v1/rerank local, p. ej. bge-reranker-v2-m3: añade «léxica + densa + reordenador»)
+ *   --citas                              con el último embebedor de la lista, evalúa también autocita y verificación
+ *                                        con el juez y el redactor del entorno sin conexión (INFERENCIA_URL…)
  *   --ollama http://localhost:11434     (OLLAMA_URL)
  *   --inferbox http://192.168.1.102:8811 (INFERBOX_URL, INFERBOX_API_KEY)
  *
@@ -26,7 +28,8 @@ import { cargarConsultas } from './juego.js';
 import { embebedorConCache, reordenadorConCache, type Montaje, type Sistema } from './montaje.js';
 import { evaluarSistema } from './ejecutar.js';
 import { cargarEntorno } from '../entorno.js';
-import { crearInteligencia } from '@scholaris/proveedores';
+import { crearInteligencia, crearInteligenciaSinConexion } from '@scholaris/proveedores';
+import { evaluarCitas } from './citas.js';
 
 const SISTEMAS_EMB: Sistema[] = [
   { nombre: 'densa', vias: ['densa'], comprender: false },
@@ -108,6 +111,13 @@ export async function embebedores(args: string[]): Promise<void> {
     const linea = `| ${embebedor.espacio.id} | ${f(res.densa)} | ${f(res['lexica+densa'])} | ${f(res['lexica+densa+reord'])} | ${propio ? `${(msDocs / textos.length).toFixed(1)} ms` : '—'} | ${propio ? `${msConsulta.toFixed(0)} ms` : '—'} |`;
     console.log(linea);
     filas.push(linea);
+    if (args.includes('--citas') && nombre === lista[lista.length - 1]) {
+      // Todo sin conexión: juez y redactor del servidor propio; el reordenador local hace de «jev» en el sistema «completa».
+      const ia = crearInteligenciaSinConexion({ ...process.env, SCHOLARIS_SIN_CONEXION: '1' });
+      const mc = { ...m, ia: { ...ia, embebedor }, redactor: ia.redactor, reordenadores: { jev: reordenadorLocal ?? ia.reordenador } } as unknown as Montaje;
+      const r = await evaluarCitas(mc, 'completa');
+      console.log(`Citas sin conexión (${ia.juez.nombre}): precisión ${(r.precision * 100).toFixed(1)} %, exhaustividad ${(r.exhaustividad * 100).toFixed(1)} %, inventadas ${r.inventadas}, indebidas ${r.indebidas}, verificación ${(r.verificacion * 100).toFixed(1)} %, ${r.ms.toFixed(0)} ms por afirmación`);
+    }
   }
   sql.bd.close();
   if (!args.includes('--conservar')) rmSync(copia, { force: true });
