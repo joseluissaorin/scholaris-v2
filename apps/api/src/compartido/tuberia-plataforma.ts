@@ -21,7 +21,7 @@ import type { EntradaIndice, EspacioVectorial, Lector, MetadatosDocumento, Pagin
 import { enParalelo } from '@scholaris/nucleo';
 import type { ParamsIngesta } from '../puertos.js';
 import {
-  adelgazar, asegurarPaquete, fuenteDesdeAlmacen, inteligenciaConMemoria, leerPaquete, miniPaquete, trabajo, type ContextoMotor,
+  adelgazar, asegurarPaquete, fuenteDesdeAlmacen, inteligenciaConMemoria, lectorConMemoria, leerPaquete, miniPaquete, trabajo, type ContextoMotor,
 } from './motor-ingesta.js';
 
 export type ModoIngesta = 'rapido' | 'economico';
@@ -59,7 +59,8 @@ function contexto(ctx: ContextoMotor, params: ParamsIngesta, paquete: PaqueteCon
     documento: params.documento,
     puertos: {
       inteligencia: ia,
-      ...(extra.lectorEconomico ? { lectorEconomico: extra.lectorEconomico } : {}),
+      // También grabado: un reintento o un relanzamiento no vuelve a pagar las páginas fáciles.
+      ...(extra.lectorEconomico ? { lectorEconomico: lectorConMemoria(extra.lectorEconomico, ctx.almacen, `${trabajo(params)}economico/`) } : {}),
       ...(extra.lotes ? { lotes: extra.lotes } : {}),
       fuente: fuenteDesdeAlmacen(ctx.almacen, params, paquete),
       sql: ctx.sql,

@@ -38,19 +38,25 @@ export async function armarSpdf(p: PuertosUsuario, d: Documento, o: OpcionesArma
     let usados = 0;
     const blobs = new Map<string, string>();
     if (o.incrustar) {
-      for (const clave of Object.keys(v.binarios)) {
-        if (clave === d.original && o.originales === false) continue;
-        const real = claveDe(p.usuario.id, d.id, clave);
-        const cab = await p.almacen.cabecera(real);
-        if (!cab || usados + cab.bytes > MAX_INCRUSTADO) continue;
-        const bytes = await p.almacen.bytes(real);
-        if (!bytes) continue;
-        // En el fichero las claves son relativas: «original.pdf», «paginas/0001.jpg».
-        const rel = !clave.startsWith('u/') ? clave : clave.startsWith(prefijoDocumento(p.usuario.id, d.id)) ? clave.slice(prefijoDocumento(p.usuario.id, d.id).length) : clave.split('/').pop()!;
-        await a.ponerBlob(rel, v.binarios[clave]!.mime, bytes);
-        blobs.set(clave, rel);
-        usados += cab.bytes;
-        if (clave === d.original) sinOriginal = false;
+      // El original primero; el resto se lee de 16 en 16 con un solo viaje por fichero (antes, cabecera
+      // y bytes en serie: un libro de 1000 páginas pasaba de cinco minutos). Tope: MAX_INCRUSTADO.
+      const prefijo = prefijoDocumento(p.usuario.id, d.id);
+      const claves = Object.keys(v.binarios)
+        .filter((clave) => !(clave === d.original && o.originales === false))
+        .sort((x, y) => Number(y === d.original) - Number(x === d.original));
+      let lleno = false;
+      for (let i = 0; i < claves.length && !lleno; i += 16) {
+        const leidos = await Promise.all(claves.slice(i, i + 16).map(async (clave) => ({ clave, bytes: await p.almacen.bytes(claveDe(p.usuario.id, d.id, clave)).catch(() => null) })));
+        for (const { clave, bytes } of leidos) {
+          if (!bytes) continue;
+          if (usados + bytes.byteLength > MAX_INCRUSTADO) { lleno = true; continue; }
+          // En el fichero las claves son relativas: «original.pdf», «paginas/0001.jpg».
+          const rel = !clave.startsWith('u/') ? clave : clave.startsWith(prefijo) ? clave.slice(prefijo.length) : clave.split('/').pop()!;
+          await a.ponerBlob(rel, v.binarios[clave]!.mime, bytes);
+          blobs.set(clave, rel);
+          usados += bytes.byteLength;
+          if (clave === d.original) sinOriginal = false;
+        }
       }
     }
     const rel = (k?: string) => (k ? blobs.get(k) ?? (o.referencias ? claveDe(p.usuario.id, d.id, k) : k) : undefined);

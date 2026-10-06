@@ -62,13 +62,23 @@ export class FlujoIngesta extends WorkflowEntrypoint<Env, ParamsIngesta> {
       tarea: p.tarea, documento: p.documento, fase, avance, total, transcurrido: Date.now() - inicio, ...(mensaje ? { mensaje } : {}),
     });
 
+    // Pasos largos y callados (consolidar, revectorizar, esperar al original…): mientras trabajan,
+    // le dicen al vigilante cada minuto que siguen vivos. Si no, a los 4 min los relanza y se repite todo.
+    const tareaDO = this.env.TAREA.getByName(`tarea:${p.usuario}:${p.tarea}`);
+    const vivo = (minutos = 3) => tareaDO.esperar(Date.now() + minutos * 60_000).catch(() => undefined);
+    const conLatido = async <T>(fn: () => Promise<T>): Promise<T> => {
+      await vivo();
+      const latido = setInterval(() => { void vivo(); }, 60_000);
+      try { return await fn(); } finally { clearInterval(latido); }
+    };
+
     try {
       if (soloVectores(p)) {
-        const r = await step.do('revectorizar', { retries: REINTENTOS, timeout: '30 minutes' }, async () => {
+        const r = await step.do('revectorizar', { retries: REINTENTOS, timeout: '30 minutes' }, async () => conLatido(async () => {
           const ctx = await this.contexto(p);
           await ctx.emitir(progreso('vectores', 0, 0.1, 'Calculando vectores'));
           return revectorizar(ctx, p);
-        });
+        }));
         await step.do('cerrar', { retries: REINTENTOS }, async () => {
           await estanteria.cerrar({ id: p.usuario, plan: p.plan }, { tarea: p.tarea, documento: p.documento, ok: true, ...(r.vectoresPendientes ? { avisos: [{ codigo: 'vectores_pendientes', mensaje: 'Los vectores aún no están en el índice: ya se puede leer y buscar por texto, y la búsqueda semántica llegará en unos minutos.' }] } : {}) });
           if (r.vectoresPendientes) await this.env.COLA.send({ tipo: 'reindexar', usuario: p.usuario, documento: p.documento }, { delaySeconds: 120 });
@@ -103,7 +113,7 @@ export class FlujoIngesta extends WorkflowEntrypoint<Env, ParamsIngesta> {
       // Modo económico: lo difícil, a la API por lotes (mitad de precio); se espera durmiendo.
       if (info.economico) {
         const lote = await step.do('enviar-lote', { retries: { limit: 3, delay: '30 seconds', backoff: 'exponential' }, timeout: '30 minutes' }, async () =>
-          this.env.TRABAJADOR.getByName(`${p.tarea}:lote`).enviarLote(p, info));
+          conLatido(() => this.env.TRABAJADOR.getByName(`${p.tarea}:lote`).enviarLote(p, info)));
         if (lote) {
           for (let i = 0; i < 288; i++) {
             const minutos = i < 6 ? 2 : 5;
@@ -137,14 +147,15 @@ export class FlujoIngesta extends WorkflowEntrypoint<Env, ParamsIngesta> {
       const plazo = Math.min(3600, 120 + 2 * info.unidades);
       const resumen = await step.do('consolidar', { retries: { limit: 4, delay: '5 seconds', backoff: 'exponential' }, timeout: `${plazo} seconds` }, async () => {
         await emisor.emitir(`usuario:${p.usuario}`, { tipo: 'progreso', progreso: progreso('indexado', 0, 0.72, 'Consolidando: folios, secciones y vectores') });
-        return this.env.TRABAJADOR.getByName(`${p.tarea}:consolidar`).consolidar(p, info);
+        return conLatido(() => this.env.TRABAJADOR.getByName(`${p.tarea}:consolidar`).consolidar(p, info));
       });
       if (resumen.vectoresPendientes) vectoresPendientes = true;
 
       // El original pudo seguir subiendo mientras se leía el paquete: se espera hasta 2 h.
       const bytesOriginal = (info.original ?? p.original) ? await step.do('original', { retries: { limit: 720, delay: '10 seconds', backoff: 'constant' } }, async () => {
         const cab = await almacenDesdeEnv(this.env, origenDe(this.env)).cabecera(info.original ?? p.original);
-        if (!cab) throw new Error('El original aún no ha terminado de subir');
+        // Esperar al navegador es legítimo: cada intento renueva el aviso al vigilante.
+        if (!cab) { await vivo(2); throw new Error('El original aún no ha terminado de subir'); }
         return cab.bytes;
       }) : undefined;
 
@@ -153,6 +164,7 @@ export class FlujoIngesta extends WorkflowEntrypoint<Env, ParamsIngesta> {
       const mimeOriginal = info.mime ?? p.mime;
       if (bytesOriginal && claveOriginal && esMp4(mimeOriginal, claveOriginal)) {
         await step.do('medio-rapido', { retries: { limit: 2, delay: '10 seconds' }, timeout: '15 minutes' }, async () => {
+          await vivo(16);
           try { return (await adelantarMoov(almacenDesdeEnv(this.env, origenDe(this.env)), claveOriginal, mimeOriginal)).estado; }
           catch (e) { return `fallo: ${e instanceof Error ? e.message : String(e)}`.slice(0, 200); }
         });
