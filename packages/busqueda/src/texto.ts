@@ -204,9 +204,10 @@ export function resaltar(textoCrudo: string, consultaTerminos: string[], ventana
     if (hasta < texto.length) { const e = texto.lastIndexOf(' ', hasta); if (e > desde + ventana / 2) hasta = e; }
   }
   // El tramo [a, b) escapado, con la etiqueta de cada turno que empiece dentro.
-  const trozo = (a: number, b: number) => {
+  // `antesDeMarca`: la etiqueta que cae justo donde empieza una coincidencia va fuera del <mark>.
+  const trozo = (a: number, b: number, antesDeMarca = false, dentroDeMarca = false) => {
     let out = '', c = a;
-    for (const h of hablantes) if (h.pos >= a && h.pos < b) { out += escaparHtml(texto.slice(c, h.pos)) + etiquetaHablante(h.nombre); c = h.pos; }
+    for (const h of hablantes) if ((dentroDeMarca ? h.pos > a : h.pos >= a) && (antesDeMarca ? h.pos <= b : h.pos < b)) { out += escaparHtml(texto.slice(c, h.pos)) + etiquetaHablante(h.nombre); c = h.pos; }
     return out + escaparHtml(texto.slice(c, b));
   };
   let salida = desde > 0 ? '…' : '';
@@ -217,7 +218,7 @@ export function resaltar(textoCrudo: string, consultaTerminos: string[], ventana
   for (const [a, b] of tramos) {
     if (b <= desde || a >= hasta) continue;
     const aa = Math.max(a, desde), bb = Math.min(b, hasta);
-    salida += trozo(cursor, aa) + '<mark>' + trozo(aa, bb) + '</mark>';
+    salida += trozo(cursor, aa, true) + '<mark>' + trozo(aa, bb, false, true) + '</mark>';
     cursor = bb;
   }
   salida += trozo(cursor, hasta);

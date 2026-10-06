@@ -56,6 +56,9 @@ describe('marcas de hablante en el resaltado', () => {
   it('quita las marcas partidas en los bordes del fragmento', () => {
     expect(resaltar('errano:** ¿Y el jazz? Mucho. **Julio Cort', ['jazz'])).toBe('¿Y el <mark>jazz</mark>? Mucho.');
   });
+  it('la etiqueta no queda dentro de la marca de la coincidencia', () => {
+    expect(resaltar('Sí. **Facundo Cabral:** Exacto. Porque', ['exacto'])).toBe('Sí. <b class="hablante">Facundo Cabral</b> <mark>Exacto</mark>. Porque');
+  });
 });
 
 describe('comprensión heurística', () => {
