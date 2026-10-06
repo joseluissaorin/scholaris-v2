@@ -424,6 +424,12 @@ importers:
         specifier: workspace:^
         version: link:../spdf
 
+  packages/normalizacion:
+    dependencies:
+      '@scholaris/nucleo':
+        specifier: workspace:*
+        version: link:../nucleo
+
   packages/nucleo: {}
 
   packages/proveedores:
