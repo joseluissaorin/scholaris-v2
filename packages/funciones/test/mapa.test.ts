@@ -105,6 +105,7 @@ describe('mapa de conceptos', () => {
     const ms = performance.now() - t0;
     console.log(`mapa 20k: ${Math.round(ms)} ms`, r.tiempos);
     expect(r.puntos).toBe(20_000);
-    expect(ms).toBeLessThan(5000);
+    // Los ejecutores de la CI son unas 2-3 veces más lentos que un portátil actual.
+    expect(ms).toBeLessThan(process.env.CI ? 15_000 : 5000);
   }, 60_000);
 });
