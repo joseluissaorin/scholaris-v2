@@ -235,7 +235,10 @@ async function etiquetasPorPar(sql: SQL, donde: string, ...p: string[]): Promise
   return salida;
 }
 
-export async function obtenerGrafo(sql: SQL, o: { biblioteca?: string; confianzaMinima?: number; todos?: boolean } = {}): Promise<GrafoCitas & { aristas: Array<AristaGrafo & { confianza: number; via: string }> }> {
+export interface AristaGrafoCompleta extends AristaGrafo { confianza: number; via: string }
+export interface GrafoCitasCompleto extends Omit<GrafoCitas, 'aristas'> { aristas: AristaGrafoCompleta[] }
+
+export async function obtenerGrafo(sql: SQL, o: { biblioteca?: string; confianzaMinima?: number; todos?: boolean } = {}): Promise<GrafoCitasCompleto> {
   const filas = await sql.ejecutar('SELECT origen, destino, tipo, via, confianza FROM grafo_aristas WHERE confianza >= ?', o.confianzaMinima ?? 0.7);
   const docs = await leerDocumentos(sql);
   let permitidos: Set<string> | null = null;
@@ -244,7 +247,7 @@ export async function obtenerGrafo(sql: SQL, o: { biblioteca?: string; confianza
     permitidos = new Set(f.map((x) => String(x.id)));
   }
   const etiquetas = await etiquetasPorPar(sql, '1');
-  const aristas: Array<AristaGrafo & { confianza: number; via: string }> = [];
+  const aristas: AristaGrafoCompleta[] = [];
   const salientes = new Map<string, number>(), entrantes = new Map<string, number>();
   for (const f of filas) {
     const a = String(f.origen), b = String(f.destino);
