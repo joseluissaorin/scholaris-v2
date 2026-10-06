@@ -64,7 +64,7 @@ export interface Env {
   OPENALEX_API_KEY?: string;
   /** KV opcional para la caché de consultas a catálogos de metadatos (sin él, R2 bajo cache/catalogos/). */
   CACHE_KV?: KVNamespace;
-  /** Solo para migraciones: actuar como un usuario (ver scripts/migrar-desde-v1.ts). */
+  /** Solo para migraciones: actuar como un usuario. */
   ADMIN_TOKEN?: string;
   /** Ids de Clerk (separados por comas) de quien administra cupones y concesiones de plan. */
   ADMINS?: string;

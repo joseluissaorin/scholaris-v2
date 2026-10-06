@@ -12,3 +12,5 @@ coverage/
 # Resultados del banco sobre material con derechos y pruebas sueltas (quedan en local)
 bench/resultados/
 bench/src/estado-tmp*.ts
+# Operación de la instancia alojada (solo en local)
+deploy/produccion/

@@ -4,8 +4,8 @@
  *
  *   1. José Luis llena una colección con bench/datos/originales en un solo lote
  *      (estimación antes de empezar, cola con concurrencia, repetidos por huella).
- *   2. Exporta un paquete .scholaris con una selección y Pepe lo importa (sin leer nada).
- *   3. Le invita, Pepe acepta, la sigue, busca en lo suyo y en lo que sigue, y la copia
+ *   2. Exporta un paquete .scholaris con una selección y la segunda persona lo importa (sin leer nada).
+ *   3. Le invita, la segunda persona acepta, la sigue, busca en lo suyo y en lo que sigue, y la copia
  *      (lo que ya tenía no se duplica; lo demás, sin un byte nuevo en el disco).
  *   4. Un enlace de solo lectura con contraseña: se lee y se busca sin cuenta; al retirarlo, deja de funcionar.
  *
@@ -80,7 +80,7 @@ const docs = (await jl.documentos.listar({ biblioteca: bib.id, limite: 100 })).e
 const b1 = await jl.busqueda.buscar({ consulta: 'scaled dot-product attention', k: 3, filtros: { bibliotecas: [bib.id] } });
 console.log(`[${seg()}] ${docs.length} documentos listos; buscar: ${b1.resultados[0]?.citaCorta ?? 'nada'}`);
 
-// 2. Paquete con una selección → Pepe -----------------------------------------
+// 2. Paquete con una selección → la segunda persona -----------------------------------------
 const seleccion = docs.filter((d) => d.tipo === 'pdf' || d.tipo === 'pdf_escaneado').slice(0, 3).map((d) => d.id);
 const r = await jl.bibliotecas.paquete(bib.id, { documentos: seleccion });
 const paquete = new Uint8Array(await r.arrayBuffer());
@@ -89,22 +89,22 @@ const m = JSON.parse(await (await abrirZip(paquete)).texto('manifest.json')) as 
 console.log(`[${seg()}] paquete: ${mb(paquete.length)}, ${m.documentos.length} documentos, derechos ${m.biblioteca.derechos}`);
 const tPaquete = Date.now();
 const imp = await importarPaquete(pepe, paquete, { nombre: 'Banco (paquete de José Luis)' });
-console.log(`[${seg()}] Pepe importa el paquete en ${((Date.now() - tPaquete) / 1000).toFixed(1)} s: ${imp.importados.length} importados (${imp.importados.filter((x) => x.tarea).length} con tarea), ${imp.repetidos.length} repetidos, ${imp.fallidos.length} fallidos`);
+console.log(`[${seg()}] la segunda persona importa el paquete en ${((Date.now() - tPaquete) / 1000).toFixed(1)} s: ${imp.importados.length} importados (${imp.importados.filter((x) => x.tarea).length} con tarea), ${imp.repetidos.length} repetidos, ${imp.fallidos.length} fallidos`);
 informe.paquete = { bytes: paquete.length, documentos: m.documentos.length, importados: imp.importados.length, conTarea: imp.importados.filter((x) => x.tarea).length, fallidos: imp.fallidos, segundos: (Date.now() - tPaquete) / 1000 };
 
 // 3. Invitar, aceptar, seguir, buscar y copiar ------------------------------------
-const inv = await jl.bibliotecas.compartir(bib.id, { correo: 'colega@example.org', permiso: 'lectura', mensaje: 'Pepe, aquí tienes el banco para las pruebas de la edición.' });
+const inv = await jl.bibliotecas.compartir(bib.id, { correo: 'colega@example.org', permiso: 'lectura', mensaje: 'Aquí tienes el banco para las pruebas de la edición.' });
 const bandeja = await pepe.invitaciones.listar();
-console.log(`[${seg()}] invitación ${inv.estado}; en la bandeja de Pepe: ${bandeja.map((b) => `«${b.nombre}» de ${b.de.nombre}`).join(', ')}`);
+console.log(`[${seg()}] invitación ${inv.estado}; en la bandeja de la segunda persona: ${bandeja.map((b) => `«${b.nombre}» de ${b.de.nombre}`).join(', ')}`);
 await pepe.invitaciones.aceptar(bandeja.find((b) => b.biblioteca === bib.id)!.id);
 const sigue = await pepe.compartida(bib.id).documentos.listar();
 const conj = await pepe.busqueda.conjunta({ consulta: 'attention', alcance: 'todo', k: 5 });
-console.log(`[${seg()}] Pepe sigue la colección (${sigue.total} documentos); búsqueda conjunta: ${conj.fuentes.map((f) => `${f.propia ? 'lo suyo' : f.nombre}: ${f.resultados}`).join(', ')}`);
+console.log(`[${seg()}] la segunda persona sigue la colección (${sigue.total} documentos); búsqueda conjunta: ${conj.fuentes.map((f) => `${f.propia ? 'lo suyo' : f.nombre}: ${f.resultados}`).join(', ')}`);
 const antes = bytesEn(join(datos, 'almacen', 'u', 'pepe'));
 const tCopia = Date.now();
 const copia = await pepe.copias.copiarTodo({ origen: { biblioteca: bib.id } });
 const despues = bytesEn(join(datos, 'almacen', 'u', 'pepe'));
-console.log(`[${seg()}] copia en ${((Date.now() - tCopia) / 1000).toFixed(1)} s: ${copia.copiados.length} copiados, ${copia.repetidos.length} ya los tenía, ${copia.fallidos.length} fallidos; bytes nuevos en el disco de Pepe: ${despues - antes} (los de José Luis: ${mb(bytesEn(join(datos, 'almacen', 'u', 'joseluis')))})`);
+console.log(`[${seg()}] copia en ${((Date.now() - tCopia) / 1000).toFixed(1)} s: ${copia.copiados.length} copiados, ${copia.repetidos.length} ya los tenía, ${copia.fallidos.length} fallidos; bytes nuevos en el disco de la segunda persona: ${despues - antes} (los de José Luis: ${mb(bytesEn(join(datos, 'almacen', 'u', 'joseluis')))})`);
 informe.copia = { copiados: copia.copiados.length, repetidos: copia.repetidos.length, fallidos: copia.fallidos, bytesNuevos: despues - antes, segundos: (Date.now() - tCopia) / 1000 };
 
 // 4. Enlace con contraseña -----------------------------------------------------
