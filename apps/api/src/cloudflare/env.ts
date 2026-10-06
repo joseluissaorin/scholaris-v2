@@ -66,4 +66,6 @@ export interface Env {
   CACHE_KV?: KVNamespace;
   /** Solo para migraciones: actuar como un usuario (ver scripts/migrar-desde-v1.ts). */
   ADMIN_TOKEN?: string;
+  /** Ids de Clerk (separados por comas) de quien administra cupones y concesiones de plan. */
+  ADMINS?: string;
 }

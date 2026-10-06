@@ -212,6 +212,7 @@ export async function crearServidorLocal(o: OpcionesServidor): Promise<ServidorL
     ...(usuarioLocal ? { usuarioLocal } : {}),
     ...(usuariosLocales.size ? { usuariosLocales } : {}),
     ...(env.SCHOLARIS_TOKEN ? { tokenLocal: env.SCHOLARIS_TOKEN } : {}),
+    ...(env.ADMINS ? { admins: env.ADMINS.split(',').map((s) => s.trim()).filter(Boolean) } : {}),
     ...(conClerk ? { clerk: crearVerificadorClerk({ publishableKey: env.CLERK_PUBLISHABLE_KEY!, ...(env.CLERK_EMISOR ? { emisor: env.CLERK_EMISOR } : {}), ...(env.CLERK_JWKS ? { jwks: env.CLERK_JWKS } : {}) }) } : {}),
     atender: async (usuario, p) => appUsuario.fetch(p, { puertos: await puertosDe(usuario) }),
     // El WebSocket lo atiende el servidor HTTP (Node o Bun) antes de llegar aquí.

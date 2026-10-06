@@ -9,8 +9,8 @@
 import type { Filtros, MetadatosDocumento } from '@scholaris/nucleo';
 import { ErrorApi, PREFIJO_API, type CodigoError, type CuerpoError, type Ok, type Pagina, type ParamsPagina, type RefTarea } from './comun.js';
 import type {
-  Ajustes, ClaveApi, ClaveApiCreada, ConfigPublica, CrearClaveApi, EstadoGrabacion, PreferenciasParciales,
-  ProveedorClave, ResultadoPurga, Yo,
+  Ajustes, CanjearCupon, ClaveApi, ClaveApiCreada, Concesion, ConcederPlan, ConfigPublica, CrearClaveApi, CrearLoteCupones, CuponAdmin,
+  CuponCanjeado, EstadoGrabacion, LoteCreado, PreferenciasParciales, ProveedorClave, ResultadoPurga, ResumenLote, RevocarCupones, Yo,
 } from './cuenta.js';
 import type {
   CompletarSubida, IngestaIniciada, Ingestar, NuevaSubida, PedirRecursos, RecursosFirmados, SubidaCreada, SubidaUrl, UrlsPartes,
@@ -442,6 +442,21 @@ export function crearCliente(opciones: OpcionesCliente) {
       kpis: () => get<KpisCorpus>('/corpus/kpis'),
       instantanea: () => get<InstantaneaCorpus>('/corpus/instantanea'),
       refrescar: () => post<InstantaneaCorpus>('/corpus/instantanea/refrescar'),
+    },
+
+    cupones: {
+      canjear: (codigo: string) => post<CuponCanjeado>('/cupones/canjear', { codigo } satisfies CanjearCupon),
+    },
+
+    /** Solo para las cuentas que administran la instancia (ADMINS). */
+    admin: {
+      lotes: () => get<ResumenLote[]>('/admin/cupones'),
+      crearLote: (p: CrearLoteCupones) => post<LoteCreado>('/admin/cupones', p),
+      cupones: (lote: string) => get<CuponAdmin[]>(`/admin/cupones/lotes/${e(lote)}`),
+      revocarCupones: (p: RevocarCupones) => post<{ revocados: number }>('/admin/cupones/revocar', p),
+      concesiones: (usuario?: string) => get<Concesion[]>('/admin/concesiones', { usuario }),
+      conceder: (p: ConcederPlan) => post<Concesion>('/admin/concesiones', p),
+      revocarConcesion: (id: string) => del(`/admin/concesiones/${e(id)}`),
     },
 
     claves: {

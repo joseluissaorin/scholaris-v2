@@ -17,7 +17,7 @@
  */
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
-import type { Billete, ConfigPublica, PedirBillete } from '@scholaris/contrato';
+import type { Billete, Concesion, ConfigPublica, PedirBillete, Plan } from '@scholaris/contrato';
 import { PREFIJO_API } from '@scholaris/contrato';
 import type { Entorno } from './entorno.js';
 import type { AlmacenAmpliado, ConfigInstancia, PuertosUsuario, UsuarioSesion } from './puertos.js';
@@ -27,6 +27,8 @@ import { sha256Hex } from './compartido/cifrado.js';
 import type { Cuentas } from './compartido/cuentas.js';
 import type { VerificadorClerk } from './compartido/clerk.js';
 import { LIMITES } from './compartido/planes.js';
+import { mejorPlan } from './compartido/cupones.js';
+import { montarCupones } from './rutas/cupones.js';
 import { rutasSubidas } from './rutas/subidas.js';
 import { rutasDocumentos } from './rutas/documentos.js';
 import { rutasBibliotecas } from './rutas/bibliotecas.js';
@@ -112,7 +114,9 @@ export interface Plataforma {
    * Caché compartida de sesiones resueltas (en Cloudflare, la Cache API de cada
    * ubicación): evita ir a D1 en cada aislamiento nuevo. Sin ella, solo la memoria.
    */
-  cacheSesiones?: { leer(clave: string): Promise<string | null>; guardar(clave: string, valor: string, segundos: number): Promise<void> };
+  cacheSesiones?: { leer(clave: string): Promise<string | null>; guardar(clave: string, valor: string, segundos: number): Promise<void>; borrar?(clave: string): Promise<void> };
+  /** Ids de las cuentas que administran la instancia (cupones y concesiones): variable ADMINS. */
+  admins?: string[];
   /** Limitador de ritmo: true si se admite la petición. */
   admitir?(clave: string, porMinuto: number): Promise<{ ok: boolean; reintentar?: number }>;
   /** Entrega una petición ya autenticada a la estantería del usuario. */
@@ -123,8 +127,30 @@ export interface Plataforma {
 
 const clavesVistas = new Map<string, { sesion: UsuarioSesion; hasta: number }>();
 
-/** Usuarios ya dados de alta en este aislamiento (valores resueltos, no promesas). */
-const usuariosVistos = new Map<string, { plan: string; cuando: number; correo: string; nombre: string }>();
+/**
+ * Usuarios ya dados de alta en este aislamiento (valores resueltos, no promesas).
+ * `plan` es el del token; `concesion`, la vigente cuando se leyó D1 (null si no
+ * había); `leido`, cuándo se miró la caché de la ubicación por última vez.
+ */
+interface Visto { plan: string; cuando: number; correo: string; nombre: string; concesion?: Concesion | null; leido?: number }
+const usuariosVistos = new Map<string, Visto>();
+
+/** El plan que da una concesión ahora mismo (null si caducó). */
+const planConcedido = (c: Concesion | null | undefined): Plan | null => (c && (!c.caduca || Date.parse(c.caduca) > Date.now()) ? c.plan : null);
+
+/**
+ * Olvida lo que este aislamiento y esta ubicación saben de un usuario (tras
+ * concederle un plan o canjear un cupón). Otros aislamientos de la ubicación lo
+ * notan en ≤ 30 s (vuelven a mirar la caché de la ubicación); las claves de API
+ * de otros aislamientos, en ≤ 60 s.
+ */
+export async function olvidarUsuario(pl: Pick<Plataforma, 'cacheSesiones'>, id: string): Promise<void> {
+  usuariosVistos.delete(id);
+  for (const [k, v] of clavesVistas) if (v.sesion.id === id) clavesVistas.delete(k);
+  await pl.cacheSesiones?.borrar?.(`visto:${id}`).catch(() => undefined);
+  // Las sesiones de claves de API en la caché de la ubicación van por clave, no por usuario: se marcan como viejas.
+  await pl.cacheSesiones?.guardar(`olvido:${id}`, String(Date.now()), 120).catch(() => undefined);
+}
 
 /** Ruta de los billetes: usuario y tarea opcional, firmados 60 s. */
 interface DatosBillete { u: string; t?: string }
@@ -221,9 +247,13 @@ export function crearPuerta(pl: Plataforma) {
       const claveCache = pl.cacheSesiones ? `clave:${await sha256Hex(token)}` : '';
       const enCache = pl.cacheSesiones ? await pl.cacheSesiones.leer(claveCache).catch(() => null) : null;
       if (enCache) {
-        const sesion = JSON.parse(enCache) as UsuarioSesion;
-        clavesVistas.set(token, { sesion, hasta: Date.now() + 60_000 });
-        return sesion;
+        const { s: sesion, t } = JSON.parse(enCache) as { s?: UsuarioSesion; t?: number };
+        // Si al usuario se le concedió un plan después de guardarla, no vale.
+        const olvido = sesion ? Number((await pl.cacheSesiones!.leer(`olvido:${sesion.id}`).catch(() => null)) ?? 0) : 0;
+        if (sesion && t && t > olvido) {
+          clavesVistas.set(token, { sesion, hasta: Date.now() + 60_000 });
+          return sesion;
+        }
       }
       const k = await pl.cuentas.autenticarClave(token);
       if (!k) fallo('no_autenticado', 'La clave de API no es válida, ha caducado o se ha revocado.');
@@ -231,7 +261,7 @@ export function crearPuerta(pl: Plataforma) {
       if (!u) fallo('no_autenticado', 'La cuenta de esta clave ya no existe.');
       const sesion: UsuarioSesion = { ...u, funciones: u.plan === 'pro' ? ['scholaris'] : [], via: 'clave_api', alcances: k.alcances };
       clavesVistas.set(token, { sesion, hasta: Date.now() + 60_000 });
-      if (pl.cacheSesiones) await pl.cacheSesiones.guardar(claveCache, JSON.stringify(sesion), 60).catch(() => undefined);
+      if (pl.cacheSesiones) await pl.cacheSesiones.guardar(claveCache, JSON.stringify({ s: sesion, t: Date.now() }), 60).catch(() => undefined);
       if (clavesVistas.size > 2000) clavesVistas.delete(clavesVistas.keys().next().value as string);
       return sesion;
     }
@@ -240,37 +270,61 @@ export function crearPuerta(pl: Plataforma) {
     if (!id) fallo('no_autenticado', 'La sesión ha caducado. Vuelve a iniciar sesión.');
     const u: UsuarioSesion = { id: id.id, correo: id.correo, nombre: id.nombre, plan: id.plan, funciones: id.funciones, via: 'clerk' };
     if (id.imagen) u.imagen = id.imagen;
-    // D1 solo cuando hace falta: alta, cambio de plan, o cada diez minutos (para «visto»).
+    // D1 solo cuando hace falta: alta, cambio de plan, o cada diez minutos (para «visto» y la concesión).
     let conocido = usuariosVistos.get(u.id);
+    // Lo de la memoria se contrasta con la caché de la ubicación cada 30 s: así un
+    // canje o una concesión (que la borran) llegan a todos los aislamientos.
+    if (conocido && pl.cacheSesiones && Date.now() - (conocido.leido ?? 0) > 30_000) {
+      const visto = await pl.cacheSesiones.leer(`visto:${u.id}`).catch(() => null);
+      conocido = visto ? { ...(JSON.parse(visto) as Visto), leido: Date.now() } : undefined;
+      if (conocido) usuariosVistos.set(u.id, conocido); else usuariosVistos.delete(u.id);
+    }
     if (!conocido && pl.cacheSesiones) {
       // Otro aislamiento de esta ubicación ya lo dio de alta hace poco: sin ir a D1.
       const visto = await pl.cacheSesiones.leer(`visto:${u.id}`).catch(() => null);
       if (visto) {
-        conocido = JSON.parse(visto) as { plan: string; cuando: number; correo: string; nombre: string };
+        conocido = { ...(JSON.parse(visto) as Visto), leido: Date.now() };
         usuariosVistos.set(u.id, conocido);
       }
     }
     // Sin correo en el token ni guardado no se reintenta en cada petición (costaba ~1 s de D1 en cada una): cada 10 min, como todos.
-    if (!conocido || conocido.plan !== u.plan || Date.now() - conocido.cuando > 600_000) {
+    // Una entrada de antes de las concesiones (sin `concesion`) también se renueva.
+    if (!conocido || conocido.plan !== u.plan || conocido.concesion === undefined || Date.now() - conocido.cuando > 600_000) {
       await pl.cuentas.asegurarUsuario(u);
       const guardado = u.correo ? null : await pl.cuentas.usuario(u.id);
-      const v = { plan: u.plan, cuando: Date.now(), correo: u.correo || guardado?.correo || '', nombre: guardado?.nombre || u.nombre };
-      usuariosVistos.set(u.id, v);
+      const concesion = guardado ? guardado.concesion ?? null : await pl.cuentas.concesionVigente(u.id);
+      const v: Visto = { plan: u.plan, cuando: Date.now(), correo: u.correo || guardado?.correo || '', nombre: guardado?.nombre || u.nombre, concesion };
       if (pl.cacheSesiones) await pl.cacheSesiones.guardar(`visto:${u.id}`, JSON.stringify(v), 600).catch(() => undefined);
+      v.leido = Date.now();
+      usuariosVistos.set(u.id, v);
       if (usuariosVistos.size > 5000) usuariosVistos.delete(usuariosVistos.keys().next().value as string);
     }
     // El token de sesión de Clerk no siempre lleva el correo: se completa con lo guardado.
     const v = usuariosVistos.get(u.id)!;
     if (!u.correo && v.correo) { u.correo = v.correo; u.nombre = v.nombre || u.nombre; }
+    // El plan efectivo: el mejor entre el del token y el de la concesión vigente.
+    const concedido = planConcedido(v.concesion);
+    if (concedido) {
+      u.plan = mejorPlan(u.plan, concedido);
+      u.concesion = v.concesion!;
+      if (u.plan === 'pro' && !u.funciones.includes('scholaris')) u.funciones = [...u.funciones, 'scholaris'];
+    }
     return u;
   };
 
+  const esAdmin = (u: UsuarioSesion): boolean =>
+    !u.ambito && ((u.via === 'clerk' && !!pl.admins?.includes(u.id)) || (u.via === 'local' && (!!pl.admins?.includes(u.id) || u.id === pl.usuarioLocal?.id)));
+  const autenticarConAdmin = async (peticion: Request): Promise<UsuarioSesion> => {
+    const u = await autenticar(peticion);
+    return esAdmin(u) ? { ...u, admin: true } : u;
+  };
+
   // API pública v1 (/api/v1): la fachada sencilla sobre la v2, con la misma autenticación.
-  montarV1(app, pl, autenticar);
+  montarV1(app, pl, autenticarConAdmin);
 
   app.use(`${PREFIJO_API}/*`, async (c, next) => {
     c.set('inicio' as never, Date.now() as never);
-    const u = await autenticar(c.req.raw);
+    const u = await autenticarConAdmin(c.req.raw);
     if (pl.admitir) {
       const l = LIMITES[pl.config.modo === 'local' ? 'local' : u.plan];
       const r = await pl.admitir(`u:${u.id}`, l.porMinuto);
@@ -296,6 +350,9 @@ export function crearPuerta(pl: Plataforma) {
 
   // Invitaciones, miembros, enlaces, copias y búsqueda conjunta (cruzan estanterías).
   montarSocial(app, pl, 'autenticado');
+
+  // Cupones y concesiones de plan (D1, no la estantería).
+  montarCupones(app, pl, (id) => olvidarUsuario(pl, id));
 
   // Bibliotecas compartidas: a la estantería del PROPIETARIO, con el ámbito del invitado.
   app.all(`${PREFIJO_API}/compartidas/:biblioteca/*`, async (c) => {

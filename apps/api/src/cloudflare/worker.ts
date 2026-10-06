@@ -55,6 +55,7 @@ function plataforma(env: Env, peticion: Request): Plataforma {
     almacen: almacenDesdeEnv(env, origen),
     ...(clerk ? { clerk } : {}),
     ...(env.ADMIN_TOKEN ? { tokenAdmin: env.ADMIN_TOKEN } : {}),
+    ...(env.ADMINS ? { admins: env.ADMINS.split(',').map((s) => s.trim()).filter(Boolean) } : {}),
     ...(env.ORIGENES_CORS ? { origenes: env.ORIGENES_CORS.split(',').map((s) => s.trim()) } : {}),
     // El ritmo por usuario lo lleva la propia Estantería (atender): sin un salto más a otro DO.
     cacheSesiones: cacheSesionesCf,
@@ -87,6 +88,9 @@ const cacheSesionesCf = {
   },
   async guardar(clave: string, valor: string, segundos: number): Promise<void> {
     await caches.default.put(`https://sesiones.scholaris.interno/${encodeURIComponent(clave)}`, new Response(valor, { headers: { 'cache-control': `max-age=${segundos}` } }));
+  },
+  async borrar(clave: string): Promise<void> {
+    await caches.default.delete(`https://sesiones.scholaris.interno/${encodeURIComponent(clave)}`);
   },
 };
 

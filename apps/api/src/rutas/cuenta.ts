@@ -21,6 +21,8 @@ export function rutasCuenta(app: Hono<Entorno>): void {
     const yo: Yo = {
       usuario: { id: u.id, correo: u.correo, nombre: u.nombre, ...(u.imagen ? { imagen: u.imagen } : {}) },
       plan: u.plan,
+      ...(u.concesion ? { concesion: u.concesion } : {}),
+      ...(u.admin ? { admin: true } : {}),
       funciones: u.funciones,
       cuotas: await p.cuentas.cuotas(u.id, p.config.modo === 'local' ? 'local' : u.plan),
       via: u.via,

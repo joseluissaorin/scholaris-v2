@@ -4,7 +4,7 @@
  * estas mismas interfaces con sus implementaciones.
  */
 import type { Almacen, Emisor, IndiceVectorial, Inteligencia, SQL } from '@scholaris/nucleo';
-import type { EventoTiempoReal, ModoInstancia, Plan } from '@scholaris/contrato';
+import type { Concesion, EventoTiempoReal, ModoInstancia, Plan } from '@scholaris/contrato';
 import type { Cuentas } from './compartido/cuentas.js';
 
 /** El almacén con lo que hace falta para las subidas por partes y las URLs firmadas. */
@@ -33,7 +33,12 @@ export interface UsuarioSesion {
   correo: string;
   nombre: string;
   imagen?: string;
+  /** Plan efectivo: el mejor entre el del token y el de la concesión vigente. */
   plan: Plan;
+  /** La concesión vigente que da (o acompaña) el plan, si la hay. */
+  concesion?: Concesion;
+  /** Administra la instancia (ADMINS): cupones y concesiones. */
+  admin?: boolean;
   funciones: string[];
   via: 'clerk' | 'clave_api' | 'local' | 'admin';
   /** Alcances si entró con clave de API. */

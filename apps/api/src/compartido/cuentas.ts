@@ -6,11 +6,39 @@
 import type { SQL, ValorSQL } from '@scholaris/nucleo';
 import { nuevoId } from '@scholaris/nucleo';
 import type {
-  AlcanceClave, Ajustes, ClaveApi, ClaveApiCreada, Cuotas, Plan, Preferencias, ProveedorClave, Usuario,
+  AlcanceClave, Ajustes, ClaveApi, ClaveApiCreada, Concesion, CuponAdmin, Cuotas, OrigenConcesion, Plan, Preferencias, ProveedorClave,
+  ResumenLote, Usuario,
 } from '@scholaris/contrato';
 import { cifrar, descifrar, sha256Hex } from './cifrado.js';
 import { LIMITES, periodo, type Metrica } from './planes.js';
 import { aBase64Url } from './firmas.js';
+import { ErrorScholaris, fallo } from './errores.js';
+import { huellaCupon, mejorPlan, normalizarCodigoCupon, nuevoCodigoCupon, pistaCupon, rangoPlan } from './cupones.js';
+
+interface FilaConcesion {
+  id: string; usuario: string; plan: Plan; origen: OrigenConcesion; cupon: string | null; nota: string | null;
+  concedida: string; caduca: string | null; revocada: string | null; por: string | null;
+}
+
+interface FilaCupon {
+  codigo: string; pista: string; plan: Plan; duracion_dias: number | null; lote: string; nota: string | null; creado: string;
+  creado_por: string | null; canjeado_por: string | null; canjeado_en: string | null; revocado: string | null;
+}
+
+const aConcesion = (f: FilaConcesion): Concesion => ({
+  id: f.id, usuario: f.usuario, plan: f.plan, origen: f.origen, concedida: f.concedida,
+  ...(f.cupon ? { cupon: f.cupon } : {}), ...(f.nota ? { nota: f.nota } : {}), ...(f.caduca ? { caduca: f.caduca } : {}), ...(f.revocada ? { revocada: f.revocada } : {}),
+});
+
+const NOMBRE_PLAN: Record<Plan, string> = { gratis: 'el plan gratuito', pro: 'Pro' };
+/** «Pro de por vida» o «Pro hasta el 6 de octubre de 2027». */
+export function describirConcesion(plan: Plan, caduca: string | null | undefined): string {
+  if (!caduca) return `${NOMBRE_PLAN[plan]} de por vida`;
+  return `${NOMBRE_PLAN[plan]} hasta el ${new Date(caduca).toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Europe/Madrid' })}`;
+}
+
+/** Intentos fallidos de canjear un cupón que se admiten por cuenta y hora. */
+export const INTENTOS_CUPON_HORA = 10;
 
 export const ESQUEMA_CUENTAS = [
   `CREATE TABLE IF NOT EXISTS usuarios (
@@ -61,6 +89,19 @@ export const ESQUEMA_CUENTAS = [
   )`,
   `CREATE INDEX IF NOT EXISTS referencias_usuario ON referencias_almacen(usuario, documento)`,
   `CREATE TABLE IF NOT EXISTS prefijos_retenidos (prefijo TEXT PRIMARY KEY, propietario TEXT NOT NULL, desde TEXT NOT NULL)`,
+  // Planes concedidos sin pasar por la pasarela (a mano o con un cupón). caduca NULL = de por vida.
+  `CREATE TABLE IF NOT EXISTS concesiones (
+    id TEXT PRIMARY KEY, usuario TEXT NOT NULL, plan TEXT NOT NULL, origen TEXT NOT NULL, cupon TEXT, nota TEXT,
+    concedida TEXT NOT NULL, caduca TEXT, revocada TEXT, por TEXT
+  )`,
+  `CREATE INDEX IF NOT EXISTS concesiones_usuario ON concesiones(usuario, revocada)`,
+  // Cupones de un solo uso. codigo = HMAC-SHA-256 del código canónico (nunca en claro); duracion_dias NULL = de por vida.
+  `CREATE TABLE IF NOT EXISTS cupones (
+    codigo TEXT PRIMARY KEY, pista TEXT NOT NULL, plan TEXT NOT NULL, duracion_dias INTEGER, lote TEXT NOT NULL, nota TEXT,
+    creado TEXT NOT NULL, creado_por TEXT, canjeado_por TEXT, canjeado_en TEXT, revocado TEXT
+  )`,
+  `CREATE INDEX IF NOT EXISTS cupones_lote ON cupones(lote)`,
+  `CREATE INDEX IF NOT EXISTS cupones_canjeado ON cupones(canjeado_por)`,
 ];
 
 /** Columnas que se añadieron después a `comparticiones` (invitaciones con estado, rol, caducidad y mensaje). */
@@ -167,9 +208,172 @@ export class Cuentas {
     if (u.correo) await this.q('UPDATE comparticiones SET usuario = ? WHERE usuario IS NULL AND correo = ?', u.id, u.correo.toLowerCase());
   }
 
-  async usuario(id: string): Promise<(Usuario & { plan: Plan }) | null> {
+  /**
+   * La cuenta con su plan EFECTIVO: el mejor entre el guardado (el del token de
+   * Clerk en el último acceso) y el de la concesión vigente.
+   */
+  async usuario(id: string): Promise<(Usuario & { plan: Plan; concesion?: Concesion }) | null> {
     const [f] = await this.q<{ id: string; correo: string; nombre: string; imagen: string | null; plan: Plan }>('SELECT id, correo, nombre, imagen, plan FROM usuarios WHERE id = ?', id);
-    return f ? { id: f.id, correo: f.correo, nombre: f.nombre, imagen: f.imagen ?? undefined, plan: f.plan } : null;
+    if (!f) return null;
+    const c = await this.concesionVigente(id);
+    return {
+      id: f.id, correo: f.correo, nombre: f.nombre, imagen: f.imagen ?? undefined, plan: mejorPlan(f.plan, c?.plan),
+      ...(c ? { concesion: c } : {}),
+    };
+  }
+
+  // -------------------------------------------------------------------------
+  // Concesiones de plan y cupones
+  // -------------------------------------------------------------------------
+
+  /** La mejor concesión vigente (mejor plan; a igualdad, la de por vida o la que dura más). */
+  async concesionVigente(usuario: string): Promise<Concesion | null> {
+    const [f] = await this.q<FilaConcesion>(
+      `SELECT * FROM concesiones WHERE usuario = ? AND revocada IS NULL AND (caduca IS NULL OR caduca > ?)
+       ORDER BY CASE plan WHEN 'pro' THEN 1 ELSE 0 END DESC, (caduca IS NULL) DESC, caduca DESC LIMIT 1`, usuario, ahora());
+    return f ? aConcesion(f) : null;
+  }
+
+  async concesiones(usuario?: string): Promise<Concesion[]> {
+    const filas = usuario
+      ? await this.q<FilaConcesion>('SELECT * FROM concesiones WHERE usuario = ? ORDER BY concedida DESC', usuario)
+      : await this.q<FilaConcesion>('SELECT * FROM concesiones ORDER BY concedida DESC LIMIT 500');
+    return filas.map(aConcesion);
+  }
+
+  /** Concede un plan (a mano o por un cupón). No toca el plan del token: el efectivo es el mejor de los dos. */
+  async conceder(c: { usuario: string; plan: Plan; origen: OrigenConcesion; dias?: number | null; nota?: string | null; cupon?: string | null; por: string; caduca?: string | null }): Promise<Concesion> {
+    const id = nuevoId('c');
+    const caduca = c.caduca !== undefined ? c.caduca : c.dias ? new Date(Date.now() + c.dias * 86400_000).toISOString() : null;
+    await this.q('INSERT INTO concesiones (id, usuario, plan, origen, cupon, nota, concedida, caduca, por) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      id, c.usuario, c.plan, c.origen, c.cupon ?? null, c.nota ?? null, ahora(), caduca, c.por);
+    await this.auditar(c.usuario, 'plan_concedido', { id, plan: c.plan, origen: c.origen, caduca, por: c.por, ...(c.cupon ? { cupon: c.cupon } : {}) });
+    if (c.por !== c.usuario) await this.auditar(c.por, 'admin_concede', { id, usuario: c.usuario, plan: c.plan, caduca });
+    return aConcesion((await this.q<FilaConcesion>('SELECT * FROM concesiones WHERE id = ?', id))[0]!);
+  }
+
+  /** Revoca una concesión. Devuelve el usuario afectado (para invalidar su caché) o null. */
+  async revocarConcesion(id: string, por: string): Promise<string | null> {
+    const [f] = await this.q<{ usuario: string }>('UPDATE concesiones SET revocada = ? WHERE id = ? AND revocada IS NULL RETURNING usuario', ahora(), id);
+    if (!f) return null;
+    await this.auditar(f.usuario, 'plan_revocado', { id, por });
+    return f.usuario;
+  }
+
+  /** Crea un lote de cupones y devuelve los códigos en claro (la única vez que existen fuera de quien los reparte). */
+  async crearCupones(o: { cantidad: number; plan: Plan; dias: number | null; lote: string; nota: string | null; por: string }): Promise<string[]> {
+    const [hay] = await this.q<{ n: number }>('SELECT COUNT(*) AS n FROM cupones WHERE lote = ?', o.lote);
+    if (hay?.n) fallo('conflicto', `Ya hay un lote que se llama «${o.lote}». Elige otro nombre.`);
+    const creado = ahora();
+    const codigos: string[] = [];
+    while (codigos.length < o.cantidad) {
+      const tanda = Array.from({ length: Math.min(10, o.cantidad - codigos.length) }, nuevoCodigoCupon);
+      const filas: ValorSQL[] = [];
+      for (const codigo of tanda) filas.push(await huellaCupon(this.claveMaestra, codigo), pistaCupon(codigo), o.plan, o.dias, o.lote, o.nota, creado, o.por);
+      // Una colisión (improbabilísima) simplemente no se inserta y el bucle genera otro.
+      const metidas = new Set((await this.q<{ codigo: string }>(
+        `INSERT INTO cupones (codigo, pista, plan, duracion_dias, lote, nota, creado, creado_por) VALUES ${tanda.map(() => '(?, ?, ?, ?, ?, ?, ?, ?)').join(', ')}
+         ON CONFLICT(codigo) DO NOTHING RETURNING codigo`, ...filas)).map((f) => f.codigo));
+      for (let i = 0; i < tanda.length; i++) if (metidas.has(filas[i * 8] as string)) codigos.push(tanda[i]!);
+    }
+    await this.auditar(o.por, 'cupones_creados', { lote: o.lote, cantidad: o.cantidad, plan: o.plan, dias: o.dias });
+    return codigos;
+  }
+
+  async lotesCupones(): Promise<ResumenLote[]> {
+    const filas = await this.q<{ lote: string; plan: Plan; dias: number | null; nota: string | null; creado: string; total: number; canjeados: number; revocados: number }>(
+      `SELECT lote, MAX(plan) AS plan, MAX(duracion_dias) AS dias, MAX(nota) AS nota, MIN(creado) AS creado, COUNT(*) AS total,
+         SUM(CASE WHEN canjeado_por IS NOT NULL THEN 1 ELSE 0 END) AS canjeados, SUM(CASE WHEN revocado IS NOT NULL THEN 1 ELSE 0 END) AS revocados
+       FROM cupones GROUP BY lote ORDER BY MIN(creado) DESC`);
+    return filas.map((f) => ({ lote: f.lote, plan: f.plan, dias: f.dias ?? null, ...(f.nota ? { nota: f.nota } : {}), creado: f.creado, total: f.total, canjeados: f.canjeados, revocados: f.revocados }));
+  }
+
+  async cuponesDeLote(lote: string): Promise<CuponAdmin[]> {
+    const filas = await this.q<FilaCupon>('SELECT * FROM cupones WHERE lote = ? ORDER BY canjeado_en DESC, pista', lote);
+    return filas.map((f) => ({
+      huella: f.codigo, pista: f.pista, lote: f.lote, plan: f.plan, dias: f.duracion_dias ?? null, creado: f.creado,
+      ...(f.nota ? { nota: f.nota } : {}), ...(f.canjeado_por ? { canjeadoPor: f.canjeado_por } : {}),
+      ...(f.canjeado_en ? { canjeadoEn: f.canjeado_en } : {}), ...(f.revocado ? { revocado: f.revocado } : {}),
+    }));
+  }
+
+  /** Anula cupones sin canjear (por código, por huella o un lote entero). Los ya canjeados no se tocan. */
+  async revocarCupones(o: { codigos?: string[]; huellas?: string[]; lote?: string; por: string }): Promise<number> {
+    const huellas = [...(o.huellas ?? []).filter((h) => /^[a-f0-9]{64}$/.test(h))];
+    for (const c of o.codigos ?? []) {
+      const n = normalizarCodigoCupon(c);
+      if (n) huellas.push(await huellaCupon(this.claveMaestra, n));
+    }
+    let n = 0;
+    if (huellas.length) {
+      n += (await this.q('UPDATE cupones SET revocado = ? WHERE codigo IN (SELECT value FROM json_each(?)) AND revocado IS NULL AND canjeado_por IS NULL RETURNING codigo',
+        ahora(), JSON.stringify(huellas))).length;
+    }
+    if (o.lote) n += (await this.q('UPDATE cupones SET revocado = ? WHERE lote = ? AND revocado IS NULL AND canjeado_por IS NULL RETURNING codigo', ahora(), o.lote)).length;
+    if (n) await this.auditar(o.por, 'cupones_revocados', { n, lote: o.lote, huellas: huellas.length });
+    return n;
+  }
+
+  /**
+   * Canjea un cupón. El reparto es atómico: el UPDATE solo se lleva la fila si
+   * sigue libre y sin anular (RETURNING dice si fue esta petición). Nunca
+   * rebaja ni gasta un cupón que no daría nada: si ya hay una concesión igual o
+   * mejor que dura lo mismo o más, se rechaza y el cupón sigue libre.
+   */
+  async canjearCupon(usuario: string, bruto: string): Promise<Concesion> {
+    const desde = new Date(Date.now() - 3600_000).toISOString();
+    const [fallos] = await this.q<{ n: number }>("SELECT COUNT(*) AS n FROM auditoria WHERE usuario = ? AND accion = 'cupon_fallido' AND cuando > ?", usuario, desde);
+    if ((fallos?.n ?? 0) >= INTENTOS_CUPON_HORA) {
+      throw new ErrorScholaris('limite_de_ritmo', 'Demasiados intentos con cupones que no valen. Espera una hora y vuelve a probar.', { reintentar: 3600 });
+    }
+    const fallido = async (codigo: Parameters<typeof fallo>[0], mensaje: string): Promise<never> => {
+      await this.auditar(usuario, 'cupon_fallido', { motivo: codigo });
+      fallo(codigo, mensaje);
+    };
+    const codigo = normalizarCodigoCupon(bruto);
+    if (!codigo) return fallido('peticion_invalida', 'Eso no parece un cupón de Scholaris. Tiene la forma SCHO-XXXX-XXXX.');
+    const huella = await huellaCupon(this.claveMaestra, codigo);
+    const [cupon] = await this.q<FilaCupon>('SELECT * FROM cupones WHERE codigo = ?', huella);
+    if (!cupon) return fallido('no_encontrado', 'Ese cupón no existe. Comprueba que esté bien copiado.');
+    const explicar = (f: FilaCupon): never => {
+      if (f.canjeado_por === usuario) fallo('conflicto', 'Ya canjeaste este cupón: el plan está en tu cuenta.');
+      if (f.canjeado_por) fallo('conflicto', 'Este cupón ya se ha canjeado y solo vale una vez.');
+      fallo('conflicto', 'Este cupón se ha anulado y ya no se puede canjear.');
+    };
+    if (cupon.canjeado_por || cupon.revocado) {
+      await this.auditar(usuario, 'cupon_fallido', { motivo: cupon.revocado ? 'anulado' : 'usado', pista: cupon.pista });
+      explicar(cupon);
+    }
+    // Nunca rebajar ni malgastar: ¿la concesión que ya tiene da lo mismo o más?
+    // (Un plan temporal sobre otro temporal del mismo plan sí suma: se alarga.)
+    const actual = await this.concesionVigente(usuario);
+    if (actual && (rangoPlan(actual.plan) > rangoPlan(cupon.plan) || (actual.plan === cupon.plan && !actual.caduca))) {
+      fallo('conflicto', `Ya tienes ${describirConcesion(actual.plan, actual.caduca)}: este cupón no te daría nada más. Guárdalo para otra persona.`);
+    }
+    const t = ahora();
+    const [mio] = await this.q<{ plan: Plan; duracion_dias: number | null }>(
+      'UPDATE cupones SET canjeado_por = ?, canjeado_en = ? WHERE codigo = ? AND canjeado_por IS NULL AND revocado IS NULL RETURNING plan, duracion_dias',
+      usuario, t, huella);
+    if (!mio) {
+      // Otra petición se lo ha llevado entre la lectura y el UPDATE.
+      const [ahoraEs] = await this.q<FilaCupon>('SELECT * FROM cupones WHERE codigo = ?', huella);
+      return explicar(ahoraEs ?? { ...cupon, canjeado_por: 'otro' });
+    }
+    // Un plan temporal se suma a lo que quede de otra concesión temporal del mismo plan.
+    let caduca: string | null = null;
+    if (mio.duracion_dias) {
+      const base = actual && actual.plan === mio.plan && actual.caduca ? Math.max(Date.now(), Date.parse(actual.caduca)) : Date.now();
+      caduca = new Date(base + mio.duracion_dias * 86400_000).toISOString();
+    }
+    try {
+      const c = await this.conceder({ usuario, plan: mio.plan, origen: 'cupon', cupon: cupon.pista, nota: cupon.nota, caduca, por: usuario });
+      await this.auditar(usuario, 'cupon_canjeado', { pista: cupon.pista, lote: cupon.lote, plan: mio.plan, caduca });
+      return c;
+    } catch (e) {
+      // Sin concesión, el cupón vuelve a quedar libre.
+      await this.q('UPDATE cupones SET canjeado_por = NULL, canjeado_en = NULL WHERE codigo = ? AND canjeado_por = ?', huella, usuario).catch(() => undefined);
+      throw e;
+    }
   }
 
   async usuarioPorCorreo(correo: string): Promise<string | null> {

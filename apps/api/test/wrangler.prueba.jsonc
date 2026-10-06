@@ -25,6 +25,7 @@
     "CLERK_EMISOR": "https://clerk.prueba",
     "SECRETO": "secreto-de-pruebas-0123456789",
     "CLAVE_MAESTRA": "clave-maestra-de-pruebas",
-    "SIN_VERIFICACION": "1"
+    "SIN_VERIFICACION": "1",
+    "ADMINS": "user_admin_cupones"
   }
 }
