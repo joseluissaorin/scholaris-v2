@@ -32,7 +32,8 @@ export interface ConfigOpenRouter extends OpcionesComunes {
 export const MODELOS_OPENROUTER = {
   /** Modelo que estructura el texto del OCR en páginas. */
   lector: 'google/gemini-3.5-flash-lite',
-  redactorRapido: 'z-ai/glm-5.3-flash',
+  /** GLM 5.3 Flash razona siempre (25-41 s por línea de contexto, medido por la ingesta): Qwen 3.8 Flash, sin razonamiento. */
+  redactorRapido: 'qwen/qwen3.8-flash',
   redactorAlto: 'google/gemini-3.8-flash',
 } as const;
 
@@ -139,7 +140,7 @@ export function crearOpenRouter(config: ConfigOpenRouter): ClienteOpenRouter {
             }),
           });
         }
-        const cuerpo: Record<string, unknown> = { model: modelo, messages, reasoning: { effort: pet.calidad === 'alta' ? 'medium' : 'low', exclude: true } };
+        const cuerpo: Record<string, unknown> = { model: modelo, messages, reasoning: pet.calidad === 'alta' ? { effort: 'medium', exclude: true } : { enabled: false } };
         if (pet.temperatura !== undefined) cuerpo.temperature = pet.temperatura;
         if (pet.maxTokens !== undefined) cuerpo.max_tokens = pet.maxTokens;
         if (pet.esquema) cuerpo.response_format = { type: 'json_schema', json_schema: { name: 'respuesta', strict: true, schema: pet.esquema } };

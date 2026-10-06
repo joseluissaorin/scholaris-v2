@@ -159,6 +159,17 @@ describe('Gemini · redactor', () => {
     expect((llamadas[1]?.cuerpo as Cuerpo).systemInstruction).toBeUndefined();
   });
 
+  it('si Flash-Lite bloquea (PROHIBITED_CONTENT), prueba una vez con Flash y si no, sube el error sin reintentar', async () => {
+    const { fetch, llamadas } = fetchFalso((ll) => (ll.url.includes('lite') ? { promptFeedback: { blockReason: 'PROHIBITED_CONTENT' } } : respuestaGemini('ok')));
+    const r = await crearGemini({ clave: 'K', fetch }).redactor().generar({ sistema: 'S', mensajes: [{ rol: 'usuario', partes: [{ texto: 'heroína' }] }] });
+    expect(r.texto).toBe('ok');
+    expect(llamadas.map((l) => l.url.includes('lite'))).toEqual([true, false]);
+    expect((llamadas[0]?.cuerpo as { safetySettings: Array<{ threshold: string }> }).safetySettings[0]?.threshold).toBe('BLOCK_NONE');
+    const todo = fetchFalso(() => ({ promptFeedback: { blockReason: 'PROHIBITED_CONTENT' } }));
+    await expect(crearGemini({ clave: 'K', fetch: todo.fetch }).redactor().generar({ mensajes: [{ rol: 'usuario', partes: [{ texto: 'x' }] }] })).rejects.toThrow(/bloqueada/);
+    expect(todo.llamadas).toHaveLength(2);
+  });
+
   it('sin caché posible, manda systemInstruction', async () => {
     const { fetch, llamadas } = fetchFalso(() => respuestaGemini('texto libre'));
     const r = await crearGemini({ clave: 'K', fetch }).redactor().generar({ sistema: 'breve', mensajes: [{ rol: 'usuario', partes: [{ texto: 'hola' }] }] });

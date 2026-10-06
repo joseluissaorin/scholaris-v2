@@ -108,7 +108,11 @@ export function crearInteligencia(env: EntornoInteligencia, opciones: OpcionesIn
   const juez: Juez = jev?.juez() ?? faltante<Juez>('juez', 'TYPESAFE_API_KEY');
 
   // Redactor.
-  const redactores = [gemini?.redactor(), openrouter?.redactor(), inferbox?.redactor()].filter(Boolean) as Redactor[];
+  // La reserva del redactor tiene un plazo corto: está en el camino crítico de la ingesta.
+  const openrouterRedactor = s(env.OPENROUTER_API_KEY)
+    ? crearOpenRouter({ clave: s(env.OPENROUTER_API_KEY) as string, ...(s(env.OPENROUTER_BASE_URL) ? { baseUrl: s(env.OPENROUTER_BASE_URL) } : {}), ...comunes, timeoutMs: 15_000, intentos: 2 })
+    : undefined;
+  const redactores = [gemini?.redactor(), openrouterRedactor?.redactor(), inferbox?.redactor()].filter(Boolean) as Redactor[];
   const redactor: Redactor = redactores.length > 1 ? redactorConReserva(redactores) : redactores[0] ?? faltante<Redactor>('redactor', 'GEMINI_API_KEY');
 
   return {

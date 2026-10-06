@@ -21,6 +21,21 @@ import { costeTokens, precioDe } from './precios.js';
 import { ESQUEMA_PAGINAS, hayBucle, instruccionesLector, normalizarPaginas, type OpcionesTranscripcion } from './lectura.js';
 import { ErrorPliego, leerPartiendo, type EntradaPliego } from './pliego.js';
 
+/** La petición o la respuesta se bloqueó por seguridad. No se reintenta con el mismo modelo. */
+export class ErrorBloqueo extends ErrorProveedor {
+  constructor(mensaje: string) {
+    super('gemini', mensaje, { reintentable: false });
+    this.name = 'ErrorBloqueo';
+  }
+}
+
+/**
+ * Filtros ajustables al mínimo: una biblioteca académica lee novela, historia y medicina
+ * (drogas, violencia, sexo). PROHIBITED_CONTENT no se puede relajar; ese caso va a la reserva.
+ */
+export const SEGURIDAD_ACADEMICA = ['HARM_CATEGORY_HARASSMENT', 'HARM_CATEGORY_HATE_SPEECH', 'HARM_CATEGORY_SEXUALLY_EXPLICIT', 'HARM_CATEGORY_DANGEROUS_CONTENT']
+  .map((category) => ({ category, threshold: 'BLOCK_NONE' }));
+
 export const MODELOS_GEMINI = {
   /** Lector por defecto: el de menos errores (CER 0,007 en el Casamiento, frente a 0,021 de Flash-Lite y 0,073 de la tubería antigua). */
   lector: 'gemini-3.8-flash',
@@ -179,7 +194,8 @@ export function crearGemini(config: ConfigGemini): ClienteGemini {
       usd: costeTokens(modelo, entrada, salida, cache, audio), ms: ahora() - t0, ...extra,
     };
     apuntar(uso);
-    if (r.promptFeedback?.blockReason) throw new ErrorProveedor('gemini', `petición bloqueada: ${r.promptFeedback.blockReason}`);
+    if (r.promptFeedback?.blockReason) throw new ErrorBloqueo(`petición bloqueada: ${r.promptFeedback.blockReason}`);
+    if (!texto && cand?.finishReason && /SAFETY|PROHIBITED|BLOCKLIST|SPII/.test(cand.finishReason)) throw new ErrorBloqueo(`respuesta bloqueada: ${cand.finishReason}`);
     return { texto, fin: cand?.finishReason, uso };
   }
 
@@ -200,6 +216,7 @@ export function crearGemini(config: ConfigGemini): ClienteGemini {
       partes.push({ text: instruccionesLector(n, e.primeraFisica, e.pista, o, e.pdf ? 'pdf' : 'imagenes') });
       const cuerpo = {
         contents: [{ role: 'user', parts: partes }],
+        safetySettings: SEGURIDAD_ACADEMICA,
         generationConfig: {
           responseMimeType: 'application/json',
           responseJsonSchema: ESQUEMA_PAGINAS,
@@ -336,13 +353,22 @@ export function crearGemini(config: ConfigGemini): ClienteGemini {
         if (pet.temperatura !== undefined) generationConfig.temperature = pet.temperatura;
         if (pet.maxTokens !== undefined) generationConfig.maxOutputTokens = pet.maxTokens;
         if (pet.esquema) { generationConfig.responseMimeType = 'application/json'; generationConfig.responseJsonSchema = pet.esquema; }
-        const cuerpo: Record<string, unknown> = { contents, generationConfig };
+        const cuerpo: Record<string, unknown> = { contents, generationConfig, safetySettings: SEGURIDAD_ACADEMICA };
         if (pet.sistema) {
           const cache = umbral > 0 && pet.sistema.length >= umbral ? await cacheDe(modelo, pet.sistema) : null;
           if (cache) cuerpo.cachedContent = cache;
           else cuerpo.systemInstruction = { parts: [{ text: pet.sistema }] };
         }
-        const { texto, fin } = await generar(modelo, cuerpo, 'generar');
+        let res: { texto: string; fin?: string };
+        try {
+          res = await generar(modelo, cuerpo, 'generar');
+        } catch (e) {
+          // Bloqueo en «rapida»: el modelo alto a veces sí lo acepta; si no, sube el error a la reserva.
+          const alto = o.modeloAlto ?? MODELOS_GEMINI.redactorAlto;
+          if (!(e instanceof ErrorBloqueo) || modelo === alto) throw e;
+          res = await generar(alto, { ...cuerpo, cachedContent: undefined, systemInstruction: pet.sistema ? { parts: [{ text: pet.sistema }] } : undefined, generationConfig: { ...generationConfig, thinkingConfig: configPensamiento('ninguno') } }, 'generar');
+        }
+        const { texto, fin } = res;
         if (!pet.esquema) return { texto };
         try {
           return { texto, json: extraerJSON<T>(texto) };
