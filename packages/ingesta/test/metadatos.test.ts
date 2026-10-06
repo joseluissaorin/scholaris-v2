@@ -69,7 +69,7 @@ describe('pasoMetadatos', () => {
       return { ok: true, status: 200, json: async () => json };
     };
     const { metadatos } = await pasoMetadatos({ ficha: { titulo: 'Microsoft Word - nips.docx' }, nombreArchivo: 'attention_2017.pdf', tipo: 'pdf', epub: false, unidades: [] }, { redactor, http });
-    expect(metadatos.titulo).toBe('Attention is All you Need');
+    expect(metadatos.titulo).toBe('Attention Is All You Need');
     expect(metadatos.autores.map((a) => a.apellidos)).toEqual(['Vaswani', 'Shazeer']);
     expect(metadatos.doi).toBe('10.48550/arxiv.1706.03762');
     expect(metadatos.procedencia?.doi?.fuente).toBe('crossref');
