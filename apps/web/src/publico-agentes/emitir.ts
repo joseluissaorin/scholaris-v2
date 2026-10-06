@@ -89,8 +89,15 @@ export const RASTREADORES_IA = [
 ];
 
 function robots(): string {
-  const publico = ['/$', '/acerca', '/en$', '/en.md', '/en/knowledge', '/en/agents', '/en/api', '/saber', '/agentes', '/api$', '/api.md', '/api/v1/openapi.json', '/api/v1/llms.txt', '/llms.txt', '/llms-full.txt', '/portada/', '/sitemap.xml', '/.well-known/'];
-  const reglas = [...publico.map((r) => `Allow: ${r}`), 'Disallow: /'].join('\n');
+  // Todo lo público abierto por defecto; solo se cierran las rutas privadas. Sin comodines «$» ni «*»:
+  // muchos lectores de robots.txt de agentes no los entienden y, con «Disallow: /», daban el sitio por cerrado.
+  const privado = [
+    '/api/v2/', '/mcp', '/oauth/', '/authorize', '/token', '/register',
+    '/administracion', '/ajustes', '/buscar', '/compartida', '/documentos', '/escribir', '/explorar',
+    '/invitaciones', '/lector', '/lotes', '/recibir', '/binarios', '/tiempo-real',
+  ];
+  const abierto = ['/', '/api/v1/openapi.json', '/api/v1/llms.txt'];
+  const reglas = [...abierto.map((r) => `Allow: ${r}`), ...privado.map((r) => `Disallow: ${r}`)].join('\n');
   const senal = 'Content-Signal: search=yes, ai-input=yes, ai-train=yes';
   const bloques = [
     `# Scholaris. Lo público (la portada, la base de conocimiento /saber, la guía de la API y /agentes)
