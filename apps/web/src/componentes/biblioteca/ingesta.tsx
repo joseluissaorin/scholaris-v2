@@ -98,11 +98,16 @@ export function TarjetaIngesta({ i }: { i: Ingesta }) {
       )}
 
       <div className="flex items-center gap-3">
-        <Rotulo className="truncate">
+        <Rotulo className="mr-auto truncate">
           {NOMBRE_TIPO[i.tipo]}{esMedio(i.tipo) ? (i.duracion ? ` · ${duracion(i.duracion)}` : '') : total ? ` · ${nombreUnidad(i.tipo, total)}` : ''}{i.bytes ? ` · ${bytes(i.bytes)}` : ''} · <Cronometro desde={i.inicio} hasta={i.fin} />
         </Rotulo>
+        {i.buscables > 0 && i.etapa !== 'listo' && i.documento ? (
+          <Link to="/buscar" search={{ doc: i.documento }} className="flex shrink-0 items-center gap-1 text-[0.875rem] text-tinta underline decoration-azul decoration-2 underline-offset-4 hover:decoration-tinta">
+            Buscar ya
+          </Link>
+        ) : null}
         {abierta ? (
-          <Link to="/lector/$id" params={{ id: i.documento! }} className="ml-auto flex shrink-0 items-center gap-1 text-[0.875rem] text-tinta underline decoration-rojo decoration-2 underline-offset-4 hover:decoration-tinta">
+          <Link to="/lector/$id" params={{ id: i.documento! }} className="flex shrink-0 items-center gap-1 text-[0.875rem] text-tinta underline decoration-rojo decoration-2 underline-offset-4 hover:decoration-tinta">
             {i.etapa === 'listo' || i.etapa === 'duplicado' ? 'Abrir' : 'Leer ya'} <Icono nombre="derecha" tam={14} />
           </Link>
         ) : null}

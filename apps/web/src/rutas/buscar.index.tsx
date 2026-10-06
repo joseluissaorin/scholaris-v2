@@ -14,7 +14,7 @@ import { textoLimpio } from '../lib/texto';
 import { numero } from '../lib/numero';
 
 type Modo = 'buscar' | 'preguntar';
-interface BusquedaBuscar { q?: string; modo?: Modo; grupo?: string; col?: string; cruzada?: boolean; desde?: number; hasta?: number }
+interface BusquedaBuscar { q?: string; modo?: Modo; grupo?: string; col?: string; doc?: string; cruzada?: boolean; desde?: number; hasta?: number }
 
 const GRUPOS: Array<{ id: string; nombre: string; tipos: TipoEntrada[] }> = [
   { id: 'libros', nombre: 'Libros y artículos', tipos: ['pdf', 'epub', 'pdf_escaneado', 'fotos'] },
@@ -29,6 +29,7 @@ export const Route = createFileRoute('/buscar/')({
     modo: s.modo === 'preguntar' ? 'preguntar' : undefined,
     grupo: typeof s.grupo === 'string' ? s.grupo : undefined,
     col: typeof s.col === 'string' ? s.col : undefined,
+    doc: typeof s.doc === 'string' ? s.doc : undefined,
     cruzada: s.cruzada === true || s.cruzada === 'true' ? true : undefined,
     desde: Number.isFinite(Number(s.desde)) && s.desde ? Number(s.desde) : undefined,
     hasta: Number.isFinite(Number(s.hasta)) && s.hasta ? Number(s.hasta) : undefined,
@@ -38,7 +39,7 @@ export const Route = createFileRoute('/buscar/')({
 
 function filtrosDe(b: BusquedaBuscar): Filtros {
   const g = GRUPOS.find((x) => x.id === b.grupo);
-  return { ...(g ? { tipos: g.tipos } : {}), ...(b.col ? { bibliotecas: [b.col] } : {}), ...(b.desde ? { anioDesde: b.desde } : {}), ...(b.hasta ? { anioHasta: b.hasta } : {}) };
+  return { ...(g ? { tipos: g.tipos } : {}), ...(b.col ? { bibliotecas: [b.col] } : {}), ...(b.doc ? { documentos: [b.doc] } : {}), ...(b.desde ? { anioDesde: b.desde } : {}), ...(b.hasta ? { anioHasta: b.hasta } : {}) };
 }
 
 function PaginaBuscar() {
@@ -48,8 +49,9 @@ function PaginaBuscar() {
   const [texto, setTexto] = useState(b.q ?? '');
   const [pregunta, setPregunta] = useState<string | null>(b.modo === 'preguntar' && b.q ? b.q : null);
   const caja = useRef<HTMLInputElement>(null);
-  const filtros = useMemo(() => filtrosDe(b), [b.grupo, b.col, b.desde, b.hasta]); // eslint-disable-line react-hooks/exhaustive-deps
+  const filtros = useMemo(() => filtrosDe(b), [b.grupo, b.col, b.doc, b.desde, b.hasta]); // eslint-disable-line react-hooks/exhaustive-deps
   const { data: bibliotecas = [] } = useQuery(q.bibliotecas());
+  const { data: documentoFiltrado } = useQuery({ ...q.documento(b.doc ?? ''), enabled: !!b.doc });
   const fijar = (c: Partial<BusquedaBuscar>) => void navegar({ search: (s) => ({ ...s, ...c }), replace: true });
 
   // Resultados mientras se escribe: 180 ms de calma bastan.
@@ -109,6 +111,7 @@ function PaginaBuscar() {
 
         {/* Filtros como chips */}
         <div className="sin-barra -mx-5 mt-4 flex items-center gap-2 overflow-x-auto px-5 md:mx-0 md:flex-wrap md:px-0">
+          {b.doc ? <Chip activo alQuitar={() => fijar({ doc: undefined })}>{documentoFiltrado?.metadatos.titulo ?? 'Un documento'}</Chip> : null}
           {GRUPOS.map((g) => <Chip key={g.id} activo={b.grupo === g.id} onClick={() => fijar({ grupo: b.grupo === g.id ? undefined : g.id })}>{g.nombre}</Chip>)}
           <MenuRaiz>
             <MenuDisparador asChild><Chip icono="biblioteca" activo={!!b.col}>{bibliotecas.find((x) => x.id === b.col)?.nombre ?? 'Colección'}</Chip></MenuDisparador>

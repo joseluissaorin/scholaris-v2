@@ -2,7 +2,8 @@ import { lazy, Suspense, useState } from 'react';
 import { createFileRoute } from '@tanstack/react-router';
 import { useQuery } from '@tanstack/react-query';
 import type { Cuota } from '@scholaris/contrato';
-import { avisar, Boton, Campo, Dialogo, Esqueleto, Filete, Rotulo, Tarjeta } from '@scholaris/ui';
+import { avisar, Boton, Campo, cx, Dialogo, Esqueleto, Filete, Rotulo, Tarjeta } from '@scholaris/ui';
+import { modoIngesta, ponerModoIngesta, type ModoIngesta } from '../datos/ingesta';
 import { api, esSimulado } from '../datos/api';
 import { q } from '../datos/consultas';
 import { Lienzo } from '../componentes/comunes/cabecera';
@@ -23,6 +24,25 @@ function Medidor({ nombre, cuota, formato = (n: number) => numero(n) }: { nombre
     <div>
       <div className="flex items-baseline justify-between gap-2"><span className="text-[0.9375rem]">{nombre}</span><span className="tnum font-mono text-[0.8125rem] text-tinta-2">{formato(cuota.usados)}{cuota.limite ? ` de ${formato(cuota.limite)}` : ' · sin límite'}</span></div>
       <div className="mt-2 h-[3px] bg-hondo"><div className={pct > 0.9 ? 'h-full bg-rojo' : 'h-full bg-tinta'} style={{ width: `${cuota.limite ? pct * 100 : 100}%`, opacity: cuota.limite ? 1 : 0.15 }} /></div>
+    </div>
+  );
+}
+
+function ModoIngestaAjuste() {
+  const [modo, setModo] = useState<ModoIngesta>(modoIngesta);
+  const opciones: Array<[ModoIngesta, string, string]> = [
+    ['rapido', 'Rápido', 'Lo nuevo se puede leer en segundos y buscar en unos minutos.'],
+    ['economico', 'Económico', 'Se procesa por lotes: listo en unas horas, a mitad de precio. Bien para bibliotecas enteras.'],
+  ];
+  return (
+    <div role="radiogroup" aria-label="Modo de lectura" className="mt-4 grid gap-3 sm:grid-cols-2">
+      {opciones.map(([m, n, d]) => (
+        <button key={m} type="button" role="radio" aria-checked={modo === m} onClick={() => { ponerModoIngesta(m); setModo(m); }}
+          className={cx('rounded-m border p-4 text-left', modo === m ? 'border-tinta bg-hoja' : 'border-filete hover:border-filete-fuerte')}>
+          <span className="flex items-center gap-2 text-[1.0625rem]">{modo === m ? <span className="h-2.5 w-2.5 rounded-full bg-rojo" /> : <span className="h-2.5 w-2.5 rounded-full border border-filete-fuerte" />}{n}</span>
+          <span className="mt-1 block text-[0.875rem] text-tinta-2">{d}</span>
+        </button>
+      ))}
     </div>
   );
 }
@@ -64,6 +84,11 @@ function Cuenta() {
         <Medidor nombre="Autocitas este mes" cuota={yo.cuotas.autocitasMes} />
         <Medidor nombre="Almacenamiento" cuota={yo.cuotas.bytes} formato={bytes} />
       </div>
+
+      <section className="mt-12">
+        <Filete>Lectura de documentos</Filete>
+        <ModoIngestaAjuste />
+      </section>
 
       {sesion.modo === 'clerk' ? (
         <section className="mt-12">

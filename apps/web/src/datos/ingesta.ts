@@ -37,8 +37,10 @@ export interface Ingesta {
   duracion?: number;
   /** Unidades rasterizadas en el navegador. */
   preparadas: number;
-  /** Unidades ya leídas por el servidor (buscables). */
+  /** Unidades ya leídas por el servidor. */
   leidas: number;
+  /** Unidades ya buscables (indexadas mientras se lee). */
+  buscables: number;
   miniaturas: string[];
   mensaje?: string;
   error?: string;
@@ -51,7 +53,7 @@ export interface Ingesta {
 // ---------------------------------------------------------------------------
 
 /** miniatura: se ve la primera página · legible: se puede leer su texto · listo: se puede buscar y citar. */
-export interface Hitos { miniatura?: number; legible?: number; listo?: number }
+export interface Hitos { miniatura?: number; legible?: number; buscable?: number; listo?: number }
 const hitos = new Map<string, Hitos>();
 /** Anota un hito una sola vez y lo deja en la consola y en `performance` (para medir). */
 function hito(i: Ingesta, k: keyof Hitos) {
@@ -60,7 +62,7 @@ function hito(i: Ingesta, k: keyof Hitos) {
   h[k] = Date.now() - i.inicio;
   hitos.set(i.id, h);
   try { performance.mark(`scholaris:${k}:${i.nombre}`); } catch { /* sin performance */ }
-  console.info(`[ingesta] ${i.nombre}: ${k === 'miniatura' ? 'primera miniatura' : k === 'legible' ? 'página 1 legible' : 'lista para buscar'} a ${(h[k]! / 1000).toFixed(1)} s`);
+  console.info(`[ingesta] ${i.nombre}: ${k === 'miniatura' ? 'primera miniatura' : k === 'legible' ? 'página 1 legible' : k === 'buscable' ? 'primeras páginas buscables' : 'lista para buscar'} a ${(h[k]! / 1000).toFixed(1)} s`);
 }
 export const hitosDe = (id: string) => hitos.get(id);
 if (typeof window !== 'undefined') (window as unknown as { __hitos: typeof hitos }).__hitos = hitos;
@@ -216,7 +218,7 @@ function nombreLegible(archivo: string): string {
 }
 
 function nueva(nombre: string, tipo: TipoEntrada, bytes: number): Ingesta {
-  const i: Ingesta = { id: `i-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`, nombre, tipo, bytes, etapa: 'preparando', avance: 0, subido: 0, unidades: null, preparadas: 0, leidas: 0, miniaturas: [], inicio: Date.now(), mensaje: 'Preparando…' };
+  const i: Ingesta = { id: `i-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`, nombre, tipo, bytes, etapa: 'preparando', avance: 0, subido: 0, unidades: null, preparadas: 0, leidas: 0, buscables: 0, miniaturas: [], inicio: Date.now(), mensaje: 'Preparando…' };
   estado = [i, ...estado];
   emitir();
   asegurarEscucha();
@@ -258,7 +260,7 @@ export async function ingerirUrl(url: string, biblioteca?: string): Promise<Inge
   const i = nueva(url.replace(/^https?:\/\/(www\.)?/, ''), tipo, 0);
   try {
     poner(i.id, { mensaje: 'Pidiendo la página…', etapa: 'procesando' });
-    const r = await api().subidas.desdeUrl({ url, ...(biblioteca ? { bibliotecas: [biblioteca] } : {}) });
+    const r = await api().subidas.desdeUrl({ url, ...(biblioteca ? { bibliotecas: [biblioteca] } : {}), ...opcionesIngesta() });
     poner(i.id, { documento: r.documento, tarea: r.tarea, mensaje: 'Leyendo…' });
     void clienteConsultas.invalidateQueries({ queryKey: ['documentos'] });
   } catch (e) {
@@ -327,11 +329,13 @@ async function correr(i: Ingesta, archivo: File, biblioteca?: string, fotos?: Fi
     }
     if (!paquete && esSimulado()) await simularMiniaturas(i);
 
-    await original;
+    // Con paquete, la lectura empieza ya: el original sigue subiendo y el servidor lo espera al final.
+    if (!paquete) await original;
     poner(i.id, { etapa: 'procesando', mensaje: 'Leyendo…', avance: 0.32 });
-    const r = await api().subidas.ingestar(sub.subida, paquete ? { paquete: 'paquete.json' } : {});
+    const r = await api().subidas.ingestar(sub.subida, { ...(paquete ? { paquete: 'paquete.json' } : {}), ...opcionesIngesta() });
     poner(i.id, { tarea: r.tarea, documento: r.documento });
     void clienteConsultas.invalidateQueries({ queryKey: ['documentos'] });
+    if (paquete) await original;
   } catch (e) {
     if (estado.find((x) => x.id === i.id)?.etapa === 'cancelada') return;
     poner(i.id, { etapa: 'error', error: mensajeDe(e), fin: Date.now() });
@@ -354,6 +358,22 @@ async function simularMiniaturas(i: Ingesta) {
 function miniaturaDePapel(k: number): string {
   const lineas = Array.from({ length: 9 }, (_, j) => `<rect x='10' y='${18 + j * 9}' width='${j === 8 ? 30 : 52 - ((k + j) % 3) * 6}' height='3' fill='%2322160f' opacity='.55'/>`).join('');
   return `data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 72 100'><rect width='72' height='100' fill='%23faf7f0'/>${k === 0 ? "<rect x='10' y='10' width='40' height='5' fill='%23b8321c'/>" : ''}${lineas}<rect x='32' y='92' width='8' height='2' fill='%2322160f' opacity='.6'/></svg>`;
+}
+
+/**
+ * Modo de ingesta elegido en Ajustes o en el menú «Añadir»: «rápido» (por
+ * defecto) o «económico» (por lotes: listo en unas horas, la mitad de precio).
+ */
+export type ModoIngesta = 'rapido' | 'economico';
+export function modoIngesta(): ModoIngesta {
+  try { return localStorage.getItem('scholaris.modoIngesta') === 'economico' ? 'economico' : 'rapido'; } catch { return 'rapido'; }
+}
+export function ponerModoIngesta(m: ModoIngesta) {
+  try { localStorage.setItem('scholaris.modoIngesta', m); } catch { /* sin almacenamiento */ }
+}
+/** Lo que viaja en `Ingestar` además del paquete. El campo `modo` lo define la plataforma. */
+function opcionesIngesta(): Record<string, unknown> {
+  return modoIngesta() === 'economico' ? { modo: 'economico' } : {};
 }
 
 async function sha256Archivo(f: File): Promise<string | undefined> {
@@ -391,12 +411,15 @@ function manejar(e: EventoTiempoReal) {
     poner(i.id, (x) => ({
       etapa: p.fase === 'listo' ? 'listo' : 'procesando', fase: p.fase, tarea: p.tarea,
       avance: Math.max(x.avance, 0.32 + 0.68 * p.total), leidas: Math.max(x.leidas, p.unidadesListas ?? 0),
+      // Unidades buscables mientras se lee (campo de la ingesta progresiva; opcional en el contrato).
+      buscables: Math.max(x.buscables, (p as { unidadesBuscables?: number }).unidadesBuscables ?? 0),
       mensaje: p.mensaje ?? x.mensaje, ...(p.error ? { etapa: 'error' as const, error: p.error } : {}),
     }));
   } else if (e.tipo === 'unidades') {
     const i = porTarea(e.tarea, e.documento);
     // `hasta` es un orden de la API (desde 0): leídas = hasta + 1.
-    if (i) { poner(i.id, (x) => ({ leidas: Math.max(x.leidas, e.hasta + 1) })); hito(i, 'legible'); }
+    const buscable = (e as { buscables?: boolean }).buscables === true;
+    if (i) { poner(i.id, (x) => ({ leidas: Math.max(x.leidas, e.hasta + 1), ...(buscable ? { buscables: Math.max(x.buscables, e.hasta + 1) } : {}) })); hito(i, 'legible'); if (buscable) hito(i, 'buscable'); }
     // Las páginas nuevas ya se pueden abrir en el lector.
     void clienteConsultas.invalidateQueries({ queryKey: ['unidades', e.documento] });
   } else if (e.tipo === 'fin') {
@@ -438,7 +461,7 @@ async function recuperarTareasAhora() {
       const i: Ingesta = {
         id: `i-${t.id}`, nombre: d?.titulo ?? 'Documento', tipo: d?.tipo ?? 'pdf', bytes: d?.bytes ?? 0, documento: t.documento, tarea: t.id, etapa: 'procesando',
         fase: t.progreso?.fase, avance: 0.32 + 0.68 * (t.progreso?.total ?? 0), subido: 1, unidades: d?.unidades ?? null, preparadas: d?.unidades ?? 0,
-        leidas: t.progreso?.unidadesListas ?? 0, miniaturas: [], inicio: Date.parse(t.creada), mensaje: t.progreso?.mensaje ?? 'Leyendo…',
+        leidas: t.progreso?.unidadesListas ?? 0, buscables: 0, miniaturas: [], inicio: Date.parse(t.creada), mensaje: t.progreso?.mensaje ?? 'Leyendo…',
       };
       estado = [...estado, i];
     }

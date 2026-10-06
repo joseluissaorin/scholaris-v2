@@ -1,10 +1,22 @@
 /** Los menús del marco (Añadir y Cuenta). Se cargan aparte: ver `Perezoso` en navegacion.tsx. */
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
+import { modoIngesta, ponerModoIngesta, type ModoIngesta } from '../../datos/ingesta';
 import { MenuRaiz, MenuDisparador, MenuContenido, MenuElemento, MenuSeparador, MenuRotulo } from '@scholaris/ui';
 import { disparar, ponerTema, useTema } from '../../lib/acciones';
 import { useSesion } from '../../sesion';
 import { esSimulado } from '../../datos/api';
 import { TECLA_MOD, useNombre } from './navegacion';
+
+function ModoLectura() {
+  const [modo, setModo] = useState<ModoIngesta>(modoIngesta);
+  const elegir = (m: ModoIngesta) => { ponerModoIngesta(m); setModo(m); };
+  return (
+    <>
+      <MenuElemento icono={modo === 'rapido' ? 'hecho' : undefined} alElegir={() => elegir('rapido')}>Rápido <span className="text-apagado">· en minutos</span></MenuElemento>
+      <MenuElemento icono={modo === 'economico' ? 'hecho' : undefined} alElegir={() => elegir('economico')}>Económico <span className="text-apagado">· en unas horas, mitad de precio</span></MenuElemento>
+    </>
+  );
+}
 
 export default function Menus({ tipo, alinear, lado, abiertoAlMontar, children }: { tipo: 'anadir' | 'cuenta'; alinear?: 'start' | 'end' | 'center'; lado?: 'right' | 'top' | 'bottom'; abiertoAlMontar?: boolean; children: ReactNode }) {
   return tipo === 'anadir'
@@ -24,6 +36,9 @@ function MenuAnadir({ children, alinear = 'start', lado, abierto }: { children: 
         <MenuElemento icono="enlace" alElegir={() => disparar('enlace')}>Desde un enlace…</MenuElemento>
         <MenuSeparador />
         <MenuElemento icono="pila" alElegir={() => disparar('spdf')}>Importar un .spdf…</MenuElemento>
+        <MenuSeparador />
+        <MenuRotulo>Cómo leerlo</MenuRotulo>
+        <ModoLectura />
       </MenuContenido>
     </MenuRaiz>
   );

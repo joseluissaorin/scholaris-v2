@@ -12,14 +12,21 @@ import { api } from '../../datos/api';
 import { bytes, fecha, NOMBRE_TIPO, nombreUnidad, duracion, esMedio } from '../../lib/formato';
 import { numero } from '../../lib/numero';
 
-type Campo = keyof MetadatosDocumento;
+/**
+ * Metadatos de edición más ricos que llegan de la ingesta: título original,
+ * traductores. Se leen si vienen; el contrato los irá incorporando.
+ */
+type Metadatos = MetadatosDocumento & { tituloOriginal?: string; traductores?: Autor[] };
+type Campo = keyof Metadatos;
 
-const CAMPOS: Array<{ k: Campo; nombre: string; ancho?: 'medio'; numerico?: boolean; solo?: (m: MetadatosDocumento) => boolean }> = [
+const CAMPOS: Array<{ k: Campo; nombre: string; ancho?: 'medio'; numerico?: boolean; solo?: (m: Metadatos) => boolean }> = [
   { k: 'titulo', nombre: 'Título' },
   { k: 'subtitulo', nombre: 'Subtítulo' },
   { k: 'autores', nombre: 'Autoría' },
+  { k: 'tituloOriginal', nombre: 'Título original' },
+  { k: 'traductores', nombre: 'Traducción' },
+  { k: 'anioOriginal', nombre: 'Año de la obra', ancho: 'medio', numerico: true },
   { k: 'anio', nombre: 'Año de esta edición', ancho: 'medio', numerico: true },
-  { k: 'anioOriginal', nombre: 'Año original', ancho: 'medio', numerico: true },
   { k: 'editorial', nombre: 'Editorial', ancho: 'medio' },
   { k: 'lugar', nombre: 'Lugar', ancho: 'medio' },
   { k: 'revista', nombre: 'Revista', solo: (m) => !!m.revista || m.tipoCSL === 'article-journal' },
@@ -34,28 +41,28 @@ const CAMPOS: Array<{ k: Campo; nombre: string; ancho?: 'medio'; numerico?: bool
 
 const FUENTE: Record<string, string> = { lectura: 'leído', crossref: 'Crossref', openalex: 'OpenAlex', usuario: 'tú', epub: 'EPUB', pdf: 'ficha del PDF' };
 
-function aTexto(m: MetadatosDocumento, k: Campo): string {
+function aTexto(m: Metadatos, k: Campo): string {
   const v = m[k];
-  if (k === 'autores' || k === 'editores') return (v as Autor[] | undefined)?.map((a) => `${a.apellidos}, ${a.nombre}`).join('; ') ?? '';
+  if (k === 'autores' || k === 'editores' || k === 'traductores') return (v as Autor[] | undefined)?.map((a) => `${a.apellidos}, ${a.nombre}`).join('; ') ?? '';
   return v == null ? '' : String(v);
 }
 
 function deTexto(k: Campo, t: string, numerico?: boolean): unknown {
-  if (k === 'autores') return t.split(';').map((x) => x.trim()).filter(Boolean).map((x) => { const [ap, no] = x.split(',').map((y) => y.trim()); return { apellidos: ap ?? '', nombre: no ?? '' }; });
+  if (k === 'autores' || k === 'traductores') return t.split(';').map((x) => x.trim()).filter(Boolean).map((x) => { const [ap, no] = x.split(',').map((y) => y.trim()); return { apellidos: ap ?? '', nombre: no ?? '' }; });
   if (numerico) return t.trim() ? Number(t) : undefined;
   return t.trim() || undefined;
 }
 
 export function Ficha({ doc }: { doc: DetalleDocumento }) {
   const qc = useQueryClient();
-  const m = doc.metadatos;
+  const m = doc.metadatos as Metadatos;
 
   async function guardar(k: Campo, valor: unknown) {
     const previo = qc.getQueryData<DetalleDocumento>(['documento', doc.id]);
-    const proc = { ...(m.procedencia ?? {}), [k]: { fuente: 'usuario' as const, confianza: 1 } };
+    const proc = { ...(m.procedencia ?? {}), [k as string]: { fuente: 'usuario' as const, confianza: 1 } };
     qc.setQueryData<DetalleDocumento>(['documento', doc.id], (d) => d && { ...d, metadatos: { ...d.metadatos, [k]: valor, procedencia: proc } });
     try {
-      const nuevo = await api().documentos.metadatos(doc.id, { [k]: valor });
+      const nuevo = await api().documentos.metadatos(doc.id, { [k]: valor } as Partial<MetadatosDocumento>);
       qc.setQueryData(['documento', doc.id], nuevo);
       void qc.invalidateQueries({ queryKey: ['documentos'] });
     } catch {
@@ -77,7 +84,7 @@ export function Ficha({ doc }: { doc: DetalleDocumento }) {
       <div className="grid grid-cols-2 gap-x-4 gap-y-4">
         {CAMPOS.filter((c) => !c.solo || c.solo(m)).map((c) => (
           <CampoEditable key={c.k} etiqueta={c.nombre} valor={aTexto(m, c.k)} ancho={c.ancho} numerico={c.numerico}
-            procedencia={m.procedencia?.[c.k]} ayuda={c.k === 'autores' ? 'Apellidos, Nombre; separados por punto y coma' : c.k === 'anioOriginal' ? 'Para citar «1975/2009»' : undefined}
+            procedencia={m.procedencia?.[c.k as string]} ayuda={c.k === 'autores' || c.k === 'traductores' ? 'Apellidos, Nombre; separados por punto y coma' : c.k === 'anioOriginal' ? 'Se cita «1975/2009»: la obra y esta edición' : undefined}
             alGuardar={(t) => void guardar(c.k, deTexto(c.k, t, c.numerico))} />
         ))}
       </div>
