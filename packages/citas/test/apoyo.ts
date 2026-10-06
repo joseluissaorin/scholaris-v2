@@ -37,7 +37,7 @@ export function redactorAutocita(latencia = 0): RedactorFalso {
         }).filter((x) => x.n >= 2).sort((x, y) => y.n - x.n).slice(0, 2);
         puntuados.forEach(({ c, n }, i) => {
           const evidencia = i === 0 ? c.texto.split(/(?<=[.:;])\s/)[0]!.replace(/[.:;]$/, '') : 'una frase que el pasaje no contiene';
-          citas.push({ afirmacion: a.id, candidato: c.id, relacion: n >= 3 ? 'APOYO_DIRECTO' : 'CONTEXTO', evidencia, confianza: Math.min(0.95, 0.5 + n * 0.1), reescritura: /transformers/i.test(a.texto) ? 'Siguiendo el modelo medieval descrito por Lewis, los transformers organizan el lenguaje como un cosmos ordenado' : null });
+          citas.push({ afirmacion: a.id, candidato: c.id, relacion: n >= 3 ? 'APOYO_DIRECTO' : 'CONTEXTO', evidencia, confianza: Math.min(0.95, 0.5 + n * 0.1), reescritura: /transformers/i.test(a.texto) ? 'Siguiendo la selección natural que describe Darwin, los transformers conservan las variaciones favorables' : null });
         });
       }
       if (afirmaciones[0]) citas.push({ afirmacion: afirmaciones[0].id, candidato: 'C99', relacion: 'APOYO_DIRECTO', evidencia: 'x', confianza: 0.99 });
@@ -63,10 +63,10 @@ export async function montar(lat: { redactor?: number; emb?: number; juez?: numb
 /** Un DOCX mínimo pero realista: estilos, runs con formato, entidades, tabulador e hipervínculo. */
 export function docxDePrueba(parrafos: string[] = []): Uint8Array {
   const cuerpo = parrafos.length ? parrafos.join('') : [
-    '<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>El poder y la mirada</w:t></w:r></w:p>',
-    '<w:p><w:r><w:rPr><w:rFonts w:ascii="Georgia" w:hAnsi="Georgia"/><w:sz w:val="24"/></w:rPr><w:t xml:space="preserve">El panóptico induce en el detenido un estado consciente y permanente de </w:t></w:r>'
-      + '<w:r><w:rPr><w:rFonts w:ascii="Georgia" w:hAnsi="Georgia"/><w:i/><w:sz w:val="24"/></w:rPr><w:t>visibilidad</w:t></w:r>'
-      + '<w:r><w:rPr><w:rFonts w:ascii="Georgia" w:hAnsi="Georgia"/><w:sz w:val="24"/></w:rPr><w:t xml:space="preserve"> que garantiza el funcionamiento automático del poder. La disciplina fabrica cuerpos dóciles, sometidos &amp; ejercitados.</w:t></w:r></w:p>',
+    '<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>Molinos y galeotes</w:t></w:r></w:p>',
+    '<w:p><w:r><w:rPr><w:rFonts w:ascii="Georgia" w:hAnsi="Georgia"/><w:sz w:val="24"/></w:rPr><w:t xml:space="preserve">Don Quijote ve treinta o cuarenta molinos de </w:t></w:r>'
+      + '<w:r><w:rPr><w:rFonts w:ascii="Georgia" w:hAnsi="Georgia"/><w:i/><w:sz w:val="24"/></w:rPr><w:t>viento</w:t></w:r>'
+      + '<w:r><w:rPr><w:rFonts w:ascii="Georgia" w:hAnsi="Georgia"/><w:sz w:val="24"/></w:rPr><w:t xml:space="preserve"> en aquel campo y los toma por desaforados gigantes. Los galeotes van a las galeras por sus delitos &amp; de por fuerza.</w:t></w:r></w:p>',
     '<w:p><w:r><w:t>Tabla</w:t></w:r><w:r><w:tab/><w:t xml:space="preserve">con tabulador y </w:t></w:r><w:hyperlink r:id="rId9"><w:r><w:rPr><w:rStyle w:val="Hyperlink"/></w:rPr><w:t>un enlace</w:t></w:r></w:hyperlink><w:r><w:t>.</w:t></w:r></w:p>',
     '<w:p/>',
     '<w:p><w:r><w:rPr><w:b/></w:rPr><w:t xml:space="preserve">La rueda de la Fortuna no se detiene nunca, según Boecio.</w:t></w:r></w:p>',

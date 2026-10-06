@@ -2,15 +2,16 @@ import { describe, expect, it } from 'vitest';
 import { htmlSeguro } from './resaltado';
 import { textoLimpio } from './texto';
 
+// Réplicas literales del capítulo VIII de la primera parte del Quijote (Project Gutenberg n.º 2000).
 describe('marcas de hablante en los pasajes', () => {
   it('la marca partida por los puntos suspensivos no deja asteriscos', () => {
-    expect(htmlSeguro('…Sí, exacto. **Joaquín Soler…')).toBe('…Sí, exacto.');
-    expect(textoLimpio('…Sí, exacto. **Joaquín Soler…')).toBe('…Sí, exacto.');
+    expect(htmlSeguro('…Aquellos que allí ves. **Sancho Pan…')).toBe('…Aquellos que allí ves.');
+    expect(textoLimpio('…Aquellos que allí ves. **Sancho Pan…')).toBe('…Aquellos que allí ves.');
   });
   it('la marca entera sale como etiqueta propia, venga cruda o del servidor', () => {
-    const esperado = 'Sí. <span class="hablante">Joaquín Soler Serrano</span> ¿Y el <mark>jazz</mark>?';
-    expect(htmlSeguro('Sí. **Joaquín Soler Serrano:** ¿Y el <mark>jazz</mark>?')).toBe(esperado);
-    expect(htmlSeguro('Sí. <b class="hablante">Joaquín Soler Serrano</b> ¿Y el <mark>jazz</mark>?')).toBe(esperado);
+    const esperado = 'Aquellos que allí ves. <span class="hablante">Sancho Panza</span> ¿Qué <mark>gigantes</mark>?';
+    expect(htmlSeguro('Aquellos que allí ves. **Sancho Panza:** ¿Qué <mark>gigantes</mark>?')).toBe(esperado);
+    expect(htmlSeguro('Aquellos que allí ves. <b class="hablante">Sancho Panza</b> ¿Qué <mark>gigantes</mark>?')).toBe(esperado);
   });
   it('nada de HTML del corpus pasa, ni por el nombre', () => {
     const r = htmlSeguro('**<img src=x onerror=alert(1)>:** hola <script>');
@@ -18,6 +19,6 @@ describe('marcas de hablante en los pasajes', () => {
     expect(r).not.toContain('*');
   });
   it('el texto plano dice quién habla sin Markdown', () => {
-    expect(textoLimpio('**Julio Cortázar:** El jazz es libertad.')).toBe('Julio Cortázar: El jazz es libertad.');
+    expect(textoLimpio('**Sancho Panza:** ¿Qué gigantes?')).toBe('Sancho Panza: ¿Qué gigantes?');
   });
 });

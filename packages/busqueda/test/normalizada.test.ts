@@ -13,18 +13,21 @@ const documento = (id: string, idioma: string, anio?: number): Documento => ({
 const fragmentos = (doc: string, textos: string[]): Fragmento[] =>
   textos.map((texto, i) => ({ id: `${doc}-${i}`, documento: doc, unidad: `${doc}-u`, orden: i, texto, contexto: '', seccion: [], ancla: pagina(i + 1) }));
 
+// Textos literales: Argote de Molina, «Discurso sobre el Libro de la Montería» (1582), con su grafía, de
+// https://es.wikisource.org/wiki/Libro_de_la_monteria/Discurso ; Cervantes, «Don Quijote» (Project Gutenberg n.º 2000);
+// Darwin, «On the Origin of Species» (1859, Project Gutenberg n.º 1228).
 async function estanteria() {
   const sql = crearSQL();
-  await escribirDocumento(sql, documento('lope', 'es'));
-  await escribirDocumento(sql, documento('cortazar', 'es', 1959));
-  await escribirDocumento(sql, documento('foucault', 'en', 1977));
-  await escribirFragmentos(sql, fragmentos('lope', [
-    '*Ber.* Y aſsi es la muerte, Brabonèl, q̃ no perdona\nni al Rey ni al vaſsallo.',
-    'No estoy muy enamorado;\nque es pequeño el corazon,\ny un Padre con su prision\ntiene lo mas ocupado.',
-    'La muger de mi Padre, aora, con su honrra.',
+  await escribirDocumento(sql, documento('argote', 'es'));
+  await escribirDocumento(sql, documento('quijote', 'es', 1605));
+  await escribirDocumento(sql, documento('darwin', 'en', 1859));
+  await escribirFragmentos(sql, fragmentos('argote', [
+    "prenden a los que hallan en palacio, y no pudiendo prenderlos, puedē matarlos, ſi con rieſgo de muerte ſe les defienden",
+    "el qual apedimiento del reyno eſtablecio ley del numero dellos que dize aſsi.",
+    "Don Sancho Fernandez, hijo del famoſo Conde Fernan Gonçalez, y de la Condeſſa Doña Sancha ſu muger, la qual deſſeando caſar con vn Rey Moro",
   ]));
-  await escribirFragmentos(sql, fragmentos('cortazar', ['Johnny dice que la muerte es así, un reloj roto que no perdona.']));
-  await escribirFragmentos(sql, fragmentos('foucault', ['Discipline and punish: the birth of the prison and the death of the king.']));
+  await escribirFragmentos(sql, fragmentos('quijote', ["La libertad, Sancho, es uno de los más preciosos dones que a los hombres dieron los cielos; con ella no pueden igualarse los tesoros que encierra la tierra ni el mar encubre; por la libertad, así como por la honra, se puede y debe aventurar la vida, y, por el contrario, el cautiverio es el mayor mal que puede venir a los hombres."]));
+  await escribirFragmentos(sql, fragmentos('darwin', ["On the other hand, we may feel sure that any variation in the least degree injurious would be rigidly destroyed. This preservation of favourable variations and the rejection of injurious variations, I call Natural Selection."]));
   return sql;
 }
 
@@ -41,17 +44,18 @@ describe('vía léxica normalizada', () => {
   it('la grafía moderna encuentra el texto antiguo y no rompe lo moderno', async () => {
     const b = new Buscador({ sql: await estanteria() });
     const lex = { vias: ['lexica' as const], limite: 10 };
-    expect(ids(await b.buscar('así es la muerte', lex))).toEqual(['cortazar-0', 'lope-0']);
-    expect(ids(await b.buscar('corazón', lex))).toEqual(['lope-1']);
-    expect(ids(await b.buscar('mujer honra', lex))).toEqual(['lope-2']);
-    expect(ids(await b.buscar('vasallo', lex))).toEqual(['lope-0']);
-    expect(ids(await b.buscar('prison death', lex))).toEqual(['foucault-0']);
+    expect(ids(await b.buscar('riesgo de muerte', lex))).toEqual(['argote-0']);
+    expect(ids(await b.buscar('mujer', lex))).toEqual(['argote-2']);
+    expect(ids(await b.buscar('famoso conde', lex))).toEqual(['argote-2']);
+    expect(ids(await b.buscar('estableció ley', lex))).toEqual(['argote-1']);
+    expect(ids(await b.buscar('aventurar la vida', lex))).toEqual(['quijote-0']);
+    expect(ids(await b.buscar('natural selection', lex))).toEqual(['darwin-0']);
   });
 
   it('las citas literales siguen yendo al texto fiel, y también casan con la capa', async () => {
     const b = new Buscador({ sql: await estanteria() });
-    expect(ids(await b.buscar('«pequeño el corazon»', { vias: ['lexica'] }))).toEqual(['lope-1']);
-    expect(ids(await b.buscar('«así es la muerte»', { vias: ['lexica'] }))).toEqual(['lope-0']);
+    expect(ids(await b.buscar('«Doña Sancha»', { vias: ['lexica'] }))).toEqual(['argote-2']);
+    expect(ids(await b.buscar('«riesgo de muerte»', { vias: ['lexica'] }))).toEqual(['argote-0']);
   });
 
   it('una estantería sin migrar (4.0) busca como antes', async () => {

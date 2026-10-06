@@ -8,20 +8,22 @@ const unidad = (orden: number, t0: number, t1: number, texto: string, hablante?:
   ancla: { tipo: 'tiempo', t0, t1, ...(hablante ? { hablante } : {}) },
 });
 
+// Réplicas literales del capítulo VIII de la primera parte del Quijote (Project Gutenberg n.º 2000), sin las
+// acotaciones del narrador, leídas como un diálogo con dos voces.
 const UNIDADES = [
-  unidad(1, 52.4, 105.9, 'Nos sentimos especialmente felices esta noche porque hemos culminado una larga tarea, una pesquisa.', 'Joaquín Soler Serrano'),
-  unidad(2, 106.2, 159.5, '**Joaquín Soler Serrano:** Lo agradecemos mucho, querido Julio Cortázar.\n\n**Julio Cortázar:** Bueno, pues aquí me tienes.\n\n**Joaquín Soler Serrano:** Vamos a ver, Julio.', 'Joaquín Soler Serrano'),
-  unidad(3, 159.5, 208.6, '**Julio Cortázar:** Es verdad. Las circunstancias de mi nacimiento fueron nada extraordinarias.', 'Julio Cortázar'),
+  unidad(1, 52.4, 105.9, 'La ventura va guiando nuestras cosas mejor de lo que acertáramos a desear, porque ves allí, amigo Sancho Panza, donde se descubren treinta, o pocos más, desaforados gigantes', 'Don Quijote'),
+  unidad(2, 106.2, 159.5, '**Don Quijote:** con quien pienso hacer batalla y quitarles a todos las vidas.\n\n**Sancho Panza:** ¿Qué gigantes?\n\n**Don Quijote:** Aquellos que allí ves.', 'Don Quijote'),
+  unidad(3, 159.5, 208.6, '**Sancho Panza:** Mire vuestra merced que aquellos que allí se parecen no son gigantes, sino molinos de viento.', 'Sancho Panza'),
 ];
 
 describe('transcripción', () => {
   const tr = construirTranscripcion(UNIDADES);
 
   it('las marcas de turno se convierten en hablantes, no en texto', () => {
-    expect(tr.hablantes).toEqual(['Joaquín Soler Serrano', 'Julio Cortázar']);
+    expect(tr.hablantes).toEqual(['Don Quijote', 'Sancho Panza']);
     expect(tr.palabras.some((w) => w.texto.includes('**'))).toBe(false);
-    expect(tr.palabras.find((w) => w.texto === 'Bueno,')?.h).toBe(1);
-    expect(tr.palabras.find((w) => w.texto === 'agradecemos')?.h).toBe(0);
+    expect(tr.palabras.find((w) => w.texto === '¿Qué')?.h).toBe(1);
+    expect(tr.palabras.find((w) => w.texto === 'pienso')?.h).toBe(0);
   });
 
   it('los instantes de las palabras crecen y no se salen de su tramo', () => {
@@ -56,18 +58,18 @@ describe('transcripción', () => {
   });
 
   it('busca sin tildes ni mayúsculas, por frases y con prefijo en la última palabra', () => {
-    expect(buscarEnTranscripcion(tr.palabras, 'cortazar').length).toBe(1);
-    expect(buscarEnTranscripcion(tr.palabras, 'JULIO cortáz').length).toBe(1);
-    expect(buscarEnTranscripcion(tr.palabras, 'una').length).toBe(2);
-    expect(buscarEnTranscripcion(tr.palabras, 'nada extra')[0]?.largo).toBe(2);
+    expect(buscarEnTranscripcion(tr.palabras, 'acertaramos').length).toBe(1);
+    expect(buscarEnTranscripcion(tr.palabras, 'SANCHO pan').length).toBe(1);
+    expect(buscarEnTranscripcion(tr.palabras, 'aquellos').length).toBe(2);
+    expect(buscarEnTranscripcion(tr.palabras, 'molinos de vie')[0]?.largo).toBe(3);
     expect(buscarEnTranscripcion(tr.palabras, '  ')).toEqual([]);
   });
 
   it('un pasaje seleccionado da su texto y su intervalo exacto', () => {
-    const a = tr.palabras.findIndex((w) => w.texto === 'Bueno,');
-    const b = tr.palabras.findIndex((w) => w.texto === 'tienes.');
+    const a = tr.palabras.findIndex((w) => w.texto === '¿Qué');
+    const b = tr.palabras.findIndex((w) => w.texto === 'gigantes?');
     const x = pasaje(tr, b, a);
-    expect(x.texto).toBe('Bueno, pues aquí me tienes.');
+    expect(x.texto).toBe('¿Qué gigantes?');
     expect(x.t0).toBe(tr.palabras[a]!.t0);
     expect(x.t1).toBe(tr.palabras[b]!.t1);
     expect(x.h).toBe(1);
@@ -82,7 +84,7 @@ describe('transcripción', () => {
     const vtt = aVtt(tr);
     expect(vtt.startsWith('WEBVTT\n')).toBe(true);
     expect(vtt).toMatch(/00:00:52\.400 --> 00:00:\d\d\.\d{3}/);
-    expect(vtt).toContain('<v Julio Cortázar>');
+    expect(vtt).toContain('<v Sancho Panza>');
     // Las marcas no se solapan.
     const marcas = [...vtt.matchAll(/(\d\d):(\d\d):(\d\d)\.(\d{3}) --> (\d\d):(\d\d):(\d\d)\.(\d{3})/g)].map((m) => [Number(m[1]) * 3600 + Number(m[2]) * 60 + Number(m[3]) + Number(m[4]) / 1000, Number(m[5]) * 3600 + Number(m[6]) * 60 + Number(m[7]) + Number(m[8]) / 1000]);
     for (let i = 1; i < marcas.length; i++) expect(marcas[i]![0]!).toBeGreaterThanOrEqual(marcas[i - 1]![1]! - 1e-6);
@@ -97,7 +99,7 @@ describe('transcripción', () => {
   });
 
   it('sílabas y densidad del habla', () => {
-    expect(silabas('Cortázar')).toBe(3);
+    expect(silabas('Quijote')).toBe(3);
     expect(silabas('y')).toBe(1);
     const d = densidad(tr, 220, 22);
     expect(d.length).toBe(22);
@@ -107,10 +109,11 @@ describe('transcripción', () => {
 
   it('una transcripción de dos horas se construye y se consulta deprisa', () => {
     const muchas: UnidadVista[] = [];
-    const frase = 'Pues yo creo que la literatura, como el jazz, es una forma de improvisación sobre un tema que uno conoce muy bien.';
+    // Frase literal del Quijote (II, LVIII), repetida para hacer bulto; las voces son genéricas.
+    const frase = 'La libertad, Sancho, es uno de los más preciosos dones que a los hombres dieron los cielos;';
     for (let i = 0; i < 150; i++) {
       const t0 = i * 48;
-      muchas.push(unidad(i + 1, t0, t0 + 47, `**${i % 2 ? 'Julio Cortázar' : 'Joaquín Soler Serrano'}:** ${Array.from({ length: 6 }, () => frase).join(' ')}`));
+      muchas.push(unidad(i + 1, t0, t0 + 47, `**${i % 2 ? 'Voz B' : 'Voz A'}:** ${Array.from({ length: 8 }, () => frase).join(' ')}`));
     }
     const inicio = performance.now();
     const grande = construirTranscripcion(muchas);

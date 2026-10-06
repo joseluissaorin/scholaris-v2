@@ -27,7 +27,7 @@ describe('texto', () => {
   it('escapa la sintaxis de FTS5 y respeta las frases', () => {
     expect(consultaFts('NEAR(a b) OR "x')).toBe('"near"');
     expect(consultaFts('el panóptico de Bentham')).toBe('"panoptico" OR "bentham"');
-    expect(consultaFts('«ver y ser visto» Foucault')).toBe('"ver y ser visto"');
+    expect(consultaFts('«molinos de viento» Cervantes')).toBe('"molinos de viento"');
     expect(consultaFts('ser o no ser')).toBe('"ser" OR "no"');
     expect(consultaFts('***')).toBeNull();
   });
@@ -37,11 +37,12 @@ describe('texto', () => {
   });
 });
 
+// Réplicas literales del capítulo VIII de la primera parte del Quijote (Project Gutenberg n.º 2000).
 describe('marcas de hablante en el resaltado', () => {
   const turno = (n: number) => `palabra${n} relleno de la conversación que sigue y sigue`;
-  const larga = `**Julio Cortázar:** ${Array.from({ length: 12 }, (_, i) => turno(i)).join(' ')} Sí, exacto. **Joaquín Soler Serrano:** ¿Y el jazz? **Julio Cortázar:** El jazz es la libertad. ${Array.from({ length: 12 }, (_, i) => turno(i + 20)).join(' ')}`;
+  const larga = `**Don Quijote:** ${Array.from({ length: 12 }, (_, i) => turno(i)).join(' ')} Aquellos que allí ves **Sancho Panza:** ¿Qué gigantes? **Don Quijote:** ellos son gigantes ${Array.from({ length: 12 }, (_, i) => turno(i + 20)).join(' ')}`;
   it('ningún asterisco llega al resaltado, aunque la ventana parta la marca', () => {
-    for (const q of [['jazz'], ['exacto'], ['libertad'], ['palabra11'], ['palabra25']]) {
+    for (const q of [['gigantes'], ['aquellos'], ['ellos'], ['palabra11'], ['palabra25']]) {
       for (const v of [40, 90, 160, 280]) {
         const r = resaltar(larga, q, v);
         expect(r, `${q} ${v}`).not.toContain('*');
@@ -49,30 +50,30 @@ describe('marcas de hablante en el resaltado', () => {
     }
   });
   it('los turnos salen como etiqueta propia, también el que estaba en curso', () => {
-    const r = resaltar(larga, ['jazz'], 120);
-    expect(r).toContain('<b class="hablante">Joaquín Soler Serrano</b> ¿Y el <mark>jazz</mark>?');
-    expect(r).toMatch(/^…<b class="hablante">Julio Cortázar<\/b> /);
+    const r = resaltar(larga, ['gigantes'], 120);
+    expect(r).toContain('<b class="hablante">Sancho Panza</b> ¿Qué <mark>gigantes</mark>?');
+    expect(r).toMatch(/^…<b class="hablante">Don Quijote<\/b> /);
   });
   it('quita las marcas partidas en los bordes del fragmento', () => {
-    expect(resaltar('errano:** ¿Y el jazz? Mucho. **Julio Cort', ['jazz'])).toBe('¿Y el <mark>jazz</mark>? Mucho.');
+    expect(resaltar('anza:** ¿Qué gigantes? **Don Quij', ['gigantes'])).toBe('¿Qué <mark>gigantes</mark>?');
   });
   it('la etiqueta no queda dentro de la marca de la coincidencia', () => {
-    expect(resaltar('Sí. **Facundo Cabral:** Exacto. Porque', ['exacto'])).toBe('Sí. <b class="hablante">Facundo Cabral</b> <mark>Exacto</mark>. Porque');
+    expect(resaltar('¿Qué gigantes? **Don Quijote:** Aquellos que allí ves', ['aquellos'])).toBe('¿Qué gigantes? <b class="hablante">Don Quijote</b> <mark>Aquellos</mark> que allí ves');
   });
 });
 
 describe('comprensión heurística', () => {
   it('extrae autores conocidos y años', () => {
-    const h = analizarHeuristico('el poder en Foucault antes de 1980', { autores: ['Foucault', 'Lewis'] });
-    expect(h.filtros).toEqual({ anioHasta: 1979, autores: ['Foucault'] });
+    const h = analizarHeuristico('la libertad en Cervantes antes de 1900', { autores: ['Cervantes', 'Darwin'] });
+    expect(h.filtros).toEqual({ anioHasta: 1899, autores: ['Cervantes'] });
     expect(analizarHeuristico('cosmos entre 1960 y 1970').filtros).toEqual({ anioDesde: 1960, anioHasta: 1970 });
     expect(analizarHeuristico('libertad después de 2000').filtros).toEqual({ anioDesde: 2001 });
   });
   it('reconoce «ir a la página» y las citas', () => {
-    expect(analizarHeuristico('página 199 de Vigilar y castigar').irA).toEqual({ folio: '199', pista: 'Vigilar y castigar' });
+    expect(analizarHeuristico('página 199 de Don Quijote').irA).toEqual({ folio: '199', pista: 'Don Quijote' });
     expect(analizarHeuristico('ir a la p. xiv').irA).toEqual({ folio: 'xiv' });
-    expect(intencionHeuristica('«ver y ser visto»')).toBe('cita');
-    expect(intencionHeuristica('lámina de las esferas')).toBe('visual');
+    expect(intencionHeuristica('«molinos de viento»')).toBe('cita');
+    expect(intencionHeuristica('lámina del diagrama')).toBe('visual');
     expect(intencionHeuristica('¿cuándo se escribió?')).toBe('temporal');
   });
 });
@@ -85,110 +86,110 @@ describe('Buscador', () => {
     expect(contarFragmentos()).toBe(30);
   });
 
-  it('encuentra el panóptico por las tres vías, sin acentos, con resaltado', async () => {
-    const r = await m.buscador.buscar('panoptico y vigilancia');
+  it('encuentra a los galeotes por las tres vías, sin acentos, con resaltado', async () => {
+    const r = await m.buscador.buscar('galeotes y galeras del rey');
     const ids = r.resultados.map((x) => x.fragmento.id);
-    expect(ids.slice(0, 3).some((id) => ['fr-fou-06', 'fr-fou-07', 'fr-fou-08'].includes(id))).toBe(true);
+    expect(ids.slice(0, 3).some((id) => ['fr-q-06', 'fr-q-07', 'fr-q-08'].includes(id))).toBe(true);
     const primero = r.resultados[0]!;
     expect(primero.vias).toContain('lexica');
     expect(primero.vias).toContain('densa');
-    expect(primero.resaltado).toMatch(/<mark>Panóptico<\/mark>/);
-    expect(primero.documento.metadatos.titulo).toBe('Vigilar y castigar');
+    expect(primero.resaltado).toMatch(/<mark>(galeotes|galeras|rey)<\/mark>/);
+    expect(primero.documento.metadatos.titulo).toBe('Don Quijote');
     expect(r.comprension.origen).toBe('modelo');
     expect(r.tiempos.total).toBeGreaterThanOrEqual(0);
   });
 
   it('funde fragmentos contiguos solo si se pide', async () => {
-    const r = await m.buscador.buscar('panóptico torre anillo visibilidad', { fundirContiguos: true });
-    const fou = r.resultados.filter((x) => ['fr-fou-06', 'fr-fou-07', 'fr-fou-08'].includes(x.fragmento.id));
+    const r = await m.buscador.buscar('galeotes gente forzada galeras', { fundirContiguos: true });
+    const fou = r.resultados.filter((x) => ['fr-q-06', 'fr-q-07', 'fr-q-08'].includes(x.fragmento.id));
     expect(fou.length).toBeLessThanOrEqual(2);
-    const sinFundir = await m.buscador.buscar('panóptico torre anillo visibilidad');
-    expect(sinFundir.resultados.filter((x) => x.fragmento.documento === 'doc-foucault').length).toBeGreaterThan(fou.length);
+    const sinFundir = await m.buscador.buscar('galeotes gente forzada galeras');
+    expect(sinFundir.resultados.filter((x) => x.fragmento.documento === 'doc-quijote').length).toBeGreaterThan(fou.length);
   });
 
   it('no devuelve dos veces el mismo pasaje (mismo id, o mismo documento, ancla y texto)', async () => {
-    const r = await m.buscador.buscar('panóptico torre anillo visibilidad', { limite: 30 });
+    const r = await m.buscador.buscar('galeotes gente forzada galeras', { limite: 30 });
     const ids = r.resultados.map((x) => x.fragmento.id);
     expect(new Set(ids).size).toBe(ids.length);
     const claves = r.resultados.map((x) => `${x.documento.id}|${JSON.stringify(x.fragmento.ancla)}|${x.fragmento.texto.slice(0, 120)}`);
     expect(new Set(claves).size).toBe(claves.length);
   });
 
-  it('busca entre lenguas: la rueda de la Fortuna llega al latín y al inglés', async () => {
+  it('busca entre lenguas: la rueda de la Fortuna llega al latín; la selección natural, al inglés', async () => {
     const r = await m.buscador.buscar('la rueda de la fortuna');
     const docs = new Set(r.resultados.slice(0, 5).map((x) => x.documento.id));
     expect(docs.has('doc-boecio')).toBe(true);
-    expect(docs.has('doc-lewis')).toBe(true);
     expect(r.comprension.traducciones.la).toContain('rota');
+    const s = await m.buscador.buscar('la selección natural de las especies');
+    expect(new Set(s.resultados.slice(0, 5).map((x) => x.documento.id)).has('doc-darwin')).toBe(true);
   });
 
   it('aplica los filtros dichos en lenguaje natural', async () => {
-    const r = await m.buscador.buscar('vigilancia del poder antes de 1980');
-    expect(r.comprension.filtros.anioHasta).toBe(1979);
+    const r = await m.buscador.buscar('la libertad antes de 1900');
+    expect(r.comprension.filtros.anioHasta).toBe(1899);
     expect(r.resultados.length).toBeGreaterThan(0);
-    expect(r.resultados.every((x) => x.documento.id !== 'doc-almeida')).toBe(true);
-    const f = await m.buscador.buscar('la libertad en Almeida');
-    expect(f.resultados.every((x) => x.documento.id === 'doc-almeida')).toBe(true);
+    expect(r.resultados.every((x) => x.documento.id !== 'doc-kennedy')).toBe(true);
+    const f = await m.buscador.buscar('la libertad en Kennedy');
+    expect(f.resultados.every((x) => x.documento.id === 'doc-kennedy')).toBe(true);
   });
 
   it('el año que filtra es el de la obra original', async () => {
-    // Vigilar y castigar: edición de 2002, original de 1975.
-    const r = await m.buscador.buscar('disciplina', { filtros: { anioHasta: 1980 } });
-    expect(r.resultados.some((x) => x.documento.id === 'doc-foucault')).toBe(true);
+    // Don Quijote: edición digital de 1999, original de 1605.
+    const r = await m.buscador.buscar('molinos', { filtros: { anioHasta: 1700 } });
+    expect(r.resultados.some((x) => x.documento.id === 'doc-quijote')).toBe(true);
   });
 
   it('respeta los filtros explícitos de idioma y documento', async () => {
     const r = await m.buscador.buscar('fortuna', { filtros: { idiomas: ['la'] } });
     expect(r.resultados.length).toBeGreaterThan(0);
     expect(r.resultados.every((x) => x.documento.id === 'doc-boecio')).toBe(true);
-    const d = await m.buscador.buscar('cuerpo', { filtros: { documentos: ['doc-foucault'] } });
-    expect(d.resultados.every((x) => x.documento.id === 'doc-foucault')).toBe(true);
+    const d = await m.buscador.buscar('gigantes', { filtros: { documentos: ['doc-quijote'] } });
+    expect(d.resultados.every((x) => x.documento.id === 'doc-quijote')).toBe(true);
   });
 
   it('las citas literales van a FTS sin modelo; el pasaje exacto primero y detrás los afines', async () => {
     const llamadasR = m.redactor.contador.llamadas, llamadasE = m.embebedor.contador.llamadas;
-    const r = await m.buscador.buscar('"ver y ser visto"');
-    expect(r.resultados[0]!.fragmento.id).toBe('fr-fou-08');
+    const r = await m.buscador.buscar('"desfacer fuerzas"');
+    expect(r.resultados[0]!.fragmento.id).toBe('fr-q-08');
     expect(r.resultados.length).toBeGreaterThan(1);
     expect(r.comprension.intencion).toBe('cita');
     expect(m.redactor.contador.llamadas).toBe(llamadasR);
     expect(m.embebedor.contador.llamadas).toBeLessThanOrEqual(llamadasE + 1);
-    expect(r.resultados[0]!.resaltado).toContain('<mark>ver</mark> y <mark>ser</mark> <mark>visto</mark>');
+    expect(r.resultados[0]!.resaltado).toContain('<mark>desfacer</mark> <mark>fuerzas</mark>');
   });
 
   it('la vía visual encuentra una lámina sin texto', async () => {
-    const r = await m.buscador.buscar('lámina de las esferas del cosmos', { vias: ['visual'] });
-    const fig = r.resultados.find((x) => x.fragmento.id === 'fg-lew-01');
+    const r = await m.buscador.buscar('lámina del diagrama de la divergencia de caracteres', { vias: ['visual'] });
+    const fig = r.resultados.find((x) => x.fragmento.id === 'fg-dar-01');
     expect(fig).toBeDefined();
     expect(fig!.vias).toEqual(['visual']);
-    expect(fig!.fragmento.ancla).toMatchObject({ tipo: 'pagina', fisica: 109 });
+    expect(fig!.fragmento.ancla).toMatchObject({ tipo: 'pagina', fisica: 131 });
   });
 
   it('resuelve «ir a la página X»', async () => {
-    const r = await m.buscador.buscar('página 199 de Vigilar y castigar');
-    expect(r.irA).toMatchObject({ documento: 'doc-foucault', unidad: 'un-fou-199', fragmento: 'fr-fou-06' });
-    expect(r.resultados.map((x) => x.fragmento.id)).toEqual(['fr-fou-06', 'fr-fou-07']);
-    expect(await m.buscador.irAPagina('doc-foucault', 'XIV')).toMatchObject({ unidad: 'un-fou-xiv' });
+    const r = await m.buscador.buscar('página 199 de Don Quijote');
+    expect(r.irA).toMatchObject({ documento: 'doc-quijote', unidad: 'un-q-199', fragmento: 'fr-q-06' });
+    expect(r.resultados.map((x) => x.fragmento.id)).toEqual(['fr-q-06', 'fr-q-07']);
+    expect(await m.buscador.irAPagina('doc-quijote', 'XIV')).toMatchObject({ unidad: 'un-q-xiv' });
     // Sin folio impreso, la página física.
-    expect(await m.buscador.irAPagina('doc-lewis', '109')).toMatchObject({ unidad: 'un-lew-099' });
-    expect(await m.buscador.irAPagina('doc-lewis', '5000')).toBeNull();
+    expect(await m.buscador.irAPagina('doc-darwin', '131')).toMatchObject({ unidad: 'un-dar-lam' });
+    expect(await m.buscador.irAPagina('doc-darwin', '5000')).toBeNull();
   });
 
   it('busca documentos por título, autor y año', async () => {
-    const r = await m.buscador.buscarDocumentos('Lewis discarded image');
-    expect(r[0]!.documento.id).toBe('doc-lewis');
-    expect((await m.buscador.buscarDocumentos('vigilar 1975'))[0]!.documento.id).toBe('doc-foucault');
+    const r = await m.buscador.buscarDocumentos('Darwin origin species');
+    expect(r[0]!.documento.id).toBe('doc-darwin');
+    expect((await m.buscador.buscarDocumentos('quijote 1605'))[0]!.documento.id).toBe('doc-quijote');
     expect((await m.buscador.buscarDocumentos('boecio consolatione'))[0]!.documento.id).toBe('doc-boecio');
   });
 
   it('más como esto: excluye el propio fragmento y sus vecinos', async () => {
-    const r = await m.buscador.similares('fr-fou-07');
+    const r = await m.buscador.similares('fr-q-07');
     const ids = r.map((x) => x.fragmento.id);
-    expect(ids).not.toContain('fr-fou-07');
-    expect(ids).not.toContain('fr-fou-06');
-    expect(ids).not.toContain('fr-fou-08');
+    expect(ids).not.toContain('fr-q-07');
+    expect(ids).not.toContain('fr-q-06');
+    expect(ids).not.toContain('fr-q-08');
     expect(ids.length).toBeGreaterThan(0);
-    expect(ids).toContain('fr-ser-04'); // la vigilancia del poder, en la entrevista
   });
 
   it('el juez filtra lo que no responde', async () => {
@@ -213,13 +214,13 @@ describe('Buscador', () => {
 describe('caché y plazos', () => {
   it('cachea la comprensión y los vectores de consulta', async () => {
     const m = await montar();
-    await m.buscador.buscar('el cuerpo dócil');
+    await m.buscador.buscar('los preciosos dones de la libertad');
     const r1 = m.redactor.contador.llamadas, e1 = m.embebedor.contador.llamadas;
-    const r = await m.buscador.buscar('El  cuerpo DÓCIL');
+    const r = await m.buscador.buscar('Los  preciosos DONES de la libertad');
     expect(m.redactor.contador.llamadas).toBe(r1);
     expect(m.embebedor.contador.llamadas).toBe(e1);
     expect(r.comprension.origen).toBe('cache');
-    expect(r.resultados[0]!.fragmento.id).toBe('fr-fou-04');
+    expect(r.resultados[0]!.fragmento.id).toBe('fr-q-09');
   });
 
   it('con caché, todas las expansiones van en una sola llamada al embebedor', async () => {
@@ -232,12 +233,12 @@ describe('caché y plazos', () => {
 
   it('si la comprensión se pasa del plazo, sigue con la heurística y la guarda para después', async () => {
     const m = await montar({ redactor: 300 }, 50);
-    const r = await m.buscador.buscar('disciplina del cuerpo');
+    const r = await m.buscador.buscar('molinos y gigantes');
     expect(r.comprension.origen).toBe('heuristica');
     expect(r.avisos.join(' ')).toMatch(/tardó demasiado/);
     expect(r.resultados.length).toBeGreaterThan(0);
     await new Promise((res) => setTimeout(res, 320));
-    const r2 = await m.buscador.buscar('disciplina del cuerpo');
+    const r2 = await m.buscador.buscar('molinos y gigantes');
     expect(r2.comprension.origen).toBe('cache');
   });
 
@@ -253,7 +254,7 @@ describe('caché y plazos', () => {
 describe('responder', () => {
   it('solo deja citar pasajes del contexto y resuelve las notas por el ancla', async () => {
     const m = await montar();
-    const r = await responderCompleto(m.buscador, m.redactor, '¿Qué efecto tiene el panóptico sobre el detenido?');
+    const r = await responderCompleto(m.buscador, m.redactor, '¿Qué ve don Quijote en los molinos de viento?');
     expect(r.descartadas).toEqual(['F99', 'frinventado']);
     expect(r.fuentes.length).toBe(2);
     expect(r.markdown).not.toMatch(/\[F\d+|frinventado/);
@@ -271,9 +272,9 @@ describe('responder', () => {
 
   it('las notas de un fragmento que cruza páginas imprimen el rango', async () => {
     const m = await montar();
-    const r = await responderCompleto(m.buscador, m.redactor, 'estado consciente y permanente de visibilidad', { busqueda: { fundirContiguos: false } });
-    const nota = r.fuentes.find((f) => f.fragmento === 'fr-fou-07');
-    expect(nota?.nota).toBe('Foucault, *Vigilar y castigar* (1975/2002), pp. 199-200.');
+    const r = await responderCompleto(m.buscador, m.redactor, 'gente condenada por sus delitos a servir al rey en las galeras', { busqueda: { fundirContiguos: false } });
+    const nota = r.fuentes.find((f) => f.fragmento === 'fr-q-07');
+    expect(nota?.nota).toBe('Cervantes Saavedra, *Don Quijote* (1605/1999), pp. 199-200.');
   });
 
   it('en streaming, ningún delta deja ver una marca sin resolver', async () => {
@@ -281,7 +282,7 @@ describe('responder', () => {
     const redactor = new RedactorFalsoConFlujo();
     const deltas: string[] = [];
     let fin: string | undefined;
-    for await (const e of responder(m.buscador, redactor, 'la disciplina y los cuerpos dóciles')) {
+    for await (const e of responder(m.buscador, redactor, 'la libertad y los tesoros de la tierra')) {
       if (e.tipo === 'texto') deltas.push(e.delta);
       if (e.tipo === 'fin') fin = e.markdown;
     }
@@ -302,12 +303,12 @@ describe('latencia (puertos falsos con latencias realistas)', () => {
   it('p50 < 600 ms sin respuesta', async () => {
     // Redactor rápido 300 ms, embebedor 90 ms, reordenador 120 ms; índice de fuerza bruta en SQL.
     const m = await montar({ redactor: 300, emb: 90, reord: 120 }, 350);
-    const consultas = ['vigilancia y poder', 'la rueda de la fortuna', 'cuerpos dóciles', 'el cosmos medieval', 'censura y canción', 'felicidad y dios',
-      'prisión y libertad', 'el modelo del universo', 'castigo público', 'Bécquer y la poesía', 'Boecio en la cárcel', 'esferas transparentes'];
+    const consultas = ['galeotes y galeras', 'la rueda de la fortuna', 'molinos de viento', 'la selección natural', 'ir a la luna', 'felicidad y dios',
+      'prisión y libertad', 'el origen de las especies', 'un lugar de la Mancha', 'la libertad y los cielos', 'Boecio en la cárcel', 'el diagrama de Darwin'];
     const frio: number[] = [], caliente: number[] = [];
     for (const q of consultas) { const t = performance.now(); await m.buscador.buscar(q); frio.push(performance.now() - t); }
     for (const q of consultas) { const t = performance.now(); await m.buscador.buscar(q); caliente.push(performance.now() - t); }
-    const t = performance.now(); await m.buscador.buscar('"ver y ser visto"'); const literal = performance.now() - t;
+    const t = performance.now(); await m.buscador.buscar('"desfacer fuerzas"'); const literal = performance.now() - t;
     const p50 = (xs: number[]) => [...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)]!;
     const p95 = (xs: number[]) => [...xs].sort((a, b) => a - b)[Math.ceil(xs.length * 0.95) - 1]!;
     console.log(`latencia fría p50=${p50(frio).toFixed(0)} ms p95=${p95(frio).toFixed(0)} ms · caliente p50=${p50(caliente).toFixed(0)} ms · literal=${literal.toFixed(1)} ms`);
@@ -346,7 +347,7 @@ describe('valores por defecto medidos', () => {
     const redactor = new RedactorFalso(0);
     const b = new Buscador({ sql, embebedor, indice: new IndiceVectorialSQL(sql, embebedor.espacio), redactor, reordenador: new ReordenadorFalso(0), espacioNombres: 'pruebas' });
     let preliminar: number | undefined;
-    const r = await b.buscar('panoptico y vigilancia', { alPreliminar: (rs) => { preliminar = rs.length; } });
+    const r = await b.buscar('galeotes y galeras del rey', { alPreliminar: (rs) => { preliminar = rs.length; } });
     expect(r.comprension.origen).toBe('heuristica');
     expect(redactor.contador.llamadas).toBe(0);
     expect(preliminar).toBeGreaterThan(0);

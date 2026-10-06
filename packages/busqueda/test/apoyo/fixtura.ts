@@ -1,7 +1,12 @@
 /**
- * Biblioteca de prueba: cuatro documentos (es, en, la y una entrevista en audio),
- * 30 fragmentos con anclas reales (folios impresos, romanos, tramos de tiempo),
- * una lámina sin texto con su figura, y vectores del embebedor falso.
+ * Biblioteca de prueba: cuatro obras reales de dominio público (es, en, la y un
+ * discurso grabado), 30 fragmentos con texto LITERAL de las ediciones digitales
+ * que se indican en cada documento, una lámina sin texto con su figura, y
+ * vectores del embebedor falso.
+ *
+ * Los folios del Quijote y de Boecio son los de las copias en PDF de esta
+ * biblioteca de prueba (las ediciones digitales no tienen páginas); los de Darwin,
+ * los de la primera edición. Nadie dice aquí nada que no escribiera o dijera.
  */
 import type { Ancla, AnclaPagina, Documento, MetadatosDocumento, SQL } from '@scholaris/nucleo';
 import { vectorABytes } from '@scholaris/nucleo';
@@ -19,110 +24,117 @@ export interface DocFixtura {
 
 export const DOCUMENTOS: DocFixtura[] = [
   {
-    id: 'doc-foucault',
+    // Cervantes, «Don Quijote» (1605-1615). Texto: Project Gutenberg n.º 2000, https://www.gutenberg.org/ebooks/2000
+    id: 'doc-quijote',
     tipo: 'pdf',
     metadatos: {
-      titulo: 'Vigilar y castigar', subtitulo: 'Nacimiento de la prisión',
-      autores: [{ nombre: 'Michel', apellidos: 'Foucault' }], anio: 2002, anioOriginal: 1975,
-      editorial: 'Siglo XXI', lugar: 'Buenos Aires', idioma: 'es', tipoCSL: 'book', isbn: '9789872102803',
+      titulo: 'Don Quijote', autores: [{ nombre: 'Miguel de', apellidos: 'Cervantes Saavedra' }], anio: 1999, anioOriginal: 1605,
+      editorial: 'Project Gutenberg', idioma: 'es', tipoCSL: 'book', url: 'https://www.gutenberg.org/ebooks/2000',
     },
     unidades: [
-      { id: 'un-fou-xiv', ancla: pag(14, 'xiv', true), impresa: 'xiv', fragmentos: [
-        { id: 'fr-fou-01', texto: 'Índice. I. Suplicio 11. II. Castigo 77. III. Disciplina 139. IV. Prisión 233.', seccion: ['Índice'] },
+      { id: 'un-q-xiv', ancla: pag(14, 'xiv', true), impresa: 'xiv', fragmentos: [
+        { id: 'fr-q-01', texto: "Y así, ¿qué podrá engendrar el estéril y mal cultivado ingenio mío, sino la historia de un hijo seco, avellanado, antojadizo y lleno de pensamientos varios y nunca imaginados de otro alguno, bien como quien se engendró en una cárcel, donde toda incomodidad tiene su asiento y donde todo triste ruido hace su habitación?", seccion: ["Primera parte", "Prólogo"] },
       ] },
-      { id: 'un-fou-011', ancla: pag(25, '11'), impresa: '11', fragmentos: [
-        { id: 'fr-fou-02', texto: 'Damiens fue condenado el 2 de marzo de 1757 a pública retractación ante la puerta principal de la iglesia de París. El suplicio era un ceremonial del poder soberano sobre el cuerpo del condenado.', seccion: ['Suplicio', 'El cuerpo de los condenados'] },
-        { id: 'fr-fou-03', texto: 'En pocas décadas desapareció el cuerpo supliciado, descuartizado, amputado, como blanco principal de la represión penal. El castigo dejó de ser un espectáculo público.', seccion: ['Suplicio', 'El cuerpo de los condenados'] },
+      { id: 'un-q-011', ancla: pag(25, '11'), impresa: '11', fragmentos: [
+        { id: 'fr-q-02', texto: "En un lugar de la Mancha, de cuyo nombre no quiero acordarme, no ha mucho tiempo que vivía un hidalgo de los de lanza en astillero, adarga antigua, rocín flaco y galgo corredor.", seccion: ["Primera parte", "Capítulo I"] },
+        { id: 'fr-q-03', texto: "Una olla de algo más vaca que carnero, salpicón las más noches, duelos y quebrantos los sábados, lantejas los viernes, algún palomino de añadidura los domingos, consumían las tres partes de su hacienda.", seccion: ["Primera parte", "Capítulo I"] },
       ] },
-      { id: 'un-fou-139', ancla: pag(153, '139'), impresa: '139', fragmentos: [
-        { id: 'fr-fou-04', texto: 'Es dócil un cuerpo que puede ser sometido, que puede ser utilizado, que puede ser transformado y perfeccionado. La disciplina fabrica así cuerpos sometidos y ejercitados, cuerpos dóciles.', seccion: ['Disciplina', 'Los cuerpos dóciles'] },
-        { id: 'fr-fou-05', texto: 'La disciplina aumenta las fuerzas del cuerpo en términos económicos de utilidad y disminuye esas mismas fuerzas en términos políticos de obediencia.', seccion: ['Disciplina', 'Los cuerpos dóciles'] },
+      { id: 'un-q-139', ancla: pag(153, '139'), impresa: '139', fragmentos: [
+        { id: 'fr-q-04', texto: "En esto, descubrieron treinta o cuarenta molinos de viento que hay en aquel campo; y, así como don Quijote los vio, dijo a su escudero: — La ventura va guiando nuestras cosas mejor de lo que acertáramos a desear, porque ves allí, amigo Sancho Panza, donde se descubren treinta, o pocos más, desaforados gigantes, con quien pienso hacer batalla y quitarles a todos las vidas, con cuyos despojos comenzaremos a enriquecer; que ésta es buena guerra, y es gran servicio de Dios quitar tan mala simiente de sobre la faz de la tierra.", seccion: ["Primera parte", "Capítulo VIII"] },
+        { id: 'fr-q-05', texto: "— Mire vuestra merced —respondió Sancho— que aquellos que allí se parecen no son gigantes, sino molinos de viento, y lo que en ellos parecen brazos son las aspas, que, volteadas del viento, hacen andar la piedra del molino.", seccion: ["Primera parte", "Capítulo VIII"] },
       ] },
-      { id: 'un-fou-199', ancla: pag(213, '199'), impresa: '199', fragmentos: [
-        { id: 'fr-fou-06', texto: 'El Panóptico de Bentham es la figura arquitectónica de esta composición: en la periferia, una construcción en forma de anillo; en el centro, una torre con anchas ventanas que se abren sobre la cara interior del anillo.', seccion: ['Disciplina', 'El panoptismo'] },
-        { id: 'fr-fou-07', texto: 'De ahí el efecto mayor del Panóptico: inducir en el detenido un estado consciente y permanente de visibilidad que garantiza el funcionamiento automático del poder. La vigilancia es permanente en sus efectos, incluso si es discontinua en su acción.', seccion: ['Disciplina', 'El panoptismo'], anclaFin: pag(214, '200') },
+      { id: 'un-q-199', ancla: pag(213, '199'), impresa: '199', fragmentos: [
+        { id: 'fr-q-06', texto: "— Ésta es cadena de galeotes, gente forzada del rey, que va a las galeras. — ¿Cómo gente forzada? —preguntó don Quijote—. ¿Es posible que el rey haga fuerza a ninguna gente?", seccion: ["Primera parte", "Capítulo XXII"] },
+        { id: 'fr-q-07', texto: "— No digo eso —respondió Sancho—, sino que es gente que, por sus delitos, va condenada a servir al rey en las galeras de por fuerza. — En resolución —replicó don Quijote—, comoquiera que ello sea, esta gente, aunque los llevan, van de por fuerza, y no de su voluntad.", seccion: ["Primera parte", "Capítulo XXII"], anclaFin: pag(214, '200') },
       ] },
-      { id: 'un-fou-200', ancla: pag(214, '200'), impresa: '200', fragmentos: [
-        { id: 'fr-fou-08', texto: 'El Panóptico es una máquina de disociar la pareja ver y ser visto: en el anillo periférico se es totalmente visto, sin ver jamás; en la torre central, se ve todo, sin ser jamás visto.', seccion: ['Disciplina', 'El panoptismo'] },
+      { id: 'un-q-200', ancla: pag(214, '200'), impresa: '200', fragmentos: [
+        { id: 'fr-q-08', texto: "— Pues desa manera —dijo su amo—, aquí encaja la ejecución de mi oficio: desfacer fuerzas y socorrer y acudir a los miserables.", seccion: ["Primera parte", "Capítulo XXII"] },
       ] },
-      { id: 'un-fou-233', ancla: pag(247, '233'), impresa: '233', fragmentos: [
-        { id: 'fr-fou-09', texto: 'La prisión se ha constituido fuera del aparato judicial, cuando se elaboraron a través de todo el cuerpo social los procedimientos para repartir a los individuos, fijarlos y distribuirlos espacialmente.', seccion: ['Prisión', 'Unas instituciones completas y austeras'] },
+      { id: 'un-q-233', ancla: pag(247, '233'), impresa: '233', fragmentos: [
+        { id: 'fr-q-09', texto: "La libertad, Sancho, es uno de los más preciosos dones que a los hombres dieron los cielos; con ella no pueden igualarse los tesoros que encierra la tierra ni el mar encubre; por la libertad, así como por la honra, se puede y debe aventurar la vida, y, por el contrario, el cautiverio es el mayor mal que puede venir a los hombres.", seccion: ["Segunda parte", "Capítulo LVIII"] },
       ] },
     ],
   },
   {
-    id: 'doc-lewis',
+    // Darwin, «On the Origin of Species» (1859, 1.ª ed., John Murray). Texto: Project Gutenberg n.º 1228,
+    // https://www.gutenberg.org/ebooks/1228. Folios de la primera edición (pp. 1, 81, 116, 490; el diagrama es una lámina plegada sin folio).
+    id: 'doc-darwin',
     tipo: 'pdf',
     metadatos: {
-      titulo: 'The Discarded Image', subtitulo: 'An Introduction to Medieval and Renaissance Literature',
-      autores: [{ nombre: 'C. S.', apellidos: 'Lewis' }], anio: 1964,
-      editorial: 'Cambridge University Press', lugar: 'Cambridge', idioma: 'en', tipoCSL: 'book',
+      titulo: 'On the Origin of Species', subtitulo: 'By Means of Natural Selection, or the Preservation of Favoured Races in the Struggle for Life',
+      autores: [{ nombre: 'Charles', apellidos: 'Darwin' }], anio: 1859,
+      editorial: 'John Murray', lugar: 'London', idioma: 'en', tipoCSL: 'book',
     },
     unidades: [
-      { id: 'un-lew-010', ancla: pag(20, '10'), impresa: '10', fragmentos: [
-        { id: 'fr-lew-01', texto: 'Medieval man was not a dreamer nor a wanderer. He was an organiser, a codifier, a builder of systems. He wanted a place for everything and everything in the right place.', seccion: ['The Medieval Situation'] },
-        { id: 'fr-lew-02', texto: 'The Model of the universe which medieval thinkers built was a synthesis of theology, science and history into a single, complex, harmonious mental model.', seccion: ['The Medieval Situation'] },
+      { id: 'un-dar-001', ancla: pag(15, '1'), impresa: '1', fragmentos: [
+        { id: 'fr-dar-01', texto: "When on board H.M.S. ‘Beagle,’ as naturalist, I was much struck with certain facts in the distribution of the inhabitants of South America, and in the geological relations of the present to the past inhabitants of that continent.", seccion: ["Introduction"] },
+        { id: 'fr-dar-02', texto: "These facts seemed to me to throw some light on the origin of species—that mystery of mysteries, as it has been called by one of our greatest philosophers.", seccion: ["Introduction"] },
       ] },
-      { id: 'un-lew-075', ancla: pag(85, '75'), impresa: '75', fragmentos: [
-        { id: 'fr-lew-03', texto: 'Boethius wrote the Consolation of Philosophy in prison while awaiting execution. For centuries it was one of the most influential books in Europe, and Fortune with her wheel became a commonplace.', seccion: ['Selected Materials: The Seminal Period', 'Boethius'] },
-        { id: 'fr-lew-04', texto: 'The wheel of Fortune turns: those raised to the top will fall. Boethius makes Philosophy argue that true happiness cannot depend on the gifts of Fortune.', seccion: ['Selected Materials: The Seminal Period', 'Boethius'] },
+      { id: 'un-dar-081', ancla: pag(95, '81'), impresa: '81', fragmentos: [
+        { id: 'fr-dar-03', texto: "If such do occur, can we doubt (remembering that many more individuals are born than can possibly survive) that individuals having any advantage, however slight, over others, would have the best chance of surviving and of procreating their kind?", seccion: ["Chapter IV", "Natural Selection"] },
+        { id: 'fr-dar-04', texto: "On the other hand, we may feel sure that any variation in the least degree injurious would be rigidly destroyed. This preservation of favourable variations and the rejection of injurious variations, I call Natural Selection.", seccion: ["Chapter IV", "Natural Selection"] },
       ] },
-      { id: 'un-lew-098', ancla: pag(108, '98'), impresa: '98', fragmentos: [
-        { id: 'fr-lew-05', texto: 'The central Earth is surrounded by a series of hollow and transparent spheres, one above the other. Each sphere carries a luminous body: the Moon, Mercury, Venus, the Sun, Mars, Jupiter and Saturn.', seccion: ['The Heavens'] },
-        { id: 'fr-lew-06', texto: 'Beyond the sphere of the fixed stars lies the Primum Mobile, and beyond that the Empyrean, the true Heaven, full of God. The cosmos of the medieval model is finite and ordered.', seccion: ['The Heavens'] },
+      { id: 'un-dar-116', ancla: pag(130, '116'), impresa: '116', fragmentos: [
+        { id: 'fr-dar-05', texto: "The accompanying diagram will aid us in understanding this rather perplexing subject. Let A to L represent the species of a genus large in its own country; these species are supposed to resemble each other in unequal degrees, as is so generally the case in nature, and as is represented in the diagram by the letters standing at unequal distances.", seccion: ["Chapter IV", "Divergence of Character"] },
       ] },
-      { id: 'un-lew-099', ancla: pag(109, null), impresa: null, fragmentos: [], figura: { id: 'fg-lew-01', pie: 'Lámina: las esferas del cosmos ptolemaico', descripcion: 'Diagrama de esferas concéntricas alrededor de la Tierra con los planetas y el primer móvil.' } },
-      { id: 'un-lew-122', ancla: pag(132, '122'), impresa: '122', fragmentos: [
-        { id: 'fr-lew-07', texto: 'The Longaevi, the long-livers, are the fairies of medieval belief: creatures of the borderland between angels and men, of whom the Model never quite found a place.', seccion: ['The Longaevi'] },
-        { id: 'fr-lew-08', texto: '[Note added to this test edition, not by Lewis: the transformer architecture did not exist in 1964; nothing in this book concerns language models.]', seccion: ['Epilogue'] },
+      { id: 'un-dar-lam', ancla: pag(131, null), impresa: null, fragmentos: [], figura: { id: 'fg-dar-01', pie: 'Lámina: el diagrama de la divergencia de caracteres', descripcion: 'Diagrama plegado sin texto: las especies A a L de un género en la base y líneas que se ramifican hacia arriba entre horizontales numeradas de I a XIV, cada intervalo de mil generaciones.' } },
+      { id: 'un-dar-490', ancla: pag(504, '490'), impresa: '490', fragmentos: [
+        { id: 'fr-dar-06', texto: "Thus, from the war of nature, from famine and death, the most exalted object which we are capable of conceiving, namely, the production of the higher animals, directly follows.", seccion: ["Chapter XIV", "Recapitulation and Conclusion"] },
+        { id: 'fr-dar-07', texto: "There is grandeur in this view of life, with its several powers, having been originally breathed into a few forms or into one; and that, whilst this planet has gone cycling on according to the fixed law of gravity, from so simple a beginning endless forms most beautiful and most wonderful have been, and are being, evolved.", seccion: ["Chapter XIV", "Recapitulation and Conclusion"] },
       ] },
     ],
   },
   {
+    // Boecio, «De consolatione philosophiae» (c. 524). Texto latino de Wikisource:
+    // https://la.wikisource.org/wiki/De_philosophiae_consolatione (grafía con u por v, como allí).
     id: 'doc-boecio',
     tipo: 'pdf',
     metadatos: {
       titulo: 'De consolatione philosophiae', autores: [{ nombre: 'Anicius Manlius Severinus', apellidos: 'Boethius' }],
-      anio: 2005, anioOriginal: 524, editorial: 'Teubner', lugar: 'Monachii et Lipsiae', idioma: 'la', tipoCSL: 'book',
-      editores: [{ nombre: 'Claudio', apellidos: 'Moreschini' }],
+      anio: 524, idioma: 'la', tipoCSL: 'book', url: 'https://la.wikisource.org/wiki/De_philosophiae_consolatione',
     },
     unidades: [
       { id: 'un-boe-003', ancla: pag(23, '3'), impresa: '3', fragmentos: [
-        { id: 'fr-boe-01', texto: 'Carmina qui quondam studio florente peregi, flebilis heu maestos cogor inire modos.', seccion: ['Liber I', 'Carmen I'] },
-        { id: 'fr-boe-02', texto: 'Haec dum mecum tacitus ipse reputarem querimoniamque lacrimabilem stili officio signarem, astitisse mihi supra verticem visa est mulier reverendi admodum vultus.', seccion: ['Liber I', 'Prosa I'] },
+        { id: 'fr-boe-01', texto: "Carmina qui quondam studio florente peregi, Flebilis heu maestos cogor inire modos.", seccion: ["Liber I", "Metrum I"] },
+        { id: 'fr-boe-02', texto: "Haec dum mecum tacitus ipse reputarem querimoniamque lacrimabilem stili officio signarem astitisse mihi supra uerticem uisa est mulier reuerendi admodum uultus, oculis ardentibus et ultra communem hominum ualentiam perspicacibus, colore uiuido atque inexhausti uigoris, quamuis ita aeui plena foret ut nullo modo nostrae crederetur aetatis, statura discretionis ambiguae.", seccion: ["Liber I", "Prosa I"] },
       ] },
       { id: 'un-boe-031', ancla: pag(51, '31'), impresa: '31', fragmentos: [
-        { id: 'fr-boe-03', texto: 'Haec nostra vis est, hunc continuum ludum ludimus: rotam volubili orbe versamus, infima summis summa infimis mutare gaudemus. Fortuna loquitur.', seccion: ['Liber II', 'Prosa II'] },
-        { id: 'fr-boe-04', texto: 'Ascende, si placet, sed ea lege ne, cum ludicri mei ratio poscet, descendere iniuriam putes.', seccion: ['Liber II', 'Prosa II'] },
+        { id: 'fr-boe-03', texto: "Fortunae te regendum dedisti, dominae moribus oportet obtemperes.", seccion: ["Liber II", "Prosa I"] },
+        { id: 'fr-boe-04', texto: "Haec nostra uis est, hunc continuum ludum ludimus: rotam uolubili orbe uersamus, infima summis, summa infimis mutare gaudemus. Ascende si placet, sed ea lege, ne uti cum ludicri mei ratio poscet descendere iniuriam putes.", seccion: ["Liber II", "Prosa II"] },
       ] },
       { id: 'un-boe-052', ancla: pag(72, '52'), impresa: '52', fragmentos: [
-        { id: 'fr-boe-05', texto: 'Beatitudo est status bonorum omnium congregatione perfectus.', seccion: ['Liber III', 'Prosa II'] },
-        { id: 'fr-boe-06', texto: 'Deum rerum omnium principem bonum esse communis humanorum conceptio probat animorum. Sed perfectum bonum veram esse beatitudinem constituimus; veram igitur beatitudinem in summo deo sitam esse necesse est.', seccion: ['Liber III', 'Prosa X'] },
+        { id: 'fr-boe-05', texto: "Liquet igitur esse beatitudinem statum bonorum omnium congregatione perfectum.", seccion: ["Liber III", "Prosa II"] },
+        { id: 'fr-boe-06', texto: "Deum, rerum omnium principem, bonum esse communis humanorum conceptio probat animorum; nam cum nihil deo melius excogitari queat, id quo melius nihil est bonum esse quis dubitet?", seccion: ["Liber III", "Prosa X"] },
       ] },
       { id: 'un-boe-120', ancla: pag(140, '120'), impresa: '120', fragmentos: [
-        { id: 'fr-boe-07', texto: 'Deum igitur aeternum esse cunctorum ratione degentium commune iudicium est. … Aeternitas igitur est interminabilis vitae tota simul et perfecta possessio.', seccion: ['Liber V', 'Prosa VI'] },
+        { id: 'fr-boe-07', texto: "Deum igitur aeternum esse cunctorum ratione degentium commune iudicium est. Quid sit igitur aeternitas consideremus; haec enim nobis naturam pariter diuinam scientiamque patefacit. Aeternitas igitur est interminabilis uitae tota simul et perfecta possessio.", seccion: ["Liber V", "Prosa VI"] },
       ] },
     ],
   },
   {
-    id: 'doc-almeida',
+    // John F. Kennedy, discurso en la Universidad Rice (Houston, 12 de septiembre de 1962); obra del Gobierno
+    // federal de EE. UU., de dominio público. Transcripción: https://en.wikisource.org/wiki/We_choose_to_go_to_the_moon
+    // Grabación: https://commons.wikimedia.org/wiki/File:Jfk_rice_university_we_choose_to_go_to_the_moon.ogg (1060 s).
+    // Los tiempos son aproximados: proporcionales a la posición del pasaje en la transcripción.
+    id: 'doc-kennedy',
     tipo: 'audio',
     metadatos: {
-      titulo: 'Entrevista a Ramiro Almeida en la Universidad de Valdeluz', autores: [{ nombre: 'Ramiro', apellidos: 'Almeida' }],
-      anio: 2026, idioma: 'es', tipoCSL: 'interview', lugar: 'Valdeluz',
+      titulo: 'Address at Rice University on the Nation’s Space Effort', autores: [{ nombre: 'John F.', apellidos: 'Kennedy' }],
+      anio: 1962, fecha: '1962-09-12', idioma: 'en', tipoCSL: 'speech', lugar: 'Houston',
     },
     unidades: [
-      { id: 'un-ser-1', ancla: { tipo: 'tiempo', t0: 0, t1: 95, hablante: 'Almeida' }, fragmentos: [
-        { id: 'fr-ser-01', texto: 'Empecé a escribir canciones en la lengua en la que pensaba y en la que me enamoraba. La canción es un territorio de libertad.', seccion: ['Los comienzos'] },
-        { id: 'fr-ser-02', texto: 'Bécquer me enseñó que la poesía no es un adorno: es una manera de mirar. Ponerle música a sus versos fue un acto de gratitud.', seccion: ['Bécquer y la cárcel'] },
+      { id: 'un-ken-1', ancla: { tipo: 'tiempo', t0: 99, t1: 318, hablante: 'Kennedy' }, fragmentos: [
+        { id: 'fr-ken-01', texto: "No man can fully grasp how far and how fast we have come, but condense, if you will, the 50 thousand years of man's recorded history in a time span of but a half-century. Stated in these terms, we know very little about the first 40 years, except at the end of them advanced man had learned to use the skins of animals to cover them.", seccion: ["Discurso"] },
+        { id: 'fr-ken-02', texto: "William Bradford, speaking in 1630 of the founding of the Plymouth Bay Colony, said that all great and honorable actions are accompanied with great difficulties, and both must be enterprised and overcome with answerable courage.", seccion: ["Discurso"] },
       ] },
-      { id: 'un-ser-2', ancla: { tipo: 'tiempo', t0: 95, t1: 240, hablante: 'Almeida' }, fragmentos: [
-        { id: 'fr-ser-03', texto: 'Con los poemas escritos desde la cárcel pasó algo parecido: hablan de la libertad con una fuerza que ninguna prisión puede encerrar.', seccion: ['Bécquer y la cárcel'] },
-        { id: 'fr-ser-04', texto: 'La censura nos vigilaba constantemente; aprendimos a decir las cosas de otra manera. La vigilancia del poder también enseña a escribir.', seccion: ['La censura'] },
+      { id: 'un-ken-2', ancla: { tipo: 'tiempo', t0: 318, t1: 488, hablante: 'Kennedy' }, fragmentos: [
+        { id: 'fr-ken-03', texto: "For the eyes of the world now look into space, to the moon and to the planets beyond, and we have vowed that we shall not see it governed by a hostile flag of conquest, but by a banner of freedom and peace.", seccion: ["Discurso"] },
+        { id: 'fr-ken-04', texto: "We set sail on this new sea because there is new knowledge to be gained, and new rights to be won, and they must be won and used for the progress of all people.", seccion: ["Discurso"] },
+        { id: 'fr-ken-05', texto: "There is no strife, no prejudice, no national conflict in outer space as yet. Its hazards are hostile to us all. Its conquest deserves the best of all mankind, and its opportunity for peaceful cooperation may never come again.", seccion: ["Discurso"] },
       ] },
-      { id: 'un-ser-3', ancla: { tipo: 'tiempo', t0: 240, t1: 400, hablante: 'Almeida' }, fragmentos: [
-        { id: 'fr-ser-05', texto: '«Puerto de invierno» nació en una pensión del muelle, mirando al mar. No pensé que acabaría siendo la canción de tanta gente.', seccion: ['Puerto de invierno'] },
-        { id: 'fr-ser-06', texto: 'A los estudiantes les diría que lean, que lean mucho, y que desconfíen de quien les prometa la felicidad a cambio de obediencia.', seccion: ['Consejos'] },
+      { id: 'un-ken-3', ancla: { tipo: 'tiempo', t0: 488, t1: 1060, hablante: 'Kennedy' }, fragmentos: [
+        { id: 'fr-ken-06', texto: "We choose to go to the moon. We choose to go to the moon... (interrupted by applause) we choose to go to the moon in this decade and do the other things, not because they are easy, but because they are hard, because that goal will serve to organize and measure the best of our energies and skills, because that challenge is one that we are willing to accept, one we are unwilling to postpone, and one which we intend to win, and the others, too.", seccion: ["Discurso"] },
+        { id: 'fr-ken-07', texto: "Well, space is there, and we're going to climb it, and the moon and the planets are there, and new hopes for knowledge and peace are there. And, therefore, as we set sail we ask God's blessing on the most hazardous and dangerous and greatest adventure on which man has ever embarked.", seccion: ["Discurso"] },
       ] },
     ],
   },
