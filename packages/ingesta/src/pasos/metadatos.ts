@@ -8,22 +8,33 @@
  * 3. Verificación: Crossref por DOI; si no hay, búsqueda bibliográfica en
  *    Crossref y OpenAlex (gratis, sin clave). Solo se acepta un registro externo
  *    si el título coincide y el autor o el año también.
- * 4. Fusión campo a campo, con procedencia y confianza por campo.
+ * 4. Enriquecimiento consciente de la edición (../enriquecimiento): créditos y
+ *    colofón, ISBN → Open Library, Wikidata y Wikipedia para la obra, arXiv,
+ *    DataCite, programas de radio y televisión, impresores de impresos sin fecha.
+ * 5. Fusión campo a campo, con procedencia y confianza por campo. Lo que editó
+ *    el usuario no se toca nunca. `anio` = esta edición; `anioOriginal` = la obra.
  */
 
-import type { Autor, MetadatosDocumento, Redactor } from '@scholaris/nucleo';
+import type { Autor, FuenteMetadato, MetadatosDocumento, Redactor } from '@scholaris/nucleo';
 import type { MetadatosIncrustados } from '@scholaris/imprenta';
 import type { Http, Procedencia, UnidadLeida } from '../tipos.js';
 import { normalizar, similitud } from '../texto.js';
 import { nombreCompleto, partirAutores, separarNombre } from './autores.js';
+import { conOrcid, crearConsultor, enriquecer, leerColofon, pruebasNuevas, type CacheConsultas, type Colofon } from '../enriquecimiento/index.js';
+import { autorDe } from './metadatos/nombres.js';
 
-type Fuente = NonNullable<MetadatosDocumento['procedencia']>[string]['fuente'];
+export * from '../enriquecimiento/index.js';
+export { autorDe, esEntidad, claveAutor } from './metadatos/nombres.js';
+
+type Fuente = FuenteMetadato;
 type Campo = Exclude<keyof MetadatosDocumento, 'procedencia'>;
 
 export interface Candidato {
   fuente: Fuente;
   /** Confianza base de la fuente. */
   confianza: number;
+  /** Confianza por campo, si difiere de la base. */
+  porCampo?: Partial<Record<Campo, number>>;
   datos: Partial<MetadatosDocumento>;
 }
 
@@ -115,7 +126,13 @@ const ESQUEMA_METADATOS = {
     autores: { type: 'array', items: { type: 'object', properties: { nombre: { type: 'string' }, apellidos: { type: 'string' } }, required: ['nombre', 'apellidos'] } },
     editores: { type: 'array', items: { type: 'object', properties: { nombre: { type: 'string' }, apellidos: { type: 'string' } }, required: ['nombre', 'apellidos'] } },
     anio: { type: 'integer', description: 'Año de ESTA edición o publicación.' },
-    anioOriginal: { type: 'integer', description: 'Año de la primera edición o de composición, si consta y difiere.' },
+    anioOriginal: { type: 'integer', description: 'Año de la primera publicación de la OBRA (primera edición, © del original en una traducción), si consta.' },
+    tituloOriginal: { type: 'string', description: 'En una traducción, el título original tal como figura («Título original: …»).' },
+    traductores: { type: 'array', items: { type: 'object', properties: { nombre: { type: 'string' }, apellidos: { type: 'string' } }, required: ['nombre', 'apellidos'] } },
+    edicion: { type: 'string', description: 'Mención de edición si consta: «2.ª ed.», «edición crítica», «Canto edition».' },
+    coleccion: { type: 'string', description: 'Colección o serie editorial, si consta.' },
+    contenedor: { type: 'string', description: 'Obra que contiene a esta: libro de un cuento o capítulo, actas de un congreso, programa de una emisión.' },
+    idiomaOriginal: { type: 'string', description: 'Lengua original (BCP-47) si es una traducción.' },
     editorial: { type: 'string' },
     lugar: { type: 'string' },
     revista: { type: 'string' },
@@ -131,7 +148,7 @@ const ESQUEMA_METADATOS = {
   required: ['titulo', 'autores', 'idioma', 'tipoCSL'],
 } as const;
 
-export function textoParaMetadatos(unidades: UnidadLeida[], maxCaracteres = 9000): string {
+export function textoParaMetadatos(unidades: UnidadLeida[], maxCaracteres = 9000, ultimas: UnidadLeida[] = []): string {
   const llenas = unidades.filter((u) => !u.vacia);
   const medio = llenas.some((u) => u.ancla?.tipo === 'tiempo');
   const bloque = (u: UnidadLeida) => {
@@ -144,7 +161,7 @@ export function textoParaMetadatos(unidades: UnidadLeida[], maxCaracteres = 9000
   // En un medio, el principio puede ser una canción o una sintonía: se toman también
   // muestras del medio y del final, donde suelen decirse nombres y títulos.
   const elegidas = medio && llenas.length > 8
-    ? [...llenas.slice(0, 5), llenas[Math.floor(llenas.length / 3)], llenas[Math.floor(llenas.length / 2)], llenas[Math.floor((2 * llenas.length) / 3)], ...llenas.slice(-2)]
+    ? [...llenas.slice(0, 5), llenas[Math.floor(llenas.length / 3)], llenas[Math.floor(llenas.length / 2)], llenas[Math.floor((2 * llenas.length) / 3)], ...llenas.slice(-2)].filter((u): u is UnidadLeida => Boolean(u))
     : llenas;
   const partes: string[] = [];
   let total = 0;
@@ -155,7 +172,29 @@ export function textoParaMetadatos(unidades: UnidadLeida[], maxCaracteres = 9000
     total += b.length;
     if (total >= maxCaracteres) break;
   }
+  // El colofón y los créditos finales («Acabose de imprimir…», «Con licencia…»).
+  const vistas = new Set(elegidas.map((u) => u.fisica));
+  const finales = ultimas.filter((u) => !u.vacia && !vistas.has(u.fisica)).slice(-2);
+  if (finales.length) partes.push(`[final del documento]\n${finales.map((u) => `[página física ${u.fisica}]\n${u.texto.slice(-1200)}`).join('\n\n')}`);
   return partes.join('\n\n');
+}
+
+/** Señales de una página de créditos o de un colofón. */
+const RE_CREDITOS = /ISBN|©|\(c\)\s*\d{4}|copyright|dep[óo]sito\s+legal|\bD\.\s?L\.|primera\s+edici[óo]n|\bedici[óo]n\s*:|esta\s+edici[óo]n|first\s+(?:published|printed)|reprinted|printed\s+in|impreso\s+en|impress?o|con\s+licencia|imprenta|t[íi]tulo\s+original|traducci[óo]n\s+(?:de|del)|translated\s+by|all\s+rights\s+reserved|todos\s+los\s+derechos|published\s+by|arXiv:\S+v\d+\s*\[|conference\s+on/i;
+
+/**
+ * Texto para leer créditos y colofón sin modelo: la primera página con texto
+ * (portada, sello de arXiv, pie del congreso) y, de las 12 primeras y las 3
+ * últimas con texto, solo las que tienen señales de créditos: así no se leen
+ * como créditos las referencias ni el cuerpo.
+ */
+export function textoColofon(unidades: UnidadLeida[], ultimas: UnidadLeida[] = []): string {
+  const llenas = unidades.filter((u) => !u.vacia && u.ancla?.tipo !== 'tiempo');
+  const vistas = new Set(llenas.map((u) => u.fisica));
+  const fin = ultimas.filter((u) => !u.vacia && !vistas.has(u.fisica)).slice(-3);
+  const texto = (u: UnidadLeida) => [u.cabecera, u.texto, ...(u.notas ?? []), u.pie].filter(Boolean).join('\n');
+  const elegidas = [...llenas.slice(0, 12), ...fin].filter((u, i) => i === 0 || RE_CREDITOS.test(texto(u)));
+  return elegidas.map(texto).join('\n\n');
 }
 
 export async function leerMetadatos(
@@ -173,14 +212,17 @@ export async function leerMetadatos(
       'Reglas: no inventes nada que no esté en el texto o la ficha; deja fuera los campos que no consten. ' +
       'El nombre del archivo y la ficha del PDF suelen ser basura (nombres de archivo, «Microsoft Word - …», programas): úsalos solo si el texto los confirma. ' +
       'Autores: separa nombre y apellidos («C. S.» / «Lewis»; «Lope» / «de Vega Carpio»; «Joaquín» / «Soler Serrano»). En entrevistas y programas, el entrevistador y el entrevistado son autores. ' +
-      'En un libro, el año es el de la edición que se tiene delante (página de créditos); el de la primera edición va en anioOriginal. ' +
+      'En un libro, el año es el de la edición que se tiene delante (página de créditos: «Esta edición», «© 2002», «Reprinted»); el de la primera publicación de la obra va en anioOriginal («Primera edición: 1975», «© 1975 Éditions Gallimard» en una traducción). ' +
+      'Lee la página de créditos y el colofón: ISBN, «Título original», «Traducción de…» (traductores), mención de edición, colección, lugar y editorial; en impresos antiguos, el pie de imprenta («En Sevilla, en la Imprenta de…»): lugar e impresor (en editorial). Si no hay año impreso, deja el año vacío. ' +
+      'Un cuento, poema o ensayo suelto de un libro es «chapter» y el libro va en contenedor; una comedia suelta impresa es «book». ' +
+      'Autores corporativos (una institución, una cadena) van enteros en apellidos con el nombre vacío. ' +
       'En un artículo, revista, volumen, número y páginas si constan. ' +
       'El nombre del archivo puede ser una clave de cita «apellidoAñoPalabra» (serrano1977fondo = Soler Serrano, 1977, «A fondo»): úsala como pista, no como título. ' +
       'En audio y vídeo: el título es el del programa, la conferencia o la entrevista (no el de una canción que suene); los autores son quien la dirige y quien interviene; ' +
       'di quién es cada etiqueta de hablante (H0, H1…) si se deduce del texto.',
     mensajes: [{
       rol: 'usuario',
-      partes: [{ texto: `Tipo de entrada: ${entrada.tipo}${entrada.duracion ? ` (${Math.round(entrada.duracion / 60)} min)` : ''}\nNombre del archivo: ${entrada.nombreArchivo}\nFicha incrustada:\n${ficha || '(vacía)'}\n\nPrincipio del documento:\n${entrada.texto}` }],
+      partes: [{ texto: `Tipo de entrada: ${entrada.tipo}${entrada.duracion ? ` (${Math.round(entrada.duracion / 60)} min)` : ''}\nNombre del archivo: ${entrada.nombreArchivo}\nFicha incrustada:\n${ficha || '(vacía)'}\n\nPrincipio (y final) del documento:\n${entrada.texto}` }],
     }],
     esquema: esquema as unknown as Record<string, unknown>,
     temperatura: 0,
@@ -225,7 +267,7 @@ function deCrossref(o: ObraCrossref): RegistroExterno {
   const r: RegistroExterno = { fuente: 'crossref' };
   if (o.title?.[0]) r.titulo = limpiarTitulo(o.title[0]);
   if (o.subtitle?.[0]) r.subtitulo = o.subtitle[0];
-  if (o.author?.length) r.autores = o.author.map((a) => (a.family ? { nombre: a.given ?? '', apellidos: a.family, ...(a.ORCID ? { orcid: a.ORCID.replace(/^https?:\/\/orcid\.org\//, '') } : {}) } : separarNombre(a.name ?? '')));
+  if (o.author?.length) r.autores = o.author.map((a) => (a.family ? { nombre: a.given ?? '', apellidos: a.family, ...(a.ORCID ? { orcid: a.ORCID.replace(/^https?:\/\/orcid\.org\//, '') } : {}) } : autorDe(a.name ?? '')));
   if (o.editor?.length) r.editores = o.editor.filter((a) => a.family).map((a) => ({ nombre: a.given ?? '', apellidos: a.family as string }));
   if (anio) r.anio = anio;
   if (o.publisher) r.editorial = o.publisher;
@@ -243,23 +285,31 @@ function deCrossref(o: ObraCrossref): RegistroExterno {
 
 interface ObraOpenAlex {
   title?: string; display_name?: string; publication_year?: number; doi?: string; language?: string; type?: string;
-  authorships?: Array<{ author?: { display_name?: string; orcid?: string } }>;
+  authorships?: Array<{ author?: { display_name?: string; orcid?: string | null } }>;
   primary_location?: { source?: { display_name?: string; host_organization_name?: string } };
   biblio?: { volume?: string; issue?: string; first_page?: string; last_page?: string };
   relevance_score?: number;
 }
 
+const TIPOS_OPENALEX: Record<string, string> = { article: 'article-journal', 'book-chapter': 'chapter', 'conference-paper': 'paper-conference', preprint: 'article', dissertation: 'thesis', book: 'book', report: 'report', dataset: 'dataset', review: 'review', other: 'document' };
+
 function deOpenAlex(o: ObraOpenAlex): RegistroExterno {
   const r: RegistroExterno = { fuente: 'openalex' };
   const t = o.title ?? o.display_name;
   if (t) r.titulo = limpiarTitulo(t);
-  if (o.authorships?.length) r.autores = o.authorships.map((a) => separarNombre(a.author?.display_name ?? '')).filter((a) => a.apellidos);
+  if (o.authorships?.length) {
+    r.autores = o.authorships.map((a) => {
+      const autor = autorDe(a.author?.display_name ?? '');
+      const orcid = a.author?.orcid?.replace(/^https?:\/\/orcid\.org\//, '');
+      return orcid ? { ...autor, orcid } : autor;
+    }).filter((a) => a.apellidos);
+  }
   if (o.publication_year) r.anio = o.publication_year;
   if (o.doi) r.doi = o.doi.replace(/^https?:\/\/doi\.org\//, '').toLowerCase();
   if (o.language) r.idioma = o.language;
-  if (o.type) r.tipoCSL = o.type === 'article' ? 'article-journal' : o.type === 'book-chapter' ? 'chapter' : o.type;
+  if (o.type) r.tipoCSL = TIPOS_OPENALEX[o.type] ?? o.type;
   const fuente = o.primary_location?.source;
-  if (fuente?.display_name && o.type === 'article') r.revista = fuente.display_name;
+  if (fuente?.display_name && (o.type === 'article' || o.type === 'conference-paper')) r.revista = fuente.display_name;
   if (fuente?.host_organization_name) r.editorial = fuente.host_organization_name;
   if (o.biblio?.volume) r.volumen = o.biblio.volume;
   if (o.biblio?.issue) r.numero = o.biblio.issue;
@@ -346,14 +396,19 @@ export async function verificar(
 // Fusión
 // ---------------------------------------------------------------------------
 
-const CAMPOS: Campo[] = ['titulo', 'subtitulo', 'autores', 'editores', 'anio', 'anioOriginal', 'editorial', 'lugar', 'revista', 'volumen', 'numero', 'paginas', 'doi', 'isbn', 'url', 'idioma', 'tipoCSL', 'resumen'];
+const CAMPOS: Campo[] = [
+  'titulo', 'subtitulo', 'tituloOriginal', 'autores', 'editores', 'traductores', 'anio', 'anioOriginal', 'fecha', 'sinFecha',
+  'editorial', 'lugar', 'edicion', 'coleccion', 'contenedor', 'revista', 'volumen', 'numero', 'paginas', 'doi', 'isbn', 'url',
+  'idioma', 'idiomaOriginal', 'tipoCSL', 'resumen',
+];
 
 const vacio = (v: unknown) => v === undefined || v === null || v === '' || (Array.isArray(v) && v.length === 0);
+const CATALOGOS = new Set<Fuente>(['crossref', 'openalex', 'openlibrary', 'wikidata', 'wikipedia', 'googlebooks', 'arxiv', 'datacite']);
 
 /**
  * Fusiona candidatos campo a campo: gana el de más confianza. Los campos
  * bibliográficos de un registro externo verificado ganan a la lectura, salvo el
- * idioma (que manda la lectura del texto) y el año original.
+ * idioma (que manda la lectura del texto). Lo que puso el usuario gana siempre.
  */
 export function fusionarMetadatos(candidatos: Candidato[], nombreArchivo: string): MetadatosDocumento {
   const salida: Partial<MetadatosDocumento> = {};
@@ -363,9 +418,11 @@ export function fusionarMetadatos(candidatos: Candidato[], nombreArchivo: string
     for (const cand of candidatos) {
       const v = cand.datos[campo];
       if (vacio(v)) continue;
-      let c = cand.confianza;
-      if ((cand.fuente === 'crossref' || cand.fuente === 'openalex') && (campo === 'idioma' || campo === 'resumen')) c -= 0.3;
+      let c = cand.porCampo?.[campo] ?? cand.confianza;
+      if (CATALOGOS.has(cand.fuente) && (campo === 'idioma' || campo === 'resumen')) c -= 0.3;
       if (campo === 'titulo' && esTituloBasura(v as string)) continue;
+      // El usuario, por encima de todo (aunque otra fuente declare confianza 1).
+      if (cand.fuente === 'usuario') c = 2;
       if (!mejor || c > mejor.c) mejor = { v, fuente: cand.fuente, c };
     }
     if (mejor) {
@@ -377,10 +434,24 @@ export function fusionarMetadatos(candidatos: Candidato[], nombreArchivo: string
     salida.titulo = tituloDeArchivo(nombreArchivo) ?? nombreArchivo;
     procedencia.titulo = { fuente: 'pdf', confianza: 0.1 };
   }
-  // Coherencia: el año original no puede ser posterior al de la edición.
-  if (salida.anioOriginal && salida.anio && salida.anioOriginal >= salida.anio) delete salida.anioOriginal;
+  // Coherencia: la obra no puede ser posterior a la edición. Cede el de menos confianza (nunca el del usuario).
+  if (salida.anioOriginal !== undefined && salida.anio !== undefined && salida.anioOriginal > salida.anio) {
+    const co = procedencia.anioOriginal, ca = procedencia.anio;
+    const quitarOriginal = co?.fuente !== 'usuario' && (ca?.fuente === 'usuario' || (co?.confianza ?? 0) <= (ca?.confianza ?? 0));
+    if (quitarOriginal) { delete salida.anioOriginal; delete procedencia.anioOriginal; } else { delete salida.anio; delete procedencia.anio; }
+  }
+  // Con año, la horquilla de «s. f.» sobra.
+  if (salida.anio !== undefined && salida.sinFecha && procedencia.sinFecha?.fuente !== 'usuario') { delete salida.sinFecha; delete procedencia.sinFecha; }
   if (salida.titulo) salida.titulo = limpiarTitulo(salida.titulo);
   return { titulo: salida.titulo, autores: salida.autores ?? [], ...salida, procedencia };
+}
+
+/** Los campos que el usuario ya editó (según la procedencia): no se tocan al reprocesar. */
+export function camposDeUsuario(m: Partial<MetadatosDocumento> | undefined): Partial<MetadatosDocumento> {
+  if (!m?.procedencia) return {};
+  const r: Partial<MetadatosDocumento> = {};
+  for (const [k, p] of Object.entries(m.procedencia)) if (p.fuente === 'usuario' && k in m) (r as Record<string, unknown>)[k] = (m as Record<string, unknown>)[k];
+  return r;
 }
 
 // ---------------------------------------------------------------------------
@@ -394,16 +465,36 @@ export interface EntradaMetadatos {
   epub: boolean;
   duracion?: number;
   unidades: UnidadLeida[];
+  /** Últimas páginas (colofón, créditos finales), si ya están leídas. */
+  ultimas?: UnidadLeida[];
   /** Idioma mayoritario visto por el lector. */
   idiomaLectura?: string;
+  /** Campos puestos por el usuario: ganan siempre. */
   usuario?: Partial<MetadatosDocumento>;
+}
+
+export interface PuertosMetadatos {
+  redactor?: Redactor;
+  http?: Http;
+  correo?: string;
+  reloj?: () => number;
+  /** Caché persistente de las consultas a catálogos. */
+  cache?: CacheConsultas;
+}
+
+export interface ResultadoMetadatos {
+  metadatos: MetadatosDocumento;
+  procedencia: Procedencia[];
+  hablantes?: Record<string, string>;
+  /** Lo que se leyó de créditos y colofón (para decidir si refinar con el libro entero). */
+  colofon?: Colofon | null;
 }
 
 export async function pasoMetadatos(
   entrada: EntradaMetadatos,
-  puertos: { redactor?: Redactor; http?: Http; correo?: string; reloj?: () => number },
+  puertos: PuertosMetadatos,
   opciones: { sinVerificacion?: boolean } = {},
-): Promise<{ metadatos: MetadatosDocumento; procedencia: Procedencia[]; hablantes?: Record<string, string> }> {
+): Promise<ResultadoMetadatos> {
   const reloj = puertos.reloj ?? Date.now;
   let hablantes: Record<string, string> | undefined;
   const procedencia: Procedencia[] = [];
@@ -412,7 +503,7 @@ export async function pasoMetadatos(
   if (puertos.redactor) {
     const t = reloj();
     try {
-      lectura = await leerMetadatos(puertos.redactor, { texto: textoParaMetadatos(entrada.unidades), nombreArchivo: entrada.nombreArchivo, ficha: entrada.ficha, tipo: entrada.tipo, ...(entrada.duracion ? { duracion: entrada.duracion } : {}) });
+      lectura = await leerMetadatos(puertos.redactor, { texto: textoParaMetadatos(entrada.unidades, 9000, entrada.ultimas), nombreArchivo: entrada.nombreArchivo, ficha: entrada.ficha, tipo: entrada.tipo, ...(entrada.duracion ? { duracion: entrada.duracion } : {}) });
       const conHablantes = lectura as typeof lectura & { hablantes?: Array<{ etiqueta: string; nombre: string }> };
       if (conHablantes.hablantes?.length) hablantes = Object.fromEntries(conHablantes.hablantes.filter((h) => h.etiqueta && h.nombre?.trim()).map((h) => [h.etiqueta.trim(), h.nombre.trim()]));
       delete conHablantes.hablantes;
@@ -424,12 +515,14 @@ export async function pasoMetadatos(
     candidatos.push({ fuente: 'lectura', confianza: 0.8, datos: lectura });
   }
   if (entrada.idiomaLectura) candidatos.push({ fuente: 'lectura', confianza: 0.85, datos: { idioma: entrada.idiomaLectura } });
-  const provisional = fusionarMetadatos(candidatos, entrada.nombreArchivo);
+  const usuario = entrada.usuario && Object.keys(entrada.usuario).length ? entrada.usuario : null;
+  // El usuario entra ya en la provisional: las búsquedas parten de su título y sus autores.
+  const provisional = fusionarMetadatos(usuario ? [...candidatos, { fuente: 'usuario', confianza: 1, datos: usuario }] : candidatos, entrada.nombreArchivo);
 
   const medio = entrada.tipo === 'audio' || entrada.tipo === 'video';
+  const http: Http = puertos.http ?? ((url, init) => fetch(url, init as RequestInit));
   if (!opciones.sinVerificacion && !medio) {
     const t = reloj();
-    const http: Http = puertos.http ?? ((url, init) => fetch(url, init as RequestInit));
     const { registro, consultas } = await verificar(provisional, http, puertos.correo);
     procedencia.push({ fase: 'metadatos', proveedor: registro?.fuente ?? 'verificacion', ms: reloj() - t, detalle: { consultas: consultas.length, encontrado: Boolean(registro), puntuacion: registro?.puntuacion ?? 0, titulo: registro?.titulo } });
     if (registro) {
@@ -451,8 +544,54 @@ export async function pasoMetadatos(
       candidatos.push({ fuente, confianza: 0.85 + 0.1 * Math.min(1, puntuacion ?? 0), datos });
     }
   }
-  if (entrada.usuario) candidatos.push({ fuente: 'usuario', confianza: 1, datos: entrada.usuario });
-  return { metadatos: fusionarMetadatos(candidatos, entrada.nombreArchivo), procedencia, ...(hablantes && Object.keys(hablantes).length ? { hablantes } : {}) };
+
+  // Enriquecimiento: edición (colofón, ISBN) y obra (Wikidata, Open Library, Wikipedia…).
+  const t = reloj();
+  const consultor = opciones.sinVerificacion ? null : crearConsultor({ http, ...(puertos.correo ? { correo: puertos.correo } : {}), ...(puertos.cache ? { cache: puertos.cache } : {}) });
+  const intermedia = fusionarMetadatos(usuario ? [...candidatos, { fuente: 'usuario', confianza: 1, datos: usuario }] : candidatos, entrada.nombreArchivo);
+  let colofon: Colofon | null = null;
+  let orcid = new Map<string, string>();
+  try {
+    const r = await enriquecer({ base: intermedia, texto: medio ? '' : textoColofon(entrada.unidades, entrada.ultimas), tipo: entrada.tipo }, consultor);
+    colofon = r.colofon;
+    orcid = r.orcid;
+    for (const h of r.hallazgos) candidatos.push({ fuente: h.fuente, confianza: h.confianza, ...(h.porCampo ? { porCampo: h.porCampo } : {}), datos: h.datos });
+    procedencia.push({
+      fase: 'metadatos', proveedor: 'enriquecimiento', ms: reloj() - t,
+      detalle: { hallazgos: r.hallazgos.map((h) => ({ fuente: h.fuente, campos: Object.keys(h.datos), ...(h.id ? { id: h.id } : {}) })), consultas: consultor?.consultas.length ?? 0, avisos: r.avisos },
+    });
+  } catch (e) {
+    procedencia.push({ fase: 'metadatos', proveedor: 'enriquecimiento', ms: reloj() - t, detalle: { error: String((e as Error)?.message ?? e).slice(0, 200) } });
+  }
+
+  if (usuario) candidatos.push({ fuente: 'usuario', confianza: 1, datos: usuario });
+  const metadatos = fusionarMetadatos(candidatos, entrada.nombreArchivo);
+  if (metadatos.procedencia?.autores?.fuente !== 'usuario') metadatos.autores = conOrcid(metadatos.autores, orcid);
+  return { metadatos, procedencia, colofon, ...(hablantes && Object.keys(hablantes).length ? { hablantes } : {}) };
+}
+
+/**
+ * Con el libro ya leído entero: si los créditos y el colofón (primeras 12 y
+ * últimas 3 páginas) traen pruebas que no se vieron con las primeras páginas,
+ * se repite el paso con ellas. Si no, devuelve el resultado tal cual.
+ */
+export async function refinarMetadatos(
+  previo: ResultadoMetadatos,
+  entrada: EntradaMetadatos & { todas: UnidadLeida[] },
+  puertos: PuertosMetadatos,
+  opciones: { sinVerificacion?: boolean } = {},
+): Promise<ResultadoMetadatos> {
+  const paginas = entrada.todas.filter((u) => u.ancla?.tipo !== 'tiempo');
+  if (paginas.length <= entrada.unidades.length) return previo;
+  const llenas = paginas.filter((u) => !u.vacia);
+  const primeras = llenas.slice(0, 12);
+  const ultimas = llenas.slice(-3);
+  const ahora = leerColofon(textoColofon(primeras, ultimas));
+  const tituloFlojo = (previo.metadatos.procedencia?.titulo?.confianza ?? 0) < 0.5;
+  if (!pruebasNuevas(previo.colofon ?? null, ahora) && !tituloFlojo) return previo;
+  const { todas: _todas, ...resto } = entrada;
+  const r = await pasoMetadatos({ ...resto, unidades: primeras, ultimas }, puertos, opciones);
+  return { ...r, procedencia: [...previo.procedencia, ...r.procedencia], ...(previo.hablantes && !r.hablantes ? { hablantes: previo.hablantes } : {}) };
 }
 
 const procedenciaLectura = (m: MetadatosDocumento, campo: string) => m.procedencia?.[campo]?.fuente === 'lectura';
@@ -461,12 +600,19 @@ const procedenciaLectura = (m: MetadatosDocumento, campo: string) => m.procedenc
 export function normalizarLectura(l: Partial<MetadatosDocumento>): Partial<MetadatosDocumento> {
   const r: Partial<MetadatosDocumento> = { ...l };
   for (const k of Object.keys(r) as Campo[]) if (vacio(r[k])) delete r[k];
-  if (r.autores) r.autores = r.autores.flatMap((a) => (a.nombre || !a.apellidos?.includes(' ') ? [a] : partirAutores(a.apellidos, r.idioma))).filter((a) => a.apellidos || a.nombre).map((a) => (a.apellidos ? a : separarNombre(a.nombre, r.idioma)));
+  const personas = (xs: Autor[]) => xs.flatMap((a) => (a.nombre || !a.apellidos?.includes(' ') ? [a] : partirAutores(a.apellidos, r.idioma)))
+    .filter((a) => a.apellidos || a.nombre).map((a) => (a.apellidos ? a : autorDe(a.nombre, r.idioma)));
+  if (r.autores) r.autores = personas(r.autores);
+  if (r.traductores) r.traductores = personas(r.traductores);
+  if (r.editores) r.editores = personas(r.editores);
   if (r.anio !== undefined) { const a = anioDe(r.anio); if (a) r.anio = a; else delete r.anio; }
   if (r.anioOriginal !== undefined) { const a = anioDe(r.anioOriginal); if (a) r.anioOriginal = a; else delete r.anioOriginal; }
   if (r.doi) { const d = limpiarDoi(r.doi); if (d) r.doi = d; else delete r.doi; }
   if (r.idioma) r.idioma = r.idioma.toLowerCase().slice(0, 5);
+  if (r.idiomaOriginal) r.idiomaOriginal = r.idiomaOriginal.toLowerCase().slice(0, 5);
+  if (r.idiomaOriginal && r.idiomaOriginal === r.idioma) delete r.idiomaOriginal;
   if (r.titulo) r.titulo = limpiarTitulo(r.titulo);
+  if (r.tituloOriginal && r.titulo && normalizar(r.tituloOriginal) === normalizar(r.titulo)) delete r.tituloOriginal;
   // Un «resumen» de cuatro palabras es una lista de materias, no un resumen.
   if (r.resumen && r.resumen.split(/\s+/).length < 8) delete r.resumen;
   return r;
