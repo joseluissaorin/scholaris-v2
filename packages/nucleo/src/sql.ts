@@ -3,7 +3,7 @@
  * admiten como mucho 100 parámetros enlazados en una sentencia («too many SQL
  * variables»). Las listas de longitud variable van como un único parámetro
  * JSON (`IN (SELECT value FROM json_each(?))`) y las inserciones de varias
- * filas se trocean con `filasPorSentencia`.
+ * filas se trocean para que filas × columnas no pase de 99.
  */
 import type { SQL, ValorSQL } from './puertos.js';
 
@@ -15,11 +15,6 @@ export const MAX_PARAMETROS_SQL = 100;
  */
 export function enLista(valores: readonly (string | number)[]): { sql: string; param: string } {
   return { sql: '(SELECT value FROM json_each(?))', param: JSON.stringify(valores) };
-}
-
-/** Filas por sentencia en un `INSERT … VALUES (…), (…)` de `columnas` columnas (más `fijos` parámetros aparte). */
-export function filasPorSentencia(columnas: number, fijos = 0): number {
-  return Math.max(1, Math.floor((MAX_PARAMETROS_SQL - 1 - fijos) / columnas));
 }
 
 /** Falla como D1 o un Durable Object si una sentencia pasa de `max` parámetros. */
