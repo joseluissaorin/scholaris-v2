@@ -3,7 +3,7 @@ import { contarTokens, partirFrases, partirParrafos, similitud } from '../src/te
 
 describe('texto', () => {
   it('parte frases respetando iniciales y abreviaturas', () => {
-    expect(partirFrases('C. S. Lewis wrote this. See e.g. the preface. It is good!')).toEqual(['C. S. Lewis wrote this.', 'See e.g. the preface.', 'It is good!']);
+    expect(partirFrases('J. R. Prieto wrote this. See e.g. the preface. It is good!')).toEqual(['J. R. Prieto wrote this.', 'See e.g. the preface.', 'It is good!']);
     expect(partirFrases('Dijo el Sr. Pérez: «¿Vienes?». ¡Claro que sí! Fin.')).toEqual(['Dijo el Sr. Pérez: «¿Vienes?».', '¡Claro que sí!', 'Fin.']);
     expect(partirFrases('Véase la sec. 3.2 del cap. 4. Luego.')).toEqual(['Véase la sec. 3.2 del cap. 4.', 'Luego.']);
   });

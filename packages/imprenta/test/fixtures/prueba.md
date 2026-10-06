@@ -1,6 +1,6 @@
 ---
 title: Notas de lectura
-author: José Luis Saorín
+author: María José Núñez
 ---
 
 # Primera parte

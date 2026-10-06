@@ -94,8 +94,8 @@ async function escenario(prefijo: string) {
   await alta(dueno);
   const bib = (await api('/bibliotecas', { token: dueno, cuerpo: { nombre: `Seminario ${prefijo}`, descripcion: 'Lecturas del seminario', derechos: 'uso_privado' } })).cuerpo;
   const otra = (await api('/bibliotecas', { token: dueno, cuerpo: { nombre: `Privada ${prefijo}` } })).cuerpo;
-  const a = await ingestar(dueno, `${prefijo}-panoptico`, ['El panóptico es una máquina de ver sin ser visto.', 'La disciplina fabrica cuerpos dóciles.'], [bib.id]);
-  const b = await ingestar(dueno, `${prefijo}-archivo`, ['El archivo es la ley de lo que puede ser dicho.'], [bib.id]);
+  const a = await ingestar(dueno, `${prefijo}-panoptico`, ['Apuntes del seminario sobre el panóptico de Bentham.', 'Resumen de la carta V: la casa de inspección.'], [bib.id]);
+  const b = await ingestar(dueno, `${prefijo}-archivo`, ['Fichas del archivo del seminario.'], [bib.id]);
   const fuera = await ingestar(dueno, `${prefijo}-diario`, ['Notas privadas sobre el panóptico que nadie más debe leer.'], [otra.id]);
   return { dueno, bib, otra, dentro: [a.documento, b.documento], fuera: fuera.documento };
 }
@@ -234,12 +234,12 @@ describe('enlaces de solo lectura', () => {
     expect((await api(`${P}/busqueda`, { cuerpo: { consulta: 'panóptico' } })).estado).toBe(404);
 
     // Con contraseña.
-    const ec = (await api('/enlaces', { token: dueno, cuerpo: { biblioteca: bib.id, confirmarDerechos: true, clave: 'foucault' } })).cuerpo;
+    const ec = (await api('/enlaces', { token: dueno, cuerpo: { biblioteca: bib.id, confirmarDerechos: true, clave: 'inspeccion' } })).cuerpo;
     const PC = `/publico/${ec.token}`;
     expect((await api(PC)).cuerpo.conClave).toBe(true);
     expect((await api(`${PC}/documentos`)).estado).toBe(401);
-    expect((await api(`${PC}/acceso`, { cuerpo: { clave: 'deleuze' } })).estado).toBe(403);
-    const pase = (await api(`${PC}/acceso`, { cuerpo: { clave: 'foucault' } })).cuerpo.pase;
+    expect((await api(`${PC}/acceso`, { cuerpo: { clave: 'equivocada' } })).estado).toBe(403);
+    const pase = (await api(`${PC}/acceso`, { cuerpo: { clave: 'inspeccion' } })).cuerpo.pase;
     expect((await api(`${PC}/documentos`, { cabeceras: { 'x-scholaris-pase': pase } })).estado).toBe(200);
     // El pase de un enlace no abre otro.
     const ec2 = (await api('/enlaces', { token: dueno, cuerpo: { biblioteca: bib.id, confirmarDerechos: true, clave: 'otra' } })).cuerpo;

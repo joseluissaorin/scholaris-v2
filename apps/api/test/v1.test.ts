@@ -56,12 +56,14 @@ function pdfMinimo(n: number): Uint8Array {
   return new TextEncoder().encode(pdf);
 }
 
-// La red simulada: una página web de ejemplo para la ingesta por URL.
-const HTML = `<!doctype html><html lang="es"><head><title>El panóptico</title><meta name="author" content="Michel Foucault">
-<meta name="citation_publication_date" content="1975"></head><body><article><h1>Vigilar</h1>
-<p>El panóptico de Bentham es una figura arquitectónica de la vigilancia: el vigilado nunca sabe si lo miran, y por eso se vigila a sí mismo.</p>
-<p>La disciplina fabrica individuos; es la técnica específica de un poder que toma a los individuos a la vez como objetos y como instrumentos.</p>
-<p>Las prisiones, las escuelas, los hospitales y los cuarteles comparten la misma tecnología del encierro y de la mirada que no se ve.</p>
+// La red simulada: una página web de ejemplo para la ingesta por URL. El texto es literal de Bentham,
+// «Panopticon; or, the Inspection-House» (1791), cartas II y V, en Wikisource:
+// https://en.wikisource.org/wiki/Panopticon_or_the_Inspection-House
+const HTML = `<!doctype html><html lang="en"><head><title>Panopticon; or, the Inspection-House</title><meta name="author" content="Jeremy Bentham">
+<meta name="citation_publication_date" content="1791"></head><body><article><h1>Letters</h1>
+<p>The apartment of the inspector occupies the centre; you may call it if you please the inspector’s lodge.</p>
+<p>Of this grating, a part sufficiently large opens, in form of a door, to admit the prisoner at his first entrance; and to give admission at any time to the inspector or any of his attendants.</p>
+<p>The essence of it consists, then, in the centrality of the inspector’s situation, combined with the wellknown and most effectual contrivances for seeing without being seen.</p>
 </article></body></html>`;
 const fetchReal = globalThis.fetch;
 beforeAll(() => {
@@ -160,13 +162,13 @@ describe('API v1: subir, leer, buscar, preguntar, citar, verificar, borrar', () 
 
   it('POST /documentos con el fichero crudo, deduplicado por huella', async () => {
     const pdf = pdfMinimo(3);
-    const r = await v1('/documentos?nombre=libro.pdf&titulo=Libro%20de%20prueba&autores=Saor%C3%ADn,%20Jos%C3%A9%20Luis&anio=2026', {
+    const r = await v1('/documentos?nombre=libro.pdf&titulo=Libro%20de%20prueba&autores=N%C3%BA%C3%B1ez,%20Mar%C3%ADa%20Jos%C3%A9&anio=2026', {
       clave: k, cuerpo: pdf, cabeceras: { 'content-type': 'application/pdf' },
     });
     expect(r.cuerpo.error).toBeUndefined();
     expect(r.estado).toBe(201);
-    expect(r.cuerpo).toMatchObject({ estado: 'listo', tipo: 'pdf_escaneado', titulo: 'Libro de prueba', autores: ['Saorín, José Luis'], anio: 2026, unidades: 3 });
-    expect(r.cuerpo.referencia).toMatch(/Saorín/);
+    expect(r.cuerpo).toMatchObject({ estado: 'listo', tipo: 'pdf_escaneado', titulo: 'Libro de prueba', autores: ['Núñez, María José'], anio: 2026, unidades: 3 });
+    expect(r.cuerpo.referencia).toMatch(/Núñez/);
     const dup = await v1('/documentos?nombre=otro.pdf', { clave: k, cuerpo: pdf, cabeceras: { 'content-type': 'application/octet-stream' } });
     expect(dup.estado).toBe(200);
     expect(dup.cuerpo).toMatchObject({ id: r.cuerpo.id, duplicado: true });
@@ -203,19 +205,19 @@ describe('API v1: subir, leer, buscar, preguntar, citar, verificar, borrar', () 
   });
 
   it('GET /buscar devuelve pasajes con cita, localizador, ancla y enlace', async () => {
-    const r = await v1(`/buscar?q=${encodeURIComponent('panóptico de Bentham')}&k=3&documento=${web}`, { clave: k });
+    const r = await v1(`/buscar?q=${encodeURIComponent('apartment of the inspector lodge')}&k=3&documento=${web}`, { clave: k });
     expect(r.estado).toBe(200);
     const p = r.cuerpo.pasajes[0];
-    expect(p.texto).toMatch(/panóptico/);
+    expect(p.texto).toMatch(/apartment of the inspector/);
     expect(p.documento.id).toBe(web);
-    expect(p.cita).toMatch(/^\(Foucault, .*párr\. \d\)$/);
+    expect(p.cita).toMatch(/^\(Bentham, .*párr\. \d\)$/);
     expect(p.localizador).toMatch(/párr\. \d/);
     expect(p.ancla.tipo).toBe('web');
     expect(p.enlace).toMatch(new RegExp(`^${ORIGEN}/lector/${web}\\?sec=`));
     expect(p.id.startsWith(`${web}:`)).toBe(true);
-    const md = await v1(`/buscar?q=disciplina&formato=markdown`, { clave: k });
-    expect(md.cuerpo).toMatch(/^# disciplina\n\n## 1\. \(/);
-    const post = await v1('/buscar', { clave: k, json: { q: 'disciplina', k: 1 } });
+    const md = await v1(`/buscar?q=grating&formato=markdown`, { clave: k });
+    expect(md.cuerpo).toMatch(/^# grating\n\n## 1\. \(/);
+    const post = await v1('/buscar', { clave: k, json: { q: 'grating', k: 1 } });
     expect(post.cuerpo.pasajes.length).toBe(1);
   });
 
@@ -233,7 +235,7 @@ describe('API v1: subir, leer, buscar, preguntar, citar, verificar, borrar', () 
   });
 
   it('POST /verificar: veredicto, probabilidad y pasajes con su cita', async () => {
-    const r = await v1('/verificar', { clave: k, json: { afirmacion: 'El panóptico hace que el vigilado se vigile a sí mismo.' } });
+    const r = await v1('/verificar', { clave: k, json: { afirmacion: 'The inspector sees without being seen.' } });
     expect(r.estado).toBe(200);
     expect(['respaldada', 'parcial', 'sin_respaldo', 'contradicha']).toContain(r.cuerpo.veredicto);
     expect(r.cuerpo.respaldada).toBe(r.cuerpo.veredicto === 'respaldada');
@@ -243,7 +245,7 @@ describe('API v1: subir, leer, buscar, preguntar, citar, verificar, borrar', () 
   });
 
   it('POST /citar: síncrono por defecto; esperar=0 y GET /citar/{id}', async () => {
-    const texto = 'El panóptico es una figura arquitectónica de la vigilancia. La disciplina fabrica individuos.';
+    const texto = 'The inspector sees without being seen. The building is circular.';
     const r = await v1('/citar', { clave: k, json: { texto, estilo: 'apa' } });
     expect(r.cuerpo.error).toBeUndefined();
     expect(r.estado).toBe(200);

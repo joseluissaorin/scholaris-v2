@@ -35,23 +35,27 @@ describe('ISBN', () => {
 
 describe('créditos y colofón', () => {
   it('The Discarded Image (1964): primera impresión y reimpresión del mismo año', () => {
-    const c = leerColofon('PUBLISHED BY\nTHE SYNDICS OF THE CAMBRIDGE UNIVERSITY PRESS\nBentley House, 200 Euston Road, London\n\n©\nCAMBRIDGE UNIVERSITY PRESS\n1964\n\nFirst printed 1964\nReprinted 1964');
+    // Página de créditos de la primera edición, recortada; texto de Internet Archive:
+    // https://archive.org/details/the-discarded-image-an-introduction-to-medieval-and-renaissance-literature-c.-s.-lewis
+    const c = leerColofon('PUBLISHED BY\nTHE SYNDICS OF THE CAMBRIDGE UNIVERSITY PRESS\nBentley House, 200 Euston Road, London, N.W. 1\n\n©\nCAMBRIDGE UNIVERSITY PRESS\n1964\n\nFirst printed 1964\nReprinted 1964');
     expect(c.editorial).toBe('Cambridge University Press');
     expect(aniosDelColofon(c)).toMatchObject({ anio: 1964, anioOriginal: 1964 });
   });
   it('edición Canto: el año de la edición no es el de la obra', () => {
-    const c = leerColofon('First published 1964\nFirst paperback edition 1967\nCanto edition 1994\nReprinted 1995, 1998\nISBN 0 521 47735 2 paperback');
+    // Fechas e ISBN cotejados en Open Library (https://openlibrary.org/works/OL71146W/editions).
+    const c = leerColofon('First published 1964\nFirst paperback edition 1967\nCanto edition 1994\nISBN 0 521 47735 2 paperback');
     expect(c.edicion).toBe('Canto edition');
     expect(aniosDelColofon(c)).toMatchObject({ anio: 1994, anioOriginal: 1964 });
     expect(c.isbns).toEqual(['9780521477352']);
   });
   it('traducción: título original, traductor, lengua y © del original', () => {
-    const c = leerColofon('Título original: Surveiller et punir\nTraducción del francés de Aurelio Garzón del Camino\n© Éditions Gallimard, 1975\n© de la traducción: Siglo XXI Editores, 1976\nPrimera edición: 1976\nEsta edición: 2002\nD.L.: M-1234-2002');
-    expect(c).toMatchObject({ tituloOriginal: 'Surveiller et punir', idiomaOriginal: 'fr', traductores: ['Aurelio Garzón del Camino'], depositoLegal: 'M-1234-2002' });
+    // Créditos inventados de un libro que no existe (editoriales y personas de prueba).
+    const c = leerColofon('Título original: Le livre d’essai\nTraducción del francés de Ana Prieto\n© Éditions de l’Exemple, 1975\n© de la traducción: Editorial Ejemplo, 1976\nPrimera edición: 1976\nEsta edición: 2002\nD.L.: M-1234-2002');
+    expect(c).toMatchObject({ tituloOriginal: 'Le livre d’essai', idiomaOriginal: 'fr', traductores: ['Ana Prieto'], depositoLegal: 'M-1234-2002' });
     expect(aniosDelColofon(c)).toMatchObject({ anio: 2002, anioOriginal: 1975 });
   });
   it('ediciones numeradas en palabras', () => {
-    const c = leerColofon('© 1975, Éditions Gallimard\nTítulo original: Surveiller et punir\nprimera edición en español, 1976\nvigesimonovena edición, 2001');
+    const c = leerColofon('© 1975, Éditions de l’Exemple\nTítulo original: Le livre d’essai\nprimera edición en español, 1976\nvigesimonovena edición, 2001');
     expect(aniosDelColofon(c)).toMatchObject({ anio: 2001, anioOriginal: 1975 });
   });
   it('pie de imprenta de una suelta del XVIII', () => {
@@ -68,7 +72,7 @@ describe('créditos y colofón', () => {
     expect(leerColofon('DOI: 10.1017/CBO9780511605390').doi).toBe('10.1017/cbo9780511605390');
   });
   it('solo se leen como créditos las páginas con señales de créditos', () => {
-    const t = textoColofon([pagina(1, 'Título'), pagina(2, 'Texto del cuerpo sin nada más'), pagina(3, '© 1975 Gallimard')], [pagina(40, 'Con licencia: En Sevilla, por Juan Pérez.')]);
+    const t = textoColofon([pagina(1, 'Título'), pagina(2, 'Texto del cuerpo sin nada más'), pagina(3, '© 1975 Éditions de l’Exemple')], [pagina(40, 'Con licencia: En Sevilla, por Juan Pérez.')]);
     expect(t).toContain('© 1975');
     expect(t).toContain('Con licencia');
     expect(t).not.toContain('cuerpo');
@@ -169,17 +173,18 @@ describe('enriquecer', () => {
     expect(r.avisos).toEqual([]);
   });
 
+  // Fichas del catálogo de RTVE Play recortadas (https://www.rtve.es/api/programas/73250/videos.json, consultado el 7-10-2026).
   const catalogoAFondo: Array<[string, unknown]> = [
     ['rtve.es/play/videos/a-fondo/', '<html>… https://www.rtve.es/api/programas/73250 …</html>'],
     ['api/programas/73250/videos.json', { page: { totalPages: 1, items: [
-      { id: '1051583', title: 'Julio Cortázar', dateOfEmission: '20-03-1977 00:00:00', duration: 7_400_000, htmlUrl: 'https://www.rtve.es/play/videos/a-fondo/julio-cortazar/1051583/', description: '<p>Joaqu&iacute;n Soler Serrano entrevista al escritor argentino Julio Cort&aacute;zar.</p>' },
-      { id: '3127003', title: 'Facundo Cabral', dateOfEmission: '02-07-1978 00:00:00', duration: 3_300_000, htmlUrl: 'https://www.rtve.es/play/videos/a-fondo/facundo-cabral/3127003/', description: '<p>Joaqu&iacute;n Soler Serrano entrevista al cantautor y escritor argentino.</p>' },
-      { id: '3000001', title: 'Alberto Cortez', dateOfEmission: '11-11-1979 00:00:00', duration: 3_500_000, htmlUrl: 'https://www.rtve.es/play/videos/a-fondo/alberto-cortez/3000001/', description: '<p>Joaqu&iacute;n Soler Serrano entrevista al cantautor.</p>' },
+      { id: '1051583', title: 'Julio Cortázar', dateOfEmission: '20-03-1977 00:00:00', duration: 7_341_360, htmlUrl: 'https://www.rtve.es/play/videos/a-fondo/julio-cortazar/1051583/', description: '<p>Joaqu&iacute;n Soler Serrano entrevista al escritor argentino Julio Cort&aacute;zar, que hace un repaso a su vida y obra literaria.</p>' },
+      { id: '3127003', title: 'Facundo Cabral', dateOfEmission: '02-07-1978 00:00:00', duration: 3_223_000, htmlUrl: 'https://www.rtve.es/play/videos/a-fondo/fondo-facundo-cabral/3127003/', description: '<p>Joaqu&iacute;n Soler Serrano entrevista al cantautor y escritor argentino.</p>' },
+      { id: '5579112', title: 'Alberto Ginastera', dateOfEmission: '26-08-1978 00:00:00', duration: 3_403_880, htmlUrl: 'https://www.rtve.es/play/videos/a-fondo/fondo-alberto-ginastera/5579112/', description: '<p>Joaqu&iacute;n Soler Serrano entrevista al m&uacute;sico Alberto Ginastera en una edici&oacute;n de su programa.</p>' },
     ] } }],
     ...wikidataAFondo,
   ];
-  // Una transcripción de la entrevista a Cabral: se le nombra muchas veces; a Cortez, una de pasada.
-  const transcripcionCabral = `${'Joaquín Soler Serrano: Facundo Cabral, bienvenido a A fondo. Cabral, ¿eres un místico? Facundo Cabral: Es inevitable, Joaquín. '.repeat(16)} Mi amigo Alberto Cortez canta conmigo a veces.`;
+  // Una transcripción de prueba (rótulos, no palabras de nadie): Cabral se nombra muchas veces; Ginastera, una de pasada.
+  const transcripcionCabral = `${'Rótulo de prueba, sin palabras de nadie: programa A fondo, con Facundo Cabral; presenta Joaquín Soler Serrano. '.repeat(16)} Otro rótulo nombra a Alberto Ginastera.`;
 
   it('RTVE Play: el episodio que respalda la grabación, con su fecha (Cabral es de 1978)', async () => {
     const http = httpFalso(catalogoAFondo);
@@ -187,7 +192,7 @@ describe('enriquecer', () => {
     const base = { titulo: 'A fondo', autores: [{ nombre: 'Joaquín', apellidos: 'Soler Serrano' }, { nombre: 'Facundo', apellidos: 'Cabral' }], anio: 1977, tipoCSL: 'broadcast' };
     const r = await enriquecer({ base, texto: '', tipo: 'video', grabacion: { texto: transcripcionCabral, hablantes: ['Joaquín Soler Serrano', 'Facundo Cabral'], duracion: 3219 } }, crearConsultor({ http }));
     const m = fusionar(base, r.hallazgos);
-    expect(m).toMatchObject({ titulo: 'Facundo Cabral', contenedor: 'A fondo', editorial: 'RTVE', anio: 1978, fecha: '1978-07-02', url: 'https://www.rtve.es/play/videos/a-fondo/facundo-cabral/3127003/' });
+    expect(m).toMatchObject({ titulo: 'Facundo Cabral', contenedor: 'A fondo', editorial: 'RTVE', anio: 1978, fecha: '1978-07-02', url: 'https://www.rtve.es/play/videos/a-fondo/fondo-facundo-cabral/3127003/' });
     expect(m.procedencia?.anio?.fuente).toBe('rtve');
     expect(m.autores.map((a) => a.apellidos)).toEqual(['Cabral']);
     expect(m.entrevistadores?.map((a) => a.apellidos)).toEqual(['Soler Serrano']);
@@ -195,18 +200,18 @@ describe('enriquecer', () => {
 
   it('si la lectura dice otro invitado que la grabación no respalda, gana la grabación', async () => {
     const http = httpFalso(catalogoAFondo);
-    const base = { titulo: 'Entrevista a Alberto Cortez', contenedor: 'A fondo', autores: [{ nombre: 'Alberto', apellidos: 'Cortez' }], entrevistadores: [{ nombre: 'Joaquín', apellidos: 'Soler Serrano' }], tipoCSL: 'interview' };
+    const base = { titulo: 'Entrevista a Alberto Ginastera', contenedor: 'A fondo', autores: [{ nombre: 'Alberto', apellidos: 'Ginastera' }], entrevistadores: [{ nombre: 'Joaquín', apellidos: 'Soler Serrano' }], tipoCSL: 'interview' };
     const r = await enriquecer({ base, texto: '', tipo: 'video', grabacion: { texto: transcripcionCabral, hablantes: [], duracion: 3219 } }, crearConsultor({ http }));
     const m = fusionar(base, r.hallazgos);
     expect(m).toMatchObject({ titulo: 'Facundo Cabral', anio: 1978 });
     expect(m.autores.map((a) => a.apellidos)).toEqual(['Cabral']);
-    expect(r.avisos.join(' ')).toMatch(/Alberto Cortez/);
+    expect(r.avisos.join(' ')).toMatch(/Alberto Ginastera/);
   });
 
   it('con duda (dos invitados igual de nombrados) o una duración que no cuadra, no se asigna episodio', async () => {
     const http = httpFalso(catalogoAFondo);
     const base = { titulo: 'A fondo', autores: [{ nombre: 'Facundo', apellidos: 'Cabral' }], tipoCSL: 'broadcast' };
-    const dudosa = `${'Facundo Cabral y Alberto Cortez cantan juntos. '.repeat(40)}`;
+    const dudosa = `${'Rótulo de prueba: Facundo Cabral, Alberto Ginastera. '.repeat(40)}`;
     const r1 = await enriquecer({ base, texto: '', tipo: 'video', grabacion: { texto: dudosa, hablantes: [] } }, crearConsultor({ http }));
     expect(r1.hallazgos.some((h) => h.fuente === 'rtve' && h.datos.fecha)).toBe(false);
     expect(r1.avisos.join(' ')).toMatch(/duda/);
@@ -216,10 +221,10 @@ describe('enriquecer', () => {
   });
 
   it('un pódcast con título de episodio leído no se toca el título', async () => {
-    const base = { titulo: 'La invención de la imprenta', contenedor: 'Documentos RNE', autores: [{ nombre: 'Ana', apellidos: 'Pérez' }], tipoCSL: 'broadcast' };
+    const base = { titulo: 'La invención de la imprenta', contenedor: 'Pódcast de prueba', autores: [{ nombre: 'Ana', apellidos: 'Pérez' }], tipoCSL: 'broadcast' };
     const r = await enriquecer({ base, texto: '', tipo: 'audio' }, crearConsultor({ http: httpFalso([]) }));
     const m = fusionar(base, r.hallazgos);
-    expect(m).toMatchObject({ titulo: 'La invención de la imprenta', contenedor: 'Documentos RNE' });
+    expect(m).toMatchObject({ titulo: 'La invención de la imprenta', contenedor: 'Pódcast de prueba' });
   });
 });
 
@@ -259,11 +264,11 @@ describe('paso completo', () => {
     expect(r.metadatos.autores[0]).toEqual({ nombre: 'Lope', apellidos: 'de Vega Carpio' });
   });
   it('el usuario manda también en el paso completo', async () => {
-    const redactor = redactorFalso(() => ({ titulo: 'Vigilar y castigar', autores: [{ nombre: 'Michel', apellidos: 'Foucault' }], idioma: 'es', tipoCSL: 'book', anio: 2002 }));
-    const { metadatos } = await pasoMetadatos({ ficha: {}, nombreArchivo: 'v.pdf', tipo: 'pdf', epub: false, unidades: [pagina(1, '© Éditions Gallimard, 1975\nTítulo original: Surveiller et punir\nEsta edición: 2002')], usuario: { anioOriginal: 1976 } }, { redactor }, { sinVerificacion: true });
+    const redactor = redactorFalso(() => ({ titulo: 'El libro de prueba', autores: [{ nombre: 'Ana', apellidos: 'Prieto' }], idioma: 'es', tipoCSL: 'book', anio: 2002 }));
+    const { metadatos } = await pasoMetadatos({ ficha: {}, nombreArchivo: 'v.pdf', tipo: 'pdf', epub: false, unidades: [pagina(1, '© Éditions de l’Exemple, 1975\nTítulo original: Le livre d’essai\nEsta edición: 2002')], usuario: { anioOriginal: 1976 } }, { redactor }, { sinVerificacion: true });
     expect(metadatos.anioOriginal).toBe(1976);
     expect(metadatos.procedencia?.anioOriginal?.fuente).toBe('usuario');
-    expect(metadatos).toMatchObject({ anio: 2002, tituloOriginal: 'Surveiller et punir' });
+    expect(metadatos).toMatchObject({ anio: 2002, tituloOriginal: 'Le livre d’essai' });
   });
 });
 
@@ -276,7 +281,7 @@ describe('pie de imprenta partido en líneas', () => {
 
 describe('limpiezas de la fusión', () => {
   it('sin ORCID antes de 1990 y sin lengua original si es la misma', () => {
-    const m = fusionarMetadatos([{ fuente: 'openalex', confianza: 0.95, datos: { titulo: 'The Discarded Image', autores: [{ nombre: 'C. S.', apellidos: 'Lewis', orcid: '0000-0001-5451-1672' }], anio: 1964, idioma: 'en', idiomaOriginal: 'en' } }], 'x.pdf');
+    const m = fusionarMetadatos([{ fuente: 'openalex', confianza: 0.95, datos: { titulo: 'The Discarded Image', autores: [{ nombre: 'C. S.', apellidos: 'Lewis', orcid: '0000-0002-1825-0097' }], anio: 1964, idioma: 'en', idiomaOriginal: 'en' } }], 'x.pdf');
     expect(m.autores[0]?.orcid).toBeUndefined();
     expect(m.idiomaOriginal).toBeUndefined();
   });

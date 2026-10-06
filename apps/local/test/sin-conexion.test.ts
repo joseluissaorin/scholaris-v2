@@ -20,7 +20,9 @@ import { driverNode, imprentaNode, prepararSinConexion } from '../src/principal.
 import { ErrorSinConexion, type GuardiaDeRed } from '../src/guardia-red.js';
 
 const TOKEN = 'token-sin-conexion-de-pruebas';
-const TEXTO_PAGINA = 'El panóptico de Bentham es la figura arquitectónica de la vigilancia: una torre central desde la que se ve sin ser visto.';
+// Bentham, «Panopticon; or, the Inspection-House» (1791), carta V, literal de Wikisource:
+// https://en.wikisource.org/wiki/Panopticon_or_the_Inspection-House
+const TEXTO_PAGINA = 'The essence of it consists, then, in the centrality of the inspector’s situation, combined with the wellknown and most effectual contrivances for seeing without being seen.';
 let s: ServidorLocal;
 let datos: string;
 let ia: Server;
@@ -64,13 +66,13 @@ function servidorIA(): Promise<Server> {
           if (mensajes.includes('image_url')) {
             tipo = 'lector';
             const fisica = Number(/páginas físicas (\d+)/.exec(mensajes)?.[1] ?? 1);
-            contenido = JSON.stringify({ paginas: [{ fisica, vacia: false, cabecera: 'VIGILAR Y CASTIGAR', folio: String(200 + fisica), titulos: [], texto: TEXTO_PAGINA, notas: [], pie: '', figuras: [], idioma: 'es', confianza: 0.95 }] });
+            contenido = JSON.stringify({ paginas: [{ fisica, vacia: false, cabecera: 'PANOPTICON', folio: String(200 + fisica), titulos: [], texto: TEXTO_PAGINA, notas: [], pie: '', figuras: [], idioma: 'es', confianza: 0.95 }] });
           } else if (esquema?.properties?.respuesta) {
             tipo = 'juez';
             contenido = '{"respuesta":"A"}';
             logprobs = { content: [{ token: 'A', logprob: Math.log(0.9), top_logprobs: [{ token: 'A', logprob: Math.log(0.9) }, { token: 'B', logprob: Math.log(0.1) }] }] };
           } else if (esquema?.properties?.titulo) {
-            contenido = JSON.stringify({ titulo: 'Vigilar y castigar', autores: [{ nombre: 'Michel', apellidos: 'Foucault' }], idioma: 'es', tipoCSL: 'book', anio: 1975 });
+            contenido = JSON.stringify({ titulo: 'Panopticon; or, the Inspection-House', autores: [{ nombre: 'Jeremy', apellidos: 'Bentham' }], idioma: 'en', tipoCSL: 'book', anio: 1791 });
           }
           llamadasIA.push({ ruta: req.url, tipo });
           return responder({ model: j.model, choices: [{ message: { role: 'assistant', content: contenido }, finish_reason: 'stop', logprobs }], usage: { prompt_tokens: 100, completion_tokens: 50 } });
@@ -151,7 +153,7 @@ afterAll(() => {
 describe('modo sin conexión', () => {
   it('la guardia bloquea internet y deja pasar lo local', async () => {
     expect(guardia).not.toBeNull();
-    await expect(fetch('https://api.openalex.org/works?search=foucault')).rejects.toBeInstanceOf(ErrorSinConexion);
+    await expect(fetch('https://api.openalex.org/works?search=bentham')).rejects.toBeInstanceOf(ErrorSinConexion);
     expect(guardia!.bloqueadas.map((b) => b.anfitrion)).toContain('api.openalex.org');
     const { default: https } = await import('node:https');
     expect(() => https.get('https://generativelanguage.googleapis.com/')).toThrow(ErrorSinConexion);
@@ -169,7 +171,7 @@ describe('modo sin conexión', () => {
     expect(cfg.clerkPublishableKey).toBeUndefined();
 
     const pdf = await pdfEscaneado(2);
-    const sub = await c.subidas.crear({ nombre: 'vigilar.pdf', mime: 'application/pdf', bytes: pdf.byteLength });
+    const sub = await c.subidas.crear({ nombre: 'panopticon.pdf', mime: 'application/pdf', bytes: pdf.byteLength });
     await subirFichero(c, sub.subida, sub.original, new Blob([pdf as Uint8Array<ArrayBuffer>]));
     const ing = await c.subidas.ingestar(sub.subida, {});
     await s.cola.vaciar();
@@ -180,13 +182,13 @@ describe('modo sin conexión', () => {
     // El lector de visión local leyó las dos páginas (imágenes, no PDF).
     expect(llamadasIA.filter((l) => l.tipo === 'lector').length).toBeGreaterThanOrEqual(2);
     const d = await c.documentos.obtener(ing.documento);
-    expect(d.metadatos.titulo).toBe('Vigilar y castigar');
+    expect(d.metadatos.titulo).toBe('Panopticon; or, the Inspection-House');
 
-    const r = await c.busqueda.buscar({ consulta: 'panóptico de Bentham vigilancia' });
-    expect(r.resultados[0]?.fragmento.texto).toMatch(/panóptico/);
+    const r = await c.busqueda.buscar({ consulta: 'inspector seeing without being seen' });
+    expect(r.resultados[0]?.fragmento.texto).toMatch(/inspector/);
     expect(r.resultados[0]?.vias).toContain('densa');
 
-    const v = await c.citas.verificar({ afirmacion: 'Bentham ideó el panóptico como figura de la vigilancia.' });
+    const v = await c.citas.verificar({ afirmacion: 'The inspector sees without being seen.' });
     expect(v.citas.length).toBeGreaterThan(0);
     expect(llamadasIA.some((l) => l.tipo === 'juez')).toBe(true);
 

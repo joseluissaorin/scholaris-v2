@@ -41,16 +41,19 @@ function documento(id: string, idioma: string, anio?: number): Documento {
   };
 }
 
-// Versos de «El casamiento en la muerte» (Lope), tal como están en el SPDF del banco.
-const LOPE = [
-  'No estoy muy enamorado;\nque es pequeño el corazon,\ny un Padre con su prision\ntiene lo mas ocupado.',
-  'Y assi, dice Brabonèl,\ny en lo que te ama Aragon,\nque no ha de haver ocasion\nen que no te acuerdes de èl.',
-  '*Al.* Mi Exercito, y el tuyo dando al viẽto\nlas Vanderas cruzadas, y las Lunas,\ntomaràn de este Valle el hondo assiento.',
-  'tengo por bien, q̃ en mis Vanderas ande\npor armas, por blason, y por trofeo. La muger de mi Padre, aora, con su honrra.',
+// Cervantes, «El ingenioso hidalgo don Quijote de la Mancha», edición de 1608 con su grafía,
+// copiado literalmente de Wikisource (capítulos II y XI, prólogo y capítulo XV):
+// https://es.wikisource.org/wiki/El_ingenioso_hidalgo_Don_Quijote_de_la_Mancha_(1608)
+const QUIJOTE = [
+  'O Princesa Dulcinea, señora deste cautiuo coraçon, mucho agrauio me auedes fecho en despedirme, y reprocharme con el riguroso afincamiento, de mandarme no parecer ante la vuestra fermosura.',
+  'Y assi dixo a su amo: Bien puede vuestra merced acomodarse desde luego, á donde ha de posar esta noche',
+  'bien como quien se engendrô en vna carcel, donde toda incomodidad tiene su assiento, y donde todo triste ruydo haze su habitacion?',
+  'Señor, yo soy hombre pacifico, mãso, sossegado, y se dissimular qualquiera injuria, porque tengo muger, y hijos que sustentar, y criar.',
 ];
+// Un documento moderno de relleno (frases de prueba, no de ninguna obra).
 const MODERNO = [
-  'La mujer del padre volvió ahora con su honra intacta, y así lo contó Bruno en la biografía.',
-  'Johnny Carter toca el saxo en París; el corazón le late como un reloj roto.',
+  'Así lo contó la mujer: cualquiera vive sosegado con sus hijos.',
+  'El corazón le late como un reloj roto.',
 ];
 
 function fragmentos(doc: string, textos: string[]): Fragmento[] {
@@ -65,12 +68,12 @@ async function base40(ruta = ':memory:'): Promise<{ db: DatabaseSync; sql: SQL }
   const sql = puertoNode(db, { sinPragma: true });
   await sql.ejecutar(
     `INSERT INTO documentos (id, tipo, metadatos, huella, original, mime, bytes, creado, actualizado, titulo, idioma)
-     VALUES ('lope', 'pdf', ?, 'h', '', 'application/pdf', 1, 'x', 'x', 'El casamiento en la muerte', 'es'),
-            ('cortazar', 'pdf', ?, 'h2', '', 'application/pdf', 1, 'x', 'x', 'El perseguidor', 'es')`,
-    JSON.stringify({ titulo: 'El casamiento en la muerte', autores: [], idioma: 'es' }),
-    JSON.stringify({ titulo: 'El perseguidor', autores: [], idioma: 'es', anio: 1959 }),
+     VALUES ('quijote', 'pdf', ?, 'h', '', 'application/pdf', 1, 'x', 'x', 'Don Quijote', 'es'),
+            ('moderno', 'pdf', ?, 'h2', '', 'application/pdf', 1, 'x', 'x', 'Texto moderno', 'es')`,
+    JSON.stringify({ titulo: 'Don Quijote', autores: [], idioma: 'es' }),
+    JSON.stringify({ titulo: 'Texto moderno', autores: [], idioma: 'es', anio: 1959 }),
   );
-  for (const [doc, textos] of [['lope', LOPE], ['cortazar', MODERNO]] as const) {
+  for (const [doc, textos] of [['quijote', QUIJOTE], ['moderno', MODERNO]] as const) {
     textos.forEach((t, i) => db.prepare(`INSERT INTO fragmentos (id, documento, unidad, orden, texto, contexto, seccion, ancla) VALUES (?, ?, 'u', ?, ?, '', '[]', '{}')`).run(`${doc}-${i}`, doc, i, t));
   }
   return { db, sql };
@@ -81,20 +84,20 @@ const ids = (r: Array<{ fragmento: Fragmento }>) => r.map((x) => x.fragmento.id)
 describe('SPDF 4.1: texto_busqueda', () => {
   it('escribirFragmentos calcula la capa con el idioma y la época del documento', async () => {
     const a = await crearSpdf();
-    await a.escribirDocumento(documento('lope', 'es'));
-    await a.escribirDocumento(documento('cortazar', 'es', 1959));
+    await a.escribirDocumento(documento('quijote', 'es'));
+    await a.escribirDocumento(documento('moderno', 'es', 1959));
     await a.escribirDocumento(documento('virgilio', 'la'));
-    await a.escribirFragmentos(fragmentos('lope', LOPE));
-    await a.escribirFragmentos(fragmentos('cortazar', MODERNO));
+    await a.escribirFragmentos(fragmentos('quijote', QUIJOTE));
+    await a.escribirFragmentos(fragmentos('moderno', MODERNO));
     await a.escribirFragmentos(fragmentos('virgilio', ['Arma virumque cano, Troiae qui primus ab oris']));
     const filas = await a.sql.ejecutar<{ id: string; texto_busqueda: string }>('SELECT id, texto_busqueda FROM fragmentos ORDER BY n');
     const capa = new Map(filas.map((f) => [f.id, f.texto_busqueda]));
-    expect(capa.get('lope-1')).toContain('asi dize');
-    expect(capa.get('lope-3')).toContain('que en mis banderas');
-    expect(capa.get('cortazar-0')).toBe('');
+    expect(capa.get('quijote-1')).toContain('asi dijo');
+    expect(capa.get('quijote-3')).toContain('ombre pazifico manso sosegado');
+    expect(capa.get('moderno-0')).toBe('');
     expect(capa.get('virgilio-0')).toContain('uirum que');
     // El texto fiel no se toca.
-    expect((await a.leerFragmento('lope-1'))?.texto).toBe(LOPE[1]);
+    expect((await a.leerFragmento('quijote-1'))?.texto).toBe(QUIJOTE[1]);
     a.cerrar();
   });
 
@@ -108,21 +111,21 @@ describe('SPDF 4.1: texto_busqueda', () => {
 
   it('la búsqueda en grafía moderna encuentra el texto antiguo; el resaltado es del texto fiel', async () => {
     const a = await crearSpdf();
-    await a.escribirDocumento(documento('lope', 'es'));
-    await a.escribirDocumento(documento('cortazar', 'es', 1959));
-    await a.escribirFragmentos(fragmentos('lope', LOPE));
-    await a.escribirFragmentos(fragmentos('cortazar', MODERNO));
+    await a.escribirDocumento(documento('quijote', 'es'));
+    await a.escribirDocumento(documento('moderno', 'es', 1959));
+    await a.escribirFragmentos(fragmentos('quijote', QUIJOTE));
+    await a.escribirFragmentos(fragmentos('moderno', MODERNO));
     // Solo en el texto fiel, «así» no encuentra «assi».
-    expect(ids(await a.buscarTexto('texto : "asi"', { crudo: true }))).toEqual(['cortazar-0']);
-    expect(ids(await a.buscarTexto('así'))).toEqual(['cortazar-0', 'lope-1']);
-    expect(ids(await a.buscarTexto('mujer'))).toEqual(['cortazar-0', 'lope-3']);
-    expect(ids(await a.buscarTexto('honra'))).toEqual(['cortazar-0', 'lope-3']);
-    expect(ids(await a.buscarTexto('ahora'))).toEqual(['cortazar-0', 'lope-3']);
-    expect(ids(await a.buscarTexto('banderas ejército', { modo: 'todas' }))).toEqual(['lope-2']);
-    expect(ids(await a.buscarTexto('corazón'))).toEqual(['cortazar-1', 'lope-0']);
+    expect(ids(await a.buscarTexto('texto : "asi"', { crudo: true }))).toEqual(['moderno-0']);
+    expect(ids(await a.buscarTexto('así'))).toEqual(['moderno-0', 'quijote-1']);
+    expect(ids(await a.buscarTexto('mujer'))).toEqual(['moderno-0', 'quijote-3']);
+    expect(ids(await a.buscarTexto('cualquiera'))).toEqual(['moderno-0', 'quijote-3']);
+    expect(ids(await a.buscarTexto('sosegado'))).toEqual(['moderno-0', 'quijote-3']);
+    expect(ids(await a.buscarTexto('ruido hace', { modo: 'todas' }))).toEqual(['quijote-2']);
+    expect(ids(await a.buscarTexto('corazón'))).toEqual(['moderno-1', 'quijote-0']);
     // Frase: la literal sigue en el texto fiel, y la normalizada encuentra la antigua.
-    expect(ids(await a.buscarTexto('pequeño el corazon', { modo: 'frase', normalizada: false }))).toEqual(['lope-0']);
-    expect(ids(await a.buscarTexto('y así dice', { modo: 'frase' }))).toEqual(['lope-1']);
+    expect(ids(await a.buscarTexto('cautiuo coraçon', { modo: 'frase', normalizada: false }))).toEqual(['quijote-0']);
+    expect(ids(await a.buscarTexto('y así dijo', { modo: 'frase' }))).toEqual(['quijote-1']);
     const r = await a.buscarTexto('asiento');
     expect(r[0]?.resaltado).toContain('assiento');
     a.cerrar();
@@ -130,10 +133,10 @@ describe('SPDF 4.1: texto_busqueda', () => {
 
   it('el documento moderno no recibe ruido de las variantes antiguas', async () => {
     const a = await crearSpdf();
-    await a.escribirDocumento(documento('cortazar', 'es', 1959));
-    await a.escribirFragmentos(fragmentos('cortazar', ['Echo de menos el ruido del bar.', 'Es un hecho: la ola rompió.']));
+    await a.escribirDocumento(documento('moderno', 'es', 1959));
+    await a.escribirFragmentos(fragmentos('moderno', ['Echo de menos el ruido del bar.', 'Es un hecho: la ola rompió.']));
     // «hecho» y «echo» comparten clave antigua, pero en un texto moderno no se mezclan.
-    expect(ids(await a.buscarTexto('hecho'))).toEqual(['cortazar-1']);
+    expect(ids(await a.buscarTexto('hecho'))).toEqual(['moderno-1']);
     expect(ids(await a.buscarTexto('hola'))).toEqual([]);
     a.cerrar();
   });
@@ -142,7 +145,7 @@ describe('SPDF 4.1: texto_busqueda', () => {
 describe('SPDF 4.0 → 4.1', () => {
   it('aplicarEsquema migra una base 4.0 (sin PRAGMA, como un Durable Object) y es idempotente', async () => {
     const { db, sql } = await base40();
-    expect((await buscarTexto(sql, 'corazon', { normalizada: false })).length).toBe(2);
+    expect((await buscarTexto(sql, 'hijos', { normalizada: false })).length).toBe(2);
     await aplicarEsquema(sql, { generador: 'prueba' });
     expect(await leerClave(sql, 'spdf_version')).toBe(VERSION_SPDF);
     expect(await leerClave(sql, 'fts_pendiente')).toBeNull();
@@ -150,15 +153,15 @@ describe('SPDF 4.0 → 4.1', () => {
     expect(fts.sql).toContain('texto_busqueda');
     const capa = db.prepare('SELECT id, texto_busqueda FROM fragmentos ORDER BY n').all() as Array<{ id: string; texto_busqueda: string | null }>;
     expect(capa.every((f) => f.texto_busqueda !== null)).toBe(true);
-    expect(capa.find((f) => f.id === 'lope-1')?.texto_busqueda).toContain('asi');
-    expect(capa.find((f) => f.id === 'cortazar-0')?.texto_busqueda).toBe('');
-    expect(ids(await buscarTexto(sql, 'honra'))).toEqual(['cortazar-0', 'lope-3']);
-    expect(ids(await buscarTexto(sql, 'corazon'))).toEqual(['cortazar-1', 'lope-0']);
+    expect(capa.find((f) => f.id === 'quijote-1')?.texto_busqueda).toContain('asi');
+    expect(capa.find((f) => f.id === 'moderno-0')?.texto_busqueda).toBe('');
+    expect(ids(await buscarTexto(sql, 'mujer'))).toEqual(['moderno-0', 'quijote-3']);
+    expect(ids(await buscarTexto(sql, 'corazon'))).toEqual(['moderno-1', 'quijote-0']);
     await aplicarEsquema(sql); // otra vez: nada que hacer
-    expect(ids(await buscarTexto(sql, 'honra'))).toEqual(['cortazar-0', 'lope-3']);
+    expect(ids(await buscarTexto(sql, 'mujer'))).toEqual(['moderno-0', 'quijote-3']);
     // Los disparadores siguen manteniendo el índice.
-    await escribirFragmentos(sql, [{ ...fragmentos('lope', ['La fee del cauallero'])[0] as Fragmento, id: 'lope-9', orden: 9 }]);
-    expect(ids(await buscarTexto(sql, 'fe caballero', { modo: 'todas' }))).toEqual(['lope-9']);
+    await escribirFragmentos(sql, [{ ...fragmentos('quijote', ['Mas, yo te juro Sancho Pança, a fè de cauallero andante'])[0] as Fragmento, id: 'quijote-9', orden: 9 }]);
+    expect(ids(await buscarTexto(sql, 'fe caballero', { modo: 'todas' }))).toEqual(['quijote-9']);
     db.exec("INSERT INTO fragmentos_fts(fragmentos_fts, rank) VALUES ('integrity-check', 1)");
     db.close();
   });
@@ -171,28 +174,28 @@ describe('SPDF 4.0 → 4.1', () => {
     db.exec('ALTER TABLE fragmentos ADD COLUMN texto_busqueda TEXT');
     db.exec("CREATE VIRTUAL TABLE fragmentos_fts USING fts5(texto, contexto, seccion, texto_busqueda, content='fragmentos', content_rowid='n', tokenize='unicode61 remove_diacritics 2')");
     await aplicarEsquema(sql);
-    expect(ids(await buscarTexto(sql, 'mujer'))).toEqual(['cortazar-0', 'lope-3']);
+    expect(ids(await buscarTexto(sql, 'mujer'))).toEqual(['moderno-0', 'quijote-3']);
     expect(await leerClave(sql, 'fts_pendiente')).toBeNull();
     db.close();
   });
 
   it('abrirSpdf migra un .spdf 4.0 al abrirlo', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'spdf40-'));
-    const { db } = await base40(join(dir, 'lope.sqlite'));
+    const { db } = await base40(join(dir, 'quijote.sqlite'));
     db.close();
-    const bytes = new Uint8Array(readFileSync(join(dir, 'lope.sqlite')));
+    const bytes = new Uint8Array(readFileSync(join(dir, 'quijote.sqlite')));
     rmSync(dir, { recursive: true, force: true });
     const a = await abrirSpdf(bytes);
     expect(await a.version()).toBe(VERSION_SPDF);
-    expect(ids(await a.buscarTexto('mujer'))).toEqual(['cortazar-0', 'lope-3']);
+    expect(ids(await a.buscarTexto('mujer'))).toEqual(['moderno-0', 'quijote-3']);
     expect(await a.comprobarIntegridad()).toEqual([]);
     a.cerrar();
   });
 
   it('rellenarTextoBusqueda completa lo insertado a mano', async () => {
     const a = await crearSpdf();
-    await a.escribirDocumento(documento('lope', 'es', 1618));
-    await a.sql.ejecutar(`INSERT INTO fragmentos (id, documento, unidad, orden, texto, contexto, seccion, ancla) VALUES ('x', 'lope', 'u', 1, 'Dixo la muger', '', '[]', '{}')`);
+    await a.escribirDocumento(documento('quijote', 'es', 1608));
+    await a.sql.ejecutar(`INSERT INTO fragmentos (id, documento, unidad, orden, texto, contexto, seccion, ancla) VALUES ('x', 'quijote', 'u', 1, 'Quien duda de esso, dixo la sobrina', '', '[]', '{}')`);
     expect(ids(await a.buscarTexto('dijo'))).toEqual([]);
     expect(await rellenarTextoBusqueda(a.sql)).toBe(1);
     expect(ids(await a.buscarTexto('dijo'))).toEqual(['x']);

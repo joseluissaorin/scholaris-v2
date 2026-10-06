@@ -25,11 +25,12 @@ describe('normalizar y localizar', () => {
   });
 
   it('busca formas con límites de palabra, mayúsculas en nombres propios y sin la etiqueta del hablante', () => {
-    const t = '**Charlie Parker:** Toco.\nBird tocaba; un bird no. Charlie Parker era Bird.';
+    // Personas inventadas.
+    const t = '**Ana Prieto:** Hola.\nAnita llegó; una anita no. Ana Prieto era Anita.';
     const ex = rangosExcluidos(t);
-    const cs = buscarFormas(t, ['Charlie Parker', 'Bird'], true, ex);
-    expect(cs.map((c) => t.slice(c.ini, c.fin))).toEqual(['Charlie Parker', 'Bird', 'Bird']);
-    expect(buscarFormas('Birdland', ['Bird'], true)).toEqual([]);
+    const cs = buscarFormas(t, ['Ana Prieto', 'Anita'], true, ex);
+    expect(cs.map((c) => t.slice(c.ini, c.fin))).toEqual(['Ana Prieto', 'Anita', 'Anita']);
+    expect(buscarFormas('Anitalandia', ['Anita'], true)).toEqual([]);
     expect(buscarFormas('el Gnosticismo y el gnosticismo', ['gnosticismo'], false)).toHaveLength(2);
     // Los espacios casan con saltos de línea.
     expect(buscarFormas('Julio\nCortázar', ['Julio Cortázar'], true)).toHaveLength(1);
@@ -38,8 +39,8 @@ describe('normalizar y localizar', () => {
   it('sin solapes gana la forma más larga; el contexto marca la mención', () => {
     const cs = sinSolapes([{ ini: 0, fin: 14 }, { ini: 8, fin: 14 }, { ini: 20, fin: 26 }]);
     expect(cs).toEqual([{ ini: 0, fin: 14 }, { ini: 20, fin: 26 }]);
-    const c = contextoMencion('Antes de todo, cuando leí la biografía de **Charlie Parker** lo supe.', 44, 58, 20);
-    expect(c).toContain('⟦Charlie Parker⟧');
+    const c = contextoMencion('Antes de todo, cuando leí la biografía de **Ana Prieto** lo supe.', 44, 54, 20);
+    expect(c).toContain('⟦Ana Prieto⟧');
     expect(c.startsWith('…')).toBe(true);
   });
 
@@ -131,31 +132,40 @@ describe('normalizar y localizar', () => {
 // ---------------------------------------------------------------------------
 // De punta a punta, con un redactor falso y un Wikidata falso
 // ---------------------------------------------------------------------------
+//
+// Tres documentos reales con su texto literal:
+//   - «A Day with Dr. Conan Doyle», entrevista de Harry How en The Strand Magazine, vol. 4, agosto de 1892:
+//     https://en.wikisource.org/wiki/The_Strand_Magazine/Volume_4/Issue_20/A_Day_with_Dr._Conan_Doyle
+//   - «The Adventures of Sherlock Holmes» (Newnes, 1892): la dedicatoria a Joseph Bell, de la primera edición
+//     en Internet Archive (https://archive.org/details/adventuresofsher001892doyl), y el segundo párrafo de
+//     «A Scandal in Bohemia», de Project Gutenberg n.º 1661;
+//   - Darwin, «The Expression of the Emotions in Man and Animals» (1872), introducción, Project Gutenberg n.º 1227.
+// Joseph Bell, el maestro de Conan Doyle, es la persona real; Sherlock Holmes, el personaje que inspiró;
+// Charles Bell, otro Bell. Los folios (11, 12…) son los de esta copia de prueba.
 
 /** El «redactor»: reconoce lo que un catalogador reconocería en estos textos. */
 const CATALOGO: Array<{ si: RegExp; e: { n: string; t: string; f: string[] } }> = [
-  { si: /Charlie Parker|Parker/, e: { n: 'Charlie Parker', t: 'p', f: ['Charlie Parker', 'Parker'] } },
-  { si: /CH\.P\./, e: { n: 'Charlie Parker', t: 'p', f: ['CH.P.'] } },
-  { si: /Cortázar/, e: { n: 'Julio Cortázar', t: 'p', f: ['Cortázar', 'Julio Cortázar'] } },
-  { si: /Johnny/, e: { n: 'Johnny Carter', t: 'q', f: ['Johnny'] } },
-  { si: /El perseguidor/, e: { n: 'El perseguidor', t: 'o', f: ['El perseguidor'] } },
-  { si: /París/, e: { n: 'París', t: 'l', f: ['París'] } },
-  { si: /1951/, e: { n: '1951', t: 'f', f: ['1951'] } },
-  { si: /Matthew Parker/, e: { n: 'Matthew Parker', t: 'p', f: ['Matthew Parker', 'Parker'] } },
-  { si: /Boecio/, e: { n: 'Boecio', t: 'p', f: ['Boecio'] } },
+  { si: /Joseph Bell|Bell/, e: { n: 'Joseph Bell', t: 'p', f: ['Joseph Bell', 'Bell'] } },
+  { si: /JOSEPH BELL/, e: { n: 'Joseph Bell', t: 'p', f: ['JOSEPH BELL'] } },
+  { si: /Doyle/, e: { n: 'Arthur Conan Doyle', t: 'p', f: ['Doyle', 'Conan Doyle'] } },
+  { si: /Holmes/, e: { n: 'Sherlock Holmes', t: 'q', f: ['Holmes'] } },
+  { si: /Edinburgh/, e: { n: 'Edinburgh', t: 'l', f: ['Edinburgh'] } },
+  { si: /1859/, e: { n: '1859', t: 'f', f: ['1859'] } },
+  { si: /Charles Bell/, e: { n: 'Charles Bell', t: 'p', f: ['Charles Bell', 'C. Bell'] } },
+  { si: /Donders/, e: { n: 'Donders', t: 'p', f: ['Donders'] } },
 ];
 
 function redactorCatalogo(fallarSi?: RegExp) {
   return redactorFalso((texto) => {
     if (texto.includes(' · B = ')) {
-      // Relaciones: «A admira a B» cuando el pasaje dice «admiraba».
+      // Relaciones: «A fue alumno de B» cuando el pasaje habla del puesto de «clerk».
       const pares = texto.split(/\n\n(?=\[\d+\])/);
-      return { r: pares.map((p, i) => ({ i: i + 1, e: /admiraba/.test(p) && /Charlie Parker/.test(p) && /Cortázar/.test(p) ? 'Julio Cortázar admira a Charlie Parker' : /admiraba/.test(p) ? 'Algo admira a Rayuela' : '' })) };
+      return { r: pares.map((p, i) => ({ i: i + 1, e: /clerk/.test(p) && /Joseph Bell/.test(p) && /Doyle/.test(p) ? 'Arthur Conan Doyle fue alumno de Joseph Bell' : '' })) };
     }
     if (fallarSi?.test(texto)) throw new Error('el proveedor se ha caído');
-    // En Discarded Image, «Parker» es Matthew Parker, no el músico.
-    const discarded = texto.includes('Discarded');
-    return { e: CATALOGO.filter((c) => c.si.test(texto) && !(discarded && c.e.n === 'Charlie Parker')).map((c) => c.e) };
+    // En el libro de Darwin, «Bell» es Charles Bell, no el maestro de Conan Doyle.
+    const darwin = texto.includes('Expression of the Emotions');
+    return { e: CATALOGO.filter((c) => c.si.test(texto) && !(darwin && c.e.n === 'Joseph Bell')).map((c) => c.e) };
   });
 }
 
@@ -165,8 +175,8 @@ function wikidataFalso() {
     const busqueda = new URL(url).searchParams.get('search') ?? '';
     llamadas.push(busqueda);
     const datos: Record<string, unknown[]> = {
-      'Charlie Parker': [{ id: 'Q103767', label: 'Charlie Parker', description: 'saxofonista estadounidense de jazz' }],
-      'Julio Cortázar': [{ id: 'Q93959', label: 'Julio Cortázar', description: 'escritor argentino' }],
+      'Joseph Bell': [{ id: 'Q648680', label: 'Joseph Bell', description: 'médico y profesor escocés' }],
+      'Arthur Conan Doyle': [{ id: 'Q35610', label: 'Arthur Conan Doyle', description: 'escritor británico (1859-1930)' }],
     };
     return new Response(JSON.stringify({ search: datos[busqueda] ?? [] }), { headers: { 'content-type': 'application/json' } });
   }) as unknown as typeof fetch;
@@ -176,27 +186,27 @@ function wikidataFalso() {
 async function biblioteca() {
   const sql = await estanteria();
   await sembrar(sql, {
-    id: 'entrevista', titulo: 'A fondo: Julio Cortázar', anio: 1977, paginas: [
-      'Hablamos de París y de Cortázar, que vivía allí desde 1951.',
-      'Cortázar cuenta que admiraba a Charlie Parker como saxofonista; Parker fue la semilla de El perseguidor.',
+    id: 'entrevista', titulo: 'A Day with Dr. Conan Doyle', autores: [['Harry', 'How']], anio: 1892, paginas: [
+      "Dr. Doyle was born in Edinburgh in 1859.",
+      "I looked at the portrait. It represented the features of Mr. Joseph Bell, M.D., whose name I had heard mentioned whilst with Professor Blackie a few months ago in the Scotch capital.\n\n\"I was clerk in Mr. Bell's ward,\" continued Dr. Doyle.",
     ],
   });
   await sembrar(sql, {
-    id: 'perseguidor', titulo: 'El perseguidor', autores: [['Julio', 'Cortázar']], anio: 1959, paginas: [
-      'In memoriam CH.P. Dédée me ha llamado por la tarde diciéndome que Johnny no estaba bien.',
-      'Johnny tocaba aquella noche en el club.',
+    id: 'aventuras', titulo: 'The Adventures of Sherlock Holmes', autores: [['Arthur Conan', 'Doyle']], anio: 1892, paginas: [
+      "MY OLD TEACHER, JOSEPH BELL, M.D., &c. OF 2, MELVILLE CRESCENT, EDINBURGH.\n\nI had seen little of Holmes lately.",
+      "My marriage had drifted us away from each other. My own complete happiness, and the home-centred interests which rise up around the man who first finds himself master of his own establishment, were sufficient to absorb all my attention, while Holmes, who loathed every form of society with his whole Bohemian soul, remained in our lodgings in Baker Street, buried among his old books, and alternating from week to week between cocaine and ambition, the drowsiness of the drug, and the fierce energy of his own keen nature.",
     ],
   });
   await sembrar(sql, {
-    id: 'discarded', titulo: 'The Discarded Image', autores: [['C. S.', 'Lewis']], anio: 1964, paginas: [
-      'Boecio fue leído por todos; Matthew Parker reunió manuscritos. Parker los legó a su colegio.',
+    id: 'expresion', titulo: 'The Expression of the Emotions in Man and Animals', autores: [['Charles', 'Darwin']], anio: 1872, paginas: [
+      "Sir Charles Bell, so illustrious for his discoveries in physiology, published in 1806 the first edition, and in the third edition of his ‘Anatomy and Philosophy of Expression.’[4] He may with justice be said, not only to have laid the foundations of the subject as a branch of science, but to have built up a noble structure. His work is in every way deeply interesting; it includes graphic descriptions of the various emotions, and is admirably illustrated. It is generally admitted that his service consists chiefly in having shown the intimate relation which exists between the movements of expression and those of respiration. One of the most important points, small as it may at first appear, is that the muscles round the eyes are involuntarily contracted during violent expiratory efforts, in order to protect these delicate organs from the pressure of the blood. This fact, which has been fully investigated for me with the greatest kindness by Professors Donders of Utrecht, throws, as we shall hereafter see, a flood of light on several of the most important expressions of the human countenance. The merits of Sir C. Bell’s work have been undervalued or quite ignored by several foreign writers, but have been fully admitted by some, for instance by M. Lemoine,[5] who with great justice says:—“Le livre de Ch. Bell devrait être médité par quiconque essaye de faire parler le visage de l’homme, par les philosophes aussi bien que par les artistes, car, sous une apparence plus légère et sous le prétexte de l’esthétique, c’est un des plus beaux monuments de la science des rapports du physique et du moral.”",
     ],
   });
   return sql;
 }
 
 async function extraerTodo(p: PuertosFunciones, w = wikidataFalso()) {
-  for (const d of ['entrevista', 'perseguidor', 'discarded']) {
+  for (const d of ['entrevista', 'aventuras', 'expresion']) {
     await extraerEntidadesDocumento(p, d, { wikidata: { fetch: w.f, pausa: 0 }, concurrencia: 2 });
   }
   return w;
@@ -212,16 +222,18 @@ async function idDe(sql: SQL, nombre: string): Promise<string> {
 describe('grafo de entidades de la biblioteca', () => {
   it('la pasada de todo el documento añade lo que el redactor calló en otro lote, sin duplicar', async () => {
     const sql = await estanteria();
-    await sembrar(sql, { id: 'd', titulo: 'Novela', paginas: ['Johnny Carter toca.', 'Más tarde Johnny Carter y Bruno; Johnny Carter otra vez.', 'Nada.'] });
-    const redactor = redactorFalso((t) => (t.includes(' · B = ') ? { r: [] } : { e: t.includes('toca') ? ['q|Johnny Carter'] : [] }));
+    // «The Adventures of Sherlock Holmes», literal de Project Gutenberg n.º 1661 («A Scandal in Bohemia» y
+    // «The Boscombe Valley Mystery»); la tercera página, de relleno.
+    await sembrar(sql, { id: 'd', titulo: 'Novela', paginas: ['To Sherlock Holmes she is always the woman.', 'I did not wonder at Lestrade’s opinion, and yet I had so much faith in Sherlock Holmes’ insight that I could not lose hope as long as every fresh fact seemed to strengthen his conviction of young McCarthy’s innocence. It was late before Sherlock Holmes returned.', 'Nada.'] });
+    const redactor = redactorFalso((t) => (t.includes(' · B = ') ? { r: [] } : { e: t.includes('she is always') ? ['q|Sherlock Holmes'] : [] }));
     const p = puertos(sql, { inteligencia: { redactor } });
     await extraerEntidadesDocumento(p, 'd', { caracteresLote: 30, wikidata: false });
     const filas = await sql.ejecutar<{ orden: number }>('SELECT orden FROM menciones ORDER BY orden, ini');
     expect(filas.map((f) => f.orden)).toEqual([0, 1, 1]);
     const { completarMenciones, obtenerEntidad } = await import('../src/entidades/resolver.js');
-    // Enlazado antes con un cantante homónimo: al saberse que es un personaje, se desenlaza.
-    await sql.ejecutar("UPDATE entidades SET wikidata = 'Q4330560', descripcion = 'cantante estadounidense'");
-    await obtenerEntidad(sql, 'persona', 'Johnny Carter', [], true);
+    // Enlazado antes con una película homónima: al saberse que es un personaje, se desenlaza.
+    await sql.ejecutar("UPDATE entidades SET wikidata = 'Q200396', descripcion = 'película de 2009 dirigida por Guy Ritchie'");
+    await obtenerEntidad(sql, 'persona', 'Sherlock Holmes', [], true);
     expect(await sql.ejecutar('SELECT wikidata, descripcion FROM entidades')).toEqual([{ wikidata: null, descripcion: 'personaje de ficción' }]);
     const frs = (await sql.ejecutar<{ id: string; orden: number; texto: string; ancla: string }>('SELECT id, orden, texto, ancla FROM fragmentos')).map((f) => ({ ...f, ancla: JSON.parse(f.ancla) }));
     expect(await completarMenciones(sql, 'd', frs)).toBe(0);
@@ -234,66 +246,67 @@ describe('grafo de entidades de la biblioteca', () => {
     const p = puertos(sql, { inteligencia: { redactor } });
     const w = await extraerTodo(p);
 
-    const parker = await fichaEntidad(sql, await idDe(sql, 'Charlie Parker'));
-    expect(parker.wikidata).toBe('Q103767');
-    expect(parker.descripcion).toBe('saxofonista estadounidense de jazz');
-    expect(parker.documentos).toBe(2);
-    expect(parker.porDocumento.map((d) => d.documento).sort()).toEqual(['entrevista', 'perseguidor']);
-    const enEntrevista = parker.porDocumento.find((d) => d.documento === 'entrevista')!;
-    expect(enEntrevista.menciones.map((m) => m.texto)).toEqual(['Charlie Parker', 'Parker']);
+    const bell = await fichaEntidad(sql, await idDe(sql, 'Joseph Bell'));
+    expect(bell.wikidata).toBe('Q648680');
+    expect(bell.descripcion).toBe('médico y profesor escocés');
+    expect(bell.documentos).toBe(2);
+    expect(bell.porDocumento.map((d) => d.documento).sort()).toEqual(['aventuras', 'entrevista']);
+    const enEntrevista = bell.porDocumento.find((d) => d.documento === 'entrevista')!;
+    expect(enEntrevista.menciones.map((m) => m.texto)).toEqual(['Joseph Bell', 'Bell']);
     expect(enEntrevista.menciones[0]!.etiqueta).toBe('p. 12');
     expect(enEntrevista.menciones[0]!.unidad).toBe(1);
-    expect(enEntrevista.menciones[0]!.contexto).toContain('⟦Charlie Parker⟧');
-    const enNovela = parker.porDocumento.find((d) => d.documento === 'perseguidor')!;
-    expect(enNovela.menciones[0]!.texto).toBe('CH.P.');
-    expect(parker.alias).toEqual(expect.arrayContaining(['Parker', 'CH.P.']));
+    expect(enEntrevista.menciones[0]!.contexto).toContain('⟦Joseph Bell⟧');
+    const enNovela = bell.porDocumento.find((d) => d.documento === 'aventuras')!;
+    expect(enNovela.menciones[0]!.texto).toBe('JOSEPH BELL');
+    // «JOSEPH BELL» es el mismo nombre en mayúsculas: casa con la entidad, pero no es un alias aparte.
+    expect(bell.alias).toEqual(expect.arrayContaining(['Bell']));
 
-    // El Parker de Lewis es otro.
-    const matthew = await fichaEntidad(sql, await idDe(sql, 'Matthew Parker'));
-    expect(matthew.porDocumento.map((d) => d.documento)).toEqual(['discarded']);
-    expect(matthew.menciones).toBe(2);
+    // El Bell de Darwin es otro.
+    const charles = await fichaEntidad(sql, await idDe(sql, 'Charles Bell'));
+    expect(charles.porDocumento.map((d) => d.documento)).toEqual(['expresion']);
+    expect(charles.menciones).toBe(2);
 
     // Vecinos con la relación nombrada.
-    const cortazar = await idDe(sql, 'Julio Cortázar');
-    const v = parker.vecinos.find((x) => x.entidad.id === cortazar)!;
+    const doyle = await idDe(sql, 'Arthur Conan Doyle');
+    const v = bell.vecinos.find((x) => x.entidad.id === doyle)!;
     expect(v).toBeDefined();
-    expect(v.relacion).toBe('Julio Cortázar admira a Charlie Parker');
+    expect(v.relacion).toBe('Arthur Conan Doyle fue alumno de Joseph Bell');
 
-    // Camino: Cortázar → Charlie Parker → Johnny Carter (de la entrevista a la novela).
-    const johnny = await idDe(sql, 'Johnny Carter');
-    const camino = await caminoEntidades(sql, cortazar, johnny);
-    expect(camino.pasos.map((x) => x.entidad.nombre)).toEqual(['Julio Cortázar', 'Charlie Parker', 'Johnny Carter']);
+    // Camino: Conan Doyle → Joseph Bell → Sherlock Holmes (de la entrevista al libro).
+    const holmes = await idDe(sql, 'Sherlock Holmes');
+    const camino = await caminoEntidades(sql, doyle, holmes);
+    expect(camino.pasos.map((x) => x.entidad.nombre)).toEqual(['Arthur Conan Doyle', 'Joseph Bell', 'Sherlock Holmes']);
     expect(camino.pasos[1]!.via!.documento).toBe('entrevista');
-    expect(camino.pasos[2]!.via!.documento).toBe('perseguidor');
+    expect(camino.pasos[2]!.via!.documento).toBe('aventuras');
     expect(camino.pasos[2]!.via!.etiqueta).toBe('p. 11');
-    const boecio = await idDe(sql, 'Boecio');
-    expect((await caminoEntidades(sql, cortazar, boecio)).pasos).toEqual([]);
+    const donders = await idDe(sql, 'Donders');
+    expect((await caminoEntidades(sql, doyle, donders)).pasos).toEqual([]);
 
     // Vecindario para dibujar.
-    const vec = await vecindarioEntidad(sql, cortazar, { saltos: 2 });
-    expect(vec.nodos.map((n) => n.nombre)).toEqual(expect.arrayContaining(['Charlie Parker', 'Johnny Carter']));
+    const vec = await vecindarioEntidad(sql, doyle, { saltos: 2 });
+    expect(vec.nodos.map((n) => n.nombre)).toEqual(expect.arrayContaining(['Joseph Bell', 'Sherlock Holmes']));
     expect(vec.aristas.length).toBeGreaterThan(1);
 
-    // Línea temporal: 1951 (fecha en el pasaje) antes que 1959 y 1977.
-    const linea = await lineaTemporalEntidad(sql, cortazar);
-    expect(linea.elementos[0]).toMatchObject({ anio: 1951, fecha: '1951', documento: 'entrevista' });
+    // Línea temporal: 1859 (fecha en el pasaje) antes que 1892, el año de los dos documentos.
+    const linea = await lineaTemporalEntidad(sql, doyle);
+    expect(linea.elementos[0]).toMatchObject({ anio: 1859, fecha: '1859', documento: 'entrevista' });
     expect(linea.elementos.map((x) => x.anio)).toEqual([...linea.elementos.map((x) => x.anio)].sort((a, b) => (a ?? 1e9) - (b ?? 1e9)));
 
     // Por documento y para el lector.
     const ed = await entidadesDocumento(sql, 'entrevista');
     expect(ed.extraccion?.estado).toBe('hecho');
-    expect(ed.entidades.slice(0, 2).map((e) => e.nombre).sort()).toEqual(['Charlie Parker', 'Julio Cortázar']);
-    const lector = await entidadesLector(sql, 'perseguidor');
-    const forma = lector.formas.find((f) => f.texto === 'Johnny')!;
+    expect(ed.entidades.slice(0, 2).map((e) => e.nombre).sort()).toEqual(['Arthur Conan Doyle', 'Joseph Bell']);
+    const lector = await entidadesLector(sql, 'aventuras');
+    const forma = lector.formas.find((f) => f.texto === 'Holmes')!;
     expect(forma.unidades).toEqual([0, 1]);
     expect(lector.entidades[forma.entidad]!.descripcion).toBe('personaje de ficción');
-    expect(lector.entidades[forma.entidad]!.nombre).toBe('Johnny Carter');
+    expect(lector.entidades[forma.entidad]!.nombre).toBe('Sherlock Holmes');
     expect(Object.values(lector.entidades).some((e) => e.tipo === 'fecha')).toBe(false);
 
     // Buscar por un alias, sin tildes, y por tipo.
-    expect((await buscarEntidades(sql, { q: 'cortazar' })).elementos[0]!.nombre).toBe('Julio Cortázar');
-    expect((await buscarEntidades(sql, { q: 'ch.p' })).elementos.map((e) => e.nombre)).toContain('Charlie Parker');
-    expect((await buscarEntidades(sql, { tipo: 'lugar' })).elementos.map((e) => e.nombre)).toEqual(['París']);
+    expect((await buscarEntidades(sql, { q: 'conan' })).elementos[0]!.nombre).toBe('Arthur Conan Doyle');
+    expect((await buscarEntidades(sql, { q: 'JOSEPH BELL' })).elementos.map((e) => e.nombre)).toContain('Joseph Bell');
+    expect((await buscarEntidades(sql, { tipo: 'lugar' })).elementos.map((e) => e.nombre)).toEqual(['Edinburgh']);
 
     // Wikidata, una vez por nombre: la segunda pasada sale de la caché.
     const antes = w.llamadas.length;
@@ -319,7 +332,7 @@ describe('grafo de entidades de la biblioteca', () => {
 
   it('reanudable: un lote que falla queda pendiente y la siguiente pasada solo hace ese', async () => {
     const sql = await biblioteca();
-    const roto = redactorCatalogo(/admiraba/);
+    const roto = redactorCatalogo(/clerk/);
     const p = puertos(sql, { inteligencia: { redactor: roto } });
     // Dos fragmentos por lote no caben: un lote por página.
     const r1 = await extraerEntidadesDocumento(p, 'entrevista', { caracteresLote: 70, concurrencia: 1, wikidata: false, relaciones: false });
@@ -336,7 +349,7 @@ describe('grafo de entidades de la biblioteca', () => {
     const ed = await entidadesDocumento(sql, 'entrevista');
     expect(ed.extraccion).toMatchObject({ estado: 'hecho', lotes: 2, lotesHechos: 2 });
     expect(ed.extraccion!.usdEstimado).toBeGreaterThan(0);
-    expect(ed.entidades.map((e) => e.nombre)).toEqual(expect.arrayContaining(['Charlie Parker', 'Julio Cortázar']));
+    expect(ed.entidades.map((e) => e.nombre)).toEqual(expect.arrayContaining(['Joseph Bell', 'Arthur Conan Doyle']));
   });
 
   it('sin redactor no hace nada (y lo dice); al borrar un documento se recuentan las entidades', async () => {
@@ -345,12 +358,12 @@ describe('grafo de entidades de la biblioteca', () => {
     expect(r.estado).toBe('sin_redactor');
     const p = puertos(sql, { inteligencia: { redactor: redactorCatalogo() } });
     await extraerTodo(p);
-    const parker = await idDe(sql, 'Charlie Parker');
-    await alBorrarDocumento(p, 'perseguidor');
-    const f = await fichaEntidad(sql, parker);
+    const bell = await idDe(sql, 'Joseph Bell');
+    await alBorrarDocumento(p, 'aventuras');
+    const f = await fichaEntidad(sql, bell);
     expect(f.documentos).toBe(1);
-    expect((await sql.ejecutar("SELECT * FROM menciones WHERE documento = 'perseguidor'")).length).toBe(0);
-    expect((await sql.ejecutar("SELECT * FROM aristas_entidades WHERE documento = 'perseguidor'")).length).toBe(0);
+    expect((await sql.ejecutar("SELECT * FROM menciones WHERE documento = 'aventuras'")).length).toBe(0);
+    expect((await sql.ejecutar("SELECT * FROM aristas_entidades WHERE documento = 'aventuras'")).length).toBe(0);
   });
 
   it('el enganche tras la ingesta extrae las entidades', async () => {
@@ -388,21 +401,21 @@ describe('rutas de entidades', () => {
 
   it('responde las rutas del contrato', async () => {
     const { sql, pedir } = await montar();
-    const lista = await pedir('GET', '/entidades?q=parker');
+    const lista = await pedir('GET', '/entidades?q=bell');
     expect(lista.estado).toBe(200);
-    expect(lista.cuerpo.elementos.map((e: any) => e.nombre)).toEqual(expect.arrayContaining(['Charlie Parker', 'Matthew Parker']));
-    const parker = lista.cuerpo.elementos.find((e: any) => e.nombre === 'Charlie Parker').id;
-    const cortazar = await idDe(sql, 'Julio Cortázar');
+    expect(lista.cuerpo.elementos.map((e: any) => e.nombre)).toEqual(expect.arrayContaining(['Joseph Bell', 'Charles Bell']));
+    const bell = lista.cuerpo.elementos.find((e: any) => e.nombre === 'Joseph Bell').id;
+    const doyle = await idDe(sql, 'Arthur Conan Doyle');
 
-    const ficha = await pedir('GET', `/entidades/${parker}`);
+    const ficha = await pedir('GET', `/entidades/${bell}`);
     expect(ficha.cuerpo.porDocumento).toHaveLength(2);
-    expect((await pedir('GET', `/entidades/${parker}/menciones?documento=entrevista`)).cuerpo.total).toBe(2);
-    expect((await pedir('GET', `/entidades/${parker}/vecinos?saltos=2`)).cuerpo.centro).toBe(parker);
-    expect((await pedir('GET', `/entidades/${cortazar}/linea`)).cuerpo.elementos.length).toBeGreaterThan(0);
-    expect((await pedir('GET', `/entidades/camino?desde=${cortazar}&hasta=${parker}`)).cuerpo.pasos).toHaveLength(2);
+    expect((await pedir('GET', `/entidades/${bell}/menciones?documento=entrevista`)).cuerpo.total).toBe(2);
+    expect((await pedir('GET', `/entidades/${bell}/vecinos?saltos=2`)).cuerpo.centro).toBe(bell);
+    expect((await pedir('GET', `/entidades/${doyle}/linea`)).cuerpo.elementos.length).toBeGreaterThan(0);
+    expect((await pedir('GET', `/entidades/camino?desde=${doyle}&hasta=${bell}`)).cuerpo.pasos).toHaveLength(2);
     expect((await pedir('GET', '/entidades/camino?desde=x')).estado).toBe(400);
     expect((await pedir('GET', '/entidades/documentos/entrevista')).cuerpo.entidades.length).toBeGreaterThan(0);
-    expect((await pedir('GET', '/entidades/documentos/perseguidor/lector')).cuerpo.formas.length).toBeGreaterThan(0);
+    expect((await pedir('GET', '/entidades/documentos/aventuras/lector')).cuerpo.formas.length).toBeGreaterThan(0);
     const estado = await pedir('GET', '/entidades/estado');
     expect(estado.cuerpo.documentos).toHaveLength(3);
     expect(estado.cuerpo.entidades).toBeGreaterThan(5);
@@ -415,9 +428,9 @@ describe('rutas de entidades', () => {
     expect((await pedir('POST', '/entidades/documentos/nada/extraer', {})).estado).toBe(404);
 
     // Una entidad fusionada sigue resolviendo por su id antiguo.
-    await sql.ejecutar("INSERT INTO entidades (id, tipo, clave, nombre, alias, busqueda, fusionada_en, creada, actualizada) VALUES ('viejo', 'persona', 'bird', 'Bird', '[]', '|bird|', ?, '', '')", parker);
+    await sql.ejecutar("INSERT INTO entidades (id, tipo, clave, nombre, alias, busqueda, fusionada_en, creada, actualizada) VALUES ('viejo', 'persona', 'dr bell', 'Dr. Bell', '[]', '|dr bell|', ?, '', '')", bell);
     const redir = await pedir('GET', '/entidades/viejo');
-    expect(redir.cuerpo.id).toBe(parker);
+    expect(redir.cuerpo.id).toBe(bell);
     expect(redir.cuerpo.fusionadaDesde).toBe('viejo');
   });
 });

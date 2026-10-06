@@ -88,21 +88,25 @@ describe('documentos', () => {
     expect(c.bloques.map((b) => b.tipo)).toEqual(['titulo', 'parrafo', 'parrafo', 'titulo', 'cita', 'parrafo']);
     expect(c.bloques[5]?.ruta).toEqual(['El panóptico', '3.2 La mirada']);
     expect(c.bloques[5]?.parrafo).toBe(2);
-    expect(c.notas).toEqual([{ id: 'footnote-1', texto: 'Foucault, Vigilar y castigar, p. 23.', bloque: 2 }]);
+    expect(c.notas).toEqual([{ id: 'footnote-1', texto: 'Bentham, Panopticon, carta V.', bloque: 2 }]);
   });
 
   it('EPUB: lomo, índice, metadatos OPF y folios impresos', async () => {
     const p = await doc('prueba.epub');
     const c = p.contenido as ContenidoDocumento;
     expect(p.tipo).toBe('epub');
-    expect(p.metadatos).toMatchObject({ titulo: 'Vigilar y castigar', autores: [{ nombre: 'Michel', apellidos: 'Foucault' }], anio: 1975, idioma: 'es', isbn: '9788420674209' });
+    expect(p.metadatos).toMatchObject({ titulo: 'Don Quijote de la Mancha', autores: [{ nombre: 'Miguel de', apellidos: 'Cervantes' }], anio: 2004, idioma: 'es', isbn: '9788420467283' });
     expect(c.paginasImpresas.map((x) => x.etiqueta)).toEqual(['11', '12', '13']);
     const pagina = (t: string) => c.bloques.find((b) => b.texto.startsWith(t))?.impresa;
-    expect(pagina('Damiens')).toBe('11');
+    expect(pagina('En un lugar de la Mancha')).toBe('11');
     expect(pagina('Párrafo de la página doce')).toBe('12');
     expect(pagina('Sigue en la página doce')).toBe('12');
     expect(pagina('Una cita larga')).toBe('13');
-    expect(c.esquema.map((e) => [e.titulo, e.nivel, e.bloque])).toEqual([['I. Suplicio', 1, 0], ['El cuerpo de los condenados', 2, 2], ['II. Castigo', 1, 5]]);
+    expect(c.esquema.map((e) => [e.titulo, e.nivel, e.bloque])).toEqual([
+      ['Capítulo primero. Que trata de la condición y ejercicio del famoso hidalgo don Quijote de la Mancha', 1, 0],
+      ['Sección de prueba', 2, 2],
+      ['Capítulo II. Que trata de la primera salida que de su tierra hizo el ingenioso don Quijote', 1, 5],
+    ]);
     expect(c.notas[0]).toMatchObject({ id: 'n1', bloque: 1 });
   });
 
@@ -114,7 +118,7 @@ describe('documentos', () => {
     expect(rtf.metadatos.titulo).toBe('Documento RTF');
     expect((rtf.contenido as ContenidoDocumento).bloques[0]).toMatchObject({ tipo: 'titulo', texto: 'Título del RTF' });
     const md = await doc('prueba.md');
-    expect(md.metadatos.autores).toEqual([{ nombre: 'José Luis', apellidos: 'Saorín' }]);
+    expect(md.metadatos.autores).toEqual([{ nombre: 'María José', apellidos: 'Núñez' }]);
     const html = await doc('prueba.html');
     expect(html.metadatos).toMatchObject({ titulo: 'Un artículo', doi: '10.1234/abcd.5678', anio: 2021 });
     expect((html.contenido as ContenidoDocumento).bloques.some((b) => b.texto === 'Menú')).toBe(false);

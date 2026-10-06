@@ -32,17 +32,18 @@ describe('rehacer no empeora (casos de producción reconstruidos)', () => {
     expect(esTituloBasura('original')).toBe(true);
   });
 
-  it('A fondo con Cela: «Entrevista» no sustituye al título y los autores no se pierden', async () => {
-    const previa = { titulo: 'Camilo José Cela', autores: [{ nombre: 'Camilo José', apellidos: 'Cela' }], entrevistadores: [{ nombre: 'Joaquín', apellidos: 'Soler Serrano' }], contenedor: 'A fondo', anio: 1976, tipoCSL: 'broadcast' };
+  it('A fondo con Delibes: «Entrevista» no sustituye al título y los autores no se pierden', async () => {
+    const previa = { titulo: 'Miguel Delibes', autores: [{ nombre: 'Miguel', apellidos: 'Delibes' }], entrevistadores: [{ nombre: 'Joaquín', apellidos: 'Soler Serrano' }], contenedor: 'A fondo', anio: 1976, tipoCSL: 'broadcast' };
     const m = await rehacer(previa, { titulo: 'Entrevista', autores: [], tipoCSL: 'interview' }, [tramo(0, 'Buenas noches.'), tramo(1, 'Hablamos de literatura.')], 'video');
-    expect(m).toMatchObject({ titulo: 'Camilo José Cela', anio: 1976, contenedor: 'A fondo', tipoCSL: 'broadcast' });
-    expect(m.autores.map((a) => a.apellidos)).toEqual(['Cela']);
+    expect(m).toMatchObject({ titulo: 'Miguel Delibes', anio: 1976, contenedor: 'A fondo', tipoCSL: 'broadcast' });
+    expect(m.autores.map((a) => a.apellidos)).toEqual(['Delibes']);
     expect(m.entrevistadores?.map((a) => a.apellidos)).toEqual(['Soler Serrano']);
   });
 
   it('A fondo con Rulfo y Borges: una lectura con menos autores no los quita', async () => {
-    for (const [nombre, apellidos] of [['Juan', 'Rulfo'], ['Jorge Luis', 'Borges']] as const) {
-      const previa = { titulo: `${nombre} ${apellidos}`, autores: [{ nombre, apellidos }, { nombre: 'Joaquín', apellidos: 'Soler Serrano' }], anio: 1977 };
+    // Años de emisión del catálogo de RTVE Play: Rulfo, 17-4-1977; Borges, 12-9-1976.
+    for (const [nombre, apellidos, anio] of [['Juan', 'Rulfo', 1977], ['Jorge Luis', 'Borges', 1976]] as const) {
+      const previa = { titulo: `${nombre} ${apellidos}`, autores: [{ nombre, apellidos }, { nombre: 'Joaquín', apellidos: 'Soler Serrano' }], anio };
       const m = await rehacer(previa, { titulo: 'A fondo', autores: [{ nombre: 'Joaquín', apellidos: 'Soler Serrano' }] }, [tramo(0, 'Buenas noches.')], 'video');
       expect(m.titulo).toBe(`${nombre} ${apellidos}`);
       expect(m.autores.map((a) => a.apellidos)).toContain(apellidos);
@@ -77,8 +78,8 @@ describe('noEmpeorar', () => {
     expect(m.subtitulo).toBeUndefined();
   });
   it('la lectura (0,8) no gana a un valor sin procedencia; el usuario no se toca nunca', () => {
-    const previa = { titulo: 'Vigilar y castigar', autores: [], anio: 2002, anioOriginal: 1976, procedencia: { anioOriginal: { fuente: 'usuario' as const, confianza: 1 } } };
-    const nueva = { titulo: 'Vigilar y castigar', autores: [], anio: 2009, anioOriginal: 1975, procedencia: { anio: { fuente: 'lectura' as const, confianza: 0.8 }, anioOriginal: { fuente: 'wikidata' as const, confianza: 0.97 } } };
+    const previa = { titulo: 'Libro de prueba', autores: [], anio: 2002, anioOriginal: 1976, procedencia: { anioOriginal: { fuente: 'usuario' as const, confianza: 1 } } };
+    const nueva = { titulo: 'Libro de prueba', autores: [], anio: 2009, anioOriginal: 1975, procedencia: { anio: { fuente: 'lectura' as const, confianza: 0.8 }, anioOriginal: { fuente: 'wikidata' as const, confianza: 0.97 } } };
     const m = noEmpeorar(previa, nueva);
     expect(m).toMatchObject({ anio: 2002, anioOriginal: 1976 });
     expect(m.procedencia?.anioOriginal?.fuente).toBe('usuario');
@@ -93,20 +94,21 @@ describe('rehacer con otra identidad y canales (preview)', () => {
     return { ok: true, status: 200, json: async () => v, text: async () => (typeof v === 'string' ? v : JSON.stringify(v)) } as Awaited<ReturnType<import('../src/tipos.js').Http>>;
   };
 
-  it('«Entrevista a Alberto Cortez» que en realidad es Cabral: el autor falso no sobrevive', async () => {
+  it('«Entrevista a Alberto Ginastera» que en realidad es Cabral: el autor falso no sobrevive', async () => {
     const http = httpFalso([
       ['rtve.es/play/videos/a-fondo/', '… https://www.rtve.es/api/programas/73250 …'],
+      // Fichas del catálogo de RTVE Play recortadas (https://www.rtve.es/api/programas/73250/videos.json, consultado el 7-10-2026).
       ['api/programas/73250/videos.json', { page: { totalPages: 1, items: [
-        { id: '3127003', title: 'Facundo Cabral', dateOfEmission: '02-07-1978 00:00:00', duration: 3_300_000, htmlUrl: 'https://www.rtve.es/play/videos/a-fondo/facundo-cabral/3127003/', description: '<p>Joaqu&iacute;n Soler Serrano entrevista al cantautor.</p>' },
-        { id: '3000001', title: 'Alberto Cortez', dateOfEmission: '11-11-1979 00:00:00', duration: 3_500_000, htmlUrl: 'https://www.rtve.es/play/videos/a-fondo/alberto-cortez/3000001/' },
+        { id: '3127003', title: 'Facundo Cabral', dateOfEmission: '02-07-1978 00:00:00', duration: 3_223_000, htmlUrl: 'https://www.rtve.es/play/videos/a-fondo/fondo-facundo-cabral/3127003/', description: '<p>Joaqu&iacute;n Soler Serrano entrevista al cantautor y escritor argentino.</p>' },
+        { id: '5579112', title: 'Alberto Ginastera', dateOfEmission: '26-08-1978 00:00:00', duration: 3_403_880, htmlUrl: 'https://www.rtve.es/play/videos/a-fondo/fondo-alberto-ginastera/5579112/', description: '<p>Joaqu&iacute;n Soler Serrano entrevista al m&uacute;sico Alberto Ginastera en una edici&oacute;n de su programa.</p>' },
       ] } }],
       ['wbsearchentities', { search: [{ id: 'Q8183492', label: 'A fondo', description: 'Spanish television show' }] }],
       ['query.wikidata.org', { results: { bindings: [{ item: { value: 'http://www.wikidata.org/entity/Q8183492' }, itemLabel: { value: 'A fondo' }, claseLabel: { value: 'programa de televisión' }, duenoLabel: { value: 'RTVE' }, presLabel: { value: 'Joaquín Soler Serrano' } }] } }],
     ]);
-    const previa = { titulo: 'Entrevista a Alberto Cortez', autores: [{ nombre: 'Alberto', apellidos: 'Cortez' }], entrevistadores: [{ nombre: 'Joaquín', apellidos: 'Soler Serrano' }], contenedor: 'A fondo', tipoCSL: 'interview' };
-    const unidades = Array.from({ length: 20 }, (_, i) => tramo(i, 'Joaquín Soler Serrano: Facundo Cabral, bienvenido. Cabral, ¿eres un místico? Facundo Cabral: Es inevitable, Joaquín.'));
-    const redactor = redactorFalso(() => ({ titulo: 'Entrevista a Alberto Cortez', contenedor: 'A fondo', autores: [{ nombre: 'Alberto', apellidos: 'Cortez' }], tipoCSL: 'interview' }));
-    const r = await rehacerFicha(previa, { tipo: 'video', nombreArchivo: 'Entrevista a Alberto Cortez.mp4', duracion: 3219, unidades }, { redactor, http });
+    const previa = { titulo: 'Entrevista a Alberto Ginastera', autores: [{ nombre: 'Alberto', apellidos: 'Ginastera' }], entrevistadores: [{ nombre: 'Joaquín', apellidos: 'Soler Serrano' }], contenedor: 'A fondo', tipoCSL: 'interview' };
+    const unidades = Array.from({ length: 20 }, (_, i) => tramo(i, 'Rótulo de prueba, sin palabras de nadie: programa A fondo, con Facundo Cabral; presenta Joaquín Soler Serrano.'));
+    const redactor = redactorFalso(() => ({ titulo: 'Entrevista a Alberto Ginastera', contenedor: 'A fondo', autores: [{ nombre: 'Alberto', apellidos: 'Ginastera' }], tipoCSL: 'interview' }));
+    const r = await rehacerFicha(previa, { tipo: 'video', nombreArchivo: 'Entrevista a Alberto Ginastera.mp4', duracion: 3219, unidades }, { redactor, http });
     expect(r.metadatos).toMatchObject({ titulo: 'Facundo Cabral', anio: 1978, contenedor: 'A fondo' });
     expect(r.metadatos.autores.map((a) => a.apellidos)).toEqual(['Cabral']);
     expect(r.metadatos.entrevistadores?.map((a) => a.apellidos)).toEqual(['Soler Serrano']);
@@ -115,7 +117,7 @@ describe('rehacer con otra identidad y canales (preview)', () => {
   it('«Vectors»: sin autor duplicado, sin el canal como apellido y con el canal en editorial', async () => {
     const previa = { titulo: 'Vectors', autores: [{ nombre: '', apellidos: '3Blue1Brown' }], tipoCSL: 'broadcast' };
     const lectura = { titulo: 'Vectors', contenedor: 'Essence of linear algebra', autores: [{ nombre: 'Grant', apellidos: 'Sanderson' }, { nombre: 'Grant Sanderson', apellidos: '(3Blue1Brown)' }] };
-    const m = await rehacer(previa, lectura, [tramo(0, 'The fundamental root of it all is the vector.')], 'video', 'vectors.mp4');
+    const m = await rehacer(previa, lectura, [tramo(0, '(transcripción de prueba)')], 'video', 'vectors.mp4');
     expect(m.autores).toEqual([{ nombre: 'Grant', apellidos: 'Sanderson' }]);
     expect(m.editorial).toBe('3Blue1Brown');
   });

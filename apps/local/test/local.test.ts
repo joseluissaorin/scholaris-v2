@@ -47,17 +47,19 @@ describe('versión local', () => {
 
   it('subida → cola local → búsqueda con sqlite-vec', async () => {
     const c = api();
-    const original = new Blob(['# Vigilar\n\nEl panóptico de Bentham.']);
-    const sub = await c.subidas.crear({ nombre: 'ensayo.md', mime: 'text/markdown', bytes: original.size, metadatos: { anio: 1975 } });
+    const original = new Blob(['# Letter II\n\nThe building is circular.']);
+    const sub = await c.subidas.crear({ nombre: 'ensayo.md', mime: 'text/markdown', bytes: original.size, metadatos: { anio: 1791 } });
     await subirFichero(c, sub.subida, sub.original, original);
     let parrafo = 0;
     const paquete: PaqueteConversion = {
       version: 1, tipo: 'documento', origen: { nombre: 'ensayo.md', mime: 'text/markdown', bytes: original.size, huella: 'h' },
-      metadatos: { titulo: 'Vigilar y castigar', autores: [{ nombre: 'Michel', apellidos: 'Foucault' }] }, unidades: 3,
+      metadatos: { titulo: 'Panopticon; or, the Inspection-House', autores: [{ nombre: 'Jeremy', apellidos: 'Bentham' }] }, unidades: 3,
       contenido: {
         clase: 'documento', formato: 'markdown', notas: [], paginasImpresas: [], esquema: [],
-        bloques: ['El panóptico de Bentham es la figura arquitectónica de la vigilancia.', 'La disciplina fabrica individuos.', 'Las prisiones se parecen a las fábricas y a las escuelas.']
-          .map((texto) => ({ tipo: 'parrafo' as const, texto, ruta: ['Vigilar'], parrafo: ++parrafo })),
+        // Bentham, «Panopticon; or, the Inspection-House» (1791), cartas II y V, literal de Wikisource:
+        // https://en.wikisource.org/wiki/Panopticon_or_the_Inspection-House
+        bloques: ['The building is circular.', 'The apartment of the inspector occupies the centre; you may call it if you please the inspector’s lodge.', 'The essence of it consists, then, in the centrality of the inspector’s situation, combined with the wellknown and most effectual contrivances for seeing without being seen.']
+          .map((texto) => ({ tipo: 'parrafo' as const, texto, ruta: ['Letter II'], parrafo: ++parrafo })),
       },
       partes: [], reserva: null, avisos: [], entorno: 'navegador', tiempos: {},
     };
@@ -69,9 +71,9 @@ describe('versión local', () => {
     expect(t.error).toBeUndefined();
     expect(t.estado).toBe('listo');
     const d = await c.documentos.obtener(ing.documento);
-    expect(d.metadatos.anio).toBe(1975);
-    const r = await c.busqueda.buscar({ consulta: 'panóptico de Bentham' });
-    expect(r.resultados[0]?.fragmento.texto).toMatch(/panóptico/);
+    expect(d.metadatos.anio).toBe(1791);
+    const r = await c.busqueda.buscar({ consulta: 'apartment of the inspector' });
+    expect(r.resultados[0]?.fragmento.texto).toMatch(/apartment of the inspector/);
     expect(r.resultados[0]?.vias).toContain('densa');
     // Exportar e importar .spdf en Node.
     const spdf = await c.documentos.spdf(ing.documento);

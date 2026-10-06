@@ -80,11 +80,13 @@ describe('capa de OCR ajeno', () => {
 describe('limpieza de la capa', () => {
   it('quita el adorno repetido y pone rayas de diálogo', async () => {
     const { prefijoBasura, limpiarUnidad } = await import('../src/pasos/capa.js');
-    const ps = Array.from({ length: 4 }, (_, i) => paginaPdf(i + 1, 'OO −¿Cuándo empiezas, Johnny?\n\nOO −No sé. Hoy, creo, ¿eh, Dé?\n\nOO −No, pasado mañana −dijo ella.'));
+    // Diálogo de «Marianela» (Galdós, 1878), cap. XXI, de Project Gutenberg n.º 17340
+    // (https://www.gutenberg.org/cache/epub/17340/pg17340.txt), con las rayas que deja una OCR.
+    const ps = Array.from({ length: 4 }, (_, i) => paginaPdf(i + 1, 'OO −¿No es usted médico?\n\nOO −De los ojos, no de las pasiones.\n\nOO −¡De las pasiones! −exclamó hablando con la moribunda−. Y a ti, pobre criatura, ¿qué pasiones te matan?'));
     const b = prefijoBasura(ps);
     expect(b).toBe('OO');
-    const u = limpiarUnidad({ orden: 0, fisica: 1, texto: 'OO −¿Cuándo empiezas, Johnny?\n\nOO −No, pasado mañana −dijo ella.', notas: [], cabecera: '', pie: '', folioVisto: null, titulos: [], figuras: [], vacia: false, lector: 'c', confianza: 1 }, b);
-    expect(u.texto).toBe('—¿Cuándo empiezas, Johnny?\n\n—No, pasado mañana —dijo ella.');
+    const u = limpiarUnidad({ orden: 0, fisica: 1, texto: 'OO −¿No es usted médico?\n\nOO −¡De las pasiones! −exclamó hablando con la moribunda−. Y a ti, pobre criatura, ¿qué pasiones te matan?', notas: [], cabecera: '', pie: '', folioVisto: null, titulos: [], figuras: [], vacia: false, lector: 'c', confianza: 1 }, b);
+    expect(u.texto).toBe('—¿No es usted médico?\n\n—¡De las pasiones! —exclamó hablando con la moribunda—. Y a ti, pobre criatura, ¿qué pasiones te matan?');
   });
 });
 

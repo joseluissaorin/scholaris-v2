@@ -38,16 +38,26 @@ describe('conceptos', () => {
 
   it('extrae tramos con léxico, semántica, reordenador y juez; agrega y exporta', async () => {
     const sql = await estanteria();
-    await sembrar(sql, { id: 'arendt', titulo: 'La condición humana', autores: [['Hannah', 'Arendt']], anio: 1958, idioma: 'es',
-      paginas: ['La libertad política es la capacidad de actuar con otros.', 'Los hombres libres se reúnen en el espacio público.', 'La cocina de la casa era grande.'] });
-    await sembrar(sql, { id: 'berlin', titulo: 'Two Concepts of Liberty', autores: [['Isaiah', 'Berlin']], anio: 1958, idioma: 'en',
-      paginas: ['Negative liberty is the absence of interference.', 'Positive freedom means self-mastery.'] });
+    // Texto literal de Project Gutenberg: Quijote, segunda parte, caps. LVIII, XLVI y XLIII
+    // (https://www.gutenberg.org/cache/epub/2000/pg2000.txt), y Mill, «On Liberty» (1859), cap. I
+    // (https://www.gutenberg.org/cache/epub/34901/pg34901.txt). Los folios son los de esta copia de prueba.
+    await sembrar(sql, { id: 'cervantes', titulo: 'Segunda parte del ingenioso caballero don Quijote de la Mancha', autores: [['Miguel de', 'Cervantes']], anio: 1615, idioma: 'es',
+      paginas: [
+        'La libertad, Sancho, es uno de los más preciosos dones que a los hombres dieron los cielos; con ella no pueden igualarse los tesoros que encierra la tierra ni el mar encubre; por la libertad, así como por la honra, se puede y debe aventurar la vida, y, por el contrario, el cautiverio es el mayor mal que puede venir a los hombres.',
+        'Los andantes caballeros, y los que en la corte andan, requiébranse con las libres, con las honestas se casan.',
+        'Come poco y cena más poco, que la salud de todo el cuerpo se fragua en la oficina del estómago.',
+      ] });
+    await sembrar(sql, { id: 'mill', titulo: 'On Liberty', autores: [['John Stuart', 'Mill']], anio: 1859, idioma: 'en',
+      paginas: [
+        'The subject of this Essay is not the so-called Liberty of the Will, so unfortunately opposed to the misnamed doctrine of Philosophical Necessity; but Civil, or Social Liberty: the nature and limits of the power which can be legitimately exercised by society over the individual.',
+        'The only freedom which deserves the name, is that of pursuing our own good in our own way, so long as we do not attempt to deprive others of theirs, or impede their efforts to obtain it.',
+      ] });
     const redactor = redactorFalso((texto) => {
       if (texto.includes('léxico en inglés')) return { lemas: ['liberty', 'freedom'], variantes: ['liberties'], excluir: [] };
       if (texto.includes('léxico en español')) return { lemas: ['libertad', 'libre'], variantes: ['libres'], excluir: ['librería'] };
       return { texto: 'La libertad aparece como acción [1] y como ausencia de interferencia [2].' };
     });
-    const juez = juezFalso((estado) => (JSON.stringify(estado).includes('cocina') ? 0.05 : 0.9));
+    const juez = juezFalso((estado) => (JSON.stringify(estado).includes('cena') ? 0.05 : 0.9));
     const p = puertos(sql, { inteligencia: { redactor, juez, embebedor: embebedorFalso(), reordenador: reordenadorFalso() } });
     const c = await crearConcepto(sql, { nombre: 'Libertad', descripcion: 'libertad política', terminos: ['libertad'], tipo: 'tema' });
     const inf = await crearInforme(sql, c.id);
@@ -58,14 +68,14 @@ describe('conceptos', () => {
     expect(informe.error).toBeUndefined();
     expect(informe.estado).toBe('listo');
     expect(informe.documentos).toBe(2);
-    expect(informe.resumen).toMatch(/\(Arendt 1958, p\. 1[12]\)/);
+    expect(informe.resumen).toMatch(/\(Cervantes 1615, p\. 1[12]\)/);
     expect(eventos.at(-1)!.fase).toBe('fin');
     const pagina = await listarTramos(sql, inf, { limite: 50 });
     const formas = pagina.elementos.map((t) => t.texto.toLowerCase());
     expect(formas).toEqual(expect.arrayContaining(['libertad', 'libres', 'liberty', 'freedom']));
-    expect(pagina.elementos.every((t) => !t.frase?.includes('cocina'))).toBe(true);
+    expect(pagina.elementos.every((t) => !t.frase?.includes('cena'))).toBe(true);
     expect(pagina.elementos[0]!.uso).toBe('definicion');
-    expect(pagina.elementos[0]!.citaCorta).toMatch(/1958, p\. 1\d/);
+    expect(pagina.elementos[0]!.citaCorta).toMatch(/1615, p\. 1\d/);
     const ag = await agregadosInforme(sql, inf);
     expect(ag.porDocumento).toHaveLength(2);
     expect(ag.porIdioma).toMatchObject({ es: expect.any(Number), en: expect.any(Number) });
@@ -81,9 +91,9 @@ describe('conceptos', () => {
     const csv = strFromU8((await exportarInforme(sql, inf, 'csv')).cuerpo);
     expect(csv.split('\r\n')[0]).toContain('Título');
     const xl = unzipSync((await exportarInforme(sql, inf, 'xlsx')).cuerpo);
-    expect(strFromU8(xl['xl/worksheets/sheet1.xml']!)).toContain('Two Concepts of Liberty');
+    expect(strFromU8(xl['xl/worksheets/sheet1.xml']!)).toContain('On Liberty');
     expect(strFromU8((await exportarInforme(sql, inf, 'tei')).cuerpo)).toContain('<TEI');
-    expect(strFromU8((await exportarInforme(sql, inf, 'bibtex')).cuerpo)).toContain('@book{arendt1958');
+    expect(strFromU8((await exportarInforme(sql, inf, 'bibtex')).cuerpo)).toContain('@book{cervantes1615');
     expect(strFromU8((await exportarInforme(sql, inf, 'html')).cuerpo)).toContain('<mark>');
     await expect(exportarInforme(sql, inf, 'pdf')).rejects.toMatchObject({ codigo: 'peticion_invalida' });
   });

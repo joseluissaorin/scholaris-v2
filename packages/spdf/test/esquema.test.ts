@@ -57,15 +57,18 @@ describe('esquema v4.1', () => {
     }
     // Y los ayudantes tipados funcionan sobre ese puerto, FTS5 incluido.
     await escribirDocumento(sql, {
-      id: 'd1', tipo: 'pdf', metadatos: { titulo: 'Vigilar y castigar', autores: [{ nombre: 'Michel', apellidos: 'Foucault' }], anio: 1975 },
+      // Bentham, «Panopticon; or, the Inspection-House» (1791), carta V, literal de Wikisource
+      // (el folio es el de esta copia de prueba):
+      // https://en.wikisource.org/wiki/Panopticon_or_the_Inspection-House
+      id: 'd1', tipo: 'pdf', metadatos: { titulo: 'Panopticon; or, the Inspection-House', autores: [{ nombre: 'Jeremy', apellidos: 'Bentham' }], anio: 1791 },
       estado: 'listo', huella: 'h', original: '', mime: 'application/pdf', bytes: 1, unidades: 1, creado: 'x', actualizado: 'x', bibliotecas: [],
     });
     await escribirFragmentos(sql, [{
-      id: 'f1', documento: 'd1', unidad: 'u1', orden: 1, texto: 'El panóptico es una máquina de disociar la pareja ver-ser visto.',
-      contexto: '', seccion: ['III. Disciplina'], ancla: { tipo: 'pagina', fisica: 10, impresa: '205', romana: false, origen: 'leido', confianza: 1 },
+      id: 'f1', documento: 'd1', unidad: 'u1', orden: 1, texto: 'The essence of it consists, then, in the centrality of the inspector’s situation, combined with the wellknown and most effectual contrivances for seeing without being seen.',
+      contexto: '', seccion: ['Letter V', 'Essential Points'], ancla: { tipo: 'pagina', fisica: 10, impresa: '205', romana: false, origen: 'leido', confianza: 1 },
     }]);
-    expect((await leerDocumento(sql, 'd1'))?.metadatos.anio).toBe(1975);
-    const r = await buscarTexto(sql, 'panoptico');
+    expect((await leerDocumento(sql, 'd1'))?.metadatos.anio).toBe(1791);
+    const r = await buscarTexto(sql, 'inspector');
     expect(r[0]?.fragmento.id).toBe('f1');
     db.close();
   });

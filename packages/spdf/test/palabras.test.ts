@@ -18,7 +18,7 @@ function puerto(db: DatabaseSync): SQL {
   return p;
 }
 
-const doc = { id: 'd', tipo: 'video' as const, metadatos: { titulo: 'A fondo', autores: [] }, estado: 'listo' as const, huella: 'h', original: '', mime: 'video/mp4', bytes: 1, unidades: 1, creado: 'x', actualizado: 'x', bibliotecas: [] };
+const doc = { id: 'd', tipo: 'video' as const, metadatos: { titulo: 'Grabación de prueba', autores: [] }, estado: 'listo' as const, huella: 'h', original: '', mime: 'video/mp4', bytes: 1, unidades: 1, creado: 'x', actualizado: 'x', bibliotecas: [] };
 
 describe('unidades.palabras', () => {
   it('una base sin la columna la gana al aplicar el esquema, y aplicarlo dos veces no hace nada', async () => {
@@ -42,7 +42,7 @@ describe('unidades.palabras', () => {
     await aplicarEsquema(sql);
     await escribirDocumento(sql, doc);
     const palabras = { v: 1 as const, t0: 612.5, cs: [0, 40, 45, 30, 80, 55] };
-    await escribirUnidades(sql, [{ id: 'u', documento: 'd', orden: 0, ancla: { tipo: 'tiempo', t0: 612.5, t1: 614 }, texto: '¿Eres un místico?', lector: 't', confianza: 1, palabras }]);
+    await escribirUnidades(sql, [{ id: 'u', documento: 'd', orden: 0, ancla: { tipo: 'tiempo', t0: 612.5, t1: 614 }, texto: '¿Qué hora es?', lector: 't', confianza: 1, palabras }]);
     const [u] = await leerUnidades(sql, 'd');
     expect(u?.palabras).toEqual(palabras);
     expect(instantesDePalabras(u!.palabras!)).toEqual([[612.5, 612.9], [612.95, 613.25], [613.3, 613.85]]);

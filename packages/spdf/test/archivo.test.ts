@@ -6,10 +6,12 @@ import { consultaFts } from '../src/repositorio.js';
 import { VERSION_SPDF } from '../src/esquema.js';
 import { bytesAFloat32, float32ABytes } from '../src/vectores.js';
 
+// Galdós, «Marianela» (1878), capítulo I. Texto literal de Project Gutenberg n.º 17340:
+// https://www.gutenberg.org/cache/epub/17340/pg17340.txt (los folios son los de esta copia de prueba).
 const doc: Documento = {
   id: 'doc1',
   tipo: 'pdf',
-  metadatos: { titulo: 'Rayuela', autores: [{ nombre: 'Julio', apellidos: 'Cortázar' }], anio: 1963, idioma: 'es' },
+  metadatos: { titulo: 'Marianela', autores: [{ nombre: 'Benito', apellidos: 'Pérez Galdós' }], anio: 1878, idioma: 'es' },
   estado: 'listo',
   huella: 'a'.repeat(64),
   original: '',
@@ -24,9 +26,9 @@ const doc: Documento = {
 const pagina = (fisica: number, impresa: string | null) => ({ tipo: 'pagina' as const, fisica, impresa, romana: false, origen: 'leido' as const, confianza: 0.98 });
 
 const fragmentos: Fragmento[] = [
-  { id: 'f1', documento: 'doc1', unidad: 'u1', orden: 1, texto: '¿Encontraría a la Maga? Tantas veces me había bastado asomarme…', contexto: 'Capítulo 1, del lado de allá', seccion: ['Del lado de allá', '1'], ancla: pagina(1, '15') },
-  { id: 'f2', documento: 'doc1', unidad: 'u2', orden: 2, texto: 'La canción de la Maga sonaba en el puente de las Artes.', contexto: '', seccion: ['Del lado de allá', '2'], ancla: pagina(2, '16'), anclaFin: pagina(3, '17') },
-  { id: 'f3', documento: 'doc1', unidad: 'u3', orden: 3, texto: 'Oliveira pensaba en el club de la Serpiente y en el jazz.', contexto: '', seccion: ['Del lado de allá', '3'], ancla: pagina(3, '17') },
+  { id: 'f1', documento: 'doc1', unidad: 'u1', orden: 1, texto: '--Me he perdido, no hay duda de que me he perdido.... Aquí tienes, Teodoro Golfín, el resultado de tu _adelante_, _siempre adelante_.', contexto: 'Capítulo I, el viajero en el camino de las minas', seccion: ['I. Perdido', '1'], ancla: pagina(1, '15') },
+  { id: 'f2', documento: 'doc1', unidad: 'u2', orden: 2, texto: '--¡Bonita situación!--exclamó sonriendo y buscando en su buen humor lenitivo a la enojosa contrariedad--. ¿En dónde estás, querido Golfín?', contexto: '', seccion: ['I. Perdido', '2'], ancla: pagina(2, '16'), anclaFin: pagina(3, '17') },
+  { id: 'f3', documento: 'doc1', unidad: 'u3', orden: 3, texto: 'Sin duda estoy en las minas... pero ni alma viviente, ni chimeneas humeantes, ni ruido, ni un tren que murmure a lo lejos, ni siquiera un perro que ladre.... ¿Qué haré?, hay por aquí una vereda que vuelve a subir.', contexto: '', seccion: ['I. Perdido', '3'], ancla: pagina(3, '17') },
 ];
 
 async function lleno(): Promise<ArchivoSpdf> {
@@ -34,11 +36,11 @@ async function lleno(): Promise<ArchivoSpdf> {
   await a.escribirDocumento(doc);
   await a.escribirUnidades([1, 2, 3].map((n) => ({
     id: `u${n}`, documento: 'doc1', orden: n, ancla: pagina(n, String(14 + n)), texto: `texto ${n}`, lector: 'prueba', confianza: 0.9,
-    cabecera: 'RAYUELA', pie: String(14 + n), notas: n === 2 ? ['¹ Nota.'] : [], miniatura: `paginas/000${n}.jpg`,
+    cabecera: 'MARIANELA', pie: String(14 + n), notas: n === 2 ? ['¹ Nota.'] : [], miniatura: `paginas/000${n}.jpg`,
   })));
-  await a.escribirSecciones([{ id: 's1', documento: 'doc1', nivel: 1, titulo: 'Del lado de allá', unidadDesde: 'u1', unidadHasta: 'u3' }]);
+  await a.escribirSecciones([{ id: 's1', documento: 'doc1', nivel: 1, titulo: 'I. Perdido', unidadDesde: 'u1', unidadHasta: 'u3' }]);
   await a.escribirFragmentos(fragmentos);
-  await a.escribirFiguras([{ id: 'g1', documento: 'doc1', unidad: 'u2', imagen: 'figuras/1.png', pie: 'Mapa de París', ancla: pagina(2, '16') }]);
+  await a.escribirFiguras([{ id: 'g1', documento: 'doc1', unidad: 'u2', imagen: 'figuras/1.png', pie: 'Lámina de prueba', ancla: pagina(2, '16') }]);
   await a.escribirEspacio({ id: 'prueba@4', proveedor: 'local', modelo: 'prueba', dims: 4, normalizado: true, modalidades: ['texto'] });
   await a.escribirVectores([
     { objetivo: 'fragmento', id: 'f1', espacio: 'prueba@4', documento: 'doc1', valores: new Float32Array([0.5, -0.25, 0.125, 1e-7]) },
@@ -70,10 +72,10 @@ describe('ArchivoSpdf', () => {
     expect(await b.leerDocumento()).toEqual(doc);
     const us = await b.leerUnidades('doc1');
     expect(us).toHaveLength(3);
-    expect(us[1]).toMatchObject({ id: 'u2', cabecera: 'RAYUELA', pie: '16', notas: ['¹ Nota.'], ancla: pagina(2, '16'), miniatura: 'paginas/0002.jpg' });
+    expect(us[1]).toMatchObject({ id: 'u2', cabecera: 'MARIANELA', pie: '16', notas: ['¹ Nota.'], ancla: pagina(2, '16'), miniatura: 'paginas/0002.jpg' });
     expect(await b.leerFragmentos('doc1')).toEqual(fragmentos);
-    expect((await b.leerSecciones('doc1'))[0]).toMatchObject({ titulo: 'Del lado de allá', unidadDesde: 'u1', unidadHasta: 'u3' });
-    expect((await b.leerFiguras('doc1'))[0]).toMatchObject({ id: 'g1', pie: 'Mapa de París' });
+    expect((await b.leerSecciones('doc1'))[0]).toMatchObject({ titulo: 'I. Perdido', unidadDesde: 'u1', unidadHasta: 'u3' });
+    expect((await b.leerFiguras('doc1'))[0]).toMatchObject({ id: 'g1', pie: 'Lámina de prueba' });
     expect(await b.espacios()).toEqual([{ id: 'prueba@4', proveedor: 'local', modelo: 'prueba', dims: 4, normalizado: true, modalidades: ['texto'] }]);
     expect((await b.leerBlob('figuras/1.png'))?.datos).toEqual(new Uint8Array([0x89, 0x50, 0x4e, 0x47, 1, 2, 3]));
     expect(await b.blobs('figuras/')).toEqual([{ clave: 'figuras/1.png', mime: 'image/png', bytes: 7 }]);
@@ -124,7 +126,7 @@ describe('ArchivoSpdf', () => {
       const [f] = await a.sql.ejecutar<{ n: number }>(`SELECT count(*) AS n FROM ${t}`);
       expect(f?.n, t).toBe(0);
     }
-    expect(await a.buscarTexto('Maga')).toEqual([]);
+    expect(await a.buscarTexto('Golfín')).toEqual([]);
     a.cerrar();
   });
 });
@@ -132,9 +134,9 @@ describe('ArchivoSpdf', () => {
 describe('FTS5', () => {
   it('busca sin tildes, ordena por BM25 y resalta', async () => {
     const a = await lleno();
-    const r = await a.buscarTexto('cancion maga');
+    const r = await a.buscarTexto('situacion golfin');
     expect(r[0]?.fragmento.id).toBe('f2');
-    expect(r[0]?.resaltado).toContain('[canción]');
+    expect(r[0]?.resaltado).toContain('[situación]');
     expect(r.map((x) => x.fragmento.id)).toContain('f1');
     expect(r[0]!.puntuacion).toBeGreaterThan(r[r.length - 1]!.puntuacion - 1e-9);
     a.cerrar();
@@ -142,27 +144,27 @@ describe('FTS5', () => {
 
   it('modos: todas las palabras, frase exacta, consulta cruda', async () => {
     const a = await lleno();
-    expect((await a.buscarTexto('maga puente', { modo: 'todas' })).map((x) => x.fragmento.id)).toEqual(['f2']);
-    expect((await a.buscarTexto('puente de las artes', { modo: 'frase' })).map((x) => x.fragmento.id)).toEqual(['f2']);
-    expect((await a.buscarTexto('serp*', { crudo: true })).map((x) => x.fragmento.id)).toEqual(['f3']);
-    expect((await a.buscarTexto('seccion:"lado"', { crudo: true })).length).toBe(3);
+    expect((await a.buscarTexto('golfin querido', { modo: 'todas' })).map((x) => x.fragmento.id)).toEqual(['f2']);
+    expect((await a.buscarTexto('querido golfín', { modo: 'frase' })).map((x) => x.fragmento.id)).toEqual(['f2']);
+    expect((await a.buscarTexto('perr*', { crudo: true })).map((x) => x.fragmento.id)).toEqual(['f3']);
+    expect((await a.buscarTexto('seccion:"perdido"', { crudo: true })).length).toBe(3);
     a.cerrar();
   });
 
   it('indexa el contexto y la sección, y filtra por documento', async () => {
     const a = await lleno();
-    expect((await a.buscarTexto('alla')).length).toBe(3);
-    expect(await a.buscarTexto('Maga', { documentos: ['otro'] })).toEqual([]);
+    expect((await a.buscarTexto('perdido')).length).toBe(3);
+    expect(await a.buscarTexto('Golfín', { documentos: ['otro'] })).toEqual([]);
     a.cerrar();
   });
 
   it('el índice sigue a las actualizaciones y los borrados', async () => {
     const a = await lleno();
-    await a.escribirFragmentos([{ ...(fragmentos[2] as Fragmento), texto: 'Morelli escribía notas sobre la novela.' }]);
-    expect(await a.buscarTexto('Serpiente')).toEqual([]);
-    expect((await a.buscarTexto('Morelli'))[0]?.fragmento.id).toBe('f3');
+    await a.escribirFragmentos([{ ...(fragmentos[2] as Fragmento), texto: 'Dio un paso y hundiose en la frágil tierra movediza.' }]);
+    expect(await a.buscarTexto('perro')).toEqual([]);
+    expect((await a.buscarTexto('hundiose'))[0]?.fragmento.id).toBe('f3');
     await a.sql.ejecutar("DELETE FROM fragmentos WHERE id = 'f3'");
-    expect(await a.buscarTexto('Morelli')).toEqual([]);
+    expect(await a.buscarTexto('hundiose')).toEqual([]);
     await a.optimizarIndice();
     expect(await a.comprobarIntegridad()).toEqual([]);
     a.cerrar();
@@ -180,7 +182,7 @@ describe('FTS5', () => {
     const a = await lleno();
     await a.sql.ejecutar("DELETE FROM fragmentos WHERE id = 'f1'");
     a.compactar();
-    expect((await a.buscarTexto('Oliveira'))[0]?.fragmento.id).toBe('f3');
+    expect((await a.buscarTexto('vereda'))[0]?.fragmento.id).toBe('f3');
     expect(await a.comprobarIntegridad()).toEqual([]);
     a.cerrar();
   });

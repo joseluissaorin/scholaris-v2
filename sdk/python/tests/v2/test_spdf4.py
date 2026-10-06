@@ -13,20 +13,20 @@ def test_abre_y_lee_documento():
     with SPDF.abrir(str(FIXTURA)) as s:
         assert s.claves()["spdf_version"].startswith("4")
         d = s.documento
-        assert d["metadatos"]["titulo"] == "Vigilar y castigar"
+        assert d["metadatos"]["titulo"] == "Don Quijote"
         us = s.unidades()
         assert [u.orden for u in us] == [0, 1, 2]
         assert us[0].etiqueta == "p. [1]"
         assert us[1].etiqueta == "p. 23"
-        assert s.pagina("24").texto.startswith("La disciplina")
+        assert s.pagina("24").texto.startswith("Una olla")
         assert s.original() == b"%PD"
 
 
 def test_busqueda_lexica_con_cita():
     with SPDF.abrir(str(FIXTURA)) as s:
-        r = s.buscar("panoptico")  # sin acento: FTS5 con remove_diacritics
+        r = s.buscar("rocin")  # sin acento: FTS5 con remove_diacritics
         assert r and r[0].id == "f1"
-        assert r[0].cita == "(Foucault, 1975, p. 23)"
+        assert r[0].cita == "(Cervantes Saavedra, 1605, p. 23)"
 
 
 def test_busqueda_vectorial():

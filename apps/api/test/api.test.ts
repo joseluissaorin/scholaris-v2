@@ -31,20 +31,22 @@ async function api(ruta: string, o: { token?: string; metodo?: string; cuerpo?: 
   return { estado: r.status, cuerpo: (tipo.includes('json') ? await r.json() : await r.text()) as any, r };
 }
 
+// Bentham, «Panopticon; or, the Inspection-House» (1791), cartas II y V, literal de Wikisource:
+// https://en.wikisource.org/wiki/Panopticon_or_the_Inspection-House
 function paqueteDocumento(texto: string[]): PaqueteConversion {
   let parrafo = 0;
   return {
     version: 1, tipo: 'documento',
     origen: { nombre: 'ensayo.md', mime: 'text/markdown', bytes: 100, huella: 'h-ensayo' },
-    metadatos: { titulo: 'Ensayo sobre el panóptico', autores: [{ nombre: 'Michel', apellidos: 'Foucault' }], anio: 1975, idioma: 'es' },
+    metadatos: { titulo: 'Panopticon; or, the Inspection-House', autores: [{ nombre: 'Jeremy', apellidos: 'Bentham' }], anio: 1791, idioma: 'en' },
     unidades: texto.length,
     contenido: {
       clase: 'documento', formato: 'markdown',
       bloques: [
-        { tipo: 'titulo', nivel: 1, texto: 'Vigilar', ruta: ['Vigilar'], parrafo: 0 },
-        ...texto.map((t) => ({ tipo: 'parrafo' as const, texto: t, ruta: ['Vigilar'], parrafo: ++parrafo })),
+        { tipo: 'titulo', nivel: 1, texto: 'Letters', ruta: ['Letters'], parrafo: 0 },
+        ...texto.map((t) => ({ tipo: 'parrafo' as const, texto: t, ruta: ['Letters'], parrafo: ++parrafo })),
       ],
-      notas: [], esquema: [{ titulo: 'Vigilar', nivel: 1, fisica: null, bloque: 0 }], paginasImpresas: [],
+      notas: [], esquema: [{ titulo: 'Letters', nivel: 1, fisica: null, bloque: 0 }], paginasImpresas: [],
     },
     partes: [], reserva: null, avisos: [], entorno: 'navegador', tiempos: {},
   };
@@ -144,8 +146,8 @@ describe('aislamiento entre usuarios', () => {
 describe('subida → ingesta → búsqueda', () => {
   it('camino feliz con el Workflow real y la inteligencia falsa', async () => {
     const t = await token('user_ingesta', { fea: 'u:scholaris' });
-    const original = new TextEncoder().encode('# Vigilar\n\nEl panóptico de Bentham…');
-    const s = await api('/subidas', { token: t, cuerpo: { nombre: 'ensayo.md', mime: 'text/markdown', bytes: original.byteLength, metadatos: { anio: 1975 } } });
+    const original = new TextEncoder().encode('# Letters\n\nThe building is circular.');
+    const s = await api('/subidas', { token: t, cuerpo: { nombre: 'ensayo.md', mime: 'text/markdown', bytes: original.byteLength, metadatos: { anio: 1791 } } });
     expect(s.estado).toBe(201);
     expect(s.cuerpo.original.modo).toBe('simple');
 
@@ -154,9 +156,9 @@ describe('subida → ingesta → búsqueda', () => {
     expect(put.status).toBe(200);
 
     const paquete = paqueteDocumento([
-      'El panóptico de Bentham es una figura arquitectónica de la vigilancia: el vigilado nunca sabe si lo miran.',
-      'La disciplina fabrica individuos; es la técnica específica de un poder que toma a los individuos como objetos.',
-      'Las prisiones, las escuelas y los cuarteles comparten la misma tecnología del encierro.',
+      'The apartment of the inspector occupies the centre; you may call it if you please the inspector’s lodge.',
+      'Of this grating, a part sufficiently large opens, in form of a door, to admit the prisoner at his first entrance; and to give admission at any time to the inspector or any of his attendants.',
+      'The essence of it consists, then, in the centrality of the inspector’s situation, combined with the wellknown and most effectual contrivances for seeing without being seen.',
     ]);
     const rec = await api(`/subidas/${s.cuerpo.subida}/recursos`, { token: t, cuerpo: { recursos: [{ ruta: 'paquete.json', mime: 'application/json' }] } });
     expect(rec.estado).toBe(200);
@@ -171,28 +173,28 @@ describe('subida → ingesta → búsqueda', () => {
 
     const doc = await api(`/documentos/${ing.cuerpo.documento}`, { token: t });
     expect(doc.cuerpo.estado).toBe('listo');
-    expect(doc.cuerpo.metadatos.anio).toBe(1975);
+    expect(doc.cuerpo.metadatos.anio).toBe(1791);
     expect(doc.cuerpo.cuentas.fragmentos).toBeGreaterThan(0);
     expect(doc.cuerpo.original).toContain(`/d/${ing.cuerpo.documento}/original.md`);
 
     const lista = await api('/documentos?orden=titulo&dir=asc', { token: t });
     expect(lista.cuerpo.elementos.some((d: { id: string }) => d.id === ing.cuerpo.documento)).toBe(true);
 
-    const b = await api('/busqueda', { token: t, cuerpo: { consulta: 'panóptico de Bentham', k: 5 } });
+    const b = await api('/busqueda', { token: t, cuerpo: { consulta: 'apartment of the inspector lodge', k: 5 } });
     expect(b.estado).toBe(200);
     expect(b.cuerpo.resultados.length).toBeGreaterThan(0);
-    expect(b.cuerpo.resultados[0].fragmento.texto).toMatch(/panóptico/);
-    expect(b.cuerpo.resultados[0].citaCorta).toMatch(/Foucault, 1975/);
+    expect(b.cuerpo.resultados[0].fragmento.texto).toMatch(/apartment of the inspector/);
+    expect(b.cuerpo.resultados[0].citaCorta).toMatch(/Bentham, 1791/);
 
     // En dos tiempos (SSE): termina con «final», con los mismos resultados que la JSON.
-    const dos = await api('/busqueda', { token: t, cuerpo: { consulta: 'panóptico de Bentham', k: 5 }, cabeceras: { accept: 'text/event-stream' } });
+    const dos = await api('/busqueda', { token: t, cuerpo: { consulta: 'apartment of the inspector lodge', k: 5 }, cabeceras: { accept: 'text/event-stream' } });
     expect(dos.estado).toBe(200);
     expect(dos.r.headers.get('content-type')).toContain('text/event-stream');
     const eventos = String(dos.cuerpo).split('\n').filter((l) => l.startsWith('event: ')).map((l) => l.slice(7));
     expect(eventos.at(-1)).toBe('final');
     expect(eventos.every((e) => e === 'preliminar' || e === 'final')).toBe(true);
     const datosFinal = JSON.parse(String(dos.cuerpo).split('\n').filter((l) => l.startsWith('data: ')).at(-1)!.slice(6));
-    expect(datosFinal.respuesta.resultados[0].fragmento.texto).toMatch(/panóptico/);
+    expect(datosFinal.respuesta.resultados[0].fragmento.texto).toMatch(/apartment of the inspector/);
 
     // La búsqueda quedó en el historial (montado desde @scholaris/funciones).
     const h = await api('/historial', { token: t });
@@ -202,12 +204,12 @@ describe('subida → ingesta → búsqueda', () => {
     const o = await api(`/documentos/${ing.cuerpo.documento}/original`, { token: t });
     const bin = await SELF.fetch(o.cuerpo.url, { headers: { range: 'bytes=0-8' } });
     expect(bin.status).toBe(206);
-    expect(await bin.text()).toBe('# Vigilar');
+    expect(await bin.text()).toBe('# Letters');
     // «bytes=0-» (lo primero que pide un <video>) llega entero en flujo, como 206.
     const abierto = await SELF.fetch(o.cuerpo.url, { headers: { range: 'bytes=2-' } });
     expect(abierto.status).toBe(206);
     expect(abierto.headers.get('content-range')).toMatch(/^bytes 2-\d+\/\d+$/);
-    expect(await abierto.text()).toBe('Vigilar\n\nEl panóptico de Bentham…');
+    expect(await abierto.text()).toBe('Letters\n\nThe building is circular.');
 
     // Exportar el .spdf en el servidor (sqlite-wasm en workerd) e importarlo como copia.
     const sp = await SELF.fetch(`${BASE}/documentos/${ing.cuerpo.documento}/spdf`, { headers: { authorization: `Bearer ${t}` } });
@@ -338,8 +340,8 @@ describe('bibliotecas compartidas', () => {
     const ajeno = await token('user_ajeno');
     for (const t of [lector, editor, ajeno]) await api('/auth/yo', { token: t }); // alta con su correo
 
-    const bib = (await api('/bibliotecas', { token: dueno, cuerpo: { nombre: 'Seminario de Foucault' } })).cuerpo;
-    const dentro = await ingestar(dueno, 'Compartido', ['El panóptico es una máquina de ver sin ser visto.'], [bib.id]);
+    const bib = (await api('/bibliotecas', { token: dueno, cuerpo: { nombre: 'Seminario sobre Bentham' } })).cuerpo;
+    const dentro = await ingestar(dueno, 'Compartido', ['Apuntes de Ana sobre el panóptico de Bentham.'], [bib.id]);
     const fuera = await ingestar(dueno, 'Privado', ['Mis notas privadas sobre el panóptico y la sociedad disciplinaria.']);
 
     expect((await api(`/bibliotecas/${bib.id}/compartir`, { token: dueno, cuerpo: { correo: 'user_lector@prueba.es', permiso: 'lectura' } })).estado).toBe(201);

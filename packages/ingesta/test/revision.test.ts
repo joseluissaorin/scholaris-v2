@@ -7,8 +7,8 @@ const decir = (t0: number, texto: string, h = 'A'): PalabraTranscrita[] => texto
 
 describe('revisión de la transcripción', () => {
   it('alinea y sustituye conservando los instantes de las palabras que casan', () => {
-    const viejas = decir(100, 'Y ha sido una de las cosas. Está no es. De esta obra forma parte El perseguidor.');
-    const nuevas = 'Y ha sido una de las cosas. Esta no, es esta. De esta obra forma parte El perseguidor.'.split(' ');
+    const viejas = decir(100, 'Y ha sido una de las cosas. Está no es. De esta obra forma parte el prólogo.');
+    const nuevas = 'Y ha sido una de las cosas. Esta no, es esta. De esta obra forma parte el prólogo.'.split(' ');
     const casa = alinear(viejas.map((w) => w.texto), nuevas);
     // «Está no es.» son las palabras 7-9.
     const r = sustituir(viejas, 7, 10, nuevas, casa, 0)!;
@@ -18,10 +18,10 @@ describe('revisión de la transcripción', () => {
   });
 
   it('solo toca las frases señaladas y deja lo demás tal cual', async () => {
-    const palabras = [...decir(0, 'Buenas noches a todos. Está no es.'), ...decir(10, 'Hablamos de Rayuela.')];
-    const redactor = redactorFalso((t) => (t.includes('Frases (n') ? { sospechosas: [{ n: 1, motivo: 'concordancia' }] } : { texto: 'Buenas noches a todos. Esta no es. Hablamos de Rayuela.' }));
-    const r = await revisarTranscripcion(palabras, [{ n: 0, t0: 0, t1: 20, propioDesde: 0, propioHasta: 20, parte: 'a.ogg' }], { async parte() { return { bytes: new Uint8Array(1), mime: 'audio/ogg' }; } }, { titulo: 'A fondo', autores: [] }, redactor);
-    expect(r.palabras.map((w) => w.texto).join(' ')).toBe('Buenas noches a todos. Esta no es. Hablamos de Rayuela.');
+    const palabras = [...decir(0, 'Buenas noches a todos. Está no es.'), ...decir(10, 'Hablamos de novelas.')];
+    const redactor = redactorFalso((t) => (t.includes('Frases (n') ? { sospechosas: [{ n: 1, motivo: 'concordancia' }] } : { texto: 'Buenas noches a todos. Esta no es. Hablamos de novelas.' }));
+    const r = await revisarTranscripcion(palabras, [{ n: 0, t0: 0, t1: 20, propioDesde: 0, propioHasta: 20, parte: 'a.ogg' }], { async parte() { return { bytes: new Uint8Array(1), mime: 'audio/ogg' }; } }, { titulo: 'Grabación de prueba', autores: [] }, redactor);
+    expect(r.palabras.map((w) => w.texto).join(' ')).toBe('Buenas noches a todos. Esta no es. Hablamos de novelas.');
     expect(r.cambios).toEqual([expect.objectContaining({ antes: 'Está no es.', despues: 'Esta no es.' })]);
     expect(r.palabras[4]!.t0).toBe(4);
   });
