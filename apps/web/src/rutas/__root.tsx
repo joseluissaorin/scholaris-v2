@@ -9,11 +9,13 @@ import { recuperarTareas } from '../datos/ingesta';
 import { NoEncontrado, ErrorDeRuta } from '../componentes/comunes/errores';
 import { EsperaMarco } from '../componentes/marco/espera';
 import { useHayMini } from '../componentes/reproductor/estado-global';
-import { Arrastrable } from '../movimiento/arrastre';
 
 const Paleta = lazy(() => import('../componentes/marco/paleta'));
 // El reproductor pequeño: solo si algo suena fuera del lector.
-const MiniReproductor = lazy(() => import('../componentes/reproductor/mini'));
+// Se puede coger y lanzar a cualquier esquina (con inercia): el arrastre viaja en el mismo trozo, fuera del marco.
+const MiniReproductor = lazy(() => Promise.all([import('../componentes/reproductor/mini'), import('../movimiento/arrastre')]).then(([m, a]) => ({
+  default: () => <a.Arrastrable clave="mini"><m.default /></a.Arrastrable>,
+})));
 
 export const Route = createRootRouteWithContext<{ consultas: QueryClient }>()({
   component: Marco,
@@ -60,8 +62,7 @@ function Marco() {
       <PieMovil />
       <Entrada />
       {paletaCargada ? <Suspense fallback={null}><Paleta abierta={paleta} alCambiar={setPaleta} /></Suspense> : null}
-      {/* El reproductor pequeño se puede coger y lanzar a cualquier esquina (con inercia). */}
-      {hayMini ? <Arrastrable clave="mini"><Suspense fallback={null}><MiniReproductor /></Suspense></Arrastrable> : null}
+      {hayMini ? <Suspense fallback={null}><MiniReproductor /></Suspense> : null}
       <Tostadora />
     </div>
   );

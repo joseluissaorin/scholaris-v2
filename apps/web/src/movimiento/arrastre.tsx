@@ -45,7 +45,8 @@ export function Arrastrable({ children, clave, desde = 640 }: { children: ReactN
       // La posición de reposo (sin desplazar) se mide una vez; las esquinas se calculan desde ahí.
       const reposo = () => { const t = n.style.translate; n.style.translate = ''; const r = n.getBoundingClientRect(); n.style.translate = t; return r; };
       const destino = (e: Esquina, r: DOMRect) => ({
-        x: e[1] === 'd' ? innerWidth - MARGEN - r.right : MARGEN - r.left,
+        // A la izquierda, sin tapar la barra lateral: el borde del contenido.
+        x: e[1] === 'd' ? innerWidth - MARGEN - r.right : (document.getElementById('contenido')?.getBoundingClientRect().left ?? 0) + MARGEN - r.left,
         y: e[0] === 'b' ? innerHeight - MARGEN - r.bottom : MARGEN + 56 - r.top,
       });
       const poner = (x: number, y: number) => { dx = x; dy = y; n.style.translate = `${x}px ${y}px`; };
