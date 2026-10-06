@@ -29,7 +29,7 @@ export interface UsuarioSesion {
   imagen?: string;
   plan: Plan;
   funciones: string[];
-  via: 'clerk' | 'clave_api' | 'local';
+  via: 'clerk' | 'clave_api' | 'local' | 'admin';
   /** Alcances si entró con clave de API. */
   alcances?: string[];
   /**

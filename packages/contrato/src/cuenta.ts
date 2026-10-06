@@ -76,7 +76,7 @@ export interface Yo {
   funciones: string[];
   cuotas: Cuotas;
   /** Cómo se autenticó esta petición. */
-  via: 'clerk' | 'clave_api' | 'local';
+  via: 'clerk' | 'clave_api' | 'local' | 'admin';
 }
 
 // ---------------------------------------------------------------------------

@@ -54,4 +54,6 @@ export interface Env {
   R2_ACCESS_KEY_ID?: string;
   R2_SECRET_ACCESS_KEY?: string;
   CORREO_CONTACTO?: string;
+  /** Solo para migraciones: actuar como un usuario (ver scripts/migrar-desde-v1.ts). */
+  ADMIN_TOKEN?: string;
 }

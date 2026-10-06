@@ -22,7 +22,7 @@ import { PREFIJO_API } from '@scholaris/contrato';
 import type { Entorno } from './entorno.js';
 import type { AlmacenAmpliado, ConfigInstancia, PuertosUsuario, UsuarioSesion } from './puertos.js';
 import { cuerpoError, cuerpoJson, ErrorScholaris, fallo, responderError } from './compartido/errores.js';
-import { firmarBillete, verificarParametros } from './compartido/firmas.js';
+import { firmarBillete, igualesSeguro, verificarParametros } from './compartido/firmas.js';
 import type { Cuentas } from './compartido/cuentas.js';
 import type { VerificadorClerk } from './compartido/clerk.js';
 import { LIMITES } from './compartido/planes.js';
@@ -87,6 +87,11 @@ export interface Plataforma {
   usuarioLocal?: UsuarioSesion;
   /** Token fijo opcional del modo local (SCHOLARIS_TOKEN). */
   tokenLocal?: string;
+  /**
+   * Token de administración (migraciones): con la cabecera `x-scholaris-como`
+   * actúa como ese usuario. Solo existe si se define el secreto ADMIN_TOKEN.
+   */
+  tokenAdmin?: string;
   clerk?: VerificadorClerk;
   /** Orígenes CORS admitidos (además del propio). */
   origenes?: string[];
@@ -169,6 +174,17 @@ export function crearPuerta(pl: Plataforma) {
       return pl.usuarioLocal;
     }
     if (!token) fallo('no_autenticado', 'Inicia sesión para continuar.');
+    if (pl.tokenAdmin && pl.tokenAdmin.length >= 32 && igualesSeguro(token, pl.tokenAdmin)) {
+      const como = peticion.headers.get('x-scholaris-como') ?? '';
+      if (!/^[\w-]{3,80}$/.test(como)) fallo('peticion_invalida', 'Falta la cabecera x-scholaris-como con el usuario.');
+      let u = await pl.cuentas.usuario(como);
+      if (!u) {
+        await pl.cuentas.asegurarUsuario({ id: como, correo: '', nombre: '', plan: 'gratis' });
+        u = (await pl.cuentas.usuario(como))!;
+      }
+      await pl.cuentas.auditar(como, 'admin', { metodo: peticion.method, ruta: new URL(peticion.url).pathname });
+      return { ...u, funciones: u.plan === 'pro' ? ['scholaris'] : [], via: 'admin' };
+    }
     if (token.startsWith('sch_')) {
       const k = await pl.cuentas.autenticarClave(token);
       if (!k) fallo('no_autenticado', 'La clave de API no es válida, ha caducado o se ha revocado.');
