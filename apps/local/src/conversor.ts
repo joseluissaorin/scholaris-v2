@@ -8,6 +8,8 @@
  *   POST /convertir?nombre=…&mime=…[&tipo=…]   cuerpo: el fichero
  *     → application/x-scholaris-tramas: una trama por parte binaria y al final
  *       {tipo:'fin', paquete} (o {tipo:'error', mensaje}).
+ *   POST /recortar?x=…&y=…&w=…&h=…[&maximo=…]   cuerpo: la imagen
+ *     → image/jpeg con la región (0-1) recortada: el recorte de una figura para su vector.
  *   GET  /salud
  */
 import { createServer } from 'node:http';
@@ -16,7 +18,7 @@ import { mkdtemp, readFile, rm, writeFile, readdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
-import { convertir, recolectar, type PaqueteConversion } from '@scholaris/imprenta/node';
+import { convertir, recolectar, recortarImagen, type PaqueteConversion } from '@scholaris/imprenta/node';
 import { codificarTrama } from '@scholaris/api/compartido/tramas';
 
 const ejecutar = promisify(execFile);
@@ -71,6 +73,18 @@ const puerto = Number(process.env.PORT ?? 8080);
 createServer(async (req, res) => {
   const url = new URL(req.url ?? '/', 'http://conversor');
   if (url.pathname === '/salud') { res.end('ok'); return; }
+  if (url.pathname === '/recortar' && req.method === 'POST') {
+    const trozosR: Buffer[] = [];
+    for await (const t of req) trozosR.push(t as Buffer);
+    const n = (k: string) => Number(url.searchParams.get(k));
+    try {
+      const r = await recortarImagen(new Uint8Array(Buffer.concat(trozosR)), { x: n('x'), y: n('y'), w: n('w'), h: n('h') }, Number(url.searchParams.get('maximo') ?? 1024));
+      res.writeHead(200, { 'content-type': r.mime }); res.end(Buffer.from(r.bytes));
+    } catch (e) {
+      res.writeHead(422, { 'content-type': 'text/plain' }); res.end(String((e as Error)?.message ?? e));
+    }
+    return;
+  }
   if (url.pathname !== '/convertir' || req.method !== 'POST') { res.statusCode = 404; res.end(); return; }
   const trozos: Buffer[] = [];
   for await (const t of req) trozos.push(t as Buffer);

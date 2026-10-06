@@ -25,7 +25,7 @@ import { crearServidorLocal, type DriverSqlite } from './servidor.js';
 import type { BaseSqlite } from './sql.js';
 import type { MensajeCliente } from '@scholaris/contrato';
 import type { ArchivoConvertir } from '@scholaris/api/compartido/motor-ingesta';
-import { conversorRemoto } from '@scholaris/api/compartido/conversor-remoto';
+import { conversorRemoto, recortadorRemoto } from '@scholaris/api/compartido/conversor-remoto';
 import { ANFITRIONES_CATALOGOS, configuracionSinConexion, modoSinConexion } from '@scholaris/proveedores';
 import { instalarGuardiaDeRed } from './guardia-red.js';
 
@@ -33,6 +33,14 @@ export const driverNode: DriverSqlite = {
   abrir: (ruta) => new Database(ruta) as unknown as BaseSqlite,
   cargarVec: (db) => sqliteVec.load(db as unknown as Database.Database),
 };
+
+/** Recortes de figuras con la imprenta de Node (canvas): el vector propio de cada figura. */
+export async function recortadorNode() {
+  const m = await import('@scholaris/imprenta/node');
+  return async (imagen: { bytes: Uint8Array; mime: string }, region: { x: number; y: number; w: number; h: number }) => {
+    try { return await m.recortarImagen(imagen.bytes, region); } catch { return null; }
+  };
+}
 
 export async function imprentaNode() {
   const m = await import('@scholaris/imprenta/node');
@@ -77,8 +85,11 @@ export async function arrancarNode(opciones: { puerto?: number; datos?: string; 
     driver: driverNode,
     // Conversor: uno remoto (SCHOLARIS_CONVERSOR_URL, p. ej. el contenedor), la imprenta de Node, o ninguno.
     ...(process.env.SCHOLARIS_CONVERSOR_URL
-      ? { convertir: conversorRemoto((r) => fetch(new URL(new URL(r.url).pathname + new URL(r.url).search, process.env.SCHOLARIS_CONVERSOR_URL), r)) }
-      : process.env.SCHOLARIS_IMPRENTA === '0' ? {} : { convertir: await imprentaNode() }),
+      ? {
+        convertir: conversorRemoto((r) => fetch(new URL(new URL(r.url).pathname + new URL(r.url).search, process.env.SCHOLARIS_CONVERSOR_URL), r)),
+        recortar: recortadorRemoto((r) => fetch(new URL(new URL(r.url).pathname + new URL(r.url).search, process.env.SCHOLARIS_CONVERSOR_URL), r)),
+      }
+      : process.env.SCHOLARIS_IMPRENTA === '0' ? {} : { convertir: await imprentaNode(), recortar: await recortadorNode() }),
   });
 
   const http = createServer(getRequestListener((req) => s.fetch(req)));

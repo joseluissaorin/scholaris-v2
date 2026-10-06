@@ -177,3 +177,22 @@ describe.skipIf(!hayFfmpeg)('medios (Node con ffmpeg)', () => {
     expect(c.audio?.tramos).toHaveLength(1);
   }, 60_000);
 });
+
+describe('recorte de figuras (vectores)', () => {
+  it('recorta la región en JPEG y ajusta las regiones que se salen', async () => {
+    const { recortarImagen, plataformaNode } = await import('../src/node/index.js');
+    const l = plataformaNode.crearLienzo(400, 200);
+    const ctx = l.ctx as unknown as { fillStyle: string; fillRect: (...a: number[]) => void };
+    ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, 400, 200);
+    ctx.fillStyle = '#c00000'; ctx.fillRect(200, 100, 200, 100);
+    const pagina = await plataformaNode.aJpeg(l, 0.9);
+    const r = await recortarImagen(pagina, { x: 0.5, y: 0.5, w: 0.5, h: 0.5 });
+    expect(r.mime).toBe('image/jpeg');
+    const img = await plataformaNode.decodificarImagen(r.bytes);
+    expect([img.ancho, img.alto]).toEqual([200, 100]);
+    const fuera = await plataformaNode.decodificarImagen((await recortarImagen(pagina, { x: 0.9, y: -0.2, w: 0.5, h: 0.5 })).bytes);
+    expect([fuera.ancho, fuera.alto]).toEqual([40, 60]);
+    const grande = await plataformaNode.decodificarImagen((await recortarImagen(pagina, { x: 0, y: 0, w: 1, h: 1 }, 100)).bytes);
+    expect(Math.max(grande.ancho, grande.alto)).toBe(100);
+  });
+});

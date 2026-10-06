@@ -27,6 +27,7 @@ import { bytesAVector, enParalelo, sha256 } from '@scholaris/nucleo';
 import { leerDocumento } from '@scholaris/spdf';
 import type { AlmacenAmpliado, ParamsIngesta } from '../puertos.js';
 import { convertirEnServidor, ErrorReserva } from './reserva.js';
+import type { Recortador } from './conversor-remoto.js';
 import { encontrarMedio, esVimeo, idYoutube, MIME_YOUTUBE, transcriptorConYoutube } from './medios-url.js';
 import type { ConfigGemini } from '@scholaris/proveedores';
 
@@ -49,6 +50,8 @@ export interface ContextoMotor {
    * para los ficheros que llegan sin paquete en vez de la reserva mínima.
    */
   convertir?(archivo: ArchivoConvertir, guardar: (id: string, datos: Uint8Array, mime: string) => Promise<void>): Promise<PaqueteConversion>;
+  /** Recorta regiones de imágenes (vectores de las figuras de página). Sin él, las figuras quedan sin vector propio. */
+  recortar?: Recortador;
   /** Unidades nuevas ya legibles (orden base 0, ambos incluidos): la interfaz las enseña al momento. */
   alUnidades?(desde: number, hasta: number): Promise<void> | void;
   /** Clave (y gateway) de Gemini para transcribir YouTube por URL. */
@@ -140,7 +143,7 @@ export function miniPaquete(p: PaqueteConversion, desde: number, hasta: number):
 /** Por encima de esto no se abre el PDF original en memoria (pdf-lib lo multiplica). */
 const MAX_PDF_CORTABLE = 12 * 1024 * 1024;
 
-export function fuenteDesdeAlmacen(almacen: AlmacenAmpliado, params: ParamsIngesta, paquete: PaqueteConversion): FuentePaquete {
+export function fuenteDesdeAlmacen(almacen: AlmacenAmpliado, params: ParamsIngesta, paquete: PaqueteConversion, recortar?: Recortador): FuentePaquete {
   const mimes = new Map(paquete.partes.map((x) => [x.id, x.mime]));
   // Con imágenes de página (las pone la imprenta) se usan ellas: cortar el PDF cuesta memoria.
   const conImagenes = paquete.contenido.clase === 'pdf' && paquete.contenido.paginas.some((x) => x.imagen);
@@ -163,6 +166,12 @@ export function fuenteDesdeAlmacen(almacen: AlmacenAmpliado, params: ParamsInges
       if (!bytes) return null;
       return { bytes, mime: mimes.get(id) ?? (await almacen.cabecera(clave))?.tipo ?? 'application/octet-stream' };
     },
+    ...(recortar ? {
+      async recorte(this: FuentePaquete, id: string, region: { x: number; y: number; w: number; h: number }) {
+        const b = await this.parte(id);
+        return b ? recortar(b, region) : null;
+      },
+    } : {}),
     ...(esPdf && params.original ? {
       async subPdf(desde: number, hasta: number) {
         const t0 = Date.now();
@@ -518,7 +527,7 @@ export async function componer(ctx: ContextoMotor, params: ParamsIngesta, info: 
   const estadoIndice = { pendientes: false };
   const r: ResultadoIngesta = await ejecutarIngesta(paquete, {
     inteligencia: ia,
-    fuente: fuenteDesdeAlmacen(ctx.almacen, params, paquete),
+    fuente: fuenteDesdeAlmacen(ctx.almacen, params, paquete, ctx.recortar),
     sql: ctx.sql,
     ...(ctx.indice ? { indice: indiceSeguro(ctx, base, estadoIndice) } : {}),
     guardarBlob: async (clave, datos) => { await ctx.almacen.poner(`${params.prefijo}${clave}`, datos.bytes, datos.mime); },

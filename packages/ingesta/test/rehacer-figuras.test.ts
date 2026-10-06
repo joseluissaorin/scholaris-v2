@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import * as spdf from '@scholaris/spdf';
 import type { Documento, Vector } from '@scholaris/nucleo';
-import { cambiosDeEscena, casarFiguras, esCandidata, regionValida, rehacerFiguras } from '../src/pasos/rehacer-figuras.js';
+import { cambiosDeEscena, casarFiguras, esCandidata, regionValida, rehacerFiguras, vectorizarFigurasPendientes } from '../src/pasos/rehacer-figuras.js';
 import { baseReal, embebedorFalso, redactorFalso } from './fakes.js';
 
 const doc = (id: string, tipo: Documento['tipo']): Documento => ({
@@ -101,6 +101,32 @@ describe('rehacer figuras', () => {
     expect(r.paginas.examinadas).toBe(2);
     expect(guardados.length).toBeGreaterThan(0);
     expect(r.figuras.sinVector).toBe(0);
+  });
+
+  it('relleno de vectores: simula, vectoriza las que faltan por su recorte y es idempotente', async () => {
+    const { sql } = await libro();
+    await spdf.escribirEspacio(sql, embebedorFalso.espacio);
+    // Las figuras de la v1 tenían región pero no vector propio.
+    await sql.ejecutar("UPDATE figuras SET ancla = json_set(ancla, '$.region', json('{\"x\":0.1,\"y\":0.1,\"w\":0.5,\"h\":0.5}'))");
+    const recortes: string[] = [];
+    const puertos = {
+      sql, imagen, embebedor: embebedorFalso,
+      recorte: async (clave: string, region: { x: number }) => { recortes.push(`${clave}@${region.x}`); return imagen(clave); },
+      guardarVectores: async (vs: Vector[]) => { await spdf.escribirVectores(sql, vs.map((v) => ({ ...v, documento: 'd1' }))); },
+    };
+    const sim = await vectorizarFigurasPendientes('d1', puertos, { simular: true });
+    expect(sim).toMatchObject({ simulado: true, figuras: 2, sinVector: 2, vectorizadas: 0, imagenes: 2, llamadas: 1 });
+    expect(recortes).toEqual([]);
+    const r = await vectorizarFigurasPendientes('d1', puertos);
+    expect(r).toMatchObject({ simulado: false, sinVector: 2, vectorizadas: 2 });
+    expect(recortes.every((x) => x.endsWith('@0.1'))).toBe(true);
+    const otra = await vectorizarFigurasPendientes('d1', puertos);
+    expect(otra).toMatchObject({ sinVector: 0, vectorizadas: 0, llamadas: 0 });
+    // Sin recortador lo dice y no finge.
+    await sql.ejecutar("DELETE FROM vectores WHERE objetivo = 'figura'");
+    const sinRecorte = await vectorizarFigurasPendientes('d1', { sql, imagen, embebedor: embebedorFalso });
+    expect(sinRecorte.vectorizadas).toBe(0);
+    expect(sinRecorte.avisos.join(' ')).toMatch(/recortador/);
   });
 
   it('vídeo: describe, vectoriza y marca los cambios de escena sin tocar los ids', async () => {

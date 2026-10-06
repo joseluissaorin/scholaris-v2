@@ -21,6 +21,7 @@ export interface DependenciasCola {
   sql: SQL;
   puertosPara(usuario: string, plan: ParamsIngesta['plan']): Promise<PuertosUsuario>;
   convertir?: ContextoMotor['convertir'];
+  recortar?: ContextoMotor['recortar'];
   /** Ingestas a la vez (cada una lee varios pliegos en paralelo). */
   concurrencia?: number;
   pliegosEnParalelo?: number;
@@ -109,6 +110,7 @@ export class ColaLocal implements Orquestador {
         indice: puertos.indice,
         espacioNombres: puertos.config.espacioNombres(p.usuario),
         ...(this.d.convertir ? { convertir: this.d.convertir } : {}),
+        ...(this.d.recortar ? { recortar: this.d.recortar } : {}),
         ...(this.d.sinVerificacion ? { sinVerificacion: true } : {}),
         // Catálogos de metadatos: caché en disco (el almacén local) y clave de OpenAlex si la hay.
         catalogos: { cache: cacheEnAlmacen(puertos.almacen), ...(process.env.OPENALEX_API_KEY ? { claveOpenAlex: process.env.OPENALEX_API_KEY } : {}) },

@@ -8,6 +8,18 @@ import type { ArchivoConvertir } from './motor-ingesta.js';
 import { ErrorReserva } from './reserva.js';
 import { leerTramas } from './tramas.js';
 
+/** Recortador del conversor: la región (0-1) de una imagen, en JPEG. Lo usan los vectores de las figuras. */
+export type Recortador = (imagen: { bytes: Uint8Array; mime: string }, region: { x: number; y: number; w: number; h: number }) => Promise<{ bytes: Uint8Array; mime: string } | null>;
+
+export function recortadorRemoto(llamar: (peticion: Request) => Promise<Response>): Recortador {
+  return async (imagen, region) => {
+    const q = new URLSearchParams({ x: String(region.x), y: String(region.y), w: String(region.w), h: String(region.h) });
+    const r = await llamar(new Request(`http://conversor/recortar?${q}`, { method: 'POST', body: imagen.bytes as unknown as BodyInit, headers: { 'content-type': imagen.mime } }));
+    if (!r.ok) return null;
+    return { bytes: new Uint8Array(await r.arrayBuffer()), mime: r.headers.get('content-type') ?? 'image/jpeg' };
+  };
+}
+
 export function conversorRemoto(llamar: (peticion: Request) => Promise<Response>) {
   return async (a: ArchivoConvertir, guardar: (id: string, datos: Uint8Array, mime: string) => Promise<void>): Promise<PaqueteConversion> => {
     const q = new URLSearchParams({ nombre: a.nombre, mime: a.mime, ...(a.tipo ? { tipo: a.tipo } : {}) });

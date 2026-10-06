@@ -16,7 +16,7 @@ import { puertosFunciones } from '../compartido/servicios.js';
 import type { Env } from './env.js';
 import { reindexar as reindexarMotor } from '../compartido/motor-ingesta.js';
 import { espacioNombresDe } from './indice-vectorize.js';
-import { conversorCF } from './conversor.js';
+import { conversorCF, recortadorCF } from './conversor.js';
 import { SqlDO } from './sql.js';
 import { LIMITES } from '../compartido/planes.js';
 import { cuerpoError } from '../compartido/errores.js';
@@ -69,6 +69,7 @@ export class Estanteria extends DurableObject<Env> {
         if (await prepararEstanteria(this.base)) await this.ctx.storage.put('esquema', HUELLA_ESQUEMA);
       },
       ...(conversorCF(env) ? { convertir: conversorCF(env)! } : {}),
+      ...(recortadorCF(env) ? { recortar: recortadorCF(env)! } : {}),
     };
     // El índice depende del espacio del embebedor: se resuelve al primer uso.
     Object.defineProperty(p, 'indice', { get: () => (this.indice ??= indicePerezoso(env, inteligencia, this.base)), enumerable: true });

@@ -11,7 +11,7 @@ import type {
 } from '@scholaris/contrato';
 import type { Documento, Vector } from '@scholaris/nucleo';
 import { escribirEspacio, escribirVectores, leerDocumento, leerEspacios, leerProcedencia } from '@scholaris/spdf';
-import { metadatosIndice, rehacerFiguras } from '@scholaris/ingesta';
+import { metadatosIndice, rehacerFiguras, vectorizarFigurasPendientes } from '@scholaris/ingesta';
 import { costeTokens } from '@scholaris/proveedores';
 import type { Entorno } from '../entorno.js';
 import { cuerpoJson, exigir, fallo, noEncontrado } from '../compartido/errores.js';
@@ -189,7 +189,48 @@ export async function figuraDeResultado(p: PuertosUsuario, documento: string, fr
   };
 }
 
+/** El recorte de la región de una figura (por el conversor del servidor), si lo hay. */
+function recorteDe(p: PuertosUsuario, documento: string) {
+  if (!p.recortar) return {};
+  const recortar = p.recortar;
+  return {
+    recorte: async (clave: string, region: { x: number; y: number; w: number; h: number }) => {
+      const bytes = await p.almacen.bytes(claveDe(p.usuario.id, documento, clave));
+      return bytes ? recortar({ bytes, mime: MIME_IMAGEN(clave) }, region) : null;
+    },
+  };
+}
+
 export function rutasContenido(app: Hono<Entorno>): void {
+  /*
+   * Relleno idempotente de los vectores de las figuras que no lo tienen (recorte
+   * de su región + gemini-embedding-2 → estantería y Vectorize por el cupo global).
+   * `simular` cuenta y estima el coste sin llamar a nadie.
+   */
+  app.post('/documentos/:id/figuras/vectores/rellenar', async (c: Ctx) => {
+    const p = puertos(c);
+    const id = prm(c, 'id');
+    const b = await cuerpoJson<{ simular?: boolean }>(c).catch(() => ({} as { simular?: boolean }));
+    if (!b.simular) exigirEscritura(c);
+    const d = (await leerDocumento(p.sql, id)) ?? noEncontrado('El documento');
+    exigir(d.estado === 'listo', 'El documento aún se está leyendo; vuelve a intentarlo cuando termine.');
+    const ia = await p.inteligencia();
+    const t0 = Date.now();
+    const r = await vectorizarFigurasPendientes(id, {
+      sql: p.sql,
+      imagen: async (clave) => { const bytes = await p.almacen.bytes(claveDe(p.usuario.id, id, clave)); return bytes ? { bytes, mime: MIME_IMAGEN(clave) } : null; },
+      ...recorteDe(p, id),
+      embebedor: ia.embebedor,
+      guardarVectores: (vs, tiempos) => guardarVectoresFiguras(p, d, vs, tiempos),
+    }, { simular: !!b.simular });
+    const costeUsd = estimarCoste(0, 0, 0, r.llamadas);
+    if (!r.simulado && r.vectorizadas) {
+      await p.sql.ejecutar('INSERT INTO procedencia (documento, fase, proveedor, detalle, ms, cuando) VALUES (?, ?, ?, ?, ?, ?)', id, 'figuras', `vectores:${ia.embebedor.espacio.id}`,
+        JSON.stringify({ que: 'rellenar', vectorizadas: r.vectorizadas, usd: costeUsd }), Date.now() - t0, new Date().toISOString());
+    }
+    return c.json({ documento: id, espacio: ia.embebedor.espacio.id, recortador: !!p.recortar, ...r, costeUsd, ms: Date.now() - t0 });
+  });
+
   app.post('/documentos/:id/figuras/rehacer', async (c: Ctx) => {
     const p = puertos(c);
     const id = prm(c, 'id');
@@ -203,6 +244,7 @@ export function rutasContenido(app: Hono<Entorno>): void {
     const r = await rehacerFiguras(id, {
       sql: p.sql,
       imagen: async (clave) => { const bytes = await p.almacen.bytes(claveDe(p.usuario.id, id, clave)); return bytes ? { bytes, mime: MIME_IMAGEN(clave) } : null; },
+      ...recorteDe(p, id),
       redactor: ia.redactor,
       embebedor: ia.embebedor,
       guardarVectores: (vs, tiempos) => guardarVectoresFiguras(p, d, vs, tiempos),

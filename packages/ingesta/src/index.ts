@@ -19,7 +19,7 @@ export { partirAutores, separarNombre, nombreCompleto } from './pasos/autores.js
 export { pasoContexto, agruparPorSeccion, contextualizarGrupo } from './pasos/contexto.js';
 export { vectorizar, textoVectorizable, type PiezaVector } from './pasos/vectores.js';
 export { pasoFiguras, reunirFiguras, describirFiguras, piesEnTexto, type FiguraConAncla } from './pasos/figuras.js';
-export { rehacerFiguras, casarFiguras, cambiosDeEscena, regionValida, esCandidata, iou, type PuertosRehacerFiguras, type OpcionesRehacerFiguras, type ResultadoRehacerFiguras } from './pasos/rehacer-figuras.js';
+export { rehacerFiguras, vectorizarFigurasPendientes, casarFiguras, cambiosDeEscena, regionValida, esCandidata, iou, type PuertosRehacerFiguras, type OpcionesRehacerFiguras, type ResultadoRehacerFiguras, type ResultadoVectoresFiguras } from './pasos/rehacer-figuras.js';
 export { escribirDocumento, escribirVectores, escribirEspacio, entradasIndice, metadatosIndice } from './pasos/indexado.js';
 export { ejecutarIngesta, type ResultadoIngesta, type OpcionesOrquestador } from './orquestador.js';
 export {

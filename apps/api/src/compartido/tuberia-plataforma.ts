@@ -62,7 +62,7 @@ function contexto(ctx: ContextoMotor, params: ParamsIngesta, paquete: PaqueteCon
       // También grabado: un reintento o un relanzamiento no vuelve a pagar las páginas fáciles.
       ...(extra.lectorEconomico ? { lectorEconomico: lectorConMemoria(extra.lectorEconomico, ctx.almacen, `${trabajo(params)}economico/`) } : {}),
       ...(extra.lotes ? { lotes: extra.lotes } : {}),
-      fuente: fuenteDesdeAlmacen(ctx.almacen, params, paquete),
+      fuente: fuenteDesdeAlmacen(ctx.almacen, params, paquete, ctx.recortar),
       sql: ctx.sql,
       ...(ctx.indice ? {
         indice: {

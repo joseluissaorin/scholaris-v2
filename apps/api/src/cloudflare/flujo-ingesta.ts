@@ -16,7 +16,7 @@ import type { Env } from './env.js';
 import { SqlRemoto } from './sql.js';
 import { almacenDesdeEnv, catalogosDesdeEnv, cuentasDesdeEnv, emisorDesdeEnv, geminiPara, indiceDesdeEnv, inteligenciaPara, origenDe } from './puertos-cf.js';
 import { espacioNombresDe } from './indice-vectorize.js';
-import { conversorCF } from './conversor.js';
+import { conversorCF, recortadorCF } from './conversor.js';
 import { adelantarMoov, esMp4 } from '../compartido/medio-rapido.js';
 
 const REINTENTOS = { limit: 5, delay: '10 seconds', backoff: 'exponential' } as const;
@@ -49,6 +49,7 @@ export class FlujoIngesta extends WorkflowEntrypoint<Env, ParamsIngesta> {
       ...(gemini ? { gemini } : {}),
       alUnidades: async (desde: number, hasta: number) => { await emisor.emitir(`usuario:${p.usuario}`, { tipo: 'unidades', tarea: p.tarea, documento: p.documento, desde, hasta }); },
       ...(conversorCF(env) ? { convertir: conversorCF(env)! } : {}),
+      ...(recortadorCF(env) ? { recortar: recortadorCF(env)! } : {}),
       alProgreso: emitir,
       emitir,
     };

@@ -380,3 +380,65 @@ export async function rehacerFiguras(documento: string, puertos: PuertosRehacerF
   base.ms = reloj() - t0;
   return base;
 }
+
+export interface ResultadoVectoresFiguras {
+  simulado: boolean;
+  /** Figuras con región o fotograma que podrían tener vector propio. */
+  figuras: number;
+  /** Las que no lo tenían en el espacio del embebedor. */
+  sinVector: number;
+  /** Las que lo tienen ahora (0 si es simulado). */
+  vectorizadas: number;
+  /** Imágenes que irían (o fueron) al embebedor, para estimar el coste. */
+  imagenes: number;
+  llamadas: number;
+  avisos: string[];
+}
+
+/**
+ * Relleno idempotente: vectoriza las figuras que aún no tienen vector en el
+ * espacio del embebedor. Las de página, por el recorte de su región; los
+ * fotogramas, enteros. No toca descripciones ni regiones. `simular` solo cuenta.
+ */
+export async function vectorizarFigurasPendientes(
+  documento: string,
+  puertos: Pick<PuertosRehacerFiguras, 'sql' | 'imagen' | 'recorte' | 'embebedor' | 'guardarVectores'>,
+  opciones: { simular?: boolean; lote?: number; concurrencia?: number } = {},
+): Promise<ResultadoVectoresFiguras> {
+  const avisos: string[] = [];
+  const e = puertos.embebedor;
+  const salida: ResultadoVectoresFiguras = { simulado: !!opciones.simular, figuras: 0, sinVector: 0, vectorizadas: 0, imagenes: 0, llamadas: 0, avisos };
+  if (!e?.admite('imagen')) { avisos.push('El embebedor no vectoriza imágenes.'); return salida; }
+  const filas = await puertos.sql.ejecutar<{ id: string; imagen: string | null; ancla: string }>('SELECT id, imagen, ancla FROM figuras WHERE documento = ?', documento);
+  const tienen = new Set((await puertos.sql.ejecutar<{ id: string }>("SELECT id FROM vectores WHERE documento = ? AND objetivo = 'figura' AND espacio = ?", documento, e.espacio.id)).map((f) => f.id));
+  const candidatas = filas.map((f) => ({ id: f.id, imagen: f.imagen, ancla: json<{ tipo?: string; region?: Region }>(f.ancla, {}) }))
+    .filter((f) => f.imagen && (f.ancla.tipo === 'tiempo' || f.ancla.region));
+  salida.figuras = candidatas.length;
+  const faltan = candidatas.filter((f) => !tienen.has(f.id));
+  salida.sinVector = faltan.length;
+  const conRegion = faltan.filter((f) => f.ancla.tipo !== 'tiempo');
+  if (conRegion.length && !puertos.recorte) avisos.push('Sin recortador en este servidor: las figuras de página no pueden tener vector propio.');
+  const posibles = faltan.filter((f) => f.ancla.tipo === 'tiempo' || puertos.recorte);
+  const lote = opciones.lote ?? 8;
+  salida.imagenes = posibles.length;
+  salida.llamadas = Math.ceil(posibles.length / lote);
+  if (opciones.simular || !posibles.length || !puertos.guardarVectores) return salida;
+  const lotes: typeof posibles[] = [];
+  for (let i = 0; i < posibles.length; i += lote) lotes.push(posibles.slice(i, i + lote));
+  let fallidos = 0;
+  await enParalelo(lotes, opciones.concurrencia ?? 4, async (l) => {
+    const piezas: Array<{ id: string; b: Binario }> = [];
+    for (const f of l) {
+      const b = f.ancla.tipo === 'tiempo' ? await puertos.imagen(f.imagen!) : await puertos.recorte!(f.imagen!, f.ancla.region!);
+      if (b) piezas.push({ id: f.id, b }); else fallidos++;
+    }
+    if (!piezas.length) return;
+    try {
+      const vs = await reintentar(() => e.vectorizar(piezas.map((p) => ({ modalidad: 'imagen' as const, bytes: p.b.bytes, mime: p.b.mime })), 'documento'), { intentos: 3, base: 1000 });
+      await puertos.guardarVectores!(piezas.map((p, i) => ({ objetivo: 'figura' as const, id: p.id, espacio: e.espacio.id, valores: vs[i]! })), new Map());
+      salida.vectorizadas += piezas.length;
+    } catch { fallidos += piezas.length; }
+  });
+  if (fallidos) avisos.push(`${fallidos} figuras no se pudieron vectorizar (se reintentan al volver a lanzarlo).`);
+  return salida;
+}

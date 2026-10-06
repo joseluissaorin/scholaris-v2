@@ -7,6 +7,7 @@ import type { Almacen, Emisor, IndiceVectorial, Inteligencia, SQL } from '@schol
 import type { Concesion, EventoTiempoReal, ModoInstancia, Plan } from '@scholaris/contrato';
 import type { Cuentas } from './compartido/cuentas.js';
 import type { ArchivoConvertir } from './compartido/motor-ingesta.js';
+import type { Recortador } from './compartido/conversor-remoto.js';
 import type { PaqueteConversion } from '@scholaris/imprenta';
 
 /** El almacén con lo que hace falta para las subidas por partes y las URLs firmadas. */
@@ -140,4 +141,6 @@ export interface PuertosUsuario {
    * para rehacer partes de un documento sin volver a leerlo. Puede faltar.
    */
   convertir?(archivo: ArchivoConvertir, guardar: (id: string, datos: Uint8Array, mime: string) => Promise<void>): Promise<PaqueteConversion>;
+  /** Recorta una región (0-1) de una imagen: el vector propio de cada figura de página. */
+  recortar?: Recortador;
 }
