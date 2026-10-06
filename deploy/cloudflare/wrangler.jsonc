@@ -85,7 +85,8 @@
 
   "vars": {
     "ESPACIO_VECTORIAL": "gemini-embedding-2@1536",
-    "AI_GATEWAY": "scholaris",
+    // Sin AI Gateway para Gemini: medido en el preview, el salto añadía ~100 ms al vector de cada consulta (490 → 390 ms).
+    // Para volver a usarlo (registros y caché del gateway): "AI_GATEWAY": "scholaris".
     "CLOUDFLARE_ACCOUNT_ID": "f22c7a728ddc8e41cefd2644f8fb7632",
     "R2_BUCKET_NAME": "scholaris",
     "CONVERSOR_ACTIVO": "1",
@@ -143,7 +144,7 @@
       "ai": { "binding": "AI" },
       "vars": {
         "ESPACIO_VECTORIAL": "gemini-embedding-2@1536",
-        "AI_GATEWAY": "scholaris",
+        // Sin AI Gateway (ver arriba).
         "CLOUDFLARE_ACCOUNT_ID": "f22c7a728ddc8e41cefd2644f8fb7632",
         "R2_BUCKET_NAME": "scholaris-produccion",
         "CONVERSOR_ACTIVO": "1",
