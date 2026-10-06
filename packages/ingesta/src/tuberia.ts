@@ -469,6 +469,7 @@ export async function consolidar(
   const provisionales = estados.flatMap((e) => e.fragmentos);
   const medio = plan.modo === 'medio';
 
+  let refinada: Promise<{ metadatos: MetadatosDocumento; procedencia: Procedencia[] } | null> | null = null;
   // Metadatos (si no llegaron antes).
   let tm = reloj();
   let meta = (await Promise.resolve(extras.metadatos ?? null).catch(() => null)) ?? (await leerJson<{ metadatos: MetadatosDocumento; hablantes?: Record<string, string> }>(ctx, claveMetadatos(documento)))?.metadatos ?? null;
@@ -494,11 +495,11 @@ export async function consolidar(
   } else if (!medio && unidades.length > 5) {
     // Con el libro entero: créditos y colofón del final (edición, pie de imprenta, «s. f.»).
     const { paquete, puertos: p } = ctx;
-    const r = await refinarConLibroEntero(meta, {
+    // En paralelo con el resto de la consolidación: la ficha refinada solo hace falta al escribir el documento.
+    refinada = refinarConLibroEntero(meta, {
       ficha: paquete.metadatos, nombreArchivo: paquete.origen.nombre, tipo: paquete.tipo, epub: paquete.contenido.clase === 'documento' && paquete.contenido.formato === 'epub',
-      unidades: unidades.slice(0, 5), todas: unidades, ...(ctx.opciones.metadatosUsuario ? { usuario: ctx.opciones.metadatosUsuario } : {}),
+      unidades: unidades.slice(0, 5), todas: [...unidades], ...(ctx.opciones.metadatosUsuario ? { usuario: ctx.opciones.metadatosUsuario } : {}),
     }, { redactor: ia.redactor, ...(p.http ? { http: p.http } : {}), ...(p.correoContacto ? { correo: p.correoContacto } : {}), reloj }, { ...(ctx.opciones.sinVerificacion ? { sinVerificacion: true } : {}) }).catch(() => null);
-    if (r) { meta = r.metadatos; procedencia.push(...r.procedencia); }
   }
   marca('metadatos', tm);
 
@@ -544,20 +545,23 @@ export async function consolidar(
     }
     marca('esperaTandas', tm);
   }
-  const porClave = new Map(provisionales.map((p) => [`${p.seccion.join('›')}|${p.texto}`, p]));
+  // Clave: el texto. Si solo cambia la sección (un libro sin índice, cuya tanda no veía el título
+  // de capítulo de páginas anteriores), se conserva el contexto y solo se vuelve a vectorizar.
+  const porClave = new Map(provisionales.map((p) => [p.texto, p]));
   const usados = new Set<string>();
   const pendientesContexto: FragmentoPlano[] = [];
   const pendientesVector = new Set<string>();
   let reaprovechados = 0;
   finales.forEach((f, i) => {
     f.orden = i;
-    const p = medio ? undefined : porClave.get(`${f.seccion.join('›')}|${f.texto}`);
+    const p = medio ? undefined : porClave.get(f.texto);
     if (p && !usados.has(p.id)) {
       usados.add(p.id);
       f.id = p.id;
       f.contexto = p.contexto;
+      const mismaSeccion = p.seccion.join('›') === f.seccion.join('›');
       if (!p.contexto) pendientesContexto.push(f);
-      if (!p.vector || !p.contexto) pendientesVector.add(f.id);
+      if (!p.vector || !p.contexto || !mismaSeccion) pendientesVector.add(f.id);
       else reaprovechados++;
     } else {
       f.id = `${documento}:c${huellaCorta(`${i}|${f.seccion.join('›')}|${f.texto}`)}`;
@@ -584,6 +588,10 @@ export async function consolidar(
   const idUnidad = (orden: number) => idUnidadDe(documento, orden);
   const sobrantes = provisionales.map((p) => p.id).filter((id) => !usados.has(id));
   const ahora = new Date().toISOString();
+  if (refinada) {
+    const r = await refinada;
+    if (r) { meta = r.metadatos; procedencia.push(...r.procedencia); }
+  }
   const documentoFinal: Documento = { ...documentoProvisional(ctx), metadatos: meta, estado: 'listo', unidades: unidades.length, actualizado: ahora };
   await escribir(sql, async (tx) => {
     for (let i = 0; i < sobrantes.length; i += 200) {

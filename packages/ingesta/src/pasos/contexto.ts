@@ -24,7 +24,8 @@ const describirAncla = (f: FragmentoPlano): string => {
 };
 
 /** Agrupa los fragmentos por sección consecutiva, partiendo las secciones largas en ventanas. */
-export function agruparPorSeccion(fragmentos: FragmentoPlano[], maxCaracteres = 60_000, maxFragmentos = 40): GrupoContexto[] {
+/** Grupos pequeños: la salida se genera en serie, así que 12 fragmentos por llamada terminan antes que 40 (y cuestan lo mismo). */
+export function agruparPorSeccion(fragmentos: FragmentoPlano[], maxCaracteres = 30_000, maxFragmentos = 12): GrupoContexto[] {
   const grupos: GrupoContexto[] = [];
   let actual: GrupoContexto | null = null;
   let chars = 0;
