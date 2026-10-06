@@ -121,7 +121,7 @@ export function crearPuerta(pl: Plataforma) {
     origin: (origen) => (!origen || origen === pl.config.origen || pl.origenes?.includes(origen) || /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origen) ? origen : null),
     allowHeaders: ['authorization', 'content-type', 'range', 'x-scholaris-cliente'],
     allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    exposeHeaders: ['etag', 'content-range', 'accept-ranges', 'content-length', 'retry-after'],
+    exposeHeaders: ['etag', 'content-range', 'accept-ranges', 'content-length', 'retry-after', 'server-timing'],
     maxAge: 86400,
   }));
 
@@ -271,8 +271,15 @@ export function crearPuerta(pl: Plataforma) {
   // Todo lo demás: a la estantería del usuario (con lo que tardó la puerta, para diagnosticar).
   app.all(`${PREFIJO_API}/*`, async (c) => {
     const h = new Headers(c.req.raw.headers);
-    h.set('x-scholaris-ms-puerta', String(Date.now() - (c.get('inicio' as never) as number ?? Date.now())));
-    return pl.atender(c.get('usuario'), new Request(c.req.raw, { headers: h }));
+    const inicio = (c.get('inicio' as never) as number | undefined) ?? Date.now();
+    const t1 = Date.now();
+    h.set('x-scholaris-ms-puerta', String(t1 - inicio));
+    const r = await pl.atender(c.get('usuario'), new Request(c.req.raw, { headers: h }));
+    // Server-Timing: cuánto se fue en la puerta (sesión) y cuánto en la estantería (incluido despertarla).
+    if (r.headers.get('content-type')?.includes('text/event-stream') || r.status === 101) return r;
+    const salida = new Response(r.body, r);
+    salida.headers.append('server-timing', `puerta;dur=${t1 - inicio}, estanteria;dur=${Date.now() - t1}`);
+    return salida;
   });
 
   // MCP (fuera de /api/v2): la autenticación es la misma.
