@@ -27,6 +27,7 @@ export function configDesdeEnv(env: Env, origen: string): ConfigInstancia {
     ...(env.CLERK_PUBLISHABLE_KEY ? { clerkPublishableKey: env.CLERK_PUBLISHABLE_KEY } : {}),
     requiereAutenticacion: true,
     conversionServidor: true,
+    youtube: !!env.GEMINI_API_KEY,
     mcp: true,
     inferbox: false,
     bytesMaximos: 4 * 1024 * 1024 * 1024,
@@ -73,6 +74,14 @@ let fabrica: FabricaIA = (env, propias) => crearInteligencia(entornoInteligencia
 export function establecerFabricaInteligencia(f: FabricaIA): void {
   fabrica = f;
   cacheIA.clear();
+}
+
+/** Clave y base de Gemini del usuario (para YouTube por URL). */
+export async function geminiPara(env: Env, cuentas: Cuentas, usuario: string): Promise<{ clave: string; baseUrl?: string } | undefined> {
+  const propias = await cuentas.clavesPropias(usuario).catch(() => ({} as Record<string, string>));
+  const e = entornoInteligencia(env, propias);
+  const clave = typeof e.GEMINI_API_KEY === 'string' ? e.GEMINI_API_KEY : undefined;
+  return clave ? { clave, ...(typeof e.GEMINI_BASE_URL === 'string' ? { baseUrl: e.GEMINI_BASE_URL } : {}) } : undefined;
 }
 
 /** Inteligencia del usuario, cacheada 10 minutos por aislamiento. */

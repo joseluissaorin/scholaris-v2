@@ -180,7 +180,7 @@ export function rutasDocumentos(app: Hono<Entorno>): void {
   app.get('/documentos/:id/unidades', async (c: Ctx) => {
     const p = puertos(c);
     const id = prm(c, 'id');
-    const desde = entero(c.req.query('desde'), 1, 1);
+    const desde = entero(c.req.query('desde'), 0, 0);
     const hasta = entero(c.req.query('hasta'), desde + 19, desde, desde + 99);
     const filas = await p.sql.ejecutar<Fila>('SELECT * FROM unidades WHERE documento = ? AND orden BETWEEN ? AND ? ORDER BY orden', id, desde, hasta);
     if (!filas.length && !(await leerDocumento(p.sql, id))) noEncontrado('El documento');
@@ -235,7 +235,7 @@ export function rutasDocumentos(app: Hono<Entorno>): void {
     const p = puertos(c);
     const id = prm(c, 'id');
     const unidad = c.req.query('unidad');
-    const desde = entero(c.req.query('desde'), unidad ? entero(unidad, 1) : 1);
+    const desde = entero(c.req.query('desde'), unidad ? entero(unidad, 0) : 0);
     const hasta = entero(c.req.query('hasta'), unidad ? desde : desde + 9);
     const filas = await p.sql.ejecutar<Fila>(
       `SELECT f.*, u.orden AS orden_unidad FROM fragmentos f JOIN unidades u ON u.id = f.unidad

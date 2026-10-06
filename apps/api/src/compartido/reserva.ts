@@ -14,6 +14,7 @@
  */
 import { sha256, type TipoEntrada } from '@scholaris/nucleo';
 import { abrirCortador, VERSION_PAQUETE, type BloqueTexto, type PaginaPdf, type PaqueteConversion } from '@scholaris/imprenta';
+import { idYoutube, infoYoutube, MIME_YOUTUBE, tramosDe, bitrateMp3 } from './medios-url.js';
 
 export class ErrorReserva extends Error {
   constructor(mensaje: string) { super(mensaje); this.name = 'ErrorReserva'; }
@@ -76,14 +77,39 @@ export interface EntradaReserva {
   /** Guarda la copia fechada de la web; devuelve la ruta relativa. */
   guardarCopia?(html: string): Promise<string>;
   fetch?: typeof fetch;
+  /** Hay clave de Gemini para YouTube. */
+  youtube?: boolean;
+  /** Bytes del principio del original (para el bitrate de un MP3 sin cargarlo entero). */
+  cabeza?: Uint8Array;
+  /** Tamaño del original si no se pasa entero. */
+  bytesOriginal?: number;
+  duracion?: number;
 }
 
 export async function convertirEnServidor(e: EntradaReserva): Promise<PaqueteConversion> {
   const base = { version: VERSION_PAQUETE, avisos: [] as string[], entorno: 'node' as const, tiempos: {}, reserva: null };
   if (e.url && (e.tipo === 'web' || !e.original)) {
-    const u = new URL(e.url);
-    if (/(^|\.)(youtube\.com|youtu\.be|vimeo\.com)$/.test(u.hostname)) {
-      throw new ErrorReserva('Los vídeos de YouTube y Vimeo todavía no se pueden traer por URL: descarga el audio o el vídeo y súbelo.');
+    if (idYoutube(e.url)) {
+      if (!e.youtube) throw new ErrorReserva('Para traer vídeos de YouTube hace falta una clave de Gemini (en Ajustes → Claves).');
+      const info = await infoYoutube(e.url, e.fetch ?? fetch);
+      const tramos = tramosDe(info.duracion);
+      const partes = tramos.map((t) => ({ id: `youtube:${t.t0}-${t.t1}`, clase: 'audio' as const, mime: MIME_YOUTUBE, bytes: 0, t0: t.t0, t1: t.t1 }));
+      return {
+        ...base, tipo: 'video',
+        origen: { nombre: info.titulo ?? info.url, mime: MIME_YOUTUBE, bytes: 0, huella: await sha256(info.url) },
+        metadatos: {
+          ...(info.titulo ? { titulo: info.titulo } : {}), url: info.url, ...(info.idioma ? { idioma: info.idioma } : {}),
+          autores: info.canal ? [{ nombre: '', apellidos: info.canal }] : [], tipoCSL: 'motion_picture',
+        },
+        unidades: tramos.length,
+        ...(info.duracion ? { duracion: info.duracion } : {}),
+        contenido: {
+          clase: 'medio', duracion: info.duracion ?? 0, video: null,
+          audio: { muestreo: 0, canales: 0, formato: 'opus', mime: MIME_YOUTUBE, tramos: tramos.map((t, i) => ({ n: i + 1, t0: t.t0, t1: t.t1 || 1e7, propioDesde: t.t0, propioHasta: t.t1 || 1e7, parte: partes[i]!.id })) },
+        },
+        partes,
+        avisos: info.duracion ? [] : ['No se conoce la duración del vídeo: se transcribe de una vez.'],
+      };
     }
     const r = await (e.fetch ?? fetch)(e.url, { headers: { 'user-agent': 'Mozilla/5.0 (compatible; Scholaris/2; +https://scholaris.joseluissaorin.com)', accept: 'text/html,application/xhtml+xml,application/pdf;q=0.9,*/*;q=0.5' }, redirect: 'follow' });
     if (!r.ok) throw new ErrorReserva(`La página respondió con un error ${r.status}.`);
@@ -108,6 +134,29 @@ export async function convertirEnServidor(e: EntradaReserva): Promise<PaqueteCon
       unidades: a.bloques.length,
       contenido: { clase: 'web', url: e.url, consultada, ...(copia ? { copia } : {}), bloques: a.bloques, esquema: a.bloques.filter((b) => b.tipo === 'titulo').map((b, i) => ({ titulo: b.texto, nivel: b.nivel ?? 1, fisica: null, bloque: i })) },
       partes: [],
+    };
+  }
+  // Audio grande descargado (pódcast): se reparte en tramos por bytes sin cargarlo entero.
+  if (!e.original && e.cabeza && e.bytesOriginal && (e.tipo === 'audio' || e.tipo === 'video' || /^(audio|video)\//.test(e.mime))) {
+    const ruta = e.rutaOriginal ?? 'original';
+    const kbps = /mpeg|mp3/.test(e.mime) ? bitrateMp3(e.cabeza) : null;
+    const total = e.bytesOriginal;
+    const origen = { nombre: e.nombre, mime: e.mime, bytes: total, huella: await sha256(e.cabeza) };
+    const duracion = e.duracion ?? (kbps ? (total * 8) / (kbps * 1000) : 0);
+    const trozo = kbps ? Math.floor(((kbps * 1000) / 8) * 600) : total;
+    const tramos: Array<{ n: number; t0: number; t1: number; propioDesde: number; propioHasta: number; parte: string }> = [];
+    const partes: PaqueteConversion['partes'] = [];
+    for (let desde = 0, n = 1; desde < total; desde += trozo, n++) {
+      const hasta = Math.min(total, desde + trozo) - 1;
+      const t0 = kbps ? (desde * 8) / (kbps * 1000) : 0, t1 = kbps ? ((hasta + 1) * 8) / (kbps * 1000) : (duracion || 1e7);
+      const id = trozo === total ? ruta : `${ruta}#bytes=${desde}-${hasta}`;
+      tramos.push({ n, t0, t1, propioDesde: t0, propioHasta: t1, parte: id });
+      partes.push({ id, clase: 'audio', mime: e.mime.startsWith('video/') ? e.mime : e.mime || 'audio/mpeg', bytes: hasta - desde + 1, t0, t1 });
+    }
+    return {
+      ...base, tipo: e.mime.startsWith('video/') ? 'video' : 'audio', origen, metadatos: {}, unidades: tramos.length, ...(duracion ? { duracion } : {}),
+      contenido: { clase: 'medio', duracion, video: null, audio: { muestreo: 0, canales: 0, formato: 'opus', mime: e.mime, tramos } },
+      partes, avisos: kbps ? [] : ['Medio transcrito de una vez (sin trocear).'],
     };
   }
   if (!e.original) throw new ErrorReserva('Falta el original para convertirlo en el servidor.');

@@ -15,6 +15,8 @@ export interface DatosCierre {
   error?: string;
   /** Clave del original en el almacén (la ingesta no la conoce). */
   original?: string;
+  mime?: string;
+  bytes?: number;
   bibliotecas?: string[];
   /** Unidades leídas (para la cuota de páginas). */
   unidades?: number;
@@ -35,9 +37,9 @@ export async function cerrarIngesta(p: PuertosUsuario, d: DatosCierre): Promise<
     const bibs = [...new Set([...(JSON.parse(doc.bibliotecas) as string[]), ...(d.bibliotecas ?? [])])];
     await p.sql.ejecutar(
       `UPDATE documentos SET estado = 'listo', actualizado = ?, metadatos = ?, bibliotecas = ?,
-         original = CASE WHEN ? <> '' THEN ? ELSE original END,
+         original = CASE WHEN ? <> '' THEN ? ELSE original END, mime = COALESCE(?, mime), bytes = COALESCE(?, bytes),
          titulo = COALESCE(?, titulo), anio = COALESCE(?, anio) WHERE id = ?`,
-      ahora(), JSON.stringify(m), JSON.stringify(bibs), d.original ?? '', d.original ?? '',
+      ahora(), JSON.stringify(m), JSON.stringify(bibs), d.original ?? '', d.original ?? '', d.mime ?? null, d.bytes ?? null,
       typeof m.titulo === 'string' ? m.titulo : null, typeof m.anio === 'number' ? m.anio : null, d.documento,
     );
   }

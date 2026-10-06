@@ -23,6 +23,8 @@ export interface DependenciasCola {
   concurrencia?: number;
   pliegosEnParalelo?: number;
   sinVerificacion?: boolean;
+  /** Clave de Gemini del usuario (YouTube por URL). */
+  gemini?(usuario: string): Promise<ContextoMotor['gemini']>;
 }
 
 class Cancelada extends Error {}
@@ -106,6 +108,7 @@ export class ColaLocal implements Orquestador {
         espacioNombres: puertos.config.espacioNombres(p.usuario),
         ...(this.d.convertir ? { convertir: this.d.convertir } : {}),
         ...(this.d.sinVerificacion ? { sinVerificacion: true } : {}),
+        ...(this.d.gemini ? { gemini: await this.d.gemini(p.usuario) } : {}),
         alProgreso: async (pr: Progreso) => {
           if (this.canceladas.has(p.tarea)) throw new Cancelada('Cancelada.');
           const t = await leerTarea(puertos.sql, p.tarea);
@@ -138,7 +141,8 @@ export class ColaLocal implements Orquestador {
         const metadatosUsuario = sub?.metadatos ? (JSON.parse(sub.metadatos) as Record<string, unknown>) : null;
         const r = await componer(ctx, p, info, metadatosUsuario);
         await cerrarIngesta(puertos, {
-          tarea: p.tarea, documento: p.documento, ok: true, original: p.original, bibliotecas: p.bibliotecas ?? [], unidades: r.unidades,
+          tarea: p.tarea, documento: p.documento, ok: true, original: info.original ?? p.original, bibliotecas: p.bibliotecas ?? [], unidades: r.unidades,
+          ...(info.mime ? { mime: info.mime } : {}), ...(info.bytes ? { bytes: info.bytes } : {}),
           ...(metadatosUsuario ? { metadatosUsuario } : {}),
         });
         await limpiarTrabajo(puertos.almacen, p);

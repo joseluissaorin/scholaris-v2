@@ -19,7 +19,9 @@
  *
  * Reserva sin navegador (SDK, API, importaciones masivas):
  *   4'. POST /subidas/:id/ingestar  {}  → el servidor convierte.
- *   POST /subidas/url  SubidaUrl → IngestaIniciada  (páginas web, YouTube, PDF por URL)
+ *   POST /subidas/url  SubidaUrl → IngestaIniciada  (páginas web; YouTube, que Gemini ve por su URL sin
+ *                      descargarlo; Vimeo con fichero descargable; pódcast: enlace directo, página del
+ *                      episodio o feed RSS; PDF por URL). `/config.funciones.youtube` dice si hay clave de Gemini.
  *
  * Subida firmada por la API (cuando no hay credenciales S3 o en local):
  *   PUT /subidas/directa?clave=…&exp=…&sig=…[&parte=…&idSubida=…]

@@ -80,6 +80,8 @@ export interface ConfigInstancia {
   clerkPublishableKey?: string;
   requiereAutenticacion: boolean;
   conversionServidor: boolean;
+  /** YouTube por URL (hace falta una clave de Gemini). */
+  youtube: boolean;
   mcp: boolean;
   inferbox: boolean;
   bytesMaximos: number;

@@ -12,7 +12,7 @@ import type { ParamsIngesta } from '../puertos.js';
 import { componer, ErrorReserva, leerUnPliego, limpiarTrabajo, preparar, revectorizar, soloVectores, transcribirUnTramo, type ContextoMotor, type InfoPlan } from '../compartido/motor-ingesta.js';
 import type { Env } from './env.js';
 import { SqlRemoto } from './sql.js';
-import { almacenDesdeEnv, cuentasDesdeEnv, emisorDesdeEnv, indiceDesdeEnv, inteligenciaPara, origenDe } from './puertos-cf.js';
+import { almacenDesdeEnv, cuentasDesdeEnv, emisorDesdeEnv, geminiPara, indiceDesdeEnv, inteligenciaPara, origenDe } from './puertos-cf.js';
 import { espacioNombresDe } from './indice-vectorize.js';
 
 const REINTENTOS = { limit: 5, delay: '10 seconds', backoff: 'exponential' } as const;
@@ -22,6 +22,7 @@ export class FlujoIngesta extends WorkflowEntrypoint<Env, ParamsIngesta> {
     const env = this.env;
     const cuentas = cuentasDesdeEnv(env);
     const ia = await inteligenciaPara(env, cuentas, p.usuario);
+    const gemini = await geminiPara(env, cuentas, p.usuario);
     const estanteria = env.ESTANTERIA.getByName(p.usuario);
     const emisor = emisorDesdeEnv(env, p.usuario);
     const emitir = async (pr: Progreso) => {
@@ -37,6 +38,7 @@ export class FlujoIngesta extends WorkflowEntrypoint<Env, ParamsIngesta> {
       espacioNombres: espacioNombresDe(p.usuario),
       ...(env.CORREO_CONTACTO ? { correoContacto: env.CORREO_CONTACTO } : {}),
       ...(env.SIN_VERIFICACION === '1' ? { sinVerificacion: true } : {}),
+      ...(gemini ? { gemini } : {}),
       alProgreso: emitir,
       emitir,
     };
@@ -115,7 +117,8 @@ export class FlujoIngesta extends WorkflowEntrypoint<Env, ParamsIngesta> {
 
       await step.do('cerrar', { retries: REINTENTOS }, async () => {
         await estanteria.cerrar({ id: p.usuario, plan: p.plan }, {
-          tarea: p.tarea, documento: p.documento, ok: true, original: p.original, bibliotecas: p.bibliotecas ?? [], unidades: resumen.unidades,
+          tarea: p.tarea, documento: p.documento, ok: true, original: info.original ?? p.original, bibliotecas: p.bibliotecas ?? [], unidades: resumen.unidades,
+          ...(info.mime ? { mime: info.mime } : {}), ...(info.bytes ? { bytes: info.bytes } : {}),
           ...(metadatosUsuario ? { metadatosUsuario: metadatosUsuario as Record<string, unknown> } : {}),
         });
         await limpiarTrabajo(almacenDesdeEnv(this.env, origenDe(this.env)), p);

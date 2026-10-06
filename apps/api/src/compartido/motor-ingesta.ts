@@ -24,6 +24,8 @@ import { sha256 } from '@scholaris/nucleo';
 import { leerDocumento } from '@scholaris/spdf';
 import type { AlmacenAmpliado, ParamsIngesta } from '../puertos.js';
 import { convertirEnServidor, ErrorReserva } from './reserva.js';
+import { encontrarMedio, esVimeo, idYoutube, MIME_YOUTUBE, transcriptorConYoutube } from './medios-url.js';
+import type { ConfigGemini } from '@scholaris/proveedores';
 
 export interface ContextoMotor {
   almacen: AlmacenAmpliado;
@@ -42,6 +44,8 @@ export interface ContextoMotor {
    * para los ficheros que llegan sin paquete en vez de la reserva mínima.
    */
   convertir?(archivo: { nombre: string; mime: string; bytes: Uint8Array; tipo?: string }): Promise<{ paquete: PaqueteConversion; datos: Map<string, Uint8Array> }>;
+  /** Clave (y gateway) de Gemini para transcribir YouTube por URL. */
+  gemini?: ConfigGemini;
 }
 
 export interface InfoPlan {
@@ -52,6 +56,10 @@ export interface InfoPlan {
   tramos: number[];
   /** Para la cuota: páginas o minutos. */
   coste: number;
+  /** Original descargado en el servidor (pódcast, Vimeo, enlace directo). */
+  original?: string;
+  mime?: string;
+  bytes?: number;
 }
 
 /** Las mismas opciones de plan en todos los pasos: el plan debe salir idéntico. */
@@ -89,6 +97,17 @@ export function fuenteDesdeAlmacen(almacen: AlmacenAmpliado, params: ParamsInges
   const esPdf = paquete.contenido.clase === 'pdf' && /pdf/i.test(params.mime || paquete.origen.mime);
   return {
     async parte(id) {
+      if (id.startsWith('youtube:')) {
+        const [t0, t1] = id.slice(8).split('-').map(Number);
+        const url = paquete.metadatos.url ?? params.url ?? '';
+        return { bytes: new TextEncoder().encode(JSON.stringify({ url, t0, t1 })), mime: MIME_YOUTUBE };
+      }
+      const rango = /^(.*)#bytes=(\d+)-(\d+)$/.exec(id);
+      if (rango) {
+        const c = rango[1]!.startsWith(params.prefijo) ? rango[1]! : `${params.prefijo}${rango[1]}`;
+        const bytes = await almacen.rango(c, Number(rango[2]), Number(rango[3]));
+        return bytes ? { bytes, mime: mimes.get(id) ?? 'audio/mpeg' } : null;
+      }
       const clave = id.startsWith(params.prefijo) ? id : `${params.prefijo}${id}`;
       const bytes = await almacen.bytes(clave);
       if (!bytes) return null;
@@ -151,13 +170,48 @@ export function transcriptorConMemoria(t: Transcriptor, almacen: AlmacenAmpliado
   };
 }
 
-function inteligenciaConMemoria(ia: Inteligencia, almacen: AlmacenAmpliado, raiz: string): Inteligencia {
+function inteligenciaConMemoria(ia: Inteligencia, almacen: AlmacenAmpliado, raiz: string, gemini?: ConfigGemini): Inteligencia {
   return {
     ...ia,
     lector: lectorConMemoria(ia.lector, almacen, raiz),
     ...(ia.lectoresReserva ? { lectoresReserva: ia.lectoresReserva.map((l) => lectorConMemoria(l, almacen, raiz)) } : {}),
-    transcriptor: transcriptorConMemoria(ia.transcriptor, almacen, raiz),
+    transcriptor: transcriptorConMemoria(transcriptorConYoutube(ia.transcriptor, gemini), almacen, raiz),
   };
+}
+
+const EXT_MIME: Record<string, string> = { mp3: 'audio/mpeg', m4a: 'audio/mp4', aac: 'audio/aac', ogg: 'audio/ogg', opus: 'audio/ogg', wav: 'audio/wav', flac: 'audio/flac', mp4: 'video/mp4', webm: 'video/webm', mov: 'video/quicktime' };
+
+/** Baja un medio al almacén en partes de 16 MB (R2 o disco), sin cargarlo entero en memoria. */
+async function descargarAlAlmacen(almacen: AlmacenAmpliado, url: string, clave: string, f: typeof fetch): Promise<{ mime: string; bytes: number }> {
+  const r = await f(url, { headers: { 'user-agent': 'Mozilla/5.0 (compatible; Scholaris/2)' }, redirect: 'follow' });
+  if (!r.ok || !r.body) throw new ErrorReserva(`No he podido descargar el medio (${r.status}).`);
+  const ext = /\.([a-z0-9]{2,4})(?:\?|$)/i.exec(new URL(r.url).pathname)?.[1]?.toLowerCase() ?? '';
+  const mime = (r.headers.get('content-type') ?? '').split(';')[0]!.trim().replace(/^application\/octet-stream$/, '') || EXT_MIME[ext] || 'audio/mpeg';
+  const sub = await almacen.subidaDirecta(clave, { tipo: mime, partes: true });
+  const TAM = 16 * 1024 * 1024;
+  const partes: Array<{ numero: number; etag: string }> = [];
+  const lector = r.body.getReader();
+  let buf = new Uint8Array(TAM), lleno = 0, total = 0;
+  const vaciar = async () => {
+    if (!lleno) return;
+    partes.push({ numero: partes.length + 1, etag: await almacen.ponerParte(clave, sub.idSubida!, partes.length + 1, buf.slice(0, lleno)) });
+    total += lleno; lleno = 0;
+  };
+  for (;;) {
+    const { value, done } = await lector.read();
+    if (done) break;
+    let v = value;
+    while (v.length) {
+      const n = Math.min(v.length, TAM - lleno);
+      buf.set(v.subarray(0, n), lleno); lleno += n; v = v.subarray(n);
+      if (lleno === TAM) await vaciar();
+    }
+    if (total + lleno > 4 * 1024 * 1024 * 1024) throw new ErrorReserva('El medio pasa de 4 GB.');
+  }
+  await vaciar();
+  if (!partes.length) throw new ErrorReserva('El medio está vacío.');
+  await almacen.completarPartes(clave, sub.idSubida!, partes);
+  return { mime, bytes: total };
 }
 
 // ---------------------------------------------------------------------------
@@ -166,6 +220,33 @@ function inteligenciaConMemoria(ia: Inteligencia, almacen: AlmacenAmpliado, raiz
 
 export async function preparar(ctx: ContextoMotor, params: ParamsIngesta): Promise<InfoPlan> {
   let clave = params.paquete;
+  let descargado: { original: string; mime: string; bytes: number } | undefined;
+  // Pódcast, Vimeo o enlace directo: se baja el medio y se trata como si se hubiera subido.
+  if (!clave && params.url && !idYoutube(params.url) && (params.tipo === 'audio' || params.tipo === 'video' || esVimeo(params.url) || /\.(mp3|m4a|aac|ogg|opus|wav|flac|mp4|webm|mov)(\?|$)/i.test(params.url))) {
+    const m = await encontrarMedio(params.url, ctx.fetch ?? fetch);
+    if (!m) throw new ErrorReserva(esVimeo(params.url) ? 'Este vídeo de Vimeo no tiene un fichero descargable: bájalo y súbelo.' : 'No encuentro el audio o el vídeo en esa dirección.');
+    const ext = /\.([a-z0-9]{2,4})(?:\?|$)/i.exec(new URL(m.url).pathname)?.[1]?.toLowerCase() ?? 'mp3';
+    const original = `${params.prefijo}original.${ext}`;
+    const d = await descargarAlAlmacen(ctx.almacen, m.url, original, ctx.fetch ?? fetch);
+    descargado = { original, mime: m.mime ?? d.mime, bytes: d.bytes };
+    const tipo = descargado.mime.startsWith('video/') ? 'video' : 'audio';
+    if (ctx.convertir) {
+      const b = await ctx.almacen.bytes(original);
+      const r = await ctx.convertir({ nombre: m.titulo ?? params.nombre, mime: descargado.mime, bytes: b!, tipo });
+      for (const [id, datos] of r.datos) await ctx.almacen.poner(`${params.prefijo}${id}`, datos, r.paquete.partes.find((x) => x.id === id)?.mime);
+      r.paquete.metadatos = { ...r.paquete.metadatos, url: params.url, ...(m.titulo ? { titulo: m.titulo } : {}) };
+      clave = `${params.prefijo}paquete.json`;
+      await ctx.almacen.poner(clave, JSON.stringify(r.paquete), 'application/json');
+    } else {
+      const paquete = await convertirEnServidor({
+        tipo, nombre: m.titulo ?? params.nombre, mime: descargado.mime, rutaOriginal: original.slice(params.prefijo.length),
+        cabeza: (await ctx.almacen.rango(original, 0, 65535)) ?? new Uint8Array(), bytesOriginal: d.bytes, ...(m.duracion ? { duracion: m.duracion } : {}),
+      });
+      paquete.metadatos = { ...paquete.metadatos, url: params.url, ...(m.titulo ? { titulo: m.titulo } : {}), ...(m.autor ? { autores: [{ nombre: '', apellidos: m.autor }] } : {}) };
+      clave = `${params.prefijo}paquete.json`;
+      await ctx.almacen.poner(clave, JSON.stringify(paquete), 'application/json');
+    }
+  }
   if (!clave && !params.url && params.original && ctx.convertir) {
     const original = await ctx.almacen.bytes(params.original);
     if (!original) throw new ErrorReserva('No encuentro el original en el almacén.');
@@ -189,6 +270,7 @@ export async function preparar(ctx: ContextoMotor, params: ParamsIngesta): Promi
         return ruta;
       },
       ...(ctx.fetch ? { fetch: ctx.fetch } : {}),
+      youtube: !!ctx.gemini,
     });
     clave = `${params.prefijo}paquete.json`;
     await ctx.almacen.poner(clave, JSON.stringify(paquete), 'application/json');
@@ -196,7 +278,7 @@ export async function preparar(ctx: ContextoMotor, params: ParamsIngesta): Promi
   const paquete = await leerPaquete(ctx.almacen, clave);
   const plan = planificar(paquete, OPCIONES_PLAN);
   const coste = plan.modo === 'medio' ? Math.ceil((paquete.duracion ?? plan.tramos.length * 600) / 60) : plan.unidades;
-  return { paquete: clave, modo: plan.modo, unidades: plan.unidades, pliegos: plan.pliegos.map((p) => p.id), tramos: plan.tramos.map((t) => t.n), coste };
+  return { paquete: clave, modo: plan.modo, unidades: plan.unidades, pliegos: plan.pliegos.map((p) => p.id), tramos: plan.tramos.map((t) => t.n), coste, ...(descargado ?? {}) };
 }
 
 export async function leerUnPliego(ctx: ContextoMotor, params: ParamsIngesta, info: InfoPlan, id: number): Promise<number> {
@@ -204,7 +286,7 @@ export async function leerUnPliego(ctx: ContextoMotor, params: ParamsIngesta, in
   const plan = planificar(paquete, OPCIONES_PLAN);
   const pliego = plan.pliegos.find((p) => p.id === id) as Pliego | undefined;
   if (!pliego) return 0;
-  const ia = inteligenciaConMemoria(ctx.inteligencia, ctx.almacen, trabajo(params));
+  const ia = inteligenciaConMemoria(ctx.inteligencia, ctx.almacen, trabajo(params), ctx.gemini);
   const r = await leerPliego(pliego, paquete, fuenteDesdeAlmacen(ctx.almacen, params, paquete), [ia.lector, ...(ia.lectoresReserva ?? [])], { ...(params.pista ? { pista: params.pista } : {}) });
   return r.paginas.length;
 }
@@ -214,7 +296,7 @@ export async function transcribirUnTramo(ctx: ContextoMotor, params: ParamsInges
   const plan = planificar(paquete, OPCIONES_PLAN);
   const tramo = plan.tramos.find((t) => t.n === n);
   if (!tramo) return 0;
-  const ia = inteligenciaConMemoria(ctx.inteligencia, ctx.almacen, trabajo(params));
+  const ia = inteligenciaConMemoria(ctx.inteligencia, ctx.almacen, trabajo(params), ctx.gemini);
   const r = await transcribirTramo(tramo, fuenteDesdeAlmacen(ctx.almacen, params, paquete), ia.transcriptor, { ...(params.pista ? { pista: params.pista } : {}) });
   return r.palabras.length;
 }
@@ -232,7 +314,7 @@ export interface ResumenComposicion {
 
 export async function componer(ctx: ContextoMotor, params: ParamsIngesta, info: InfoPlan, metadatosUsuario?: Record<string, unknown> | null): Promise<ResumenComposicion> {
   const paquete = await leerPaquete(ctx.almacen, info.paquete);
-  const ia = inteligenciaConMemoria(ctx.inteligencia, ctx.almacen, trabajo(params));
+  const ia = inteligenciaConMemoria(ctx.inteligencia, ctx.almacen, trabajo(params), ctx.gemini);
   const base = ia.embebedor.espacio.id;
   let ultimo = 0;
   let faseAnterior = '';

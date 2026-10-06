@@ -119,7 +119,7 @@ export function crearPuerta(pl: Plataforma) {
     const k = pl.config;
     const cfg: ConfigPublica = {
       modo: k.modo, version: k.version, requiereAutenticacion: k.requiereAutenticacion,
-      funciones: { conversionServidor: k.conversionServidor, youtube: k.conversionServidor, mcp: k.mcp, inferbox: k.inferbox, subidaPorPartes: true },
+      funciones: { conversionServidor: k.conversionServidor, youtube: k.youtube, mcp: k.mcp, inferbox: k.inferbox, subidaPorPartes: true },
       limites: { bytesMaximos: k.bytesMaximos, tamParte: k.tamParte },
     };
     if (k.clerkPublishableKey) cfg.clerkPublishableKey = k.clerkPublishableKey;

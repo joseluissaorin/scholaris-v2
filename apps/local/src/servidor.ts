@@ -96,7 +96,7 @@ export async function crearServidorLocal(o: OpcionesServidor): Promise<ServidorL
     modo: 'local', version: VERSION, origen,
     ...(conClerk ? { clerkPublishableKey: env.CLERK_PUBLISHABLE_KEY } : {}),
     requiereAutenticacion: conClerk || !!env.SCHOLARIS_TOKEN,
-    conversionServidor: true, mcp: true, inferbox: !!env.INFERBOX_URL,
+    conversionServidor: true, youtube: !!env.GEMINI_API_KEY, mcp: true, inferbox: !!env.INFERBOX_URL,
     bytesMaximos: 16 * 1024 * 1024 * 1024, tamParte: TAM_PARTE,
     espacioNombres: (u) => u,
   };
@@ -181,6 +181,11 @@ export async function crearServidorLocal(o: OpcionesServidor): Promise<ServidorL
     ...(o.convertir ? { convertir: o.convertir } : {}),
     concurrencia: Number(env.SCHOLARIS_CONCURRENCIA ?? 2),
     sinVerificacion: env.SCHOLARIS_SIN_VERIFICACION === '1',
+    gemini: async (u) => {
+      const propias = await cuentas.clavesPropias(u).catch(() => ({} as Record<string, string>));
+      const clave = propias.gemini ?? env.GEMINI_API_KEY;
+      return clave ? { clave, ...(env.GEMINI_BASE_URL ? { baseUrl: env.GEMINI_BASE_URL } : {}) } : undefined;
+    },
   });
 
   const usuarioLocal: UsuarioSesion | undefined = conClerk ? undefined : {
