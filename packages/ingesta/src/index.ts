@@ -10,6 +10,7 @@ export { leerCapa, leerCapaPagina, cuerpoDominante, folioVisible } from './pasos
 export { leerPliego, leerPaginas, enBucle, type ResultadoPliego, type OpcionesLectura } from './pasos/lectura.js';
 export { transcribirTramo, transcribirMedio, segmentarTranscripcion, frasesDe } from './pasos/medios.js';
 export { unidadesDeBloques } from './pasos/bloques.js';
+export { atribuirHablantes, frasesIndexadas, reconocerReparto, asignarVentana, type Persona, type FraseIndexada } from './pasos/hablantes.js';
 export { deducirFolios, pasoFolios, interpretarFolio, etiquetasInformativas, type EntradaFolio } from './pasos/folios.js';
 export { pasoEstructura, construirSecciones, titulosDelTexto, anclarIndice, parrafosDeUnidad, rutaDe } from './pasos/estructura.js';
 export { trocear, fragmentosDeMedio, pasoFragmentos, type OpcionesTroceado } from './pasos/fragmentos.js';

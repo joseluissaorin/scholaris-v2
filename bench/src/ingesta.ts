@@ -13,7 +13,7 @@ import { convertirEnMemoria, abrirCortador, type PaqueteEnMemoria, type Opciones
 import { crearInteligencia, type UsoProveedor } from '@scholaris/proveedores';
 import { crearSpdf } from '@scholaris/spdf';
 import { ejecutarIngesta, type FuentePaquete, type OpcionesOrquestador } from '@scholaris/ingesta';
-import type { Progreso } from '@scholaris/nucleo';
+import { sha256, type Progreso, type Transcripcion, type Transcriptor } from '@scholaris/nucleo';
 import { cargarEntorno } from './entorno.js';
 
 export const RAIZ = resolve(import.meta.dirname, '..');
@@ -33,6 +33,25 @@ export interface OpcionesBanco {
   /** Lector: 'alta' (3.8 Flash primero) o 'rapida' (Flash-Lite primero). Por defecto, alta solo para escaneados y fotos. */
   lector?: 'alta' | 'rapida';
   sinVista?: boolean;
+  /** Reutilizar transcripciones ya hechas (bench/datos/cache): por defecto sí. */
+  cacheTranscripciones?: boolean;
+}
+
+/** Las transcripciones cuestan dinero y minutos: en el banco se guardan por huella del audio. */
+export function transcriptorConCache(t: Transcriptor): Transcriptor {
+  const dir = join(RAIZ, 'datos', 'cache', 'transcripciones');
+  return {
+    nombre: t.nombre,
+    async transcribir(audio, opciones = {}) {
+      const clave = await sha256(new Uint8Array([...new TextEncoder().encode(JSON.stringify({ n: t.nombre, d: audio.desplazamiento ?? 0, o: opciones })), ...audio.bytes.subarray(0, 2_000_000)]));
+      const ruta = join(dir, `${clave}.json`);
+      try { return JSON.parse(await readFile(ruta, 'utf8')) as Transcripcion; } catch { /* no está */ }
+      const r = await t.transcribir(audio, opciones);
+      await mkdir(dir, { recursive: true });
+      await writeFile(ruta, JSON.stringify(r));
+      return r;
+    },
+  };
 }
 
 export function fuenteEnMemoria(m: PaqueteEnMemoria, original: Uint8Array | null): FuentePaquete {
@@ -92,6 +111,7 @@ export async function ingerir(ruta: string, o: OpcionesBanco = {}) {
     onUso: (u) => usos.push(u), concurrencia: 48, calidadLector,
     alPasarLector: (i) => { const k = `${i.lector.split(':').pop()} → ${i.motivo.slice(0, 80)}`; pasos[k] = (pasos[k] ?? 0) + i.paginas.length; if (muestras.length < 5 && /red/.test(i.motivo)) muestras.push(i.motivo.slice(0, 400)); },
   });
+  if (o.cacheTranscripciones !== false) ia.transcriptor = transcriptorConCache(ia.transcriptor);
   const archivo = await crearSpdf({ generador: 'scholaris-nube/bench' });
   const fuente = fuenteEnMemoria(enMemoria, original);
 

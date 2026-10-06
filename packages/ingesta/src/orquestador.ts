@@ -10,12 +10,13 @@
  *   vectores(imagen de página) ── desde el principio, no depende de la lectura ──────┘
  */
 
-import { nuevoId, type Documento, type Embebedor, type FaseIngesta, type MetadatosDocumento, type Progreso, type Vector } from '@scholaris/nucleo';
+import { nuevoId, type PalabraTranscrita, type Documento, type Embebedor, type FaseIngesta, type MetadatosDocumento, type Progreso, type Vector } from '@scholaris/nucleo';
 import type { PaqueteConversion } from '@scholaris/imprenta';
 import { planificar } from './planificar.js';
 import type { FragmentoPlano, OpcionesIngesta, Plan, Procedencia, PuertosIngesta, Seccion, UnidadLeida } from './tipos.js';
 import { leerPaginas } from './pasos/lectura.js';
 import { segmentarTranscripcion, transcribirMedio } from './pasos/medios.js';
+import { atribuirHablantes } from './pasos/hablantes.js';
 import { unidadesDeBloques } from './pasos/bloques.js';
 import { pasoFolios, type OpcionesFolios } from './pasos/folios.js';
 import { pasoEstructura, quitarTitulillos } from './pasos/estructura.js';
@@ -55,6 +56,8 @@ export interface OpcionesOrquestador extends OpcionesIngesta {
   tramosMedio?: { minimo?: number; objetivo?: number; maximo?: number };
   troceado?: { minimo?: number; objetivo?: number; maximo?: number };
   bibliotecas?: string[];
+  /** Atribuir las frases de audio y vídeo a personas con nombre (por defecto, sí). */
+  atribuirHablantes?: boolean;
   /** Espacio de nombres del índice vectorial (estantería). */
   espacioNombres?: string;
 }
@@ -134,6 +137,7 @@ export async function ejecutarIngesta(paquete: PaqueteConversion, puertos: Puert
   const tLectura = reloj();
   let unidades: UnidadLeida[] = [];
   let idiomaLectura: string | undefined;
+  let palabrasMedio: PalabraTranscrita[] | null = null;
   // Metadatos en cuanto estén las primeras páginas (o el primer tramo).
   let resolverPrimeras: (u: UnidadLeida[]) => void = () => {};
   const primeras = new Promise<UnidadLeida[]>((r) => { resolverPrimeras = r; });
@@ -177,6 +181,7 @@ export async function ejecutarIngesta(paquete: PaqueteConversion, puertos: Puert
     });
     procedencia.push(...r.procedencia);
     idiomaLectura = r.idioma;
+    palabrasMedio = r.palabras;
     unidades = segmentarTranscripcion(r.palabras, opciones.tramosMedio);
     unidadesListas = unidades.length;
   } else {
@@ -213,6 +218,22 @@ export async function ejecutarIngesta(paquete: PaqueteConversion, puertos: Puert
     emitir('metadatos', 1, r.metadatos.titulo);
     return r;
   });
+
+  // --- hablantes (audio y vídeo): quién dice cada frase, con nombre -------
+  let repartoConNombres = false;
+  if (plan.modo === 'medio' && palabrasMedio && opciones.atribuirHablantes !== false) {
+    const t = reloj();
+    const { metadatos: meta } = await metadatosP;
+    const r = await atribuirHablantes(palabrasMedio, meta, ia.redactor, { reloj, concurrencia: plan.concurrencia });
+    procedencia.push(r.procedencia);
+    if (r.reparto.length) {
+      repartoConNombres = true;
+      unidades = segmentarTranscripcion(r.palabras, opciones.tramosMedio);
+      unidadesListas = unidades.length;
+    }
+    marcar('hablantes', t);
+    emitir('metadatos', 1, r.reparto.map((p) => p.nombre).join(', '));
+  }
 
   // --- folios -------------------------------------------------------------
   if (plan.modo === 'paginas') {
@@ -263,7 +284,7 @@ export async function ejecutarIngesta(paquete: PaqueteConversion, puertos: Puert
   // --- contexto y vectores de texto ---------------------------------------
   const { metadatos, hablantes } = await metadatosP;
   // Hablantes con nombre: «H0» → «Facundo Cabral» en el texto y en el ancla.
-  if (hablantes) {
+  if (hablantes && !repartoConNombres) {
     const nombre = (h?: string) => (h && hablantes[h.split('·')[0] as string]) || h;
     for (const u of unidades) {
       if (u.hablante) u.hablante = nombre(u.hablante);
@@ -309,7 +330,7 @@ export async function ejecutarIngesta(paquete: PaqueteConversion, puertos: Puert
   const tVec = reloj();
   await vectorizarEnTodos(fragmentos.map((f) => ({ objetivo: 'fragmento', id: f.id, texto: textoVectorizable(f) })), 'fragmentos');
   const figuras = await figurasP;
-  if (hablantes) for (const g of figuras) if (g.ancla.tipo === 'tiempo' && g.ancla.hablante) g.ancla = { ...g.ancla, hablante: hablantes[g.ancla.hablante.split('·')[0] as string] ?? g.ancla.hablante };
+  if (hablantes && !repartoConNombres) for (const g of figuras) if (g.ancla.tipo === 'tiempo' && g.ancla.hablante) g.ancla = { ...g.ancla, hablante: hablantes[g.ancla.hablante.split('·')[0] as string] ?? g.ancla.hablante };
   await vistaPaginas;
   marcar('vectores', tVec);
   emitir('vectores', 1);
