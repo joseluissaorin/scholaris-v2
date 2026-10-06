@@ -594,6 +594,22 @@ export async function refinarMetadatos(
   return { ...r, procedencia: [...previo.procedencia, ...r.procedencia], ...(previo.hablantes && !r.hablantes ? { hablantes: previo.hablantes } : {}) };
 }
 
+/**
+ * Para la consolidación: la ficha ya hecha con las primeras páginas y el libro
+ * entero. Devuelve null si los créditos y el colofón no traen nada nuevo.
+ */
+export async function refinarConLibroEntero(
+  meta: MetadatosDocumento,
+  entrada: EntradaMetadatos & { todas: UnidadLeida[] },
+  puertos: PuertosMetadatos,
+  opciones: { sinVerificacion?: boolean } = {},
+): Promise<ResultadoMetadatos | null> {
+  if (entrada.tipo === 'audio' || entrada.tipo === 'video') return null;
+  const previo: ResultadoMetadatos = { metadatos: meta, procedencia: [], colofon: leerColofon(textoColofon(entrada.unidades, entrada.ultimas)) };
+  const r = await refinarMetadatos(previo, entrada, puertos, opciones);
+  return r === previo ? null : r;
+}
+
 const procedenciaLectura = (m: MetadatosDocumento, campo: string) => m.procedencia?.[campo]?.fuente === 'lectura';
 
 /** Repara la salida del Redactor: autores sin partir, años como texto, DOI con prefijo. */

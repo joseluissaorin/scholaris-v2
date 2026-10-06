@@ -37,7 +37,7 @@ import { unidadesDeBloques } from './pasos/bloques.js';
 import { etiquetasInformativas, interpretarFolio, pasoFolios } from './pasos/folios.js';
 import { anclarIndice, construirSecciones, pasoEstructura, quitarTitulillos, type EntradaIndice } from './pasos/estructura.js';
 import { trocear, fragmentosDeMedio, type OpcionesTroceado } from './pasos/fragmentos.js';
-import { pasoMetadatos } from './pasos/metadatos.js';
+import { pasoMetadatos, refinarConLibroEntero } from './pasos/metadatos.js';
 import { pasoContexto } from './pasos/contexto.js';
 import { pasoFiguras, type FiguraConAncla } from './pasos/figuras.js';
 import { textoVectorizable, vectorizar, type PiezaVector } from './pasos/vectores.js';
@@ -491,6 +491,14 @@ export async function consolidar(
     meta = r.metadatos;
     if (idioma && !meta.idioma) meta.idioma = idioma;
     procedencia.push(...r.procedencia);
+  } else if (!medio && unidades.length > 5) {
+    // Con el libro entero: créditos y colofón del final (edición, pie de imprenta, «s. f.»).
+    const { paquete, puertos: p } = ctx;
+    const r = await refinarConLibroEntero(meta, {
+      ficha: paquete.metadatos, nombreArchivo: paquete.origen.nombre, tipo: paquete.tipo, epub: paquete.contenido.clase === 'documento' && paquete.contenido.formato === 'epub',
+      unidades: unidades.slice(0, 5), todas: unidades, ...(ctx.opciones.metadatosUsuario ? { usuario: ctx.opciones.metadatosUsuario } : {}),
+    }, { redactor: ia.redactor, ...(p.http ? { http: p.http } : {}), ...(p.correoContacto ? { correo: p.correoContacto } : {}), reloj }, { ...(ctx.opciones.sinVerificacion ? { sinVerificacion: true } : {}) }).catch(() => null);
+    if (r) { meta = r.metadatos; procedencia.push(...r.procedencia); }
   }
   marca('metadatos', tm);
 
