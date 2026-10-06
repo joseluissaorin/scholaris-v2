@@ -213,7 +213,7 @@ describe('Gemini · transcriptor', () => {
     expect(c.input[0]?.mime_type).toBe('audio/mpeg');
     expect(c.generation_config.transcription_config).toEqual({
       mode: { type: 'verbatim', timestamp_granularities: ['word'], diarization_mode: 'speaker' },
-      language_codes: ['es-ES'], custom_vocabulary: ['Anchieta', 'auto sacramental'],
+      language_codes: ['es-ES'],
     });
   });
 

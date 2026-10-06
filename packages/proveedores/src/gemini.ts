@@ -574,8 +574,8 @@ export function crearGemini(config: ConfigGemini): ClienteGemini {
         if (opciones.hablantes !== false) modo.diarization_mode = 'speaker';
         const tc: Record<string, unknown> = { mode: modo };
         if (opciones.idioma) tc.language_codes = [opciones.idioma];
-        const vocabulario = vocabularioDePista(opciones.pista);
-        if (vocabulario.length) tc.custom_vocabulary = vocabulario;
+        // custom_vocabulary es incompatible con las marcas por palabra (400 de la Interactions API,
+        // visto en vivo el 6-10-2026), y Scholaris siempre las pide: la pista no se manda.
         const r = await limitar(() => pedir<RespuestaInteraccion>({
           proveedor: 'gemini', url: `${base}/v1beta/interactions`, cabeceras,
           cuerpo: { model: modelo, store: false, input: [fuente], generation_config: { transcription_config: tc } },
@@ -632,12 +632,6 @@ export function interpretarInteraccion(r: RespuestaInteraccion, desplazamiento: 
       ...(a.speaker ? { hablante: a.speaker.replace(/^spk[:_]?/, 'H') } : {}),
     }));
   return { texto, palabras };
-}
-
-/** Saca términos de la pista («Anchieta, auto sacramental; Pepe») para sesgar el vocabulario. */
-function vocabularioDePista(pista: string | undefined): string[] {
-  if (!pista) return [];
-  return pista.split(/[,;\n]/).map((s) => s.trim()).filter((s) => s && s.split(/\s+/).length <= 4 && s.length <= 60).slice(0, 50);
 }
 
 export function normalizarMime(mime: string): string {
