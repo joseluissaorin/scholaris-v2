@@ -60,7 +60,7 @@ export function documentoDeDetalle(origen: string, d: DetalleDocumento, extra: {
     id: d.id, titulo: m.titulo, autores: (m.autores ?? []).map(autorV1), tipo: d.tipo, estado: estadoV1(d.estado, !!d.tarea),
     unidades: d.unidades, creado: d.creado, enlace: enlaceLector(origen, d.id), texto_url: `${rutaDoc(origen, d.id)}/texto`,
   };
-  if (m.anio) v.anio = m.anio;
+  if (m.anio ?? m.anioOriginal) v.anio = (m.anio ?? m.anioOriginal)!;
   if (d.duracion) v.duracion = d.duracion;
   if (m.idioma) v.idioma = m.idioma;
   if (m.url) v.url = m.url;
@@ -86,8 +86,9 @@ export function documentoDeResumen(origen: string, r: ResumenDocumento): Documen
   return v;
 }
 
-export function docBreve(id: string, m: Pick<MetadatosDocumento, 'titulo' | 'autores' | 'anio'>): PasajeV1['documento'] {
-  return { id, titulo: m.titulo, autores: (m.autores ?? []).map(autorV1), ...(m.anio ? { anio: m.anio } : {}) };
+export function docBreve(id: string, m: Pick<MetadatosDocumento, 'titulo' | 'autores' | 'anio'> & Partial<Pick<MetadatosDocumento, 'anioOriginal'>>): PasajeV1['documento'] {
+  const anio = m.anio ?? m.anioOriginal;
+  return { id, titulo: m.titulo, autores: (m.autores ?? []).map(autorV1), ...(anio ? { anio } : {}) };
 }
 
 export function pasajeDeVista(origen: string, r: ResultadoVista): PasajeV1 {

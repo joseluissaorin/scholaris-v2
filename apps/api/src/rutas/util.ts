@@ -22,13 +22,15 @@ export function etiquetaAncla(a: Ancla, fin?: Ancla): string {
 }
 
 /** «(Foucault, 1975, p. 23)» a partir de metadatos y ancla. */
-export function citaCorta(m: Pick<MetadatosDocumento, 'autores' | 'anio' | 'titulo'> | undefined, a: Ancla, fin?: Ancla): string {
+export function citaCorta(m: Pick<MetadatosDocumento, 'autores' | 'anio' | 'titulo'> & Partial<Pick<MetadatosDocumento, 'anioOriginal'>> | undefined, a: Ancla, fin?: Ancla): string {
   const autores = m?.autores ?? [];
   const quien = autores.length === 0 ? (m?.titulo ? `«${m.titulo.slice(0, 40)}»` : 's. a.')
     : autores.length === 1 ? (autores[0]!.apellidos || autores[0]!.nombre)
     : autores.length === 2 ? `${autores[0]!.apellidos || autores[0]!.nombre} y ${autores[1]!.apellidos || autores[1]!.nombre}`
     : `${autores[0]!.apellidos || autores[0]!.nombre} et al.`;
-  const partes = [quien, m?.anio ? String(m.anio) : 's. f.'];
+  // Sin año de la edición, el de la original (como hace la referencia CSL): nunca «s. f.» si se sabe.
+  const anio = m?.anio ?? m?.anioOriginal;
+  const partes = [quien, anio ? String(anio) : 's. f.'];
   const et = etiquetaAncla(a, fin);
   if (et && a.tipo !== 'imagen') partes.push(et);
   return `(${partes.join(', ')})`;
