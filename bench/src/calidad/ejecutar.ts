@@ -52,7 +52,7 @@ export interface Ejecucion {
 function sha(): string {
   try {
     const s = execSync('git rev-parse --short HEAD', { cwd: DIR_CALIDAD }).toString().trim();
-    const sucio = execSync('git status --porcelain -- ../packages/busqueda', { cwd: DIR_CALIDAD }).toString().trim();
+    const sucio = execSync('git status --porcelain -- ../../packages/busqueda', { cwd: DIR_CALIDAD }).toString().trim();
     return sucio ? `${s}+cambios` : s;
   } catch { return '?'; }
 }

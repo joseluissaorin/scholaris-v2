@@ -6,6 +6,7 @@
  * Grupos: vias, rrf, pesos, reordenadores, expansiones, contiguos, vista (todos si no se dice).
  */
 import { writeFileSync } from 'node:fs';
+import type { AjustesBusqueda } from '@scholaris/busqueda';
 import { join } from 'node:path';
 import { DIR_DATOS_CALIDAD } from './estanteria.js';
 import { evaluarSistema, PRODUCCION } from './ejecutar.js';
@@ -14,6 +15,9 @@ import { montar, type Sistema } from './montaje.js';
 
 const H: Sistema = { nombre: 'hibrida', vias: ['lexica', 'densa', 'visual'], comprender: false };
 const C: Sistema = { ...H, comprender: true };
+const MEJOR: AjustesBusqueda = { fundirContiguos: false, penalizacionUnidad: 1, kRrf: 10, pesos: { conceptual: { visual: 0, lexica: 0.35 }, temporal: { visual: 0, lexica: 0.35 }, visual: { lexica: 0.35 }, cita: { visual: 0 } } };
+const SIN_VIS = { conceptual: { visual: 0 }, temporal: { visual: 0 }, cita: { visual: 0 } };
+const SIN_VIS_LEX = { conceptual: { visual: 0, lexica: 0.5 }, temporal: { visual: 0, lexica: 0.5 }, cita: { visual: 0 } };
 
 function grupos(m: ReturnType<typeof montar>): Record<string, Sistema[]> {
   const reord = Object.keys(m.reordenadores);
@@ -50,6 +54,26 @@ function grupos(m: ReturnType<typeof montar>): Record<string, Sistema[]> {
     contiguos: [
       { ...C, nombre: 'fundir contiguos' },
       { ...C, nombre: 'sin fundir', opciones: { fundirContiguos: false } },
+    ],
+    unidad: [1, 0.95, 0.85, 0.7].map((x) => ({ ...C, nombre: `pen ${x}`, ajustes: { fundirContiguos: false, penalizacionUnidad: x } })),
+    combinado: [
+      { ...C, nombre: 'base sin fundir', ajustes: { fundirContiguos: false } },
+      { ...C, nombre: 'k10', ajustes: { fundirContiguos: false, kRrf: 10 } },
+      { ...C, nombre: 'k10 vis0', ajustes: { fundirContiguos: false, kRrf: 10, pesos: SIN_VIS } },
+      { ...C, nombre: 'k10 vis0 lex.5', ajustes: { fundirContiguos: false, kRrf: 10, pesos: SIN_VIS_LEX } },
+      { ...C, nombre: 'D sola', vias: ['densa'], ajustes: { fundirContiguos: false } },
+      { ...C, nombre: 'D+comp k10', vias: ['densa'], ajustes: { fundirContiguos: false, kRrf: 10 } },
+    ],
+    lexica: [0.5, 0.35, 0.25, 0.15].flatMap((l) => [10, 20].map((k) => ({ ...C, nombre: `lex ${l} k${k}`, ajustes: { fundirContiguos: false, penalizacionUnidad: 1, kRrf: k, pesos: { conceptual: { visual: 0, lexica: l }, temporal: { visual: 0, lexica: l }, visual: { lexica: l }, cita: { visual: 0 } } } }))),
+    lexexp: [
+      { ...C, nombre: 'mejor', ajustes: MEJOR },
+      { ...C, nombre: 'lex: solo original', ajustes: { ...MEJOR, expansionesLexicas: [] } },
+      { ...C, nombre: 'lex: original+trad', ajustes: { ...MEJOR, expansionesLexicas: ['traduccion'] } },
+      { ...C, nombre: 'lex: original+trad+enunc', ajustes: { ...MEJOR, expansionesLexicas: ['traduccion', 'enunciado'] } },
+    ],
+    reordenar: [
+      { ...C, nombre: 'mejor sin reord.', ajustes: MEJOR },
+      ...reord.flatMap((r) => [0.5, 0.7, 0.9].map((w) => ({ ...C, nombre: `${r} ${w}`, reordenador: r, ajustes: { ...MEJOR, pesoReordenador: w } }))),
     ],
     produccion: [{ ...PRODUCCION }],
   };

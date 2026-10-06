@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, it } from 'vitest';
-import { Buscador, IndiceVectorialSQL, analizarHeuristico, consultaFts, intencionHeuristica, plegar, resaltar, responder, responderCompleto } from '../src/index.js';
+import { Buscador, IndiceVectorialSQL, analizarHeuristico, sinDuplicados, consultaFts, intencionHeuristica, plegar, resaltar, responder, responderCompleto } from '../src/index.js';
 import { EmbebedorFalso, JuezFalso, RedactorFalso, RedactorFalsoConFlujo, ReordenadorFalso } from './apoyo/falsos.js';
 import { cargarFixtura, contarFragmentos } from './apoyo/fixtura.js';
 import { crearSQL, type SQLMedido } from './apoyo/sql-node.js';
@@ -73,12 +73,20 @@ describe('Buscador', () => {
     expect(r.tiempos.total).toBeGreaterThanOrEqual(0);
   });
 
-  it('funde fragmentos contiguos del mismo documento', async () => {
-    const r = await m.buscador.buscar('panóptico torre anillo visibilidad');
+  it('funde fragmentos contiguos solo si se pide', async () => {
+    const r = await m.buscador.buscar('panóptico torre anillo visibilidad', { fundirContiguos: true });
     const fou = r.resultados.filter((x) => ['fr-fou-06', 'fr-fou-07', 'fr-fou-08'].includes(x.fragmento.id));
     expect(fou.length).toBeLessThanOrEqual(2);
-    const sinFundir = await m.buscador.buscar('panóptico torre anillo visibilidad', { fundirContiguos: false });
+    const sinFundir = await m.buscador.buscar('panóptico torre anillo visibilidad');
     expect(sinFundir.resultados.filter((x) => x.fragmento.documento === 'doc-foucault').length).toBeGreaterThan(fou.length);
+  });
+
+  it('no devuelve dos veces el mismo pasaje (mismo id, o mismo documento, ancla y texto)', async () => {
+    const r = await m.buscador.buscar('panóptico torre anillo visibilidad', { limite: 30 });
+    const ids = r.resultados.map((x) => x.fragmento.id);
+    expect(new Set(ids).size).toBe(ids.length);
+    const claves = r.resultados.map((x) => `${x.documento.id}|${JSON.stringify(x.fragmento.ancla)}|${x.fragmento.texto.slice(0, 120)}`);
+    expect(new Set(claves).size).toBe(claves.length);
   });
 
   it('busca entre lenguas: la rueda de la Fortuna llega al latín y al inglés', async () => {
@@ -284,3 +292,22 @@ describe('latencia (puertos falsos con latencias realistas)', () => {
 });
 
 export type { SQLMedido };
+
+describe('sin repetidos', () => {
+  it('quita el mismo pasaje con otro id (copia del documento o reintento de ingesta) y conserva sus vías', () => {
+    const ancla = { tipo: 'pagina' as const, fisica: 3, impresa: '3', romana: false, origen: 'leido' as const, confianza: 1 };
+    const texto = 'El panóptico de Bentham es una figura arquitectónica de la vigilancia, una torre en el centro de un anillo.';
+    const f = (id: string, documento: string, t = texto) => [id, { id, documento, unidad: `${documento}-u3`, orden: 1, texto: t, contexto: '', seccion: [], ancla }] as const;
+    const frags = new Map([f('a', 'd1'), f('b', 'd1'), f('c', 'd2'), f('d', 'd1', 'Otro pasaje distinto de la misma página, con su propio texto y bastante largo.')]);
+    const cs = [
+      { id: 'a', puntos: 4, vias: new Set(['lexica' as const]) },
+      { id: 'b', puntos: 3, vias: new Set(['densa' as const]) },
+      { id: 'c', puntos: 2, vias: new Set(['visual' as const]) },
+      { id: 'd', puntos: 1, vias: new Set(['densa' as const]) },
+      { id: 'a', puntos: 0.5, vias: new Set(['densa' as const]) },
+    ];
+    const r = sinDuplicados(cs, frags);
+    expect(r.map((c) => c.id)).toEqual(['a', 'd']);
+    expect([...r[0]!.vias].sort()).toEqual(['densa', 'lexica', 'visual']);
+  });
+});

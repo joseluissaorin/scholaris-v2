@@ -18,7 +18,7 @@ import { bytesAVector } from '@scholaris/nucleo';
 import { CacheLRU, conPlazo } from './cache.js';
 import { comprenderConModelo, comprenderSinModelo, unirFiltros } from './comprension.js';
 import { Estanteria, type DocumentoBreve } from './estanteria.js';
-import { fusionar, limpiar, normalizar, PESOS_POR_INTENCION, sinDuplicados, type Candidato, type ListaVia } from './fusion.js';
+import { fusionar, K_RRF, limpiar, normalizar, PESOS_POR_INTENCION, sinDuplicados, type Candidato, type ListaVia } from './fusion.js';
 import { consultaFts, normalizarConsulta, plegar, resaltar, terminos } from './texto.js';
 import type { Comprension, DestinoPagina, Expansion, Intencion, OpcionesBusqueda, RespuestaBusqueda, Via } from './tipos.js';
 
@@ -41,6 +41,12 @@ export interface AjustesBusqueda {
   kRrf?: number;
   /** Peso del reordenador frente a la fusión (0-1). */
   pesoReordenador?: number;
+  /** Factor por cada acierto más en la misma unidad (1 = sin penalizar). */
+  penalizacionUnidad?: number;
+  /** Fundir fragmentos contiguos si la llamada no dice nada. */
+  fundirContiguos?: boolean;
+  /** Expansiones que pasan también por la vía léxica (por defecto, todas menos el HyDE). */
+  expansionesLexicas?: Array<Expansion['tipo']>;
   /** Tipos de expansión de la comprensión que se usan para buscar. */
   expansiones?: Array<Expansion['tipo']>;
 }
@@ -80,7 +86,7 @@ export class Buscador {
   private fusionar(listas: ListaVia[], intencion: Intencion): Candidato[] {
     const a = this.ajustes;
     const pesos = a.pesos?.[intencion] ? { ...PESOS_POR_INTENCION[intencion], ...a.pesos[intencion] } : undefined;
-    return fusionar(listas, intencion, a.kRrf ?? 60, pesos);
+    return fusionar(listas, intencion, a.kRrf ?? K_RRF, pesos);
   }
 
   private get ns(): string { return this.puertos.espacioNombres ?? 'estanteria'; }
@@ -255,7 +261,9 @@ export class Buscador {
     const expansionesA = enCache ? enCache.expansiones.filter((e) => e.tipo === 'original' || (this.ajustes.expansiones ?? ['parafrasis', 'enunciado', 'hyde', 'traduccion']).includes(e.tipo)) : [{ texto: consulta, tipo: 'original' as const, peso: 1 }];
     const ronda = async (exps: Array<{ texto: string; peso: number; tipo: string }>, permitidos: Set<string> | null, fase: string) => {
       const tr = ahora();
-      const lexicas = exps.filter((e) => e.tipo !== 'hyde'); // el HyDE es largo: solo para vectores
+      // El HyDE es largo: solo para vectores. Las demás expansiones, las que digan los ajustes.
+      const tiposLex = this.ajustes.expansionesLexicas ?? [];
+      const lexicas = exps.filter((e) => e.tipo !== 'hyde' && (!tiposLex || e.tipo === 'original' || tiposLex.includes(e.tipo as Expansion['tipo'])));
       const pLex = vias.has('lexica') ? this.viaLexica(lexicas, k, permitidos).then((l) => { marca(`lexica${fase}`, tr); return l; }) : Promise.resolve([]);
       const pVec = quiereVectores
         ? this.vectorizarConsultas(exps.map((e) => e.texto)).then(async (vs) => {
@@ -329,7 +337,7 @@ export class Buscador {
       const f = frags.get(c.id);
       return f && docs.has(f.documento) && (!permitidos || permitidos.has(f.documento));
     });
-    candidatos = limpiar(sinDuplicados(candidatos, frags), frags, opciones.fundirContiguos !== false).slice(0, top);
+    candidatos = limpiar(sinDuplicados(candidatos, frags), frags, opciones.fundirContiguos ?? this.ajustes.fundirContiguos ?? false, this.ajustes.penalizacionUnidad ?? 1).slice(0, top);
     tiempos.hidratacion = Math.round((ahora() - th) * 10) / 10;
 
     // Reordenación sobre el texto (no sobre la imagen).
@@ -344,8 +352,8 @@ export class Buscador {
         });
         const r = await this.puertos.reordenador!.reordenar(comprension.consulta, textos);
         const nr = normalizar(r);
-        // Fusión ponderada 0,3 / 0,7 como en reranker_service.py.
-        const w = this.ajustes.pesoReordenador ?? 0.7;
+        // Fusión ponderada: 0,2 la fusión y 0,8 el reordenador (Jev), medido con el banco.
+        const w = this.ajustes.pesoReordenador ?? 0.8;
         puntuaciones = puntuaciones.map((p, i) => (1 - w) * p + w * (nr[i] ?? 0));
       } catch (e) {
         avisos.push(`Reordenador no disponible: ${(e as Error).message}`);

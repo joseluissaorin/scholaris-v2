@@ -55,7 +55,7 @@ export interface OpcionesBusqueda {
   /** Probabilidad mínima del juez para conservar un resultado (0,15). */
   umbralJuez?: number;
   vias?: Via[];
-  /** Fundir fragmentos contiguos del mismo documento (sí). */
+  /** Fundir fragmentos contiguos del mismo documento (no: en el banco bajaba Recall@20 de 0,82 a 0,66). */
   fundirContiguos?: boolean;
 }
 

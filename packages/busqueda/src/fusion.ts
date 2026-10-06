@@ -3,12 +3,21 @@ import { fusionarRangos } from '@scholaris/nucleo';
 import type { Fragmento } from '@scholaris/nucleo';
 import type { Intencion, Via } from './tipos.js';
 
+/**
+ * Pesos medidos con el banco de calidad (bench/calidad, 183 consultas): la vía
+ * densa es la que más aporta; la léxica, con peso bajo, salva las citas
+ * literales y la grafía antigua; los vectores de página solo ayudan cuando se
+ * busca una imagen (con peso 0,3 o 0,6 en consultas de texto bajaban el nDCG@10).
+ */
 export const PESOS_POR_INTENCION: Record<Intencion, Record<Via, number>> = {
-  conceptual: { lexica: 0.8, densa: 1.0, visual: 0.3 },
-  visual: { lexica: 0.4, densa: 0.6, visual: 1.0 },
-  cita: { lexica: 1.0, densa: 0.45, visual: 0.1 },
-  temporal: { lexica: 0.8, densa: 1.0, visual: 0.2 },
+  conceptual: { lexica: 0.35, densa: 1.0, visual: 0 },
+  visual: { lexica: 0.35, densa: 0.6, visual: 1.0 },
+  cita: { lexica: 1.0, densa: 0.45, visual: 0 },
+  temporal: { lexica: 0.35, densa: 1.0, visual: 0 },
 };
+
+/** k de la fusión por rangos recíprocos: 10 (60, el clásico, aplana demasiado con listas cortas y buenas). */
+export const K_RRF = 10;
 
 export interface ListaVia {
   via: Via;
@@ -23,7 +32,7 @@ export interface Candidato {
   vias: Set<Via>;
 }
 
-export function fusionar(listas: ListaVia[], intencion: Intencion, k = 60, pesosPropios?: Record<Via, number>): Candidato[] {
+export function fusionar(listas: ListaVia[], intencion: Intencion, k = K_RRF, pesosPropios?: Record<Via, number>): Candidato[] {
   const pesos = pesosPropios ?? PESOS_POR_INTENCION[intencion];
   const puntos = fusionarRangos(listas.map((l) => ({ ids: l.ids, peso: l.peso * pesos[l.via] })), k);
   const vias = new Map<string, Set<Via>>();
@@ -42,7 +51,7 @@ export function fusionar(listas: ListaVia[], intencion: Intencion, k = 60, pesos
  * vías del vecino) y penaliza varios aciertos en la misma unidad (0,85ⁿ, como
  * hacía la versión anterior), para que la lista no sea diez trozos de una página.
  */
-export function limpiar(candidatos: Candidato[], fragmentos: Map<string, Fragmento>, fundirContiguos = true): Candidato[] {
+export function limpiar(candidatos: Candidato[], fragmentos: Map<string, Fragmento>, fundirContiguos = false, penalizacionUnidad = 1): Candidato[] {
   const guardados: Candidato[] = [];
   const porDoc = new Map<string, Array<{ orden: number; c: Candidato }>>();
   for (const c of candidatos) {
@@ -64,7 +73,7 @@ export function limpiar(candidatos: Candidato[], fragmentos: Map<string, Fragmen
     if (!f) continue;
     const n = (porUnidad.get(f.unidad) ?? 0) + 1;
     porUnidad.set(f.unidad, n);
-    if (n > 1) c.puntos *= 0.85 ** (n - 1);
+    if (n > 1 && penalizacionUnidad < 1) c.puntos *= penalizacionUnidad ** (n - 1);
   }
   return guardados.sort((a, b) => b.puntos - a.puntos);
 }
