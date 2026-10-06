@@ -27,7 +27,7 @@ services:
       SCHOLARIS_SIN_CONEXION: "1"
       INFERENCIA_URL: http://ollama:11434
       INFERENCIA_SABOR: ollama
-      INFERENCIA_MODELO_LECTOR: ${INFERENCIA_MODELO_LECTOR:-qwen2.5vl:7b}
+      INFERENCIA_MODELO_LECTOR: ${INFERENCIA_MODELO_LECTOR:-qwen3-vl:8b-instruct}
       INFERENCIA_EMBEBEDOR_URL: http://embeddinggemma:8812
       INFERENCIA_TRANSCRIPCION_URL: http://whisper:8080
       INFERENCIA_CONCURRENCIA: ${INFERENCIA_CONCURRENCIA:-2}
@@ -80,7 +80,7 @@ services:
       OLLAMA_HOST: http://ollama:11434
     entrypoint: ["sh", "-c"]
     command:
-      - ollama pull ${INFERENCIA_MODELO_LECTOR:-qwen2.5vl:7b}
+      - ollama pull ${INFERENCIA_MODELO_LECTOR:-qwen3-vl:8b-instruct}
     depends_on:
       - ollama
 

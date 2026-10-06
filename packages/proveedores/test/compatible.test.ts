@@ -21,7 +21,7 @@ describe('servidor compatible con OpenAI', () => {
     expect(llamadas).toHaveLength(3);
     const cuerpo = llamadas[0]!.cuerpo as Record<string, unknown> & { messages: Array<{ content: Array<{ type: string; image_url?: { url: string } }> }> };
     expect(llamadas[0]!.url).toBe('http://localhost:11434/v1/chat/completions');
-    expect(cuerpo.model).toBe('qwen2.5vl:7b');
+    expect(cuerpo.model).toBe('qwen3-vl:8b-instruct');
     expect((cuerpo.response_format as { type: string }).type).toBe('json_schema');
     expect(cuerpo.think).toBe(false);
     expect(cuerpo.messages[0]!.content[0]!.image_url!.url).toMatch(/^data:image\/jpeg;base64,/);
@@ -39,6 +39,27 @@ describe('servidor compatible con OpenAI', () => {
     expect(rasterizadas).toBe(1);
     // Un objeto de página suelto (sin «paginas») también vale.
     expect(p.map((x) => [x.fisica, x.folio])).toEqual([[1, '3'], [2, '3']]);
+  });
+
+  it('lector: corta en streaming una página que entra en bucle (sin esperar a max_tokens)', async () => {
+    let enviados = 0;
+    const fetch = (async (_url: string, init: RequestInit) => {
+      const signal = init.signal as AbortSignal;
+      const enc = new TextEncoder();
+      const cuerpo = new ReadableStream<Uint8Array>({
+        async pull(c) {
+          if (signal.aborted || enviados > 2000) { c.close(); return; }
+          enviados++;
+          c.enqueue(enc.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: enviados === 1 ? '{"fisica": 1, "texto": "' : 'Cel. Voi a llevar la respuesta,\\n' } }] })}\n\n`));
+        },
+      });
+      return new Response(cuerpo, { headers: { 'content-type': 'text/event-stream' } });
+    }) as unknown as typeof globalThis.fetch;
+    const c = crearOpenAICompatible({ url: 'http://localhost:11434', sabor: 'ollama', fetch });
+    // Se corta, se repite una vez con aviso y, si sigue en bucle, queda como página faltante (confianza 0).
+    const [p] = await c.lector().leerPliego({ imagenes: IMG(1), primeraFisica: 1 });
+    expect(p).toMatchObject({ fisica: 1, texto: '', confianza: 0 });
+    expect(enviados).toBeLessThan(400);
   });
 
   it('si el servidor rechaza json_schema, repite con json_object y lo recuerda', async () => {
@@ -177,7 +198,7 @@ describe('modo sin conexión', () => {
       SCHOLARIS_SIN_CONEXION: '1', INFERENCIA_URL: 'http://localhost:11434',
       GEMINI_API_KEY: 'no-se-usa', OPENROUTER_API_KEY: 'no-se-usa', TYPESAFE_API_KEY: 'no-se-usa', CLOUDFLARE_ACCOUNT_ID: 'x', CLOUDFLARE_API_TOKEN: 'y',
     }, { fetch });
-    expect(ia.lector.nombre).toBe('ollama:qwen2.5vl:7b');
+    expect(ia.lector.nombre).toBe('ollama:qwen3-vl:8b-instruct');
     expect(ia.embebedor.espacio.id).toBe('embeddinggemma-2@768');
     expect(ia.reordenador.nombre).toBe('ollama:coseno');
     await ia.lector.leerPliego({ imagenes: IMG(1), primeraFisica: 1 });

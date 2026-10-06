@@ -8,6 +8,7 @@
  *
  *   --modelos ollama:embeddinggemma-2,ollama:embeddinggemma-2@256,ollama:bge-m3,inferbox:qwen3-vl-embed,servidor:embeddinggemma-2
  *   --servidor http://localhost:8812     (INFERENCIA_EMBEBEDOR_URL: EmbeddingGemma 2 multimodal)
+ *   --reordenador http://localhost:8812  (un /v1/rerank local, p. ej. bge-reranker-v2-m3: añade «léxica + densa + reordenador»)
  *   --ollama http://localhost:11434     (OLLAMA_URL)
  *   --inferbox http://192.168.1.102:8811 (INFERBOX_URL, INFERBOX_API_KEY)
  *
@@ -22,7 +23,7 @@ import { join } from 'node:path';
 import { rmSync } from 'node:fs';
 import { abrirEstanteria, DIR_DATOS_CALIDAD } from './estanteria.js';
 import { cargarConsultas } from './juego.js';
-import { embebedorConCache, type Montaje, type Sistema } from './montaje.js';
+import { embebedorConCache, reordenadorConCache, type Montaje, type Sistema } from './montaje.js';
 import { evaluarSistema } from './ejecutar.js';
 import { cargarEntorno } from '../entorno.js';
 import { crearInteligencia } from '@scholaris/proveedores';
@@ -31,6 +32,8 @@ const SISTEMAS_EMB: Sistema[] = [
   { nombre: 'densa', vias: ['densa'], comprender: false },
   { nombre: 'lexica+densa', vias: ['lexica', 'densa'], comprender: false },
 ];
+/** Con --reordenador URL: además, la híbrida con un reordenador local (/v1/rerank). */
+const CON_REORDENADOR: Sistema = { nombre: 'lexica+densa+reord', vias: ['lexica', 'densa'], comprender: false, reordenador: 'local' };
 
 function arg(args: string[], nombre: string): string | undefined {
   const i = args.indexOf(`--${nombre}`);
@@ -49,6 +52,9 @@ export async function embebedores(args: string[]): Promise<void> {
   const fragmentos = await sql.ejecutar<{ id: string; documento: string; texto: string; contexto: string; seccion: string | null }>('SELECT id, documento, texto, contexto, seccion FROM fragmentos ORDER BY n');
   const textos = fragmentos.map((f) => textoVectorizable({ texto: f.texto, contexto: f.contexto, seccion: f.seccion ? (JSON.parse(f.seccion) as string[]) : [] }));
   const filas: string[] = [];
+  const urlReord = arg(args, 'reordenador');
+  const reordenadorLocal = urlReord ? reordenadorConCache(crearOpenAICompatible({ url: urlReord, sabor: 'generico', urlReordenador: urlReord, concurrencia: 2 }).reordenador()) : undefined;
+  const sistemas = reordenadorLocal ? [...SISTEMAS_EMB, CON_REORDENADOR] : SISTEMAS_EMB;
 
   for (const nombre of lista) {
     let embebedor: Embebedor;
@@ -91,21 +97,21 @@ export async function embebedores(args: string[]): Promise<void> {
     }
     const m = {
       sql, embebedor, indice: new IndiceVectorialSQL(sql, embebedor.espacio), contador: new ContadorUso(),
-      ia: undefined as never, redactor: undefined as never, reordenadores: {}, env: {},
+      ia: undefined as never, redactor: undefined as never, reordenadores: reordenadorLocal ? { local: reordenadorLocal } : {}, env: {},
     } as unknown as Montaje;
     const res: Record<string, number[]> = {};
-    for (const s of SISTEMAS_EMB) {
+    for (const s of sistemas) {
       const { resumen } = await evaluarSistema(m, s, consultas);
       res[s.nombre] = [resumen.ndcg10, resumen.recall20, resumen.mrr];
     }
     const f = (x: number[] | undefined) => (x ? x.map((v) => v.toFixed(3)).join(' / ') : '—');
-    const linea = `| ${embebedor.espacio.id} | ${f(res.densa)} | ${f(res['lexica+densa'])} | ${propio ? `${(msDocs / textos.length).toFixed(1)} ms` : '—'} | ${propio ? `${msConsulta.toFixed(0)} ms` : '—'} |`;
+    const linea = `| ${embebedor.espacio.id} | ${f(res.densa)} | ${f(res['lexica+densa'])} | ${f(res['lexica+densa+reord'])} | ${propio ? `${(msDocs / textos.length).toFixed(1)} ms` : '—'} | ${propio ? `${msConsulta.toFixed(0)} ms` : '—'} |`;
     console.log(linea);
     filas.push(linea);
   }
   sql.bd.close();
   if (!args.includes('--conservar')) rmSync(copia, { force: true });
   console.log(`\n${fragmentos.length} fragmentos, ${consultas.length} consultas. Columnas: nDCG@10 / Recall@20 / MRR.\n`);
-  console.log('| Espacio | densa | léxica + densa | ms por fragmento (lote) | ms por consulta |\n|---|---|---|---|---|');
+  console.log('| Espacio | densa | léxica + densa | léxica + densa + reordenador local | ms por fragmento (lote) | ms por consulta |\n|---|---|---|---|---|---|');
   for (const l of filas) console.log(l);
 }

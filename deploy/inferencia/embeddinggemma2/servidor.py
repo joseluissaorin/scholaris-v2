@@ -15,6 +15,8 @@ contrato que InferBox, así que Scholaris lo usa igual que a InferBox:
       Los prefijos de tarea solo se aplican al texto solo («task: search result |
       query: …», «title: none | text: …»), como pide la ficha del modelo.
   POST /v1/embeddings   (OpenAI, solo texto; «dimensions» opcional)
+  POST /v1/rerank       {"query", "documents", "top_n"} → {"results": [{"index", "relevance_score"}]}
+      (opcional, con --reordenador BAAI/bge-reranker-v2-m3: Ollama no tiene reordenador)
   GET  /v1/health, GET /v1/models
 
 Dispositivo: CUDA (bfloat16) → MPS en el Mac (bfloat16) → CPU (float32).
@@ -214,6 +216,28 @@ def embeddings(p: PeticionOpenAI) -> dict[str, Any]:
             "usage": {"prompt_tokens": 0, "total_tokens": 0}}
 
 
+class PeticionRerank(BaseModel):
+    model: str | None = None
+    query: str
+    documents: list[str]
+    top_n: int | None = None
+
+
+@app.post("/v1/rerank", dependencies=[Depends(comprobar_clave)])
+def rerank(p: PeticionRerank) -> dict[str, Any]:
+    cruzado = estado.get("reordenador")
+    if cruzado is None:
+        raise HTTPException(404, "este servidor no tiene reordenador (arráncalo con --reordenador)")
+    if not p.documents:
+        return {"results": []}
+    with cerrojo:
+        puntos = cruzado.predict([(p.query, d) for d in p.documents], batch_size=16, convert_to_numpy=True)
+    # CrossEncoder ya aplica la sigmoide a los modelos de una salida (bge-reranker): 0-1.
+    puntos = np.asarray(puntos, dtype=np.float64)
+    orden = sorted(range(len(p.documents)), key=lambda i: -puntos[i])[: p.top_n or len(p.documents)]
+    return {"model": estado.get("nombre_reordenador"), "results": [{"index": i, "relevance_score": float(puntos[i])} for i in orden]}
+
+
 def main() -> None:
     a = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     a.add_argument("--anfitrion", default=os.environ.get("EMBEDDINGGEMMA_ANFITRION", "127.0.0.1"))
@@ -221,8 +245,15 @@ def main() -> None:
     a.add_argument("--modelo", default=os.environ.get("EMBEDDINGGEMMA_MODELO", "google/embeddinggemma-2"))
     a.add_argument("--dispositivo", default=os.environ.get("EMBEDDINGGEMMA_DISPOSITIVO"))
     a.add_argument("--modalidades", default=os.environ.get("EMBEDDINGGEMMA_MODALIDADES", "texto,imagen,audio,video"))
+    a.add_argument("--reordenador", default=os.environ.get("EMBEDDINGGEMMA_REORDENADOR"), help="p. ej. BAAI/bge-reranker-v2-m3 (opcional)")
     x = a.parse_args()
     cargar(x.modelo, x.dispositivo, [m.strip() for m in x.modalidades.split(",") if m.strip()])
+    if x.reordenador:
+        from sentence_transformers import CrossEncoder
+        disp, dtype = elegir_dispositivo(x.dispositivo)
+        estado["reordenador"] = CrossEncoder(x.reordenador, device=disp, model_kwargs={"torch_dtype": dtype if disp != "cpu" else torch.float32})
+        estado["nombre_reordenador"] = x.reordenador
+        print(f"Reordenador {x.reordenador} en {disp}", flush=True)
     print(f"EmbeddingGemma 2 en {estado['dispositivo']} ({estado['cargado']:.1f} s), modalidades: {', '.join(estado['modalidades'])}", flush=True)
     import uvicorn
     uvicorn.run(app, host=x.anfitrion, port=x.puerto, log_level="warning")

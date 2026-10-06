@@ -28,7 +28,7 @@ import type {
 } from '@scholaris/nucleo';
 import { enParalelo, normalizarVector } from '@scholaris/nucleo';
 import { aBase64, ahora, apuntador, ErrorProveedor, extraerJSON, limitador, pedir, type ContadorUso, type OpcionesComunes, type UsoProveedor } from './comun.js';
-import { ESQUEMA_PAGINAS, instruccionesLector, normalizarPaginas, type OpcionesTranscripcion } from './lectura.js';
+import { ESQUEMA_PAGINAS, hayBucle, instruccionesLector, normalizarPaginas, paginaFaltante, type OpcionesTranscripcion } from './lectura.js';
 
 /**
  * Los mismos campos que `ESQUEMA_PAGINAS`, para UNA página y en otro orden: el
@@ -122,7 +122,7 @@ const PREFIJOS: Array<{ re: RegExp; documento: string; consulta: string }> = [
 /** Modelos por defecto de cada sabor (los que se han probado; ver SIN-CONEXION.md). */
 export const MODELOS_POR_DEFECTO: Record<SaborServidor, Required<Omit<ModelosCompatibles, 'redactor' | 'juez'>>> = {
   inferbox: { lector: 'qwen2.5-vl-7b', embebedor: 'embeddinggemma-2', reordenador: 'bge-reranker', transcriptor: '' },
-  ollama: { lector: 'qwen2.5vl:7b', embebedor: 'embeddinggemma-2', reordenador: '', transcriptor: 'whisper-1' },
+  ollama: { lector: 'qwen3-vl:8b-instruct', embebedor: 'embeddinggemma-2', reordenador: '', transcriptor: 'whisper-1' },
   llamacpp: { lector: '', embebedor: '', reordenador: '', transcriptor: 'whisper-1' },
   vllm: { lector: 'Qwen/Qwen2.5-VL-7B-Instruct', embebedor: 'BAAI/bge-m3', reordenador: 'BAAI/bge-reranker-v2-m3', transcriptor: 'openai/whisper-large-v3-turbo' },
   lmstudio: { lector: 'qwen2.5-vl-7b-instruct', embebedor: 'text-embedding-bge-m3', reordenador: '', transcriptor: 'whisper-1' },
@@ -154,6 +154,14 @@ export interface PeticionChat {
   operacion: UsoProveedor['operacion'];
   extraUso?: Partial<UsoProveedor>;
   timeoutMs?: number;
+  /**
+   * Leer en streaming y cortar en cuanto la salida entra en bucle (el fallo
+   * típico de los modelos de visión pequeños): sin esto, una página en bucle
+   * quema todos los tokens (2 minutos en un Mac) antes de fallar.
+   */
+  vigilarBucle?: boolean;
+  /** frequency_penalty (contra los bucles). */
+  penalizacion?: number;
 }
 
 export interface RespuestaChatLocal {
@@ -217,11 +225,13 @@ export function crearOpenAICompatible(config: ConfigCompatible): ClienteCompatib
     if (p.esquema && !sinSoporte.esquema) cuerpo.response_format = { type: 'json_schema', json_schema: { name: 'respuesta', strict: true, schema: p.esquema } };
     else if (p.esquema) cuerpo.response_format = { type: 'json_object' };
     if (p.logprobs && !sinSoporte.logprobs) { cuerpo.logprobs = true; cuerpo.top_logprobs = p.logprobs; }
+    if (p.penalizacion) cuerpo.frequency_penalty = p.penalizacion;
     // Sin razonamiento: lo que se pide aquí es transcribir o elegir, y los tokens de pensar cuestan minutos en local.
     if (sabor === 'ollama') { cuerpo.think = false; cuerpo.reasoning_effort = 'none'; }
     if (sabor === 'llamacpp' || sabor === 'vllm') cuerpo.chat_template_kwargs = { enable_thinking: false };
     const t0 = ahora();
     let r: RespuestaOpenAI;
+    if (p.vigilarBucle) return limitar(() => chatVigilado(cuerpo, p, t0));
     try {
       r = await limitar(() => pedir<RespuestaOpenAI>({ proveedor: prov, url: `${base}/chat/completions`, cabeceras, cuerpo }, p.timeoutMs ? { ...op, timeoutMs: p.timeoutMs } : op));
     } catch (e) {
@@ -246,6 +256,94 @@ export function crearOpenAICompatible(config: ConfigCompatible): ClienteCompatib
     };
   }
 
+  /** chat/completions en streaming, con corte si la salida entra en bucle. */
+  async function chatVigilado(cuerpo: Record<string, unknown>, p: PeticionChat, t0: number): Promise<RespuestaChatLocal> {
+    const f = config.fetch ?? globalThis.fetch.bind(globalThis);
+    const control = new AbortController();
+    const plazo = setTimeout(() => control.abort(), p.timeoutMs ?? op.timeoutMs);
+    const alAbortar = () => control.abort();
+    config.signal?.addEventListener('abort', alAbortar, { once: true });
+    let texto = '';
+    let fin: string | undefined;
+    let uso: RespuestaOpenAI['usage'];
+    let bucle = false;
+    try {
+      let res: Response;
+      try {
+        res = await f(`${base}/chat/completions`, {
+          method: 'POST', signal: control.signal,
+          headers: { ...cabeceras, 'content-type': 'application/json' },
+          body: JSON.stringify({ ...cuerpo, stream: true, stream_options: { include_usage: true } }),
+        });
+      } catch (e) {
+        throw new ErrorProveedor(prov, `fallo de red en ${base}/chat/completions: ${(e as Error)?.message ?? e}`, { reintentable: true, causa: e });
+      }
+      if (!res.ok || !res.body) {
+        const cuerpoError = await res.text().catch(() => '');
+        const msg = cuerpoError.slice(0, 500);
+        if (res.status === 400 && cuerpo.response_format && !sinSoporte.esquema && /response_format|json_schema|schema|grammar/i.test(msg)) {
+          sinSoporte.esquema = true;
+          clearTimeout(plazo);
+          return chat({ ...p });
+        }
+        throw new ErrorProveedor(prov, `HTTP ${res.status} en ${base}/chat/completions: ${msg}`, { estado: res.status, reintentable: res.status >= 500 || res.status === 429, cuerpo: cuerpoError });
+      }
+      // Un servidor que no hace streaming (o un doble de pruebas) responde JSON entero: vale igual.
+      if (!/event-stream/i.test(res.headers.get('content-type') ?? '')) {
+        const j = JSON.parse(await res.text()) as RespuestaOpenAI;
+        if (j.error) throw new ErrorProveedor(prov, typeof j.error === 'string' ? j.error : j.error.message ?? 'error');
+        texto = j.choices?.[0]?.message?.content ?? '';
+        fin = j.choices?.[0]?.finish_reason;
+        uso = j.usage;
+        if (hayBucle(texto.replace(/\\n/g, '\n'))) bucle = true;
+        throw new FinRespuesta();
+      }
+      const lector = res.body.getReader();
+      const dec = new TextDecoder();
+      let resto = '';
+      let revisado = 0;
+      for (;;) {
+        const { value, done } = await lector.read();
+        if (done) break;
+        resto += dec.decode(value, { stream: true });
+        let i: number;
+        while ((i = resto.indexOf('\n')) >= 0) {
+          const linea = resto.slice(0, i).trim();
+          resto = resto.slice(i + 1);
+          if (!linea.startsWith('data:')) continue;
+          const datos = linea.slice(5).trim();
+          if (datos === '[DONE]') continue;
+          try {
+            const j = JSON.parse(datos) as { choices?: Array<{ delta?: { content?: string }; finish_reason?: string | null }>; usage?: RespuestaOpenAI['usage'] };
+            const c = j.choices?.[0];
+            if (c?.delta?.content) texto += c.delta.content;
+            if (c?.finish_reason) fin = c.finish_reason;
+            if (j.usage) uso = j.usage;
+          } catch { /* línea partida: llegará entera */ }
+        }
+        if (texto.length - revisado >= 400) {
+          revisado = texto.length;
+          // Los saltos de línea llegan escapados dentro del JSON: se desescapan para mirar el bucle.
+          if (hayBucle(texto.replace(/\\n/g, '\n'))) { bucle = true; control.abort(); break; }
+        }
+      }
+    } catch (e) {
+      if (!bucle && !(e instanceof FinRespuesta)) {
+        if (e instanceof ErrorProveedor) throw e;
+        throw new ErrorProveedor(prov, control.signal.aborted ? `tiempo agotado o cancelado en ${base}/chat/completions` : `fallo leyendo la respuesta: ${(e as Error)?.message ?? e}`, { reintentable: !config.signal?.aborted, causa: e });
+      }
+    } finally {
+      clearTimeout(plazo);
+      config.signal?.removeEventListener('abort', alAbortar);
+    }
+    apuntar({
+      proveedor: prov, modelo: p.modelo, operacion: p.operacion, tokensEntrada: uso?.prompt_tokens ?? 0, tokensSalida: uso?.completion_tokens ?? Math.ceil(texto.length / 4),
+      usd: 0, ms: ahora() - t0, ...(uso ? {} : { estimado: true }), ...(p.extraUso ?? {}),
+    });
+    if (bucle) throw new ErrorPliego(prov, `bucle de repetición cortado a los ${texto.length} caracteres: …${texto.slice(-160)}`);
+    return { texto: sinRazonamiento(texto), ...(fin ? { fin } : {}) };
+  }
+
   async function salud(): Promise<boolean> {
     try {
       await pedir({ proveedor: prov, url: sabor === 'inferbox' ? `${config.url.replace(/\/v1\/?$/, '').replace(/\/+$/, '')}/v1/health` : `${base}/models`, cabeceras }, { ...config, timeoutMs: 5_000, intentos: 1 });
@@ -260,11 +358,13 @@ export function crearOpenAICompatible(config: ConfigCompatible): ClienteCompatib
   function lector(o: OpcionesTranscripcion & { modelo?: string; concurrencia?: number } = {}): Lector {
     const modelo = o.modelo ?? modelos.lector;
     const porPagina = limitador(o.concurrencia ?? config.concurrencia ?? 4);
-    const leerUna = async (img: { bytes: Uint8Array; mime: string }, fisica: number, pista: string | undefined): Promise<PaginaLeida> => {
+    const leerUnaVez = async (img: { bytes: Uint8Array; mime: string }, fisica: number, pista: string | undefined, segundo: boolean): Promise<PaginaLeida> => {
       const instrucciones = instruccionesLector(1, fisica, pista, o, 'imagenes')
-        + '\nDevuelve UN objeto JSON de página (sin la lista «paginas»), con «texto» = todo el cuerpo de la página. «titulos» solo repite los títulos de sección, nunca los versos ni los parlamentos. Responde SOLO con el JSON.';
+        + '\nDevuelve UN objeto JSON de página (sin la lista «paginas»), con «texto» = todo el cuerpo de la página. «titulos» solo repite los títulos de sección, nunca los versos ni los parlamentos. Responde SOLO con el JSON.'
+        + (segundo ? '\nATENCIÓN: transcribe cada línea UNA sola vez, de arriba abajo, y termina el JSON en cuanto acabe la página. No repitas nada.' : '');
       const r = await porPagina(() => chat({
-        modelo, operacion: 'leer', extraUso: { paginas: 1, imagenes: 1 }, maxTokens: 6_000, temperatura: 0,
+        modelo, operacion: 'leer', extraUso: { paginas: 1, imagenes: 1 }, maxTokens: 4_096, temperatura: segundo ? 0.2 : 0, vigilarBucle: true,
+        ...(segundo ? { penalizacion: 0.3 } : {}),
         esquema: ESQUEMA_PAGINA_LOCAL as unknown as Record<string, unknown>,
         mensajes: [{ role: 'user', content: [
           { type: 'image_url', image_url: { url: `data:${normalizarMime(img.mime)};base64,${aBase64(img.bytes)}` } },
@@ -278,6 +378,21 @@ export function crearOpenAICompatible(config: ConfigCompatible): ClienteCompatib
       const lista = json && typeof json === 'object' && !Array.isArray(json) && !('paginas' in json) ? { paginas: [json] } : json;
       const p = normalizarPaginas(lista, 1, fisica, o)[0] as PaginaLeida;
       return corregirPaginaLocal(p);
+    };
+    /**
+     * Una página que entra en bucle, sale cortada o da JSON roto se repite una
+     * vez avisando al modelo (y con penalización de repetición); si vuelve a
+     * fallar, queda como página faltante (confianza 0) para que la ingesta use
+     * la capa de texto o la marque. Los errores de red sí se propagan.
+     */
+    const leerUna = async (img: { bytes: Uint8Array; mime: string }, fisica: number, pista: string | undefined): Promise<PaginaLeida> => {
+      try { return await leerUnaVez(img, fisica, pista, false); } catch (e) {
+        if (!(e instanceof ErrorPliego)) throw e;
+        try { return await leerUnaVez(img, fisica, pista, true); } catch (e2) {
+          if (!(e2 instanceof ErrorPliego)) throw e2;
+          return paginaFaltante(fisica);
+        }
+      }
     };
     return {
       nombre: `${prov}:${modelo}`,
@@ -537,6 +652,9 @@ export function crearOpenAICompatible(config: ConfigCompatible): ClienteCompatib
 
   return { contador, sabor, salud, chat, lector, embebedor, reordenador, transcriptor, juez, redactor };
 }
+
+/** Señal interna: la respuesta llegó entera (sin streaming). */
+class FinRespuesta extends Error {}
 
 // ---------------------------------------------------------------------------
 // Utilidades (exportadas para las pruebas)
