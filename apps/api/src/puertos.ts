@@ -20,6 +20,12 @@ export interface AlmacenAmpliado extends Almacen {
   /** Metadatos sin leer el cuerpo. */
   cabecera(clave: string): Promise<{ bytes: number; tipo?: string; etag?: string } | null>;
   listar(prefijo: string): Promise<Array<{ clave: string; bytes: number }>>;
+  /**
+   * Un rango [desde, hasta] como flujo, sin cargarlo en memoria. Los medios lo
+   * necesitan: el navegador pide «bytes=0-» de un vídeo de 357 MB y un Worker
+   * no puede tenerlo entero en memoria (128 MB).
+   */
+  flujoRango?(clave: string, desde: number, hasta: number): Promise<ReadableStream | null>;
 }
 
 export interface UsuarioSesion {

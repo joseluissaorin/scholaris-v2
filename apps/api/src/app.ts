@@ -302,9 +302,17 @@ export async function servirBinario(almacen: AlmacenAmpliado, clave: string, pet
     if (desde >= cab.bytes || desde > hasta) {
       return new Response(null, { status: 416, headers: { 'content-range': `bytes */${cab.bytes}` } });
     }
+    // Sin flujo, como mucho 8 MiB por respuesta (una respuesta parcial más corta es válida:
+    // el navegador pide el resto). Con flujo, el rango entero sin pasar por la memoria.
+    if (!almacen.flujoRango) hasta = Math.min(hasta, desde + 8 * 1024 * 1024 - 1);
     h.set('content-range', `bytes ${desde}-${hasta}/${cab.bytes}`);
     h.set('content-length', String(hasta - desde + 1));
     if (peticion.method === 'HEAD') return new Response(null, { status: 206, headers: h });
+    if (almacen.flujoRango) {
+      const flujo = await almacen.flujoRango(clave, desde, hasta);
+      if (!flujo) return Response.json(cuerpoError('no_encontrado', 'El fichero no existe.'), { status: 404 });
+      return new Response(flujo, { status: 206, headers: h });
+    }
     const trozo = await almacen.rango(clave, desde, hasta);
     return new Response(trozo as Uint8Array<ArrayBuffer>, { status: 206, headers: h });
   }

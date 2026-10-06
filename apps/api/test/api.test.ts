@@ -192,6 +192,11 @@ describe('subida → ingesta → búsqueda', () => {
     const bin = await SELF.fetch(o.cuerpo.url, { headers: { range: 'bytes=0-8' } });
     expect(bin.status).toBe(206);
     expect(await bin.text()).toBe('# Vigilar');
+    // «bytes=0-» (lo primero que pide un <video>) llega entero en flujo, como 206.
+    const abierto = await SELF.fetch(o.cuerpo.url, { headers: { range: 'bytes=2-' } });
+    expect(abierto.status).toBe(206);
+    expect(abierto.headers.get('content-range')).toMatch(/^bytes 2-\d+\/\d+$/);
+    expect(await abierto.text()).toBe('Vigilar\n\nEl panóptico de Bentham…');
 
     // Exportar el .spdf en el servidor (sqlite-wasm en workerd) e importarlo como copia.
     const sp = await SELF.fetch(`${BASE}/documentos/${ing.cuerpo.documento}/spdf`, { headers: { authorization: `Bearer ${t}` } });

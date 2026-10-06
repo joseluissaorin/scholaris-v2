@@ -40,6 +40,10 @@ export function crearAlmacenR2(bucket: R2Bucket, o: OpcionesR2): AlmacenAmpliado
       const r = await bucket.get(clave, { range: { offset: desde, length: hasta - desde + 1 } });
       return r ? new Uint8Array(await r.arrayBuffer()) : null;
     },
+    async flujoRango(clave, desde, hasta) {
+      const r = await bucket.get(clave, { range: { offset: desde, length: hasta - desde + 1 } });
+      return r ? r.body : null;
+    },
     async existe(clave) {
       return (await bucket.head(clave)) !== null;
     },

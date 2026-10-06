@@ -64,6 +64,11 @@ export function crearAlmacenDisco(raizRelativa: string, o: { secreto: string; or
         return new Uint8Array(b.subarray(0, bytesRead));
       } finally { await f.close(); }
     },
+    async flujoRango(clave, desde, hasta) {
+      const r = ruta(clave);
+      if (!(await stat(r).catch(() => null))?.isFile()) return null;
+      return Readable.toWeb(createReadStream(r, { start: desde, end: hasta })) as unknown as ReadableStream;
+    },
     async existe(clave) {
       return (await stat(ruta(clave)).catch(() => null))?.isFile() ?? false;
     },
