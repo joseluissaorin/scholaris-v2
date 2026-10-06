@@ -137,20 +137,40 @@ export async function prepararTuberia(ctx: ContextoMotor, params: ParamsIngesta 
 }
 
 /** Modo económico: manda las páginas difíciles a la API por lotes. */
+/** Pliegos por lote de Gemini: con todas las páginas en uno, el lote (imágenes, base64 y JSON) no cabe en 128 MB. */
+const PLIEGOS_POR_LOTE = 4;
+
 export async function enviarLoteTuberia(ctx: ContextoMotor, params: ParamsIngesta, info: InfoTuberia): Promise<string | null> {
   const paquete = await leerPaquete(ctx.almacen, info.paquete);
   const plan = (await leerJson<Plan>(ctx, clavePlan(params)))!;
-  return enviarLote(contexto(ctx, params, paquete, plan, { vectores: false }));
+  // Varios lotes pequeños, uno detrás de otro (la memoria de cada uno se libera antes del siguiente);
+  // el id que se devuelve es la lista, separada por comas.
+  const ids: string[] = [];
+  for (let i = 0; i < plan.pliegos.length; i += PLIEGOS_POR_LOTE) {
+    const parte: Plan = { ...plan, pliegos: plan.pliegos.slice(i, i + PLIEGOS_POR_LOTE) };
+    const id = await enviarLote(contexto(ctx, params, paquete, parte, { vectores: false }));
+    if (id) ids.push(id);
+  }
+  return ids.length ? ids.join(',') : null;
 }
 
 /** ¿Está el lote? Si sí, sus resultados quedan en el almacén, uno por pliego. */
 export async function recogerLoteTuberia(ctx: ContextoMotor, params: ParamsIngesta, info: InfoTuberia, id: string): Promise<{ listo: boolean; error?: string }> {
   const paquete = await leerPaquete(ctx.almacen, info.paquete);
   const plan = (await leerJson<Plan>(ctx, clavePlan(params)))!;
-  const r = await recogerLote(contexto(ctx, params, paquete, plan, { vectores: false }), id);
-  if (!r.listo) return { listo: false };
-  for (const [k, paginas] of Object.entries(r.resultados ?? {})) await ctx.almacen.poner(claveLote(params, k), JSON.stringify(paginas), 'application/json');
-  return { listo: true, ...(r.error ? { error: r.error } : {}) };
+  const errores: string[] = [];
+  let pendientes = 0;
+  for (const uno of id.split(',').filter(Boolean)) {
+    // Los lotes ya recogidos dejan su marca y no se vuelven a descargar.
+    if (await ctx.almacen.existe(claveLote(params, `hecho-${uno.replace(/[^\w-]+/g, '_')}`))) continue;
+    const r = await recogerLote(contexto(ctx, params, paquete, plan, { vectores: false }), uno);
+    if (!r.listo) { pendientes++; continue; }
+    for (const [k, paginas] of Object.entries(r.resultados ?? {})) await ctx.almacen.poner(claveLote(params, k), JSON.stringify(paginas), 'application/json');
+    await ctx.almacen.poner(claveLote(params, `hecho-${uno.replace(/[^\w-]+/g, '_')}`), '{}', 'application/json');
+    if (r.error) errores.push(r.error);
+  }
+  if (pendientes) return { listo: false };
+  return { listo: true, ...(errores.length ? { error: errores.join('; ') } : {}) };
 }
 
 export interface ResultadoTanda extends ResumenTanda { vectoresPendientes?: boolean }
