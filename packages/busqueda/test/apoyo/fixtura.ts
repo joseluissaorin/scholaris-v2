@@ -74,7 +74,7 @@ export const DOCUMENTOS: DocFixtura[] = [
       { id: 'un-lew-099', ancla: pag(109, null), impresa: null, fragmentos: [], figura: { id: 'fg-lew-01', pie: 'Lámina: las esferas del cosmos ptolemaico', descripcion: 'Diagrama de esferas concéntricas alrededor de la Tierra con los planetas y el primer móvil.' } },
       { id: 'un-lew-122', ancla: pag(132, '122'), impresa: '122', fragmentos: [
         { id: 'fr-lew-07', texto: 'The Longaevi, the long-livers, are the fairies of medieval belief: creatures of the borderland between angels and men, of whom the Model never quite found a place.', seccion: ['The Longaevi'] },
-        { id: 'fr-lew-08', texto: 'In 1957 the transformer architecture had not been invented; nothing in this lecture concerns language models.', seccion: ['Epilogue'] },
+        { id: 'fr-lew-08', texto: '[Note added to this test edition, not by Lewis: the transformer architecture did not exist in 1964; nothing in this book concerns language models.]', seccion: ['Epilogue'] },
       ] },
     ],
   },
@@ -93,35 +93,35 @@ export const DOCUMENTOS: DocFixtura[] = [
       ] },
       { id: 'un-boe-031', ancla: pag(51, '31'), impresa: '31', fragmentos: [
         { id: 'fr-boe-03', texto: 'Haec nostra vis est, hunc continuum ludum ludimus: rotam volubili orbe versamus, infima summis summa infimis mutare gaudemus. Fortuna loquitur.', seccion: ['Liber II', 'Prosa II'] },
-        { id: 'fr-boe-04', texto: 'Ascende, si placet, sed ea lege ne, cum ludicri mei ratio poscet, descendere iniuriam putes. Rota Fortunae numquam stat.', seccion: ['Liber II', 'Prosa II'] },
+        { id: 'fr-boe-04', texto: 'Ascende, si placet, sed ea lege ne, cum ludicri mei ratio poscet, descendere iniuriam putes.', seccion: ['Liber II', 'Prosa II'] },
       ] },
       { id: 'un-boe-052', ancla: pag(72, '52'), impresa: '52', fragmentos: [
-        { id: 'fr-boe-05', texto: 'Beatitudo est status bonorum omnium congregatione perfectus. Felicitas vera non in fortunae muneribus sed in summo bono posita est.', seccion: ['Liber III', 'Prosa II'] },
-        { id: 'fr-boe-06', texto: 'Deum esse ipsum bonum, summum bonum in deo situm esse; ergo beatitudo in deo sita est.', seccion: ['Liber III', 'Prosa X'] },
+        { id: 'fr-boe-05', texto: 'Beatitudo est status bonorum omnium congregatione perfectus.', seccion: ['Liber III', 'Prosa II'] },
+        { id: 'fr-boe-06', texto: 'Deum rerum omnium principem bonum esse communis humanorum conceptio probat animorum. Sed perfectum bonum veram esse beatitudinem constituimus; veram igitur beatitudinem in summo deo sitam esse necesse est.', seccion: ['Liber III', 'Prosa X'] },
       ] },
       { id: 'un-boe-120', ancla: pag(140, '120'), impresa: '120', fragmentos: [
-        { id: 'fr-boe-07', texto: 'Deus aeternus est; aeternitas igitur est interminabilis vitae tota simul et perfecta possessio. Praescientia dei libertatem arbitrii non tollit.', seccion: ['Liber V', 'Prosa VI'] },
+        { id: 'fr-boe-07', texto: 'Deum igitur aeternum esse cunctorum ratione degentium commune iudicium est. … Aeternitas igitur est interminabilis vitae tota simul et perfecta possessio.', seccion: ['Liber V', 'Prosa VI'] },
       ] },
     ],
   },
   {
-    id: 'doc-serrat',
+    id: 'doc-almeida',
     tipo: 'audio',
     metadatos: {
-      titulo: 'Entrevista a Joan Manuel Serrat en la Universidad de La Laguna', autores: [{ nombre: 'Joan Manuel', apellidos: 'Serrat' }],
-      anio: 2026, idioma: 'es', tipoCSL: 'interview', lugar: 'San Cristóbal de La Laguna',
+      titulo: 'Entrevista a Ramiro Almeida en la Universidad de Valdeluz', autores: [{ nombre: 'Ramiro', apellidos: 'Almeida' }],
+      anio: 2026, idioma: 'es', tipoCSL: 'interview', lugar: 'Valdeluz',
     },
     unidades: [
-      { id: 'un-ser-1', ancla: { tipo: 'tiempo', t0: 0, t1: 95, hablante: 'Serrat' }, fragmentos: [
-        { id: 'fr-ser-01', texto: 'Empecé a escribir canciones en catalán porque era la lengua en la que pensaba y en la que me enamoraba. La canción es un territorio de libertad.', seccion: ['Los comienzos'] },
-        { id: 'fr-ser-02', texto: 'Machado me enseñó que la poesía no es un adorno: es una manera de mirar. Ponerle música a sus versos fue un acto de gratitud.', seccion: ['Machado y Hernández'] },
+      { id: 'un-ser-1', ancla: { tipo: 'tiempo', t0: 0, t1: 95, hablante: 'Almeida' }, fragmentos: [
+        { id: 'fr-ser-01', texto: 'Empecé a escribir canciones en la lengua en la que pensaba y en la que me enamoraba. La canción es un territorio de libertad.', seccion: ['Los comienzos'] },
+        { id: 'fr-ser-02', texto: 'Bécquer me enseñó que la poesía no es un adorno: es una manera de mirar. Ponerle música a sus versos fue un acto de gratitud.', seccion: ['Bécquer y la cárcel'] },
       ] },
-      { id: 'un-ser-2', ancla: { tipo: 'tiempo', t0: 95, t1: 240, hablante: 'Serrat' }, fragmentos: [
-        { id: 'fr-ser-03', texto: 'Con Miguel Hernández pasó algo parecido: sus poemas desde la cárcel hablan de la libertad con una fuerza que ninguna prisión puede encerrar.', seccion: ['Machado y Hernández'] },
+      { id: 'un-ser-2', ancla: { tipo: 'tiempo', t0: 95, t1: 240, hablante: 'Almeida' }, fragmentos: [
+        { id: 'fr-ser-03', texto: 'Con los poemas escritos desde la cárcel pasó algo parecido: hablan de la libertad con una fuerza que ninguna prisión puede encerrar.', seccion: ['Bécquer y la cárcel'] },
         { id: 'fr-ser-04', texto: 'La censura nos vigilaba constantemente; aprendimos a decir las cosas de otra manera. La vigilancia del poder también enseña a escribir.', seccion: ['La censura'] },
       ] },
-      { id: 'un-ser-3', ancla: { tipo: 'tiempo', t0: 240, t1: 400, hablante: 'Serrat' }, fragmentos: [
-        { id: 'fr-ser-05', texto: 'Mediterráneo nació en un hotel de Calella, mirando al mar. No pensé que acabaría siendo la canción de tanta gente.', seccion: ['Mediterráneo'] },
+      { id: 'un-ser-3', ancla: { tipo: 'tiempo', t0: 240, t1: 400, hablante: 'Almeida' }, fragmentos: [
+        { id: 'fr-ser-05', texto: '«Puerto de invierno» nació en una pensión del muelle, mirando al mar. No pensé que acabaría siendo la canción de tanta gente.', seccion: ['Puerto de invierno'] },
         { id: 'fr-ser-06', texto: 'A los estudiantes les diría que lean, que lean mucho, y que desconfíen de quien les prometa la felicidad a cambio de obediencia.', seccion: ['Consejos'] },
       ] },
     ],

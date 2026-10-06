@@ -72,8 +72,8 @@ function Entrada() {
         </div>
         <div className="relative my-10 hidden max-w-md lg:block">
           <Composicion estilo="malevich" className="mb-8 h-28 w-44 opacity-95" />
-          <p className="text-[1.25rem] leading-snug">«Siempre imaginé que el Paraíso sería algún tipo de biblioteca.»</p>
-          <p className="mt-3 text-[0.875rem] text-sobre-barra-2">— Jorge Luis Borges</p>
+          <p className="text-[1.25rem] leading-snug">«Yo, que me figuraba el Paraíso / bajo la especie de una biblioteca.»</p>
+          <p className="mt-3 text-[0.875rem] text-sobre-barra-2">Jorge Luis Borges, «Poema de los dones»</p>
         </div>
         <p className="relative hidden text-[0.75rem] text-sobre-barra-2 lg:block">PDF · escaneos · audio · vídeo · cada cita con su página o su minuto</p>
       </section>

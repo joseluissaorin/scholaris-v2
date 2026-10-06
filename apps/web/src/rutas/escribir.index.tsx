@@ -32,11 +32,11 @@ const RELACION: Record<RelacionCita, { texto: string; tono: 'bien' | 'medio' | '
   AFIRMACION_NEGATIVA: { texto: 'Lo niega', tono: 'mal' },
 };
 
-const EJEMPLO = `El castigo moderno ya no se dirige al cuerpo que sufre, sino al alma que se corrige. La disciplina fabrica individuos útiles distribuyéndolos en el espacio y ordenándolos en el tiempo.
+const EJEMPLO = `El castigo moderno ya no castiga el cuerpo que sufre, sino que corrige la conducta del que obedece. La disciplina reparte a las personas en el espacio y las ordena en el tiempo.
 
-El dispositivo panóptico induce en el detenido una conciencia permanente de visibilidad, de modo que el poder funciona solo. Hoy las plataformas reproducen ese efecto sin necesidad de torre.
+La torre de Bentham hace que el preso que se sabe visible a todas horas acabe vigilándose a sí mismo, de modo que el poder funciona solo. Hoy las plataformas reproducen ese efecto sin necesidad de torre.
 
-Lo abyecto no es lo sucio, sino aquello que perturba una identidad y no respeta los límites. En las cartas de Emilia Llanos el duelo se inscribe en la forma más que en el tema.`;
+Lo abyecto no es lo sucio, sino aquello que perturba una identidad y no respeta los límites. En las cartas de Elvira Montesdeoca el duelo se inscribe en la forma más que en el tema.`;
 
 function Autocita() {
   const { a } = Route.useSearch();

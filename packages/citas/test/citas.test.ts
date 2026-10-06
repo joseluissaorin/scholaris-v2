@@ -74,7 +74,7 @@ Boecio, desde la prisión, imagina a la Fortuna haciendo girar su rueda. Lewis a
 
 Los transformers aplican al lenguaje la misma idea del modelo medieval del cosmos y sus esferas. El poder del Panóptico no depende de la visibilidad permanente del detenido en la torre.
 
-Según Serrat, la censura y la vigilancia del poder enseñan a escribir (Serrat, 2026). En este trabajo propongo una lectura nueva de todos estos textos.`;
+Según Almeida, la censura y la vigilancia del poder enseñan a escribir (Almeida, 2026). En este trabajo propongo una lectura nueva de todos estos textos.`;
 
 describe('autocita', () => {
   let m: Awaited<ReturnType<typeof montar>>;
@@ -144,8 +144,8 @@ describe('autocita', () => {
   });
 
   it('no cita lo ya citado ni la contribución propia', () => {
-    expect(de('Según Serrat').yaCitada).toBe(true);
-    expect(de('Según Serrat').citas).toEqual([]);
+    expect(de('Según Almeida').yaCitada).toBe(true);
+    expect(de('Según Almeida').citas).toEqual([]);
     expect(de('En este trabajo propongo').citas).toEqual([]);
   });
 
@@ -203,7 +203,7 @@ describe('CSL', () => {
         const motor = await MotorCitas.crear({ estilo: e.id, idioma, documentos: DOCS });
         const { citas, bibliografia } = motor.citar([
           [{ documento: 'doc-foucault', ancla: pag(213, '199'), anclaFin: pag(214, '200') }],
-          [{ documento: 'doc-serrat', ancla: { tipo: 'tiempo', t0: 724, t1: 800 } }],
+          [{ documento: 'doc-almeida', ancla: { tipo: 'tiempo', t0: 724, t1: 800 } }],
           [{ documento: 'doc-boecio', ancla: pag(51, '31') }],
           [{ documento: 'doc-lewis', ancla: pag(109, null) }],
         ]);
@@ -395,7 +395,7 @@ describe('exportación', () => {
     expect(b).toContain('author = {Foucault, Michel}');
     expect(b).toContain('origdate = {1975}');
     expect(b).toContain('title = {{Vigilar \\& castigar al 100 \\%}}');
-    expect(b).toContain('@misc{serrat2026entrevista,');
+    expect(b).toContain('@misc{almeida2026entrevista,');
     expect(b).toContain('langid = {latin}');
   });
   it('RIS y CSL-JSON', () => {

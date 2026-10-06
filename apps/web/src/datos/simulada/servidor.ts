@@ -42,16 +42,16 @@ const tarjeta = (cuaderno: string, i: number, doc: string, orden: number, extra:
   return { id: `t-${cuaderno}-${i}`, tipo: 'fragmento', documento: doc, objetivo: `f-${doc}-${orden}-0`, contenido: {}, cita: { texto, etiqueta: anclaACita(ancla), citaCorta: citaCorta(d.meta, ancla) }, posicion: i, huerfana: false, creada: hace(60 * (40 - i)), ...extra };
 };
 tarjetas.set('c-panoptico', [
-  tarjeta('c-panoptico', 0, 'd-foucault', 207), tarjeta('c-panoptico', 1, 'd-foucault', 208),
+  tarjeta('c-panoptico', 0, 'd-mirada', 207), tarjeta('c-panoptico', 1, 'd-mirada', 208),
   { id: 't-c-panoptico-n', tipo: 'nota', contenido: { texto: 'Contrastar con la «vigilancia de plataforma»: ¿se interioriza igual la mirada cuando nadie mira?' }, posicion: 2, huerfana: false, creada: hace(300) },
   tarjeta('c-panoptico', 3, 'd-web', 10),
 ]);
-tarjetas.set('c-duelo', [tarjeta('c-duelo', 0, 'd-kristeva', 9), tarjeta('c-duelo', 1, 'd-llanos', 13), tarjeta('c-duelo', 2, 'd-clase', 13)]);
+tarjetas.set('c-duelo', [tarjeta('c-duelo', 0, 'd-asco', 9), tarjeta('c-duelo', 1, 'd-montesdeoca', 13), tarjeta('c-duelo', 2, 'd-clase', 13)]);
 
 const vigilantes: Vigilante[] = [
   { id: 'v-1', nombre: 'Abyección y archivo', consulta: 'abyección en cartas y archivos personales', modo: 'al_ingerir', alertas: true, pendientes: 2, ultimaEjecucion: hace(90), ultimaConfianza: 'alta', creado: hace(60 * 24 * 20), actualizado: hace(90) },
   { id: 'v-2', nombre: 'Vigilancia sin torre', consulta: 'panóptico y plataformas digitales', modo: 'semanal', alertas: true, pendientes: 0, ultimaEjecucion: hace(60 * 24 * 3), ultimaConfianza: 'media', creado: hace(60 * 24 * 40), actualizado: hace(60 * 24 * 3) },
-  { id: 'v-3', nombre: 'Machado cantado', consulta: 'poesía de Machado musicada', modo: 'manual', alertas: false, pendientes: 0, creado: hace(60 * 24 * 2), actualizado: hace(60 * 24 * 2) },
+  { id: 'v-3', nombre: 'Bécquer cantado', consulta: 'poesía de Bécquer musicada', modo: 'manual', alertas: false, pendientes: 0, creado: hace(60 * 24 * 2), actualizado: hace(60 * 24 * 2) },
 ];
 const alertas: Alerta[] = [
   { id: 'a-1', vigilante: 'v-1', nombreVigilante: 'Abyección y archivo', documentosNuevos: ['d-clase'], cambio: 'La sesión 7 de Teoría de la Literatura define lo abyecto como crisis del límite entre dentro y fuera (12:00).', disparadaPor: 'ingesta', creada: hace(90) },
@@ -61,10 +61,10 @@ const alertas: Alerta[] = [
 const historial: EventoBusqueda[] = [
   ['¿qué efecto produce el panóptico en el detenido?', 'respuesta', 'conceptual', 6, 'alta', 1200, true],
   ['abyección cadáver', 'busqueda', 'literal', 14, undefined, 140, false],
-  ['Machado música Serrat', 'busqueda', 'conceptual', 9, undefined, 180, false],
+  ['Bécquer música Almeida', 'busqueda', 'conceptual', 9, undefined, 180, false],
   ['rizoma frente a árbol', 'respuesta', 'conceptual', 7, 'media', 1900, false],
   ['cartas sin enviar 1936', 'busqueda', 'factual', 4, undefined, 95, true],
-  ['Sísifo dichoso', 'busqueda', 'literal', 2, undefined, 70, false],
+  ['oscuras golondrinas', 'busqueda', 'literal', 2, undefined, 70, false],
 ].map(([consulta, tipo, intencion, resultados, confianza, ms, fijado], i) => ({
   id: `h-${i}`, consulta: consulta as string, tipo: tipo as EventoBusqueda['tipo'], intencion: intencion as EventoBusqueda['intencion'], resultados: resultados as number,
   ...(confianza ? { confianza: confianza as 'alta' } : {}), estado: 'ok', ms: ms as number, fijado: fijado as boolean, oculto: false, cuando: hace(60 * (i * 7 + 2)),
@@ -80,7 +80,7 @@ const ajustes: Ajustes = {
 };
 let grabacion = { activa: true, desde: hace(60 * 24 * 200) };
 const conceptos: Concepto[] = [
-  { id: 'k-abyeccion', nombre: 'Abyección', descripcion: 'Usos del concepto de Kristeva en el corpus.', terminos: ['abyecto', 'abyección', 'abject'], ultimoInforme: 'i-1', creado: hace(60 * 24 * 14), actualizado: hace(60 * 24) },
+  { id: 'k-abyeccion', nombre: 'Abyección', descripcion: 'Usos del concepto de lo abyecto en el corpus.', terminos: ['abyecto', 'abyección', 'abject'], ultimoInforme: 'i-1', creado: hace(60 * 24 * 14), actualizado: hace(60 * 24) },
   { id: 'k-vigilancia', nombre: 'Vigilancia', terminos: ['vigilar', 'panóptico', 'mirada'], creado: hace(60 * 24 * 40), actualizado: hace(60 * 24 * 6) },
 ];
 
@@ -140,15 +140,15 @@ function simularIngesta(documento: string, tarea: string, unidades: number, rapi
 
 // Un libro ya procesándose al abrir la demo: así se ve la ingesta en vivo.
 {
-  const id = 'd-sexualidad';
+  const id = 'd-confesion';
   docs.set(id, {
-    id, tipo: 'pdf_escaneado', unidades: 212, romanas: 0, sinFolio: 4, estado: 'procesando', leidas: 0, tarea: 'tarea-sexualidad',
-    meta: { titulo: 'Historia de la sexualidad 1', subtitulo: 'La voluntad de saber', autores: [{ nombre: 'Michel', apellidos: 'Foucault' }], anio: 2005, anioOriginal: 1976, editorial: 'Siglo XXI', idioma: 'es', tipoCSL: 'book' },
-    secciones: [{ titulo: 'I. Nosotros, los victorianos', nivel: 1, unidad: 5 }, { titulo: 'II. La hipótesis represiva', nivel: 1, unidad: 15 }, { titulo: 'IV. El dispositivo de sexualidad', nivel: 1, unidad: 79 }],
-    banco: ['Lejos de silenciar el sexo, la modernidad lo ha puesto a hablar sin descanso.', 'El dispositivo de sexualidad no reprime: incita, multiplica, clasifica.', 'Donde hay poder hay resistencia, y esta nunca está en posición de exterioridad.'],
+    id, tipo: 'pdf_escaneado', unidades: 212, romanas: 0, sinFolio: 4, estado: 'procesando', leidas: 0, tarea: 'tarea-confesion',
+    meta: { titulo: 'El confesionario y el archivo', subtitulo: 'Una historia de la intimidad vigilada', autores: [{ nombre: 'Inés', apellidos: 'Valcárcel Ruiz' }], anio: 2015, editorial: 'Ediciones del Faro Viejo', lugar: 'Madrid', idioma: 'es', tipoCSL: 'book' },
+    secciones: [{ titulo: 'I. Decirlo todo', nivel: 1, unidad: 5 }, { titulo: 'II. El silencio que no era', nivel: 1, unidad: 15 }, { titulo: 'IV. Del confesionario a la ficha', nivel: 1, unidad: 79 }],
+    banco: ['Lejos de callar la intimidad, la época moderna la obligó a hablar sin descanso.', 'La confesión no reprime lo que escucha: lo ordena, lo multiplica y lo clasifica.', 'Allí donde alguien vigila hay alguien que resiste, y esa resistencia nunca está del todo fuera.'],
     fijos: {}, bibliotecas: [], creado: ahora(), bytes: 72_000_000, mime: 'application/pdf',
   });
-  simularIngesta(id, 'tarea-sexualidad', 212, 0.5);
+  simularIngesta(id, 'tarea-confesion', 212, 0.5);
 }
 
 // ---------------------------------------------------------------------------
@@ -199,7 +199,7 @@ function piezas(): Pieza[] {
   if (indice) return indice;
   indice = [];
   for (const d of docs.values()) {
-    if (d.id === 'd-sexualidad') continue;
+    if (d.id === 'd-confesion') continue;
     for (let o = 1; o <= d.unidades; o++) {
       textoDe(d, o).split('\n\n').filter((p) => !p.startsWith('#')).forEach((p, i) => indice!.push({ d, orden: o, parrafo: i, texto: p, norm: normalizar(p) }));
     }
@@ -339,10 +339,10 @@ const ESTILOS: EstiloCsl[] = [
 
 function mapa(): MapaConceptos {
   const grupos = [
-    ['Vigilancia y disciplina', 0.28, 0.32, ['d-foucault', 'd-web']], ['Abyección y cuerpo', 0.7, 0.3, ['d-kristeva', 'd-clase']],
-    ['Archivo y duelo', 0.62, 0.68, ['d-llanos', 'd-cartas']], ['Rizoma y devenir', 0.22, 0.72, ['d-deleuze']],
-    ['Absurdo y lucidez', 0.46, 0.86, ['d-camus']], ['Canción y poema', 0.86, 0.56, ['d-serrat']],
-    ['Biblioteca infinita', 0.44, 0.12, ['d-borges']], ['Heterotopías', 0.4, 0.5, ['d-heterotopias', 'd-foucault']],
+    ['Vigilancia y disciplina', 0.28, 0.32, ['d-mirada', 'd-web']], ['Abyección y cuerpo', 0.7, 0.3, ['d-asco', 'd-clase']],
+    ['Archivo y duelo', 0.62, 0.68, ['d-montesdeoca', 'd-cartas']], ['Rizoma y devenir', 0.22, 0.72, ['d-mapas']],
+    ['Rimas y pérdida', 0.46, 0.86, ['d-becquer']], ['Canción y poema', 0.86, 0.56, ['d-almeida']],
+    ['Archivo infinito', 0.44, 0.12, ['d-voces']], ['Heterotopías', 0.4, 0.5, ['d-heterotopias', 'd-mirada']],
   ] as const;
   const r = (() => { let s = 7; return () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 2 ** 32; }; })();
   const puntos: MapaConceptos['puntos'] = [];
@@ -366,11 +366,11 @@ function grafo(): GrafoCitas {
     return { documento: id, titulo: d.meta.titulo, autores: autoresCorto(d.meta), anio: d.meta.anioOriginal ?? d.meta.anio, tipo: d.tipo, citas, citadoPor };
   };
   return {
-    nodos: [nodo('d-foucault', 0, 3), nodo('d-kristeva', 1, 3), nodo('d-llanos', 2, 1), nodo('d-deleuze', 1, 1), nodo('d-web', 1, 0), nodo('d-clase', 2, 0), nodo('d-heterotopias', 2, 0), nodo('d-borges', 0, 1), nodo('d-camus', 0, 0)],
+    nodos: [nodo('d-mirada', 0, 3), nodo('d-asco', 1, 3), nodo('d-montesdeoca', 2, 1), nodo('d-mapas', 1, 1), nodo('d-web', 1, 0), nodo('d-clase', 2, 0), nodo('d-heterotopias', 2, 0), nodo('d-voces', 0, 1), nodo('d-becquer', 0, 0)],
     aristas: [
-      { desde: 'd-web', hacia: 'd-foucault', peso: 6, unidades: [2, 9, 10] }, { desde: 'd-heterotopias', hacia: 'd-foucault', peso: 4 }, { desde: 'd-llanos', hacia: 'd-kristeva', peso: 5 },
-      { desde: 'd-clase', hacia: 'd-kristeva', peso: 8 }, { desde: 'd-clase', hacia: 'd-llanos', peso: 3 }, { desde: 'd-deleuze', hacia: 'd-foucault', peso: 2 },
-      { desde: 'd-kristeva', hacia: 'd-borges', peso: 1 }, { desde: 'd-heterotopias', hacia: 'd-deleuze', peso: 2 }, { desde: 'd-llanos', hacia: 'd-borges', peso: 1 },
+      { desde: 'd-web', hacia: 'd-mirada', peso: 6, unidades: [2, 9, 10] }, { desde: 'd-heterotopias', hacia: 'd-mirada', peso: 4 }, { desde: 'd-montesdeoca', hacia: 'd-asco', peso: 5 },
+      { desde: 'd-clase', hacia: 'd-asco', peso: 8 }, { desde: 'd-clase', hacia: 'd-montesdeoca', peso: 3 }, { desde: 'd-mapas', hacia: 'd-mirada', peso: 2 },
+      { desde: 'd-asco', hacia: 'd-voces', peso: 1 }, { desde: 'd-heterotopias', hacia: 'd-mapas', peso: 2 }, { desde: 'd-montesdeoca', hacia: 'd-voces', peso: 1 },
     ],
     construido: hace(60 * 30),
   };
@@ -455,7 +455,7 @@ ruta('GET', '/documentos/:id/cita', (m, _c, q) => {
   return json({ texto, html: texto });
 });
 
-ruta('POST', '/documentos/importar', () => json({ documento: 'd-foucault', versionOrigen: 300, avisos: [] }));
+ruta('POST', '/documentos/importar', () => json({ documento: 'd-mirada', versionOrigen: 300, avisos: [] }));
 
 ruta('GET', '/bibliotecas', () => json(bibliotecas.map((b) => ({ ...b, documentos: [...docs.values()].filter((d) => !d.borrado && d.bibliotecas.includes(b.id)).length }))));
 ruta('POST', '/bibliotecas', (_m, c) => { const b: Biblioteca = { id: `b-${Date.now()}`, nombre: c.nombre, color: c.color, documentos: 0, creada: ahora(), actualizada: ahora(), propietario: 'yo', permiso: 'propietario', compartida: false }; bibliotecas.push(b); return json(b); });
@@ -568,18 +568,19 @@ ruta('GET', '/grafo', () => json(grafo()));
 // --- Entidades (personas y obras): un grafo pequeño escrito a mano --------
 type EntDemo = { id: string; nombre: string; tipo: TipoEntidad; descripcion?: string; wikidata?: string; alias?: string[]; en: Array<[string, number, string]> };
 const ENTIDADES_DEMO: EntDemo[] = [
-  { id: 'e-foucault', nombre: 'Michel Foucault', tipo: 'persona', descripcion: 'filósofo francés (1926-1984)', wikidata: 'Q44272', alias: ['Foucault'], en: [['d-foucault', 12, 'la tesis de ⟦Foucault⟧ sobre la mirada que disciplina'], ['d-web', 3, 'releer a ⟦Foucault⟧ desde la vigilancia digital'], ['d-heterotopias', 2, '⟦Foucault⟧ propone los «otros espacios»'], ['d-deleuze', 40, 'el diagrama, que ⟦Foucault⟧ llamaba dispositivo']] },
-  { id: 'e-bentham', nombre: 'Jeremy Bentham', tipo: 'persona', descripcion: 'filósofo británico (1748-1832)', wikidata: 'Q132524', alias: ['Bentham'], en: [['d-foucault', 200, 'el proyecto de ⟦Bentham⟧ para una casa de inspección'], ['d-web', 4, 'del panóptico de ⟦Bentham⟧ a la cámara del teléfono']] },
-  { id: 'e-panoptico', nombre: 'Panóptico', tipo: 'obra', descripcion: 'proyecto arquitectónico de Jeremy Bentham (1791)', alias: ['panóptico'], en: [['d-foucault', 201, 'el ⟦panóptico⟧ como máquina de ver sin ser visto'], ['d-web', 4, 'el ⟦panóptico⟧ se ha vuelto portátil']] },
-  { id: 'e-kristeva', nombre: 'Julia Kristeva', tipo: 'persona', descripcion: 'filósofa y psicoanalista francobúlgara', wikidata: 'Q159876', alias: ['Kristeva'], en: [['d-kristeva', 9, 'para ⟦Kristeva⟧, lo abyecto no es ni sujeto ni objeto'], ['d-llanos', 5, 'leídas con ⟦Kristeva⟧, las cartas guardan lo que se expulsa'], ['d-clase', 12, 'en la clase de hoy, ⟦Kristeva⟧ y el duelo']] },
-  { id: 'e-borges', nombre: 'Jorge Luis Borges', tipo: 'persona', descripcion: 'escritor argentino (1899-1986)', wikidata: 'Q909', alias: ['Borges'], en: [['d-borges', 3, 'una biblioteca total imaginada por ⟦Borges⟧'], ['d-kristeva', 40, 'la enciclopedia china que cita ⟦Borges⟧']] },
-  { id: 'e-babel', nombre: 'La biblioteca de Babel', tipo: 'obra', descripcion: 'cuento de Jorge Luis Borges (1941)', en: [['d-borges', 40, 'en ⟦La biblioteca de Babel⟧ todos los libros existen ya']] },
-  { id: 'e-paris', nombre: 'París', tipo: 'lugar', wikidata: 'Q90', en: [['d-foucault', 150, 'la peste en ⟦París⟧ y el reglamento de la ciudad'], ['d-kristeva', 2, 'el seminario de ⟦París⟧ en los setenta']] },
+  { id: 'e-valcarcel', nombre: 'Inés Valcárcel Ruiz', tipo: 'persona', descripcion: 'historiadora (personaje de la demostración)', alias: ['Valcárcel'], en: [['d-mirada', 12, 'la tesis de ⟦Valcárcel⟧ sobre la mirada que disciplina'], ['d-web', 3, 'releer a ⟦Valcárcel⟧ desde la vigilancia digital'], ['d-heterotopias', 2, '⟦Valcárcel⟧ y la cárcel como «espacio otro»'], ['d-mapas', 40, 'el diagrama, que ⟦Valcárcel⟧ llama dispositivo']] },
+  { id: 'e-bentham', nombre: 'Jeremy Bentham', tipo: 'persona', descripcion: 'filósofo británico (1748-1832)', alias: ['Bentham'], en: [['d-mirada', 200, 'el proyecto de ⟦Bentham⟧ para una casa de inspección'], ['d-web', 4, 'de la torre de ⟦Bentham⟧ a la cámara del teléfono']] },
+  { id: 'e-panoptico', nombre: 'Panóptico', tipo: 'obra', descripcion: 'proyecto arquitectónico de Jeremy Bentham (1791)', alias: ['panóptico'], en: [['d-mirada', 201, 'el ⟦panóptico⟧ como máquina de ver sin ser visto'], ['d-web', 4, 'el ⟦panóptico⟧ se ha vuelto portátil']] },
+  { id: 'e-etxeberria', nombre: 'Clara Etxeberria Goñi', tipo: 'persona', descripcion: 'ensayista (personaje de la demostración)', alias: ['Etxeberria'], en: [['d-asco', 9, 'para ⟦Etxeberria⟧, lo abyecto no es ni sujeto ni objeto'], ['d-montesdeoca', 5, 'leídas con ⟦Etxeberria⟧, las cartas guardan lo que se expulsa'], ['d-clase', 12, 'en la clase de hoy, ⟦Etxeberria⟧ y el duelo']] },
+  { id: 'e-bermejo', nombre: 'Aurelio Bermejo', tipo: 'persona', descripcion: 'cuentista (personaje de la demostración)', alias: ['Bermejo'], en: [['d-voces', 3, 'un archivo total imaginado por ⟦Bermejo⟧'], ['d-asco', 40, 'el catálogo imposible que inventa ⟦Bermejo⟧']] },
+  { id: 'e-catalogos', nombre: 'La sala de los catálogos', tipo: 'obra', descripcion: 'cuento de Aurelio Bermejo (personaje de la demostración)', en: [['d-voces', 40, 'en ⟦La sala de los catálogos⟧ todos los libros están ya descritos']] },
+  { id: 'e-becquer', nombre: 'Gustavo Adolfo Bécquer', tipo: 'persona', descripcion: 'poeta español (1836-1870)', alias: ['Bécquer'], en: [['d-becquer', 1, 'Rimas, de Gustavo Adolfo ⟦Bécquer⟧'], ['d-almeida', 15, 'las golondrinas de ⟦Bécquer⟧ ya traían la música dentro']] },
+  { id: 'e-paris', nombre: 'París', tipo: 'lugar', wikidata: 'Q90', en: [['d-mirada', 150, 'la peste en ⟦París⟧ y el reglamento de la ciudad'], ['d-asco', 2, 'el seminario de ⟦París⟧ en los setenta']] },
 ];
 const CO_DEMO: Array<[string, string, number, string?]> = [
-  ['e-foucault', 'e-bentham', 4.2, 'Michel Foucault analiza el panóptico de Jeremy Bentham'], ['e-bentham', 'e-panoptico', 5.1, 'Jeremy Bentham diseñó el Panóptico'],
-  ['e-foucault', 'e-panoptico', 3.4], ['e-foucault', 'e-paris', 1.2], ['e-kristeva', 'e-paris', 0.9], ['e-borges', 'e-babel', 3.8, 'La biblioteca de Babel es un cuento de Jorge Luis Borges'],
-  ['e-kristeva', 'e-borges', 0.7], ['e-foucault', 'e-borges', 0.6],
+  ['e-valcarcel', 'e-bentham', 4.2, 'Inés Valcárcel analiza el panóptico de Jeremy Bentham'], ['e-bentham', 'e-panoptico', 5.1, 'Jeremy Bentham diseñó el Panóptico'],
+  ['e-valcarcel', 'e-panoptico', 3.4], ['e-valcarcel', 'e-paris', 1.2], ['e-etxeberria', 'e-paris', 0.9], ['e-bermejo', 'e-catalogos', 3.8, 'La sala de los catálogos es un cuento de Aurelio Bermejo'],
+  ['e-etxeberria', 'e-bermejo', 0.7], ['e-valcarcel', 'e-bermejo', 0.6], ['e-becquer', 'e-etxeberria', 0.5],
 ];
 function entidadDemo(e: EntDemo): Entidad {
   return { id: e.id, nombre: e.nombre, tipo: e.tipo, alias: e.alias ?? [], ...(e.descripcion ? { descripcion: e.descripcion } : {}), ...(e.wikidata ? { wikidata: e.wikidata } : {}), menciones: e.en.length * 3, documentos: new Set(e.en.map((x) => x[0])).size };
@@ -633,13 +634,13 @@ ruta('GET', '/entidades/:id/linea', (m) => {
 });
 
 ruta('GET', '/grafo/huerfanas', () => json([
-  { referencia: 'Bentham, J. (1791). Panopticon; or, the Inspection-House.', anio: 1791, citadaPor: ['d-foucault', 'd-web'] },
-  { referencia: 'Lacan, J. (1966). Écrits.', anio: 1966, citadaPor: ['d-kristeva', 'd-clase'] },
-  { referencia: 'Douglas, M. (1966). Purity and Danger.', anio: 1966, citadaPor: ['d-kristeva'] },
+  { referencia: 'Bentham, J. (1791). Panopticon; or, the Inspection-House.', anio: 1791, citadaPor: ['d-mirada', 'd-web'] },
+  { referencia: 'Lacan, J. (1966). Écrits.', anio: 1966, citadaPor: ['d-asco', 'd-clase'] },
+  { referencia: 'Douglas, M. (1966). Purity and Danger.', anio: 1966, citadaPor: ['d-asco'] },
 ]));
 ruta('GET', '/perspectivas/arqueologia', () => json({ olvidados: [
-  { documento: 'd-deleuze', titulo: 'Mil mesetas', ultimaApertura: hace(60 * 24 * 96), motivo: 'Lo subrayaste mucho en mayo y no lo has vuelto a abrir; tres búsquedas recientes sobre «devenir» lo tocan.' },
-  { documento: 'd-borges', titulo: 'Ficciones', ultimaApertura: hace(60 * 24 * 64), motivo: '«La biblioteca de Babel» responde a tu consulta sobre el archivo total.' },
+  { documento: 'd-mapas', titulo: 'Mapas sin centro', ultimaApertura: hace(60 * 24 * 96), motivo: 'Lo subrayaste mucho en mayo y no lo has vuelto a abrir; tres búsquedas recientes sobre «devenir» lo tocan.' },
+  { documento: 'd-voces', titulo: 'El archivo de las voces y otros cuentos', ultimaApertura: hace(60 * 24 * 64), motivo: '«La sala de los catálogos» responde a tu consulta sobre el archivo total.' },
 ] }));
 ruta('GET', '/perspectivas/huecos', () => json([
   { tema: 'Didi-Huberman y la imagen-superviviente', consultas: 5, resultadosMedios: 0.4, sugerencia: 'Ninguno de tus documentos trata el tema; quizá falte «Ante el tiempo».' },
@@ -647,7 +648,7 @@ ruta('GET', '/perspectivas/huecos', () => json([
 ]));
 ruta('GET', '/perspectivas/recomendaciones', () => json([
   { titulo: 'Arlette Farge, «La atracción del archivo»', motivo: 'Lo citan dos de tus documentos y encaja con «Archivo y duelo».' },
-  { titulo: 'Mary Douglas, «Pureza y peligro»', motivo: 'Kristeva la cita en el capítulo III y la buscas como «impureza».' },
+  { titulo: 'Mary Douglas, «Pureza y peligro»', motivo: 'Etxeberria la cita en el capítulo III y la buscas como «impureza».' },
 ]));
 ruta('POST', '/perspectivas/abierto', () => ok());
 ruta('GET', '/corpus/kpis', () => json(corpus()));

@@ -1,6 +1,6 @@
 /**
  * Un pasaje de una colección que sigues: como los tuyos, pero dice de dónde
- * sale («de Rosa · Seminario de Foucault») y se abre en la vista de esa
+ * sale («de Rosa · Seminario de teoría») y se abre en la vista de esa
  * colección, en su folio o su minuto.
  */
 import { Resaltado } from '../../lib/resaltado';

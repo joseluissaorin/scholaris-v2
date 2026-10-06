@@ -126,9 +126,9 @@ describe('Buscador', () => {
     const r = await m.buscador.buscar('vigilancia del poder antes de 1980');
     expect(r.comprension.filtros.anioHasta).toBe(1979);
     expect(r.resultados.length).toBeGreaterThan(0);
-    expect(r.resultados.every((x) => x.documento.id !== 'doc-serrat')).toBe(true);
-    const f = await m.buscador.buscar('la libertad en Serrat');
-    expect(f.resultados.every((x) => x.documento.id === 'doc-serrat')).toBe(true);
+    expect(r.resultados.every((x) => x.documento.id !== 'doc-almeida')).toBe(true);
+    const f = await m.buscador.buscar('la libertad en Almeida');
+    expect(f.resultados.every((x) => x.documento.id === 'doc-almeida')).toBe(true);
   });
 
   it('el año que filtra es el de la obra original', async () => {
@@ -303,7 +303,7 @@ describe('latencia (puertos falsos con latencias realistas)', () => {
     // Redactor rápido 300 ms, embebedor 90 ms, reordenador 120 ms; índice de fuerza bruta en SQL.
     const m = await montar({ redactor: 300, emb: 90, reord: 120 }, 350);
     const consultas = ['vigilancia y poder', 'la rueda de la fortuna', 'cuerpos dóciles', 'el cosmos medieval', 'censura y canción', 'felicidad y dios',
-      'prisión y libertad', 'el modelo del universo', 'castigo público', 'Machado y la poesía', 'Boecio en la cárcel', 'esferas transparentes'];
+      'prisión y libertad', 'el modelo del universo', 'castigo público', 'Bécquer y la poesía', 'Boecio en la cárcel', 'esferas transparentes'];
     const frio: number[] = [], caliente: number[] = [];
     for (const q of consultas) { const t = performance.now(); await m.buscador.buscar(q); frio.push(performance.now() - t); }
     for (const q of consultas) { const t = performance.now(); await m.buscador.buscar(q); caliente.push(performance.now() - t); }

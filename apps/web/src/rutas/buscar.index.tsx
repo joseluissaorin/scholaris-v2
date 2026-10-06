@@ -223,7 +223,7 @@ function Inicio({ modo, alElegir }: { modo: Modo; alElegir: (t: string) => void 
   const { data } = useQuery(q.historial());
   const recientes = (data?.elementos ?? []).filter((e) => (modo === 'preguntar') === (e.tipo === 'respuesta')).slice(0, 6);
   const ejemplos = modo === 'preguntar'
-    ? ['¿Qué efecto tiene el panóptico sobre quien se sabe vigilado?', '¿Cómo define Kristeva lo abyecto?', '¿Qué dice Serrat sobre musicar a Machado?']
+    ? ['¿Qué efecto tiene el panóptico sobre quien se sabe vigilado?', '¿Cómo define Etxeberria lo abyecto?', '¿Qué dice Ramiro Almeida sobre cantar a Bécquer?']
     : ['vigilancia y visibilidad', 'el cadáver como límite', 'rizoma frente a árbol', 'cartas sin enviar'];
   return (
     <div className="grid gap-10 md:grid-cols-2">
