@@ -271,7 +271,9 @@ async function correr(i: Ingesta, archivo: File, biblioteca?: string, fotos?: Fi
   let conversion: Conversion | null = null;
   controles.set(i.id, { cancelar: () => conversion?.cancelar() });
   try {
-    const sub = await api().subidas.crear({ nombre: archivo.name, mime: archivo.type || 'application/octet-stream', bytes: i.bytes, tipo: i.tipo, ...(biblioteca ? { bibliotecas: [biblioteca] } : {}) });
+    // La huella antes de subir: si el fichero ya está en la biblioteca, no se sube ni se lee otra vez.
+    const huella = !fotos && archivo.size < 512 * 1024 ** 2 ? await sha256Archivo(archivo) : undefined;
+    const sub = await api().subidas.crear({ nombre: archivo.name, mime: archivo.type || 'application/octet-stream', bytes: i.bytes, tipo: i.tipo, ...(huella ? { huella } : {}), ...(biblioteca ? { bibliotecas: [biblioteca] } : {}) });
     if (sub.duplicado) {
       poner(i.id, { etapa: 'duplicado', documento: sub.duplicado, avance: 1, mensaje: 'Ya estaba en tu biblioteca', fin: Date.now() });
       return;
@@ -352,6 +354,13 @@ async function simularMiniaturas(i: Ingesta) {
 function miniaturaDePapel(k: number): string {
   const lineas = Array.from({ length: 9 }, (_, j) => `<rect x='10' y='${18 + j * 9}' width='${j === 8 ? 30 : 52 - ((k + j) % 3) * 6}' height='3' fill='%2322160f' opacity='.55'/>`).join('');
   return `data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 72 100'><rect width='72' height='100' fill='%23faf7f0'/>${k === 0 ? "<rect x='10' y='10' width='40' height='5' fill='%23b8321c'/>" : ''}${lineas}<rect x='32' y='92' width='8' height='2' fill='%2322160f' opacity='.6'/></svg>`;
+}
+
+async function sha256Archivo(f: File): Promise<string | undefined> {
+  try {
+    const h = await crypto.subtle.digest('SHA-256', await f.arrayBuffer());
+    return [...new Uint8Array(h)].map((b) => b.toString(16).padStart(2, '0')).join('');
+  } catch { return undefined; }
 }
 
 function mensajeDe(e: unknown): string {

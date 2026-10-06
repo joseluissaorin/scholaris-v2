@@ -138,7 +138,7 @@ const Fila = memo(function Fila({ docId, orden, modo, texto, apaisada, resaltar,
           <span className="flex items-center gap-2 text-[0.875rem] text-apagado"><span className="h-1.5 w-1.5 rounded-full bg-rojo anim-pulso" />Leyendo esta página…</span>
         </div>
       ) : u?.imagenUrl && !imagenRota ? (
-        <img src={u.imagenUrl} alt={`Imagen de la página ${u.etiqueta}`} loading="lazy" decoding="async" onError={() => setImagenRota(true)} className={cx('w-full rounded-[2px] bg-hoja object-contain shadow-hoja', apaisada ? 'aspect-[16/9]' : 'aspect-[1/1.414]')} />
+        <img src={u.imagenUrl} alt={`Imagen de la página ${u.etiqueta}`} loading="lazy" decoding="async" onError={() => setImagenRota(true)} className={cx('w-full rounded-[2px] bg-white object-contain shadow-hoja', apaisada ? 'aspect-[16/9]' : 'aspect-[1/1.414]')} />
       ) : u ? (
         <Facsimil texto={u.texto} folio={folio?.impresa} titulillo={orden % 2 ? titulillo : undefined} apaisada={apaisada} />
       ) : (
