@@ -106,7 +106,10 @@ export class FlujoIngesta extends WorkflowEntrypoint<Env, ParamsIngesta> {
           this.env.TRABAJADOR.getByName(`${p.tarea}:lote`).enviarLote(p, info));
         if (lote) {
           for (let i = 0; i < 288; i++) {
-            await step.sleep(`espera-lote-${i}`, i < 6 ? '2 minutes' : '5 minutes');
+            const minutos = i < 6 ? 2 : 5;
+            // Avisar al vigilante de que esta espera es a propósito (si no, la relanza y paga otro lote).
+            await step.do(`aviso-espera-${i}`, async () => { await this.env.TAREA.getByName(`tarea:${p.usuario}:${p.tarea}`).esperar(Date.now() + minutos * 60_000); });
+            await step.sleep(`espera-lote-${i}`, `${minutos} minutes`);
             const r = await step.do(`recoger-lote-${i}`, { retries: { limit: 3, delay: '30 seconds' }, timeout: '10 minutes' }, async () =>
               this.env.TRABAJADOR.getByName(`${p.tarea}:lote`).recogerLote(p, info, lote));
             if (r.listo) break;

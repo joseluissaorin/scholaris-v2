@@ -61,7 +61,13 @@ export class Trabajador extends DurableObject<Env> {
   }
 
   async enviarLote(p: ParamsIngesta, info: InfoTuberia): Promise<string | null> {
-    return enviarLoteTuberia(await this.contexto(p), p, info);
+    // Un lote por tarea: este objeto («<tarea>:lote») es el mismo en los relanzamientos,
+    // así que un reintento o un relanzamiento recoge el lote ya pagado en vez de mandar otro.
+    const ya = await this.ctx.storage.get<string>('lote');
+    if (ya) return ya;
+    const id = await enviarLoteTuberia(await this.contexto(p), p, info);
+    if (id) await this.ctx.storage.put('lote', id);
+    return id;
   }
 
   async recogerLote(p: ParamsIngesta, info: InfoTuberia, id: string): Promise<{ listo: boolean; error?: string }> {

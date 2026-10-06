@@ -47,6 +47,16 @@ export class Tarea extends DurableObject<Env> {
     return n;
   }
 
+  /**
+   * RPC: la tarea va a esperar a propósito (el lote de Gemini del modo económico) hasta
+   * ese instante. Cuenta como avance y el vigilante no la relanza antes.
+   */
+  async esperar(hasta: number): Promise<void> {
+    await this.ctx.storage.put('espera', hasta);
+    await this.ctx.storage.put('avance', Date.now());
+    if (!(await this.ctx.storage.get<boolean>('fin'))) await this.ctx.storage.setAlarm(Math.max(Date.now() + 120_000, hasta + 60_000));
+  }
+
   /** RPC: contador atómico (pliegos leídos, tramos transcritos). */
   async sumar(clave: string, n = 1): Promise<number> {
     const v = ((await this.ctx.storage.get<number>(`c:${clave}`)) ?? 0) + n;
@@ -70,8 +80,11 @@ export class Tarea extends DurableObject<Env> {
     if (!nombre?.startsWith('tarea:')) return;
     const [, usuario, tarea] = nombre.split(':');
     const avance = (await this.ctx.storage.get<number>('avance')) ?? 0;
-    const sin = Date.now() - avance;
-    if (sin < 115_000) { await this.ctx.storage.setAlarm(avance + 120_000); return; }
+    // Una espera anunciada (lote económico) no es estar parada.
+    const espera = (await this.ctx.storage.get<number>('espera')) ?? 0;
+    if (Date.now() < espera + 60_000) { await this.ctx.storage.setAlarm(espera + 60_000 + 1000); return; }
+    const sin = Date.now() - Math.max(avance, espera);
+    if (sin < 115_000) { await this.ctx.storage.setAlarm(Math.max(avance, espera) + 120_000); return; }
     const r = await this.env.ESTANTERIA.getByName(usuario!).vigilarTarea(tarea!, sin);
     if (r.startsWith('sigue') || r.startsWith('relanzada')) await this.ctx.storage.setAlarm(Date.now() + 120_000);
   }
