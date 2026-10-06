@@ -69,9 +69,20 @@ export interface ConfigCompatible extends OpcionesComunes {
 /** Dimensiones de los embebedores habituales (por nombre, sin etiqueta de cuantización). */
 export const DIMENSIONES_CONOCIDAS: Record<string, number> = {
   'bge-m3': 1024, 'nomic-embed-text': 768, 'mxbai-embed-large': 1024, 'snowflake-arctic-embed': 1024, 'snowflake-arctic-embed2': 1024,
-  'all-minilm': 384, 'granite-embedding': 384, 'embeddinggemma': 768, 'qwen3-embedding': 4096, 'qwen3-embedding:0.6b': 1024, 'qwen3-embedding:4b': 2560,
+  'all-minilm': 384, 'granite-embedding': 384, 'embeddinggemma': 768, 'embeddinggemma-2': 768, 'qwen3-embedding': 4096, 'qwen3-embedding:0.6b': 1024, 'qwen3-embedding:4b': 2560,
   'qwen3-embedding:8b': 4096, 'multilingual-e5-large': 1024, 'paraphrase-multilingual': 768, 'jina-embeddings-v3': 1024,
 };
+
+/**
+ * Modelos con espacio canónico: el mismo id sirva quien sirva el modelo
+ * (Ollama, llama.cpp, sentence-transformers en InferBox), para que los vectores
+ * de un SPDF valgan en otra instalación. EmbeddingGemma 2 (Google DeepMind,
+ * 6-10-2026, Apache 2.0): 768 dimensiones nativas con Matryoshka a 512, 256 y
+ * 128 (no hay 1536), 8K de contexto.
+ */
+const CANONICOS: Array<{ re: RegExp; id: string; matryoshka?: number[] }> = [
+  { re: /(^|\/)embeddinggemma-2(:|$)/i, id: 'embeddinggemma-2', matryoshka: [768, 512, 256, 128] },
+];
 
 /** Prefijos de tarea que esperan algunos embebedores (documento, consulta). */
 const PREFIJOS: Array<{ re: RegExp; documento: string; consulta: string }> = [
@@ -86,7 +97,7 @@ const PREFIJOS: Array<{ re: RegExp; documento: string; consulta: string }> = [
 /** Modelos por defecto de cada sabor (los que se han probado; ver SIN-CONEXION.md). */
 export const MODELOS_POR_DEFECTO: Record<SaborServidor, Required<Omit<ModelosCompatibles, 'redactor' | 'juez'>>> = {
   inferbox: { lector: 'qwen2.5-vl-7b', embebedor: 'qwen3-vl-embed', reordenador: 'bge-reranker', transcriptor: '' },
-  ollama: { lector: 'qwen2.5vl:7b', embebedor: 'bge-m3', reordenador: '', transcriptor: 'whisper-1' },
+  ollama: { lector: 'qwen2.5vl:7b', embebedor: 'embeddinggemma-2', reordenador: '', transcriptor: 'whisper-1' },
   llamacpp: { lector: '', embebedor: '', reordenador: '', transcriptor: 'whisper-1' },
   vllm: { lector: 'Qwen/Qwen2.5-VL-7B-Instruct', embebedor: 'BAAI/bge-m3', reordenador: 'BAAI/bge-reranker-v2-m3', transcriptor: 'openai/whisper-large-v3-turbo' },
   lmstudio: { lector: 'qwen2.5-vl-7b-instruct', embebedor: 'text-embedding-bge-m3', reordenador: '', transcriptor: 'whisper-1' },
@@ -269,7 +280,10 @@ export function crearOpenAICompatible(config: ConfigCompatible): ClienteCompatib
     if (!modelo) throw new ErrorProveedor(prov, 'falta el modelo del embebedor (INFERENCIA_MODELO_EMBEBEDOR)');
     const dims = o.dims ?? config.dims ?? dimensionesDe(modelo);
     if (!dims) throw new ErrorProveedor(prov, `no sé cuántas dimensiones tiene «${modelo}»: pon INFERENCIA_DIMS`);
-    const espacio: EspacioVectorial = { id: `local:${modelo}@${dims}`, proveedor: prov, modelo, dims, normalizado: true, modalidades: ['texto'] };
+    const canonico = CANONICOS.find((c) => c.re.test(modelo));
+    if (canonico?.matryoshka && !canonico.matryoshka.includes(dims)) throw new ErrorProveedor(prov, `«${modelo}» admite ${canonico.matryoshka.join(', ')} dimensiones, no ${dims}`);
+    const nativas = canonico?.matryoshka?.[0];
+    const espacio: EspacioVectorial = { id: `${canonico ? canonico.id : `local:${modelo}`}@${dims}`, proveedor: prov, modelo: canonico?.id ?? modelo, dims, normalizado: true, modalidades: ['texto'] };
     const prefijo = PREFIJOS.find((x) => x.re.test(modelo));
     return {
       espacio,
@@ -285,11 +299,13 @@ export function crearOpenAICompatible(config: ConfigCompatible): ClienteCompatib
         await enParalelo(lotes, 2, async (idx) => {
           const t0 = ahora();
           const r = await limitar(() => pedir<{ data?: Array<{ embedding: number[]; index?: number }>; usage?: { prompt_tokens?: number } }>(
-            { proveedor: prov, url: `${base}/embeddings`, cabeceras, cuerpo: { model: modelo, input: idx.map((i) => textos[i]) } }, op));
+            { proveedor: prov, url: `${base}/embeddings`, cabeceras, cuerpo: { model: modelo, input: idx.map((i) => textos[i]), ...(nativas && dims !== nativas ? { dimensions: dims } : {}) } }, op));
           const datos = r.data ?? [];
           if (datos.length !== idx.length) throw new ErrorProveedor(prov, `/embeddings devolvió ${datos.length} vectores para ${idx.length} textos`);
           datos.forEach((d, k) => {
-            const v = Float32Array.from(d.embedding);
+            let v = Float32Array.from(d.embedding);
+            // Matryoshka: si el servidor no recortó, se recorta aquí (y se renormaliza abajo).
+            if (nativas && v.length === nativas && dims < nativas) v = v.slice(0, dims);
             if (v.length !== dims) throw new ErrorProveedor(prov, `«${modelo}» devolvió ${v.length} dimensiones y se esperaban ${dims} (INFERENCIA_DIMS)`);
             salida[idx[d.index ?? k] as number] = normalizarVector(v);
           });

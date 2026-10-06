@@ -133,9 +133,11 @@ export async function construirEstanteria(o: { actualizar?: boolean } = {}): Pro
 }
 
 /** Puerto SQL sobre la estantería congelada (solo lectura). */
-export function abrirEstanteria(): SQL & { bd: DatabaseSync; huella: string } {
+/** `copia`: abre una copia escribible (para experimentos que añaden vectores sin tocar la estantería congelada). */
+export function abrirEstanteria(copia?: string): SQL & { bd: DatabaseSync; huella: string } {
   if (!existsSync(RUTA_ESTANTERIA)) throw new Error('Falta la estantería del banco: pnpm bench calidad estanteria');
-  const bd = new DatabaseSync(RUTA_ESTANTERIA, { readOnly: true });
+  if (copia) copyFileSync(RUTA_ESTANTERIA, copia);
+  const bd = new DatabaseSync(copia ?? RUTA_ESTANTERIA, { readOnly: !copia });
   const huella = (bd.prepare(`SELECT valor FROM spdf WHERE clave = 'huella_banco'`).get() as { valor: string } | undefined)?.valor ?? '?';
   const preparadas = new Map<string, ReturnType<DatabaseSync['prepare']>>();
   const sql = {

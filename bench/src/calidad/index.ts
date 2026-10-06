@@ -11,6 +11,7 @@
  *   remapear          lleva juicios, semillas y oro de citas a una estantería reconstruida
  *   revisar           confirmar o corregir juicios a mano
  *   experimentos      barridos de ajustes (vías, rrf, pesos, reordenadores, expansiones, contiguos, vista)
+ *   embebedores       compara embebedores (Gemini, EmbeddingGemma 2, bge-m3, Qwen3-VL) en la vía densa
  *   folios-rehacer    recalcula los folios de las fuentes congeladas sin releer (--simular: sin escribir)
  */
 export async function calidad(args: string[]): Promise<void> {
@@ -29,6 +30,7 @@ export async function calidad(args: string[]): Promise<void> {
     case 'experimentos': return (await import('./experimentos.js')).experimentos(resto);
     case 'remapear': return (await import('./remapear.js')).remapear();
     case 'revisar': return (await import('./revisar.js')).revisar(resto);
+    case 'embebedores': return (await import('./embebedores.js')).embebedores(resto);
     case 'folios-rehacer': return (await import('./folios-rehacer.js')).foliosRehacer(resto);
     case undefined: return (await import('./ejecutar.js')).ejecutar([]);
     default:

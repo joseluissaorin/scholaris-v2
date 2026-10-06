@@ -69,6 +69,24 @@ describe('servidor compatible con OpenAI', () => {
     expect(dimensionesDe('qwen3-embedding:0.6b')).toBe(1024);
   });
 
+  it('EmbeddingGemma 2: espacio canónico, prefijos de tarea y Matryoshka (768 → 256 renormalizado)', async () => {
+    const { fetch, llamadas } = fetchFalso((ll) => ({ data: (ll.cuerpo as { input: string[] }).input.map((_, i) => ({ index: i, embedding: Array.from({ length: 768 }, (_, k) => (k < 256 ? 0.1 : 0.5)) })) }));
+    const c = crearOpenAICompatible({ url: 'http://localhost:11434', sabor: 'ollama', fetch });
+    const e768 = c.embebedor();
+    expect(e768.espacio).toMatchObject({ id: 'embeddinggemma-2@768', modelo: 'embeddinggemma-2', dims: 768 });
+    await e768.vectorizar([{ modalidad: 'texto', texto: 'rimas' }], 'consulta');
+    await e768.vectorizar([{ modalidad: 'texto', texto: 'Volverán las oscuras golondrinas' }], 'documento');
+    expect((llamadas[0]!.cuerpo as { input: string[] }).input[0]).toBe('task: search result | query: rimas');
+    expect((llamadas[1]!.cuerpo as { input: string[] }).input[0]).toBe('title: none | text: Volverán las oscuras golondrinas');
+    const e256 = crearOpenAICompatible({ url: 'http://localhost:11434', sabor: 'ollama', fetch, dims: 256 }).embebedor();
+    expect(e256.espacio.id).toBe('embeddinggemma-2@256');
+    const [v] = await e256.vectorizar([{ modalidad: 'texto', texto: 'x' }], 'documento');
+    expect(v!.length).toBe(256);
+    expect(Math.hypot(...v!)).toBeCloseTo(1);
+    expect((llamadas.at(-1)!.cuerpo as { dimensions?: number }).dimensions).toBe(256);
+    expect(() => crearOpenAICompatible({ url: 'http://localhost:11434', sabor: 'ollama', fetch, dims: 1536 }).embebedor()).toThrow(/768, 512, 256, 128/);
+  });
+
   it('reordenador: /v1/rerank con relevance_score; si da 404, coseno con el embebedor', async () => {
     const { fetch: f1, llamadas: l1 } = fetchFalso(() => ({ results: [{ index: 1, relevance_score: 0.9 }, { index: 0, relevance_score: 0.1 }] }));
     const r1 = crearOpenAICompatible({ url: 'http://localhost:8080', sabor: 'llamacpp', fetch: f1 }).reordenador();
@@ -87,7 +105,7 @@ describe('servidor compatible con OpenAI', () => {
     expect(l2.filter((l) => l.url.endsWith('/rerank'))).toHaveLength(1);
 
     // Ollama no tiene rerank: ni lo intenta.
-    const { fetch: f3, llamadas: l3 } = fetchFalso((ll) => ({ data: (ll.cuerpo as { input: string[] }).input.map((_, i) => ({ index: i, embedding: Array.from({ length: 1024 }, () => 1) })) }));
+    const { fetch: f3, llamadas: l3 } = fetchFalso((ll) => ({ data: (ll.cuerpo as { input: string[] }).input.map((_, i) => ({ index: i, embedding: Array.from({ length: 768 }, () => 1) })) }));
     const r3 = crearOpenAICompatible({ url: 'http://localhost:11434', sabor: 'ollama', fetch: f3 }).reordenador();
     expect(r3.nombre).toBe('ollama:coseno');
     await r3.reordenar('q', ['a']);
@@ -148,7 +166,7 @@ describe('modo sin conexión', () => {
 
   it('crearInteligencia con SCHOLARIS_SIN_CONEXION=1 ignora las claves de nube y solo llama al servidor local', async () => {
     const { fetch, llamadas } = fetchFalso((ll) => {
-      if (ll.url.endsWith('/embeddings')) return { data: (ll.cuerpo as { input: string[] }).input.map((_, i) => ({ index: i, embedding: Array.from({ length: 1024 }, () => 0.5) })) };
+      if (ll.url.endsWith('/embeddings')) return { data: (ll.cuerpo as { input: string[] }).input.map((_, i) => ({ index: i, embedding: Array.from({ length: 768 }, () => 0.5) })) };
       return chatOk(paginasJSON(1, 1));
     });
     const ia = crearInteligencia({
@@ -156,7 +174,7 @@ describe('modo sin conexión', () => {
       GEMINI_API_KEY: 'no-se-usa', OPENROUTER_API_KEY: 'no-se-usa', TYPESAFE_API_KEY: 'no-se-usa', CLOUDFLARE_ACCOUNT_ID: 'x', CLOUDFLARE_API_TOKEN: 'y',
     }, { fetch });
     expect(ia.lector.nombre).toBe('ollama:qwen2.5vl:7b');
-    expect(ia.embebedor.espacio.id).toBe('local:bge-m3@1024');
+    expect(ia.embebedor.espacio.id).toBe('embeddinggemma-2@768');
     expect(ia.reordenador.nombre).toBe('ollama:coseno');
     await ia.lector.leerPliego({ imagenes: IMG(1), primeraFisica: 1 });
     await ia.embebedor.vectorizar([{ modalidad: 'texto', texto: 'x' }], 'documento');
