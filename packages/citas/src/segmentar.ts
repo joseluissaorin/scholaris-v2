@@ -7,7 +7,7 @@ export interface Parrafo extends TramoTexto { indice: number }
 export interface Afirmacion extends TramoTexto {
   id: string;
   parrafo: number;
-  /** Ya lleva una cita en el texto: «(Foucault, 1975, p. 23)», «[3]», una nota. */
+  /** Ya lleva una cita en el texto: «(Darwin, 1859, p. 81)», «[3]», una nota. */
   yaCitada: boolean;
 }
 
@@ -87,7 +87,7 @@ export function puntoDeInsercion(texto: string, inicio: number, fin: number, mod
   let f = fin;
   if (modo === 'autor-fecha') {
     while (f > inicio && '.?!…:;,'.includes(texto[f - 1] as string)) f--;
-    // «… de visibilidad».  → la cita va tras las comillas y antes del punto: «…» (Foucault, 1975).
+    // «… de visibilidad».  → la cita va tras las comillas y antes del punto: «…» (Darwin, 1859).
     return f;
   }
   while (f < texto.length && /[.?!…:;,»”"')\]]/.test(texto[f] as string)) f++;

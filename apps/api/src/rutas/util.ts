@@ -21,7 +21,7 @@ export function etiquetaAncla(a: Ancla, fin?: Ancla): string {
   try { return anclaACita(a, fin); } catch { return ''; }
 }
 
-/** «(Foucault, 1975, p. 23)» a partir de metadatos y ancla. */
+/** «(Darwin, 1859, p. 81)» a partir de metadatos y ancla. */
 export function citaCorta(m: Pick<MetadatosDocumento, 'autores' | 'anio' | 'titulo'> & Partial<Pick<MetadatosDocumento, 'anioOriginal'>> | undefined, a: Ancla, fin?: Ancla): string {
   const autores = m?.autores ?? [];
   const quien = autores.length === 0 ? (m?.titulo ? `«${m.titulo.slice(0, 40)}»` : 's. a.')

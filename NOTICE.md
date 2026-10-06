@@ -21,7 +21,7 @@ Los documentos de `bench/calidad` son de dominio público o tienen licencia libr
 - Jenna Kanerva, Cassandra Ledins, Siiri Käpyaho y Filip Ginter, *OCR Error Post-Correction with LLMs in Historical Documents: No Free Lunches* (arXiv:2502.01205, 2025): **CC BY 4.0**.
 - Gustavo Adolfo Bécquer, *El monte de las ánimas*, grabación de Elena del Valle para [LibriVox](https://librivox.org/): dominio público.
 
-Las pruebas unitarias citan frases sueltas de obras con derechos (Foucault, Lewis, Cortázar…) como material de prueba, en extensión de cita breve.
+Las pruebas unitarias y la demostración de la web usan obras de dominio público con citas literales cotejadas con su edición en línea (el *Quijote* de Project Gutenberg y la edición de 1608 de Wikisource, Darwin, Boecio, Bentham, Bécquer, Galdós, Larra, el discurso de Kennedy en Rice…), con la fuente anotada junto a cada texto. Donde solo importa la mecánica, los nombres son inventados.
 
 ## Dependencias destacadas
 

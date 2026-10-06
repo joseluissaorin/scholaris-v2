@@ -39,7 +39,7 @@ export interface Buscar {
 export interface ResultadoVista extends Resultado {
   /** «p. 23», «pp. 23-24», «12:04». */
   etiqueta: string;
-  /** Cita corta lista para pegar: «(Foucault, 1975, p. 23)». */
+  /** Cita corta lista para pegar: «(Darwin, 1859, p. 81)». */
   citaCorta: string;
   miniaturaUrl?: string;
   explicacion?: string;

@@ -7,7 +7,7 @@ biblioteca estándar; numpy es opcional para la búsqueda vectorial.
     from scholaris.v2 import SPDF
     with SPDF.abrir("vigilar.spdf") as s:
         print(s.documento["metadatos"]["titulo"])
-        for r in s.buscar("panóptico"):
+        for r in s.buscar("selección natural"):
             print(r.cita, r.texto[:80])
 """
 from __future__ import annotations

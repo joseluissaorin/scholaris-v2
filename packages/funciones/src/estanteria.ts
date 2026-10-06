@@ -60,7 +60,7 @@ export function apellidoPrincipal(doc: Pick<DocumentoBreve, 'metadatos' | 'autor
   return partes[partes.length - 1] ?? '';
 }
 
-/** «Foucault 1975, p. 23», «Foucault y Deleuze 1972, 12:04», «Arendt et al. 1958, diap. 7». */
+/** «Darwin 1859, p. 81», «Kennedy 1962, 12:04», «Bentham 1791, diap. 7». */
 export function citaCorta(doc: DocumentoBreve, ancla?: Ancla | null, anclaFin?: Ancla | null): string {
   const autores = doc.metadatos.autores ?? [];
   let quien: string;

@@ -346,7 +346,7 @@ async function* eventosSse(cuerpo: ReadableStream<Uint8Array>): AsyncGenerator<{
   }
 }
 
-/** Nota al pie como la del redactor: «Foucault, *Vigilar y castigar* (1975), p. 23.» */
+/** Nota al pie como la del redactor: «Darwin, *On the Origin of Species* (1859), p. 81.» */
 function nota(f: FuenteV1): string {
   const d = f.documento;
   const autor = d.autores.length === 0 ? 's. a.' : d.autores.length === 1 ? d.autores[0]!.split(',')[0]! : d.autores.length === 2

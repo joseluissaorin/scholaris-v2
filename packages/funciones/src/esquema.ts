@@ -104,7 +104,7 @@ export const SENTENCIAS_FUNCIONES: readonly string[] = [
     ancla       TEXT,                -- JSON Ancla
     ancla_fin   TEXT,
     pasaje      TEXT,                -- texto literal citado (copia verificada)
-    cita        TEXT,                -- «Foucault 1975, p. 23»
+    cita        TEXT,                -- «Darwin 1859, p. 81»
     huella      TEXT,                -- huella del pasaje para reverificar
     contenido   TEXT NOT NULL,       -- JSON libre (nota, título, comentario…)
     afirmacion  TEXT,
@@ -208,7 +208,7 @@ export const SENTENCIAS_FUNCIONES: readonly string[] = [
     unidad            TEXT,
     ancla             TEXT,           -- JSON Ancla
     etiqueta          TEXT,           -- «p. 23», «12:04»
-    cita              TEXT,           -- «Foucault 1975, p. 23»
+    cita              TEXT,           -- «Darwin 1859, p. 81»
     texto             TEXT NOT NULL,
     lema              TEXT,
     categoria         TEXT,

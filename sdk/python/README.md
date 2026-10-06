@@ -90,8 +90,8 @@ from scholaris.v2 import SPDF
 
 with SPDF.abrir("vigilar.spdf") as s:
     print(s.documento["metadatos"]["titulo"])
-    for f in s.buscar("panóptico", k=5):       # FTS5, insensible a acentos
-        print(f.cita, f.texto[:80])            # «(Foucault, 1975, p. 23) …»
+    for f in s.buscar("selección natural", k=5):       # FTS5, insensible a acentos
+        print(f.cita, f.texto[:80])            # «(Darwin, 1859, p. 81) …»
     print(s.pagina("145").texto)               # por número de página impreso
 ```
 

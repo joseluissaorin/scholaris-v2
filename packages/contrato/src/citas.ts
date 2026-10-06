@@ -56,7 +56,7 @@ export interface PropuestaCita {
   hasta: number;
   afirmacion: string;
   cita: CitaVerificada;
-  /** Texto de la cita en el estilo pedido: «(Foucault, 1975, p. 23)». */
+  /** Texto de la cita en el estilo pedido: «(Darwin, 1859, p. 81)». */
   textoCita: string;
   decision?: 'aceptada' | 'rechazada';
   /** Alternativas por si la primera no convence. */

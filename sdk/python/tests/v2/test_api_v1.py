@@ -31,9 +31,9 @@ class SesionFalsa:
 
 
 def test_buscar_manda_la_clave_y_devuelve_los_pasajes():
-    f = SesionFalsa([Respuesta(200, {"consulta": "x", "pasajes": [{"cita": "(Foucault, 1975, p. 23)"}], "ms": 3})])
+    f = SesionFalsa([Respuesta(200, {"consulta": "x", "pasajes": [{"cita": "(Darwin, 1859, p. 81)"}], "ms": 3})])
     s = Scholaris("sch_prueba", base="https://ejemplo.es/", sesion=f)
-    assert s.buscar("x", k=3, documentos=["d1", "d2"])[0]["cita"] == "(Foucault, 1975, p. 23)"
+    assert s.buscar("x", k=3, documentos=["d1", "d2"])[0]["cita"] == "(Darwin, 1859, p. 81)"
     metodo, url, k = f.pedidas[0]
     assert (metodo, url) == ("GET", "https://ejemplo.es/api/v1/buscar")
     assert k["headers"]["authorization"] == "Bearer sch_prueba"

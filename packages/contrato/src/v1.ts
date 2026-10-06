@@ -91,7 +91,7 @@ export interface PasajeV1 {
   documento: { id: string; titulo: string; autores: string[]; anio?: number };
   /** Texto literal del pasaje. */
   texto: string;
-  /** Cita corta lista para pegar: «(Cortázar, 1977, 1:06:56)», «(Foucault, 1975, p. 23)». */
+  /** Cita corta lista para pegar: «(Cortázar, 1977, 1:06:56)», «(Darwin, 1859, p. 81)». */
   cita: string;
   /** Solo el localizador: «p. 23», «pp. 23-24», «1:06:56», «diap. 7». */
   localizador: string;

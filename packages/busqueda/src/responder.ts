@@ -29,7 +29,7 @@ export interface FuenteRespuesta {
   n: number;
   fragmento: string;
   documento: string;
-  /** «Foucault, 1975, p. 23». */
+  /** «Darwin, 1859, p. 81». */
   etiqueta: string;
   /** Línea de la nota al pie. */
   nota: string;
@@ -68,7 +68,7 @@ export function autorYAnio(r: Pick<Resultado, 'documento'>): { autor: string; an
   return { autor, anio };
 }
 
-/** Etiqueta corta de autor y año para una fuente: «Foucault, 1975». */
+/** Etiqueta corta de autor y año para una fuente: «Darwin, 1859». */
 export function etiquetaAutor(r: Pick<Resultado, 'documento'>): string {
   const { autor, anio } = autorYAnio(r);
   return `${autor}, ${anio}`;

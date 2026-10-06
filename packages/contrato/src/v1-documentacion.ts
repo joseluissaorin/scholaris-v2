@@ -54,7 +54,7 @@ const ESQUEMAS: Record<string, Esquema> = {
   DocumentoBreve: obj({ id: str(), titulo: str(), autores: arr(str()), anio: int() }, ['id', 'titulo', 'autores']),
   Pasaje: obj({
     id: str('Id del fragmento (el del documento, «:» y su posición).', { examples: ['dmuwtm9kmsanlrbm5:p23.1'] }), documento: ref('DocumentoBreve'), texto: str('Texto literal.'),
-    cita: str('Cita corta lista para pegar.', { examples: ['(Cortázar, 1977, 1:06:56)', '(Foucault, 1975, p. 23)'] }),
+    cita: str('Cita corta lista para pegar.', { examples: ['(Cortázar, 1977, 1:06:56)', '(Darwin, 1859, p. 81)'] }),
     localizador: str('Solo el localizador.', { examples: ['p. 23', 'pp. 23-24', '1:06:56', 'diap. 7'] }),
     ancla: ref('Ancla'), enlace: str('El lector abierto en esa página o en ese segundo.', { format: 'uri' }), puntuacion: num(),
   }, ['id', 'documento', 'texto', 'cita', 'localizador', 'ancla', 'enlace']),

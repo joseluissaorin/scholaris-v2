@@ -52,7 +52,7 @@ Se puede filtrar por biblioteca, documento, tipo, autor, idioma y año (desde, h
 
 ## Lo que devuelve cada resultado
 
-El pasaje literal, su cita lista para pegar («(Foucault, 1975, p. 23)»), el localizador exacto, el ancla y un enlace que abre el lector en esa página o en ese segundo. La búsqueda nunca escribe una cita: la cita sale del ancla.
+El pasaje literal, su cita lista para pegar («(Darwin, 1859, p. 81)»), el localizador exacto, el ancla y un enlace que abre el lector en esa página o en ese segundo. La búsqueda nunca escribe una cita: la cita sale del ancla.
 
 ## También
 
@@ -109,7 +109,7 @@ You can filter by library, document, type, author, language and year (from, to).
 
 ## What each result returns
 
-The literal passage, its citation ready to paste ("(Foucault, 1975, p. 23)"), the exact locator, the anchor and a link that opens the reader at that page or second. Search never writes a citation: the citation comes from the anchor.
+The literal passage, its citation ready to paste ("(Darwin, 1859, p. 81)"), the exact locator, the anchor and a link that opens the reader at that page or second. Search never writes a citation: the citation comes from the anchor.
 
 ## Also
 

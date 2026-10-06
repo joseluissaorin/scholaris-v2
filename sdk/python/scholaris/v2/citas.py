@@ -40,7 +40,7 @@ def ancla_a_cita(ancla: Mapping[str, Any], fin: Optional[Mapping[str, Any]] = No
 
 
 def cita_corta(metadatos: Mapping[str, Any], ancla: Mapping[str, Any], fin: Optional[Mapping[str, Any]] = None) -> str:
-    """«(Foucault, 1975, p. 23)»."""
+    """«(Darwin, 1859, p. 81)»."""
     autores = list(metadatos.get("autores") or [])
     nombre = lambda a: a.get("apellidos") or a.get("nombre") or ""  # noqa: E731
     if not autores:
