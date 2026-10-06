@@ -1,0 +1,44 @@
+{
+  "name": "@scholaris/local",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "description": "Scholaris en casa: la misma API sobre Node, SQLite y el disco.",
+  "exports": {
+    ".": "./src/index.ts",
+    "./servidor": "./src/servidor.ts"
+  },
+  "scripts": {
+    "dev": "tsx watch src/principal.ts",
+    "start": "tsx src/principal.ts",
+    "build": "node build.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@hono/node-server": "^2.1.3",
+    "@napi-rs/canvas": "^1.0.10",
+    "@scholaris/api": "workspace:^",
+    "@scholaris/busqueda": "workspace:^",
+    "@scholaris/contrato": "workspace:^",
+    "@scholaris/funciones": "workspace:^",
+    "@scholaris/imprenta": "workspace:^",
+    "@scholaris/nucleo": "workspace:^",
+    "@scholaris/proveedores": "workspace:^",
+    "@scholaris/spdf": "workspace:^",
+    "better-sqlite3": "^13.0.3",
+    "hono": "^4.9.0",
+    "pdfjs-dist": "^6.4.299",
+    "sqlite-vec": "^0.1.9",
+    "undici": "^8.11.2",
+    "ws": "^8.22.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^9.6.0",
+    "@types/node": "^22.20.5",
+    "@types/ws": "^8.18.2",
+    "esbuild": "^0.28.2",
+    "tsx": "^4.23.15",
+    "vitest": "^3.2.7"
+  }
+}

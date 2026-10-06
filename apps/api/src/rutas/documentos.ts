@@ -119,7 +119,7 @@ export function rutasDocumentos(app: Hono<Entorno>): void {
     const p = puertos(c);
     const d = await documentoOError(p, prm(c, 'id'));
     const [cuentas] = await p.sql.ejecutar<{ f: number; s: number; g: number }>(
-      'SELECT (SELECT COUNT(*) FROM fragmentos WHERE documento = ?1) AS f, (SELECT COUNT(*) FROM secciones WHERE documento = ?1) AS s, (SELECT COUNT(*) FROM figuras WHERE documento = ?1) AS g', d.id);
+      'SELECT (SELECT COUNT(*) FROM fragmentos WHERE documento = ?) AS f, (SELECT COUNT(*) FROM secciones WHERE documento = ?) AS s, (SELECT COUNT(*) FROM figuras WHERE documento = ?) AS g', d.id, d.id, d.id);
     const espaciosIds = new Set((await p.sql.ejecutar<{ espacio: string }>('SELECT DISTINCT espacio FROM vectores WHERE documento = ?', d.id)).map((f) => f.espacio));
     const detalle: DetalleDocumento = {
       ...d,

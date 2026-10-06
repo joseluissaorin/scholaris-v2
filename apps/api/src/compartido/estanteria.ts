@@ -118,9 +118,9 @@ export async function totalesEstanteria(sql: SQL): Promise<{ documentos: number;
 /** Claves del almacén que pertenecen a un documento (para borrarlas). */
 export async function clavesDeDocumento(sql: SQL, documento: string): Promise<string[]> {
   const filas = await sql.ejecutar<{ k: string | null }>(
-    `SELECT original AS k FROM documentos WHERE id = ?1
-     UNION SELECT imagen FROM unidades WHERE documento = ?1 UNION SELECT miniatura FROM unidades WHERE documento = ?1
-     UNION SELECT imagen FROM figuras WHERE documento = ?1`, documento);
+    `SELECT original AS k FROM documentos WHERE id = ?
+     UNION SELECT imagen FROM unidades WHERE documento = ? UNION SELECT miniatura FROM unidades WHERE documento = ?
+     UNION SELECT imagen FROM figuras WHERE documento = ?`, documento, documento, documento, documento);
   return filas.map((f) => f.k).filter((k): k is string => !!k);
 }
 

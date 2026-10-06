@@ -1,0 +1,92 @@
+/**
+ * Arranque en Node: `pnpm --filter @scholaris/local start` o la imagen Docker.
+ *
+ *   DATA_DIR          carpeta de datos (./datos)
+ *   PORT              puerto (8790)
+ *   PUBLIC_URL        URL pública si va detrás de un proxy
+ *   WEB_DIR           web construida (apps/web/dist)
+ *   GEMINI_API_KEY, OPENROUTER_API_KEY, TYPESAFE_API_KEY   inteligencia por API
+ *   INFERBOX_URL, INFERBOX_API_KEY                         opcional, sin conexión
+ *   SCHOLARIS_TOKEN   token fijo para un solo usuario (opcional)
+ *   CLERK_PUBLISHABLE_KEY                                  multiusuario con Clerk
+ */
+import { createServer } from 'node:http';
+import { fileURLToPath } from 'node:url';
+import { dirname, join, resolve } from 'node:path';
+import { getRequestListener } from '@hono/node-server';
+import { Agent, setGlobalDispatcher } from 'undici';
+import { WebSocketServer } from 'ws';
+import Database from 'better-sqlite3';
+import * as sqliteVec from 'sqlite-vec';
+import { crearServidorLocal, type DriverSqlite } from './servidor.js';
+import type { BaseSqlite } from './sql.js';
+import type { MensajeCliente } from '@scholaris/contrato';
+
+export const driverNode: DriverSqlite = {
+  abrir: (ruta) => new Database(ruta) as unknown as BaseSqlite,
+  cargarVec: (db) => sqliteVec.load(db as unknown as Database.Database),
+};
+
+export async function imprentaNode() {
+  const m = await import('@scholaris/imprenta/node');
+  return async (a: { nombre: string; mime: string; bytes: Uint8Array; tipo?: string }) =>
+    m.recolectar(m.convertir({ nombre: a.nombre, mime: a.mime, bytes: a.bytes }, a.tipo ? { tipo: a.tipo as never } : {}));
+}
+
+/**
+ * El fetch de Node encola en serie las peticiones simultáneas al mismo origen
+ * (Gemini): con un agente de muchas conexiones vuelve el paralelismo real.
+ */
+export function fetchEnParalelo(): void {
+  setGlobalDispatcher(new Agent({ connections: 256, pipelining: 1, keepAliveTimeout: 30_000 }));
+}
+
+export async function arrancarNode(opciones: { puerto?: number; datos?: string; web?: string } = {}) {
+  fetchEnParalelo();
+  const aqui = dirname(fileURLToPath(import.meta.url));
+  const puerto = opciones.puerto ?? Number(process.env.PORT ?? 8790);
+  const s = await crearServidorLocal({
+    datos: opciones.datos ?? process.env.DATA_DIR ?? './datos',
+    puerto,
+    web: opciones.web ?? process.env.WEB_DIR ?? resolve(aqui, '../../web/dist'),
+    driver: driverNode,
+    ...(process.env.SCHOLARIS_IMPRENTA === '0' ? {} : { convertir: await imprentaNode() }),
+  });
+
+  const http = createServer(getRequestListener((req) => s.fetch(req)));
+  const wss = new WebSocketServer({ noServer: true });
+  http.on('upgrade', (req, socket, cabeza) => {
+    const url = new URL(req.url ?? '/', s.origen);
+    if (url.pathname !== '/api/v2/tiempo-real') return socket.destroy();
+    void s.canalDeBillete(url.searchParams.get('billete') ?? '').then((canal) => {
+      if (!canal) {
+        socket.write('HTTP/1.1 401 Unauthorized\r\nContent-Type: text/plain; charset=utf-8\r\n\r\nEl billete no es válido o ha caducado.');
+        return socket.destroy();
+      }
+      wss.handleUpgrade(req, socket, cabeza, (ws) => {
+        const usuario = canal.split(':')[1] ?? '';
+        const tarea = canal.startsWith('tarea:') ? canal.split(':')[2] : undefined;
+        ws.send(JSON.stringify({ tipo: 'hola', usuario, ...(tarea ? { tarea } : {}) }));
+        const quitar = s.tiempoReal.suscribir(canal, (e) => ws.send(JSON.stringify(e)));
+        ws.on('message', (m) => {
+          try {
+            const msg = JSON.parse(String(m)) as MensajeCliente;
+            if (msg.tipo === 'ping') ws.send(JSON.stringify({ tipo: 'pong', t: msg.t }));
+          } catch { /* ignorado */ }
+        });
+        ws.on('close', quitar);
+      });
+    });
+  });
+  await new Promise<void>((r) => http.listen(puerto, r));
+  console.log(`Scholaris local escuchando en ${s.origen} (datos en ${resolve(opciones.datos ?? process.env.DATA_DIR ?? './datos')})`);
+  const cerrar = () => { s.cerrar(); http.close(); };
+  return { servidor: s, http, cerrar };
+}
+
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  arrancarNode().catch((e) => { console.error(e); process.exit(1); });
+  process.on('SIGTERM', () => process.exit(0));
+}
+
+export { join };

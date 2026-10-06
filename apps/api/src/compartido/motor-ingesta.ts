@@ -59,7 +59,8 @@ const OPCIONES_PLAN = {} as const;
 
 export { ErrorReserva };
 
-const trabajo = (p: ParamsIngesta) => `${p.prefijo}trabajo/${p.tarea}/`;
+/** Por documento: un reintento (tarea nueva) reaprovecha las lecturas ya pagadas. */
+const trabajo = (p: ParamsIngesta) => `${p.prefijo}trabajo/`;
 
 // ---------------------------------------------------------------------------
 // Paquete y fuente

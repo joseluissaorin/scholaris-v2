@@ -32,7 +32,8 @@ export function rutasTareas(app: Hono<Entorno>): void {
       documento: t.documento, prefijo, original: d.original, paquete: anterior.paquete, url: anterior.url, fases: anterior.fases,
       tipo: d.tipo, mime: d.mime, nombre: d.titulo ?? t.documento,
     }, t.tipo === 'importacion' ? 'importacion' : 'ingesta');
-    return c.json((await leerTarea(p.sql, r.tarea))!);
+    const { params: _x, ...nueva } = (await leerTarea(p.sql, r.tarea))!;
+    return c.json(nueva);
   });
 
   app.delete('/tareas/:id', async (c: Ctx) => {
