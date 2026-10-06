@@ -2,7 +2,6 @@ import { StrictMode, Suspense, use } from 'react';
 import { createRoot } from 'react-dom/client';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { createRouter, RouterProvider } from '@tanstack/react-router';
-import { ConsejoProveedor } from '@scholaris/ui';
 import { routeTree } from './arbol-rutas.gen';
 import { arrancar } from './datos/api';
 import { clienteConsultas } from './datos/consultas';
@@ -41,13 +40,11 @@ function Aplicacion() {
 createRoot(document.getElementById('raiz')!).render(
   <StrictMode>
     <QueryClientProvider client={clienteConsultas}>
-      <ConsejoProveedor delayDuration={350}>
-        <FalloArranque promesa={promesaConfig}>
-          <Suspense fallback={<EsperaMarco />}>
-            <Aplicacion />
-          </Suspense>
-        </FalloArranque>
-      </ConsejoProveedor>
+      <FalloArranque promesa={promesaConfig}>
+        <Suspense fallback={<EsperaMarco />}>
+          <Aplicacion />
+        </Suspense>
+      </FalloArranque>
     </QueryClientProvider>
   </StrictMode>,
 );

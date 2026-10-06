@@ -112,8 +112,8 @@ export const Medio = forwardRef<ManejadorMedio, { doc: DetalleDocumento; url?: s
       <div>
         <div className="sticky top-[7.75rem] z-20 -mx-5 border-b border-filete bg-papel/95 px-5 pb-4 pt-2 backdrop-blur md:top-[4.25rem] md:-mx-12 md:px-12">
           {doc.tipo === 'video' ? (
-            url ? <video ref={setEl} src={url} className="mx-auto max-h-[38vh] w-full max-w-3xl rounded-s bg-black" playsInline preload="metadata" /> : (
-              <div className="relative mx-auto grid aspect-video max-h-[34vh] w-full max-w-3xl place-items-center overflow-hidden rounded-s bg-tinta text-sobre-tinta">
+            url ? <video ref={setEl} src={url} className="mx-auto max-h-[24vh] w-full max-w-3xl rounded-s bg-black md:max-h-[38vh]" playsInline preload="metadata" /> : (
+              <div className="relative mx-auto grid aspect-video max-h-[22vh] w-full max-w-3xl md:max-h-[34vh] place-items-center overflow-hidden rounded-s bg-tinta text-sobre-tinta">
                 <svg viewBox="0 0 160 90" className="absolute inset-0 h-full w-full opacity-90" aria-hidden><rect x="0" y="0" width="160" height="90" fill="var(--s-azul)" /><circle cx="122" cy="70" r="46" fill="var(--s-amarillo)" /><rect x="14" y="16" width="62" height="40" fill="#22160f" /></svg>
                 <span className="relative font-mono text-[2rem] tnum">{tiempoACadena(r.t)}</span>
               </div>
@@ -143,11 +143,11 @@ function Controles({ r }: { r: Reloj }) {
   const VELS = [1, 1.25, 1.5, 2, 0.75];
   return (
     <div className="mx-auto mt-3 flex max-w-3xl items-center gap-3">
-      <button type="button" onClick={() => r.ir(r.t - 10)} aria-label="Atrás 10 segundos" className="tactil-grande grid h-10 w-10 place-items-center rounded-s text-tinta-2 hover:bg-hondo hover:text-tinta"><span className="font-mono text-[0.75rem]">−10</span></button>
+      <button type="button" onClick={() => r.ir(r.t - 10)} aria-label="Atrás 10 segundos" className="tactil-grande hidden sm:grid h-10 w-10 place-items-center rounded-s text-tinta-2 hover:bg-hondo hover:text-tinta"><span className="font-mono text-[0.75rem]">−10</span></button>
       <button type="button" onClick={r.sonando ? r.pausa : r.play} aria-label={r.sonando ? 'Pausa' : 'Reproducir'} className="grid h-12 w-12 shrink-0 place-items-center rounded-full bg-tinta text-sobre-tinta hover:bg-tinta-2">
         <Icono nombre={r.sonando ? 'pausa' : 'play'} tam={18} grosor={2.4} />
       </button>
-      <button type="button" onClick={() => r.ir(r.t + 10)} aria-label="Adelante 10 segundos" className="tactil-grande grid h-10 w-10 place-items-center rounded-s text-tinta-2 hover:bg-hondo hover:text-tinta"><span className="font-mono text-[0.75rem]">+10</span></button>
+      <button type="button" onClick={() => r.ir(r.t + 10)} aria-label="Adelante 10 segundos" className="tactil-grande hidden sm:grid h-10 w-10 place-items-center rounded-s text-tinta-2 hover:bg-hondo hover:text-tinta"><span className="font-mono text-[0.75rem]">+10</span></button>
       <span className="tnum w-16 shrink-0 text-right font-mono text-[0.875rem]">{tiempoACadena(r.t)}</span>
       <input
         type="range" min={0} max={Math.round(r.dur)} step={1} value={Math.round(r.t)} onChange={(e) => r.ir(Number(e.target.value))}

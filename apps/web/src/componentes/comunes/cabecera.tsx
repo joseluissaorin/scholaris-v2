@@ -14,7 +14,7 @@ export function Cabecera({ numero, antetitulo, titulo, forma, color, children, c
       <FormaBauhaus
         forma={forma}
         color={color}
-        className={cx('pointer-events-none absolute', compacta ? '-right-12 -top-16 h-44 w-44 md:h-56 md:w-56' : '-right-20 -top-28 h-52 w-52 md:-right-10 md:-top-44 md:h-[21rem] md:w-[21rem]')}
+        className={cx('pointer-events-none absolute', compacta ? '-right-16 -top-24 h-40 w-40 md:-right-12 md:-top-16 md:h-56 md:w-56' : '-right-20 -top-28 h-52 w-52 md:-right-10 md:-top-44 md:h-[21rem] md:w-[21rem]')}
       />
       <p className="rotulo relative text-apagado">{numero ? <span className="text-rojo">{numero}</span> : null}{numero ? ' · ' : ''}{antetitulo}</p>
       <h1 className={cx('titular relative mt-2 max-w-[11ch] text-tinta', compacta ? 'text-[clamp(2.25rem,6vw,3.5rem)]' : 'text-[clamp(3rem,10vw,6.75rem)]')}>{titulo}</h1>

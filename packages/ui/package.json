@@ -24,5 +24,8 @@
   "peerDependencies": {
     "react": "^19.0.0",
     "radix-ui": "^1.0.0"
-  }
+  },
+  "sideEffects": [
+    "*.css"
+  ]
 }

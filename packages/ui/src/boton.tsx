@@ -1,5 +1,4 @@
-import { forwardRef, type ButtonHTMLAttributes, type ReactNode } from 'react';
-import { Slot } from 'radix-ui';
+import { cloneElement, forwardRef, isValidElement, type ButtonHTMLAttributes, type ReactElement, type ReactNode } from 'react';
 import { cx } from './cx';
 import { Icono, type NombreIcono } from './iconos';
 
@@ -37,37 +36,36 @@ export const Boton = forwardRef<HTMLButtonElement, PropsBoton>(function Boton(
   { variante = 'linea', tam = 'm', icono, soloIcono, cargando, comoHijo, atajo, className, children, disabled, type, ...resto },
   ref,
 ) {
-  const Comp = comoHijo ? Slot.Root : 'button';
   const tamIcono = tam === 'g' ? 20 : tam === 'p' ? 15 : 17;
+  const clases = cx(
+    'relative inline-flex select-none items-center justify-center whitespace-nowrap rounded-s font-serif leading-none',
+    'transition-[background-color,border-color,color,transform,filter] duration-100 active:translate-y-px',
+    'disabled:pointer-events-none disabled:opacity-45',
+    VARIANTES[variante],
+    soloIcono ? TAMANOS_ICONO[tam] : TAMANOS[tam],
+    className,
+  );
+  // «Como hijo»: el aspecto del botón sobre un enlace del enrutador, sin envolverlo.
+  if (comoHijo && isValidElement(children)) {
+    const hijo = children as ReactElement<{ className?: string }>;
+    return cloneElement(hijo, { ...(resto as object), className: cx(clases, 'gap-2', hijo.props.className) });
+  }
   return (
-    <Comp
+    <button
       ref={ref}
-      type={comoHijo ? undefined : (type ?? 'button')}
+      type={type ?? 'button'}
       disabled={disabled || cargando}
       aria-busy={cargando || undefined}
-      className={cx(
-        'relative inline-flex select-none items-center justify-center whitespace-nowrap rounded-s font-serif leading-none',
-        'transition-[background-color,border-color,color,transform,filter] duration-100 active:translate-y-px',
-        'disabled:pointer-events-none disabled:opacity-45',
-        VARIANTES[variante],
-        soloIcono ? TAMANOS_ICONO[tam] : TAMANOS[tam],
-        className,
-      )}
+      className={clases}
       {...resto}
     >
-      {comoHijo ? (
-        children
-      ) : (
-        <>
-          {cargando ? (
-            <span aria-hidden className="inline-block h-3 w-3 border-[1.5px] border-current anim-gira" style={{ animationDuration: '0.9s' }} />
-          ) : icono ? (
-            <Icono nombre={icono} tam={tamIcono} />
-          ) : null}
-          {children}
-          {atajo ? <span className="rotulo ml-1 opacity-60">{atajo}</span> : null}
-        </>
-      )}
-    </Comp>
+      {cargando ? (
+        <span aria-hidden className="inline-block h-3 w-3 border-[1.5px] border-current anim-gira" style={{ animationDuration: '0.9s' }} />
+      ) : icono ? (
+        <Icono nombre={icono} tam={tamIcono} />
+      ) : null}
+      {children}
+      {atajo ? <span className="rotulo ml-1 opacity-60">{atajo}</span> : null}
+    </button>
   );
 });

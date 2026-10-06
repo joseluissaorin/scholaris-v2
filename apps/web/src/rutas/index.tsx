@@ -152,7 +152,7 @@ function PaginaBiblioteca() {
           <section aria-label="En la imprenta" className="mb-10">
             <div className="mb-3 flex items-baseline gap-3">
               <h2 className="text-[1.375rem] italic tracking-[-0.01em]">En la imprenta</h2>
-              <Rotulo>{ingestas.filter((i) => i.etapa !== 'listo').length} en curso · las páginas se pueden leer en cuanto aparecen</Rotulo>
+              <Rotulo>{ingestas.filter((i) => i.etapa !== 'listo').length} en curso<span className="hidden sm:inline"> · las páginas se pueden leer en cuanto aparecen</span></Rotulo>
             </div>
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
               {ingestas.map((i) => <TarjetaIngesta key={i.id} i={i} />)}

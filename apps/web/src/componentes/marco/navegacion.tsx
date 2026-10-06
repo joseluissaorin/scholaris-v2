@@ -1,9 +1,8 @@
-import { Link, useRouterState } from '@tanstack/react-router';
+import { Link } from '@tanstack/react-router';
 import { useQuery } from '@tanstack/react-query';
-import {
-  cx, Icono, Teclas, Consejo, MenuRaiz, MenuDisparador, MenuContenido, MenuElemento, MenuSeparador, MenuRotulo, type NombreIcono,
-} from '@scholaris/ui';
-import { disparar, ponerTema, useTema } from '../../lib/acciones';
+import { cloneElement, lazy, Suspense, useState, type ReactElement } from 'react';
+import { cx, Icono, type NombreIcono } from '@scholaris/ui';
+import { disparar } from '../../lib/acciones';
 import { useSesion } from '../../sesion';
 import { esSimulado } from '../../datos/api';
 import { q } from '../../datos/consultas';
@@ -24,51 +23,32 @@ function useAlertasPendientes() {
   return data?.filter((a) => !a.vista).length ?? 0;
 }
 
-/** Menú de «Añadir»: el mismo en el riel y en la barra móvil. */
-export function MenuAnadir({ children, alinear = 'start' }: { children: React.ReactNode; alinear?: 'start' | 'end' | 'center' }) {
-  return (
-    <MenuRaiz>
-      <MenuDisparador asChild>{children}</MenuDisparador>
-      <MenuContenido alinear={alinear} className="w-64">
-        <MenuRotulo>Añadir a la biblioteca</MenuRotulo>
-        <MenuElemento icono="subir" atajo={`${TECLA_MOD} U`} alElegir={() => disparar('archivos')}>Archivos…</MenuElemento>
-        <MenuElemento icono="camara" alElegir={() => disparar('camara')}>Fotografiar páginas</MenuElemento>
-        <MenuElemento icono="enlace" alElegir={() => disparar('enlace')}>Desde un enlace…</MenuElemento>
-        <MenuSeparador />
-        <MenuElemento icono="pila" alElegir={() => disparar('spdf')}>Importar un .spdf…</MenuElemento>
-      </MenuContenido>
-    </MenuRaiz>
-  );
+/**
+ * Los menús del marco se cargan con la intención (al pasar, enfocar o pulsar) y
+ * en cuanto el navegador queda ocioso: Radix no pesa en el primer pintado.
+ */
+const Menus = lazy(() => import('./menus'));
+const precargarMenus = () => void import('./menus');
+if (typeof window !== 'undefined') {
+  if ('requestIdleCallback' in window) requestIdleCallback(precargarMenus, { timeout: 4000 });
+  else setTimeout(precargarMenus, 2500);
 }
 
-function MenuCuenta({ children }: { children: React.ReactNode }) {
-  const sesion = useSesion();
-  const nombre = useNombre();
-  const tema = useTema();
-  return (
-    <MenuRaiz>
-      <MenuDisparador asChild>{children}</MenuDisparador>
-      <MenuContenido alinear="start" className="w-64">
-        <div className="px-2.5 pb-2 pt-1.5">
-          <p className="text-[0.9375rem] text-tinta">{nombre ?? 'Tu biblioteca'}</p>
-          <p className="rotulo mt-0.5 text-apagado">{sesion.modo === 'local' ? (esSimulado() ? 'Demostración' : 'Versión local') : sesion.usuario?.correo}</p>
-        </div>
-        <MenuSeparador />
-        <MenuRotulo>Tema</MenuRotulo>
-        {(['claro', 'oscuro', 'sistema'] as const).map((t) => (
-          <MenuElemento key={t} icono={t === 'claro' ? 'sol' : t === 'oscuro' ? 'luna' : 'ajustes'} alElegir={() => ponerTema(t)} atajo={tema === t ? '●' : undefined}>
-            {t === 'claro' ? 'Claro' : t === 'oscuro' ? 'Oscuro' : 'Como el sistema'}
-          </MenuElemento>
-        ))}
-        <MenuSeparador />
-        {sesion.abrirPerfil ? <MenuElemento icono="editar" alElegir={sesion.abrirPerfil}>Perfil</MenuElemento> : null}
-        {sesion.salir ? <MenuElemento icono="salir" alElegir={sesion.salir}>Cerrar sesión</MenuElemento> : null}
-      </MenuContenido>
-    </MenuRaiz>
-  );
+function Perezoso({ tipo, alinear, lado, children }: { tipo: 'anadir' | 'cuenta'; alinear?: 'start' | 'end' | 'center'; lado?: 'right' | 'top' | 'bottom'; children: ReactElement<{ onClick?: () => void; onPointerEnter?: () => void; onFocus?: () => void }> }) {
+  const [montado, setMontado] = useState(false);
+  if (!montado) return cloneElement(children, { onPointerEnter: precargarMenus, onFocus: precargarMenus, onClick: () => setMontado(true) });
+  return <Suspense fallback={children}><Menus tipo={tipo} alinear={alinear} lado={lado} abiertoAlMontar>{children}</Menus></Suspense>;
 }
 
-function useNombre() {
+export function MenuAnadir({ children, alinear = 'start', lado }: { children: ReactElement; alinear?: 'start' | 'end' | 'center'; lado?: 'right' | 'top' | 'bottom' }) {
+  return <Perezoso tipo="anadir" alinear={alinear} lado={lado}>{children as ReactElement<object>}</Perezoso>;
+}
+
+function MenuCuenta({ children, lado }: { children: ReactElement; lado?: 'right' | 'top' | 'bottom' }) {
+  return <Perezoso tipo="cuenta" lado={lado}>{children as ReactElement<object>}</Perezoso>;
+}
+
+export function useNombre() {
   const s = useSesion();
   const { data: yo } = useQuery({ ...q.yo(), enabled: !s.usuario });
   return s.usuario?.nombre ?? yo?.usuario.nombre;
@@ -90,7 +70,7 @@ export function Riel() {
         <Monograma />
       </Link>
 
-      <MenuAnadir>
+      <MenuAnadir lado="right">
         <button type="button" aria-label="Añadir a la biblioteca" className="group mb-6 grid h-12 w-12 place-items-center rounded-full bg-rojo text-[#fbf5ec] transition-transform duration-150 hover:scale-105 active:scale-95 dark:text-papel">
           <Icono nombre="mas" tam={22} grosor={2} className="transition-transform duration-200 group-data-[state=open]:rotate-45" />
         </button>
@@ -116,15 +96,13 @@ export function Riel() {
       </ul>
 
       <div className="mt-auto flex flex-col items-center gap-3">
-        <Consejo texto={<span>Buscar en todo <Teclas className="ml-1 border-white/30 bg-transparent text-sobre-tinta">{TECLA_MOD} K</Teclas></span>} lado="right">
-          <button type="button" onClick={() => disparar('paleta')} aria-label={`Buscar en todo (${TECLA_MOD} K)`} className="grid h-10 w-10 place-items-center rounded-s text-tinta-2 hover:bg-hondo hover:text-tinta">
+          <button type="button" onClick={() => disparar('paleta')} aria-label={`Buscar en todo (${TECLA_MOD} K)`} title={`Buscar en todo (${TECLA_MOD} K)`} className="grid h-10 w-10 place-items-center rounded-s text-tinta-2 hover:bg-hondo hover:text-tinta">
             <Icono nombre="teclado" tam={19} />
           </button>
-        </Consejo>
         <Link to="/ajustes" aria-label="Ajustes" className="grid h-10 w-10 place-items-center rounded-s text-tinta-2 hover:bg-hondo hover:text-tinta data-[status=active]:bg-hondo data-[status=active]:text-tinta">
           <Icono nombre="ajustes" tam={19} />
         </Link>
-        <MenuCuenta>
+        <MenuCuenta lado="right">
           <button type="button" aria-label="Cuenta y tema" className="rounded-full"><Iniciales /></button>
         </MenuCuenta>
         <span className="rotulo mt-2 select-none text-[0.625rem] text-apagado [writing-mode:vertical-rl] rotate-180">
@@ -137,12 +115,10 @@ export function Riel() {
 
 /** Barra superior en el móvil: monograma, título del lugar, buscar y cuenta. */
 export function BarraMovil() {
-  const ruta = useRouterState({ select: (s) => s.location.pathname });
-  const actual = SECCIONES.find((s) => (s.a === '/' ? ruta === '/' : ruta.startsWith(s.a)));
   return (
     <header className="sticky top-0 z-30 flex h-14 items-center gap-3 border-b border-filete bg-papel/90 px-4 pt-[env(safe-area-inset-top)] backdrop-blur md:hidden">
       <Link to="/" aria-label="Scholaris"><Monograma tam={30} /></Link>
-      <span className="titular flex-1 truncate text-[1.375rem]">{actual?.etiqueta ?? (ruta.startsWith('/ajustes') ? 'Ajustes' : ruta.startsWith('/lector') ? 'Lector' : '')}</span>
+      <span className="flex-1 truncate text-[1.25rem] italic tracking-[-0.01em]">Scholaris</span>
       <button type="button" onClick={() => disparar('paleta')} aria-label="Buscar en todo" className="tactil-grande grid h-10 w-10 place-items-center rounded-s text-tinta-2">
         <Icono nombre="buscar" tam={20} />
       </button>

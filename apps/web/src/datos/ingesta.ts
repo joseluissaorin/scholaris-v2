@@ -187,6 +187,12 @@ function crearSubidorPartes(subida: string) {
 // El flujo de una ingesta
 // ---------------------------------------------------------------------------
 
+/** «the_discarded-image.pdf» → «The discarded image»: mientras no llegue el título de verdad. */
+function nombreLegible(archivo: string): string {
+  const base = archivo.replace(/\.[a-z0-9]{2,5}$/i, '').replace(/[_]+/g, ' ').replace(/\s+/g, ' ').trim();
+  return base ? base.charAt(0).toUpperCase() + base.slice(1) : archivo;
+}
+
 function nueva(nombre: string, tipo: TipoEntrada, bytes: number): Ingesta {
   const i: Ingesta = { id: `i-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`, nombre, tipo, bytes, etapa: 'preparando', avance: 0, subido: 0, unidades: null, preparadas: 0, leidas: 0, miniaturas: [], inicio: Date.now(), mensaje: 'Preparando…' };
   estado = [i, ...estado];
@@ -212,7 +218,7 @@ export function ingerirArchivos(archivos: File[], opciones: { biblioteca?: strin
     resto.push(...imagenes);
   }
   for (const f of resto) {
-    const i = nueva(f.name, deducirTipo(f), f.size);
+    const i = nueva(nombreLegible(f.name), deducirTipo(f), f.size);
     void correr(i, f, opciones.biblioteca);
     salida.push(i);
   }
@@ -267,7 +273,7 @@ async function correr(i: Ingesta, archivo: File, biblioteca?: string, fotos?: Fi
       const partes = crearSubidorPartes(sub.subida);
       for await (const e of conversion.eventos) {
         if (e.tipo === 'no_disponible') break;
-        if (e.tipo === 'inicio') poner(i.id, { unidades: e.unidades ?? null, tipo: e.entrada });
+        if (e.tipo === 'inicio') poner(i.id, (x) => ({ unidades: e.unidades ?? x.unidades, tipo: e.entrada, ...(e.metadatos.titulo?.trim() ? { nombre: e.metadatos.titulo.trim() } : {}) }));
         else if (e.tipo === 'progreso') poner(i.id, (x) => ({ preparadas: Math.max(x.preparadas, e.hechas), unidades: x.unidades ?? e.total, avance: Math.max(x.avance, 0.3 * (e.total ? e.hechas / e.total : 0)), mensaje: e.mensaje ?? x.mensaje }));
         else if (e.tipo === 'parte') {
           partes.anadir(e.parte, e.datos);

@@ -65,7 +65,7 @@ export function TarjetaIngesta({ i }: { i: Ingesta }) {
 
       {/* Las páginas, apareciendo. */}
       {miniaturas.length ? (
-        <div className="flex h-[4.25rem] items-end gap-1.5 overflow-hidden" aria-hidden>
+        <div className="flex h-[4.25rem] items-end justify-end gap-1.5 overflow-hidden" aria-hidden>
           {miniaturas.map((m, k) => {
             const n = i.miniaturas.length - miniaturas.length + k + 1;
             return (

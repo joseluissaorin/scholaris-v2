@@ -62,8 +62,8 @@ function Claves() {
                 <p>{k.nombre}</p>
                 <Rotulo>{k.alcances.map((a) => ALCANCES[a]).join(' · ')} · creada {haceCuanto(k.creada)}{k.ultimoUso ? ` · usada ${haceCuanto(k.ultimoUso)}` : ' · sin usar'}</Rotulo>
               </div>
-              <code className="font-mono text-[0.8125rem] text-tinta-2">{k.prefijo}…</code>
-              <Boton variante="fantasma" tam="p" className="text-rojo" onClick={() => revocar(k)}>Revocar</Boton>
+              <code className="hidden font-mono text-[0.8125rem] text-tinta-2 sm:inline">{k.prefijo}…</code>
+              <Boton variante="fantasma" tam="p" className="!text-rojo" onClick={() => revocar(k)}>Revocar</Boton>
             </li>
           ))}
         </ul>

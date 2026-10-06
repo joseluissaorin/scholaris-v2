@@ -48,11 +48,12 @@ export function Dialogo({ abierto, alCambiar, titulo, descripcion, children, pie
 export const MenuRaiz = DropdownMenu.Root;
 export const MenuDisparador = DropdownMenu.Trigger;
 
-export function MenuContenido({ children, className, alinear = 'end' }: { children: ReactNode; className?: string; alinear?: 'start' | 'end' | 'center' }) {
+export function MenuContenido({ children, className, alinear = 'end', lado = 'bottom' }: { children: ReactNode; className?: string; alinear?: 'start' | 'end' | 'center'; lado?: 'top' | 'right' | 'bottom' | 'left' }) {
   return (
     <DropdownMenu.Portal>
       <DropdownMenu.Content
         align={alinear}
+        side={lado}
         sideOffset={6}
         className={cx('z-50 min-w-48 rounded-m border border-filete-fuerte bg-hoja p-1 shadow-flota anim-dialogo', className)}
       >
@@ -107,7 +108,8 @@ export const ConsejoProveedor = Tooltip.Provider;
 /** Consejo emergente al pasar o enfocar. Nunca guarda información que no esté también en otro sitio. */
 export function Consejo({ texto, children, lado = 'top' }: { texto: ReactNode; children: ReactNode; lado?: 'top' | 'right' | 'bottom' | 'left' }) {
   return (
-    <Tooltip.Root delayDuration={350}>
+    <Tooltip.Provider delayDuration={350}>
+    <Tooltip.Root>
       <Tooltip.Trigger asChild>{children}</Tooltip.Trigger>
       <Tooltip.Portal>
         <Tooltip.Content side={lado} sideOffset={6} className="z-50 rounded-s bg-tinta px-2 py-1 text-[0.75rem] text-sobre-tinta anim-aparece">
@@ -115,5 +117,6 @@ export function Consejo({ texto, children, lado = 'top' }: { texto: ReactNode; c
         </Tooltip.Content>
       </Tooltip.Portal>
     </Tooltip.Root>
+    </Tooltip.Provider>
   );
 }

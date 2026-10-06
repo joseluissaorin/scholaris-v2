@@ -3,15 +3,16 @@
  * archivo o un enlace), elegir, fotografiar. Sin pantalla de «subir»: lo que
  * entra aparece en la mesa de la biblioteca en el mismo instante.
  */
-import { useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { useNavigate, useRouterState } from '@tanstack/react-router';
-import { avisar, Boton, Campo, Dialogo, FormaBauhaus } from '@scholaris/ui';
+import { avisar, FormaBauhaus } from '@scholaris/ui';
 import { ingerirArchivos, ingerirUrl, cancelarIngesta } from '../../datos/ingesta';
 import { api } from '../../datos/api';
 import { clienteConsultas } from '../../datos/consultas';
 import { alDisparar, disparar, obtenerBibliotecaActiva } from '../../lib/acciones';
 
 const ES_URL = /^https?:\/\/\S+$/i;
+const DialogoEnlace = lazy(() => import('./dialogo-enlace'));
 
 function esCampoDeTexto(el: EventTarget | null) {
   const e = el as HTMLElement | null;
@@ -26,7 +27,6 @@ export function Entrada() {
   const spdf = useRef<HTMLInputElement>(null);
   const [arrastrando, setArrastrando] = useState(false);
   const [enlace, setEnlace] = useState(false);
-  const [url, setUrl] = useState('');
 
   function entrar(lista: File[]) {
     if (!lista.length) return;
@@ -134,22 +134,7 @@ export function Entrada() {
         </div>
       ) : null}
 
-      <Dialogo
-        abierto={enlace}
-        alCambiar={(v) => { setEnlace(v); if (!v) setUrl(''); }}
-        titulo="Desde un enlace"
-        descripcion="Una página web, un artículo, un PDF en línea o un vídeo de YouTube. Guardamos una copia fechada para que la cita no caduque."
-        pie={
-          <>
-            <Boton variante="fantasma" onClick={() => setEnlace(false)}>Cancelar</Boton>
-            <Boton variante="tinta" disabled={!ES_URL.test(url.trim())} onClick={() => { void entrarUrl(url); setEnlace(false); setUrl(''); }}>Añadir</Boton>
-          </>
-        }
-      >
-        <form onSubmit={(e) => { e.preventDefault(); if (ES_URL.test(url.trim())) { void entrarUrl(url); setEnlace(false); setUrl(''); } }}>
-          <Campo autoFocus icono="enlace" type="url" inputMode="url" placeholder="https://…" value={url} onChange={(e) => setUrl(e.target.value)} aria-label="Enlace" />
-        </form>
-      </Dialogo>
+      {enlace ? <Suspense fallback={null}><DialogoEnlace alCerrar={() => setEnlace(false)} alEnviar={(u) => void entrarUrl(u)} /></Suspense> : null}
     </>
   );
 }

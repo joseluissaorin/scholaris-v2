@@ -88,7 +88,7 @@ function Vigilantes() {
                     <Boton variante="fantasma" tam="p" icono="rayo" onClick={() => void ejecutar(v)}>Mirar ahora</Boton>
                     <Boton variante="fantasma" tam="p" icono="buscar" comoHijo><Link to="/buscar" search={{ q: v.consulta }}><Icono nombre="buscar" tam={15} />Buscar</Link></Boton>
                     <Boton variante="fantasma" tam="p" icono="editar" onClick={() => setEditar(v)}>Editar</Boton>
-                    <Boton variante="fantasma" tam="p" icono="papelera" className="ml-auto text-rojo" onClick={() => borrar(v)}>Borrar</Boton>
+                    <Boton variante="fantasma" tam="p" icono="papelera" className="ml-auto !text-rojo" onClick={() => borrar(v)}>Borrar</Boton>
                   </div>
                 </Tarjeta>
               </li>
