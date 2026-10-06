@@ -4,23 +4,44 @@ La web de Scholaris v2: una biblioteca donde se suelta cualquier archivo, se lee
 y cada cita apunta a la página impresa o al segundo exacto. Este documento
 explica el sistema visual, la arquitectura de la interfaz y por qué es así.
 
-## 1. La idea: una imprenta, no un panel de control
+## 1. La idea: la Scholaris de siempre, con relieve y con Bauhaus
 
-Scholaris trabaja con libros, y el usuario es alguien que lee y cita. La
-interfaz se piensa como un taller de imprenta: papel cálido, tinta de café,
-tres tintas Bauhaus que se usan con cuentagotas, Georgia para leer y para
-mandar, y una monoespaciada que susurra los datos (folios, marcas de tiempo,
-cifras). La pieza que distingue a Scholaris de cualquier otro gestor de PDF es
-**el folio**: «p. 145», «12:04», «diap. 7». Por eso el folio tiene su propio
-componente y aparece en todas partes con la misma forma (una raya roja y la
-cifra en monoespaciada).
+La base visual es la de la Scholaris original (scholaris.joseluissaorin.com),
+portada casi al pie de la letra:
 
-Doctrina de composición (Estética Saorín): una sola cosa enorme por pantalla
-(el titular del lugar), una sola forma geométrica que muerde el borde (cuarto
-de círculo rojo en Biblioteca, círculo azul en Buscar, triángulo amarillo en
-Escribir, cuadrado girado en Explorar), retícula que se nota, grano de papel
-muy fino. Nada de degradados, nada de sombras genéricas, nada de iconos de
-librería: los iconos están dibujados para el sistema.
+- la barra lateral de café oscuro con el **logo dibujado a mano** (la cabeza de
+  perfil con un libro abierto por sombrero), los lugares con su icono y la
+  marca amarilla del activo;
+- **DM Sans** para todo;
+- crema y café; tarjetas de 16 px de radio que se levantan del papel con
+  sombras blandas en capas;
+- campos y botones de 12 px; rótulos en mayúsculas seminegritas;
+- el fondo Bauhaus de cruces, puntos y una diagonal roja muy tenue.
+
+Encima van dos capas nuevas:
+
+1. **Cualidad táctil.** Lo que se pulsa sube: tiene un filo de luz arriba y una
+   sombra corta y blanda, sube un poco al pasar el ratón y se hunde al
+   pulsarlo. Lo que recibe contenido se hunde: campos, carriles de progreso,
+   bandejas y zonas de soltar. Las tarjetas se levantan del papel. Hay grano de
+   papel sobre todo. Son objetos sobre una mesa.
+2. **El lenguaje Bauhaus, con contención.** Rige la correspondencia de
+   Kandinsky (azul-círculo, amarillo-triángulo, rojo-cuadrado), con tres
+   registros (`Composicion`):
+   - Kandinsky: círculos concéntricos, líneas que cruzan, puntos en tensión;
+   - Malevich: el cuadrado negro dominante y barras en diagonal;
+   - Bauhaus: retícula y formas primarias.
+
+   Aparece en las cabeceras de cada lugar (su forma delante del título y una
+   composición pequeña a la derecha), en los estados vacíos, en las portadas
+   generadas (Malevich para libros y escaneos, Kandinsky para el audio, el
+   cuadrado rojo para el vídeo), en los iconos de tipo, en la franja de tres
+   tintas de la tarjeta de ingesta, en la respuesta de Preguntar y en la
+   tarjeta social. Nunca dentro del texto que se lee.
+
+De lo nuevo se conservan solo los detalles que no chocan: los folios en mono
+(ahora como plaquita hundida con cuña roja), los hitos de ingesta y ⌘K. El
+texto de los libros se lee en Georgia; todo lo demás va en DM Sans.
 
 ## 2. Arquitectura de la información
 
@@ -54,58 +75,72 @@ Además, en todas partes:
 
 ## 3. Tokens
 
-Definidos en `packages/ui/src/tema.css` como variables CSS y expuestos a
-Tailwind v4 con `@theme inline` (utilidades `bg-papel`, `text-tinta`,
-`border-filete`, `text-rojo`…). El tema oscuro cambia las variables bajo
-`.oscuro`; se aplica en `index.html` antes del primer pintado, sin parpadeo.
+En `packages/ui/src/tema.css` hay una sola paleta, la antigua afinada:
 
-| Token | Claro | Oscuro | Uso |
-|---|---|---|---|
-| `papel` | `#F3EEE3` | `#1A1511` | fondo, nunca blanco puro |
-| `hoja` | `#FAF7F0` | `#231C17` | superficies (tarjetas, campos) |
-| `hondo` | `#E9E2D2` | `#120E0B` | huecos, pistas, esqueletos |
-| `filete` / `filete-fuerte` | `#D9CFBD` / `#B9AA92` | `#3B3029` / `#5B4B3F` | líneas finas y bordes |
-| `tinta` | `#22160F` | `#EFE6D6` | texto, botón principal |
-| `tinta-2` | `#4F3C2F` | `#CBBBA6` | texto secundario |
-| `apagado` | `#75614F` | `#A39079` | rótulos (contraste 5:1 sobre papel) |
-| `rojo` | `#B8321C` | `#E7644A` | la acción («+»), el folio, lo activo |
-| `azul` | `#23457A` | `#8FA9DC` | contrapunto excepcional |
-| `amarillo` | `#E2A52A` | `#ECBB52` | alertas, aceptado, el lápiz que subraya |
+| Familia | Valores | Uso |
+|---|---|---|
+| cream 50-500 | #FAF7F0 · #F5F0E8 · #EDE6D6 · #E2D9C5 · #D4C4B0 · #C4AE96 | papel, tarjetas, huecos, bordes |
+| coffee 300-900 | #8F7868 · #7A5F4F · #6B4226 · #5C3D2E · #4A2E1A · #2C1810 · #1A0F0A | tinta, texto secundario, barra lateral |
+| Bauhaus | rojo #B83E33 (el #C1453B de siempre, ajustado a AA) · azul #2B4C7E · amarillo #E8A838 | acentos, formas, folio |
+| Semánticos apagados | verde #5B7A3D · ocre #B8860B | éxito, avisos |
 
-Tipografía: Georgia para todo lo que se lee y se pulsa; `ui-monospace` para los
-datos (`.rotulo`: 11 px, mayúsculas, espaciado 0,08 em). Los titulares usan
-`.titular` (interletraje −0,035 em, interlineado 0,92). La lectura (`.lectura`)
-va a 17 px con interlineado 1,62, partición silábica y sangría de párrafo como
-en un libro; el tamaño se ajusta en Apariencia. Cero bytes de fuentes web.
+Los nombres semánticos (`papel`, `hoja`, `hondo`, `filete`, `tinta`, `apagado`,
+`rojo`…) apuntan a esas familias. El tema oscuro invierte la escala sin
+cambiar los nombres. Todos los textos pequeños cumplen AA: coffee-400 y
+`apagado` tienen un contraste de 5:1 sobre crema.
 
-Radios mínimos (3, 6 y 10 px), dos sombras («hoja» y «flota»), una curva de
-animación (`--ease-imprenta`). Todas las animaciones se anulan con
-`prefers-reduced-motion`.
+Las sombras son las de siempre: `soft`, `card`, `lifted`, `inner-soft` y
+`glow`. El relieve se añade como variables:
 
-## 4. Componentes (uno de cada)
+| Variable | Qué es |
+|---|---|
+| `--relieve`, `--relieve-alto` | botones y chips: filo de luz arriba, sombra corta |
+| `--relieve-oscuro` | el botón café y el rojo |
+| `--pulsado` | al pulsar: se hunde |
+| `--hundido` | campos, carriles, bandejas, zonas de soltar |
+| `--levantado`, `--levantado-alto` | tarjetas: se levantan del papel (y más al pasar) |
+
+Radios: 8 px (`rounded-lg`), 12 px (`rounded-xl`: botones y campos) y 16 px
+(`rounded-2xl`: tarjetas y diálogos). La tipografía es DM Sans variable, solo
+latín, servida desde `/fuentes/` y precargada. Georgia queda para el texto de
+los libros y la mono para los datos (`.dato`, `Folio`).
+
+## 4. Componentes
 
 `packages/ui` exporta exactamente un componente por función:
 
 | Componente | Notas |
 |---|---|
-| `Boton` | variantes `tinta` (principal), `rojo` (la acción de la pantalla), `linea`, `fantasma`; tamaños `p`, `m`, `g`; `cargando`, `soloIcono`, `comoHijo` (aspecto de botón sobre un enlace del enrutador) |
-| `Campo`, `AreaTexto`, `Selector`, `Etiquetado` | un solo estilo de campo; `tam="g"` es la caja grande de búsqueda; `Etiquetado` enlaza `label`, `id` y `aria-describedby` |
-| `Tarjeta` | la hoja sobre el papel; `viva` reacciona al puntero |
-| `Chip` | filtro conmutable (`aria-pressed`) o etiqueta con ✕ |
-| `Folio` | el ancla de cita; `dudoso` cuando el folio se dedujo con poca confianza |
-| `Rotulo`, `Filete`, `Teclas` | la monoespaciada, la regla de imprenta, las teclas |
-| `Esqueleto`, `EsqueletoTexto`, `BarraAvance` | nunca un spinner: esqueletos con la forma de lo que viene, y una línea roja arriba mientras se navega |
-| `Vacio` | el estado vacío: forma Bauhaus grande, titular, una frase, una acción |
-| `Dialogo` | solo para lo irreversible (borrar la cuenta, borrar todo) |
-| `MenuRaiz/…` | menús de Radix con el mismo vestido |
-| `Interruptor`, `Consejo` | Radix Switch y Tooltip |
-| `avisar`, `conDeshacer`, `Tostadora` | el único canal de avisos; **deshacer en lugar de confirmar** |
-| `Icono` | 58 trazados propios de trazo fino y geometría Bauhaus |
+| `Boton` | variantes `tinta` (café con degradado y relieve), `rojo`, `linea` (crema con borde) y `fantasma`; sube al pasar el ratón y se hunde al pulsar |
+| `Campo`, `AreaTexto`, `Selector`, `Etiquetado` | campos hundidos, foco con borde café y halo |
+| `Tarjeta` | `rounded-2xl`, levantada; `viva` sube un poco más al pasar |
+| `Chip` | píldora con relieve, con punto de color opcional; la activa se hunde en café |
+| `Folio` | plaquita mono hundida con cuña roja; amarilla si el folio es dudoso |
+| `Teclas` | teclas con relieve y canto |
+| `BarraAvance` | carril hundido |
+| `Vacio` | bandeja hundida con borde discontinuo, una composición, un titular y una acción |
+| `Composicion` | el lenguaje de formas: `kandinsky`, `malevich`, `bauhaus` |
+| `Dialogo`, menús, `Interruptor`, `Consejo` | los de Radix, vestidos de crema, con el pie del diálogo en una franja hundida |
+| `avisar`, `conDeshacer`, `Tostadora` | avisos en café con «Deshacer» en amarillo |
+| `Icono` | trazado redondo, como los de siempre |
 
-Regla de borrado: lo que se puede deshacer no pide confirmación. Borrar un
-documento, una tarjeta, un vigilante, una búsqueda del historial o revocar una
-clave lo quita de la vista al instante y ofrece «Deshacer» durante 7 s; la
-petición al servidor solo sale si nadie deshace.
+En la web viven `Cabecera` (forma del lugar, título y composición), `Pestanas`
+(control segmentado hundido; la activa sube), `Seccion` (tarjeta con icono,
+como los ajustes de siempre), `IconoTipo` (el icono sobre su forma de color),
+`Portada` (cubiertas generadas, con lomo) y `Logo`.
+
+### Composiciones recuperadas de la antigua
+
+- **Biblioteca**: el panel de inicio de siempre (filtro, banda de cifras,
+  píldoras de tipo con punto de color) y la columna derecha de acciones y
+  colecciones, con la rejilla de portadas y la mesa de entrada.
+- **Barra lateral** oscura con los lugares y, debajo del activo, sus
+  subapartados.
+- **Móvil**: la cabecera café con el menú que se despliega, más un botón
+  redondo para añadir.
+- **Ajustes**: secciones en tarjeta con icono.
+- **Autocita**: barra de opciones, documento en tarjeta y pie con las cifras y
+  «Analizar y citar».
 
 ## 5. Datos: el contrato, siempre
 
@@ -207,15 +242,15 @@ Medido con `vite build` y Lighthouse (build de producción con la demostración)
 
 | Medida | Valor |
 |---|---|
-| JS inicial del marco (gzip) | **130 KB** (presupuesto: 150) |
-| CSS (gzip) | 11 KB |
+| JS inicial del marco (gzip) | **132 KB** (presupuesto: 150) |
+| CSS (gzip) | 15 KB (más 36 KB de DM Sans, precargada) |
 | Rutas | un trozo por ruta (2-12 KB gzip cada una) |
 | Clerk | solo si la instancia lo pide, en su trozo (18 KB + clerk-js) |
 | Imprenta y pdf.js | solo al soltar un archivo, dentro de hilos |
-| Lighthouse escritorio | rendimiento 100 · accesibilidad 100 · buenas prácticas 100 · CLS 0 |
-| Lighthouse móvil (4G lenta simulada) | rendimiento 93 · accesibilidad 100 · buenas prácticas 100 · TBT 0 ms · CLS 0 |
+| Lighthouse escritorio | rendimiento 100 · accesibilidad 100 · CLS 0 |
+| Lighthouse móvil (4G lenta simulada) | rendimiento 89 · accesibilidad 100 · buenas prácticas 100 · TBT 0 ms · CLS 0 |
 
-Cómo se llega ahí: Georgia y la monoespaciada del sistema (cero fuentes),
+Cómo se llega ahí: una sola fuente web (DM Sans, latín, precargada),
 iconos propios, menús y diálogos del marco cargados con la intención (al pasar
 o enfocar) y en tiempo ocioso, la paleta precargada en ocioso, el marco pintado
 en `index.html` antes del JavaScript, esqueletos con la geometría final y
@@ -260,3 +295,14 @@ VITE_FUENTE=simulada pnpm --filter @scholaris/web build   # demostración estát
 `predev` y `prebuild` copian a `public/pdfjs/` las fuentes, cmaps y wasm que
 pdf.js pide en tiempo de ejecución. Las rutas son ficheros en `src/rutas/`
 (TanStack Router genera `arbol-rutas.gen.ts`).
+
+## 12. Capturas comparadas
+
+En `capturas/restauracion/`:
+
+- `antigua/` tiene la Scholaris de producción (solo navegación, con el usuario
+  de prueba);
+- `nueva/` tiene la restaurada;
+- `lado-a-lado/` pone las mismas pantallas, a la misma anchura, una junto a
+  la otra (Biblioteca, Buscar, Escribir, Cuadernos, Mapa, Corpus, Vigilantes y
+  Ajustes, más tres en móvil).
