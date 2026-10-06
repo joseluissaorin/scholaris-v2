@@ -104,8 +104,10 @@ export interface Embebedor {
 
 /** Lo que devuelve la lectura de una página (o de una imagen). */
 export interface PaginaLeida {
-  /** Índice físico de la página dentro del pliego, desde 1. */
+  /** Índice físico absoluto, desde 1 (primeraFisica + posición en el pliego). */
   fisica: number;
+  /** Qué lector la leyó al final (la cascada lo rellena). */
+  lector?: string;
   /** Cuerpo en Markdown ligero (títulos con #, cursivas, listas), sin cabecera ni pie. */
   texto: string;
   /** Notas al pie, separadas. */
@@ -214,4 +216,6 @@ export interface Inteligencia {
   reordenador: Reordenador;
   juez: Juez;
   redactor: Redactor;
+  /** Contador de uso y coste, si el montaje lo lleva. */
+  contador?: { total(): { usd: number; llamadas: number } } | unknown;
 }
