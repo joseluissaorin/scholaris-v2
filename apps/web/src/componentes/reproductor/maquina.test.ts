@@ -80,6 +80,7 @@ describe('máquina del reproductor', () => {
     expect(otra.acciones).toEqual([{ tipo: 'renovar', esperaMs: 0 }]);
     expect(otra.b.intentos).toBe(0);
     expect(otra.b.error).toBeNull();
+    expect(otra.b.quiere).toBe(true);
   });
 
   it('«no admitido» al abrir: primero se renueva (puede ser un 403 por caducidad) y luego es el formato', () => {

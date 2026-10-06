@@ -125,7 +125,7 @@ export const LineaTiempo = memo(function LineaTiempo({ duracion, transcripcion, 
       {/* El trazo */}
       <div className="absolute inset-x-0 top-[15px] h-[2px] rounded-full bg-[var(--linea-trazo)]" />
       <div ref={cargado} className="linea-cargado absolute inset-x-0 top-[15px] h-[2px]" />
-      <div ref={oido} className="absolute inset-x-0 top-[14px] h-1 origin-left scale-x-0 rounded-full bg-[var(--linea-oido)] will-change-transform" />
+      <div ref={oido} className="absolute inset-x-0 top-[14px] h-1 origin-left rounded-full bg-[var(--linea-oido)] will-change-transform" style={{ transform: 'scaleX(0)' }} />
 
       {/* Turnos de palabra */}
       {transcripcion && duracion ? <Turnos transcripcion={transcripcion} duracion={duracion} /> : null}
@@ -166,10 +166,10 @@ const Turnos = memo(function Turnos({ transcripcion, duracion }: { transcripcion
     }
     return out;
   }, [transcripcion, duracion]);
-  if (!transcripcion.hablantes.length) return null;
+  if (transcripcion.hablantes.length < 2) return null;
   return (
-    <svg viewBox="0 0 1000 1" preserveAspectRatio="none" className="pointer-events-none absolute inset-x-0 top-[24px] h-[5px] w-full overflow-visible" aria-hidden>
-      {rects.map((r, i) => <rect key={i} x={r.x} y="0" width={r.w} height="1" fill={colorHablante(r.h)} opacity={0.85} />)}
+    <svg viewBox="0 0 1000 1" preserveAspectRatio="none" className="pointer-events-none absolute inset-x-0 top-[23px] h-1 w-full overflow-visible" aria-hidden>
+      {rects.map((r, i) => <rect key={i} x={r.x} y="0" width={r.w} height="1" fill={colorHablante(r.h)} opacity={0.6} />)}
     </svg>
   );
 });

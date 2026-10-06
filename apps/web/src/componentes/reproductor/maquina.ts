@@ -113,7 +113,8 @@ export function transicion(b: Banderas, e: Evento): { banderas: Banderas; accion
       if (!b.quiere || b.error) return igual;
       return fallo(b, MEDIA_ERR.RED);
     case 'reintentar':
-      return { banderas: { ...b, error: null, intentos: 0 }, accion: { tipo: 'renovar', esperaMs: 0 } };
+      // «Reintentar» es también «reproducir»: la persona quiere oírlo.
+      return { banderas: { ...b, error: null, intentos: 0, quiere: true }, accion: { tipo: 'renovar', esperaMs: 0 } };
   }
 }
 

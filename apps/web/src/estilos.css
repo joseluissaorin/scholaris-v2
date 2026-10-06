@@ -83,7 +83,7 @@ mark {
 
 /* Pantalla completa: el vídeo arriba, los mandos abajo sobre café. */
 .reproductor-pantalla:fullscreen { background: #1a0f0a; display: flex; flex-direction: column; padding: 0 1.5rem 1rem; }
-.reproductor-pantalla:fullscreen .escenario { flex: 1; aspect-ratio: auto !important; border-radius: 0; box-shadow: none; }
+.reproductor-pantalla:fullscreen .escenario { flex: 1; aspect-ratio: auto !important; max-width: none; border-radius: 0; box-shadow: none; }
 .reproductor-pantalla:fullscreen .controles { color: #faf7f0; }
 
 @keyframes r-carga { 0% { transform: translateX(-100%); } 100% { transform: translateX(300%); } }

@@ -19,7 +19,7 @@ import { BarraSeleccion } from '../lector/seleccion';
 import { motor, type FuenteMedio, type Instantanea } from './motor';
 import { VELOCIDADES } from './maquina';
 import { fotogramaEn, useFotogramas, useMenosMovimiento, useMotor, useRelojDom, useSegundo, useTranscripcion } from './ganchos';
-import { aVtt, buscarEnTranscripcion, parrafoEn, type Transcripcion } from './transcripcion';
+import { aVtt, buscarEnTranscripcion, buscarIndice, parrafoEn, type Transcripcion } from './transcripcion';
 import { LineaTiempo, type Capitulo } from './linea';
 import { Onda } from './onda';
 import { TranscripcionVista, type ManejadorTranscripcion } from './transcripcion-vista';
@@ -106,6 +106,7 @@ export const Reproductor = forwardRef<ManejadorMedio, Props>(function Reproducto
 
   // Seguir la voz, buscar dentro, citar.
   const [seguir, setSeguir] = useState(true);
+  const [buscarMovil, setBuscarMovil] = useState(false);
   const [busqueda, setBusqueda] = useState('');
   const [indiceCoincidencia, setIndiceCoincidencia] = useState(0);
   const coincidencias = useMemo(() => (tr && busqueda.trim().length > 1 ? buscarEnTranscripcion(tr.palabras, busqueda) : []), [tr, busqueda]);
@@ -161,7 +162,7 @@ export const Reproductor = forwardRef<ManejadorMedio, Props>(function Reproducto
             <EscenarioAudio hueco={hueco} doc={doc} inst={inst} propio={propio} transcripcion={tr} duracion={duracion} />
           )}
           <Controles inst={inst} propio={propio} duracion={duracion} esVideo={esVideo} transcripcion={tr} capitulos={capitulos} fotogramas={fotogramas}
-            marca={inicial ?? null} pantalla={pantalla} documento={doc.id} alAyuda={abrirAyuda} />
+            marca={instanteInicial.current && instanteInicial.current > 0 ? instanteInicial.current : null} pantalla={pantalla} documento={doc.id} alAyuda={abrirAyuda} buscar={buscarMovil} alBuscar={() => setBuscarMovil((x) => !x)} />
         </div>
         <div className="hidden lg:block">
           {tr && tr.hablantes.length ? <Hablantes tr={tr} /> : null}
@@ -172,20 +173,20 @@ export const Reproductor = forwardRef<ManejadorMedio, Props>(function Reproducto
             <button type="button" onClick={abrirAyuda} className="underline decoration-filete-fuerte underline-offset-4 hover:text-coffee-800">todas las teclas</button>
           </p>
         </div>
-        <div className="mt-1 lg:hidden">{barraBusqueda}</div>
+        {buscarMovil ? <div className="mt-1 lg:hidden">{barraBusqueda}</div> : null}
       </div>
 
       {/* Transcripción */}
       <div ref={columnaTexto} className="min-w-0 px-5 md:px-12 lg:px-10 xl:px-14">
         <div ref={barraDesktop} className="sticky top-[4.25rem] z-10 -mx-2 hidden bg-cream-100/90 px-2 py-3 backdrop-blur lg:block">{barraBusqueda}</div>
-        <div ref={zonaTexto} className="mx-auto max-w-[46rem] pb-24 pt-2">
+        <div ref={zonaTexto} className="mx-auto max-w-[46rem] pb-24 pt-2" onPointerDown={(e) => { if (e.pointerType === 'mouse' && !(e.target as HTMLElement).closest('button')) setSeguir(false); }}>
           <TranscripcionVista ref={vista} transcripcion={tr} marcadas={marcadas} foco={coincidencias[indiceCoincidencia]?.desde ?? null} resaltar={resaltar}
             margenSuperior={margenSuperior} seguir={seguir} alCambiarSeguir={setSeguir} pendientes={pendientes ?? (unidades && doc.estado === 'procesando' ? undefined : 0)} />
         </div>
       </div>
 
       {!seguir && propio && (inst.estado === 'sonando' || inst.estado === 'esperando') ? (
-        <button type="button" onClick={() => setSeguir(true)} className="fixed bottom-[calc(5.5rem+env(safe-area-inset-bottom))] left-1/2 z-30 flex h-10 -translate-x-1/2 items-center gap-2 rounded-full border border-[#1a0f0a] bg-[linear-gradient(180deg,#4a2e1a_0%,#2c1810_100%)] px-4 text-[0.8125rem] font-semibold text-cream-50 shadow-[var(--relieve-oscuro),0_8px_20px_rgb(44_24_16/0.25)] anim-tostada lg:bottom-8 lg:left-[calc(50%+14rem)]">
+        <button type="button" onClick={() => setSeguir(true)} className="fixed bottom-[calc(8.5rem+env(safe-area-inset-bottom))] left-1/2 z-30 flex h-10 -translate-x-1/2 items-center gap-2 rounded-full border border-[#1a0f0a] bg-[linear-gradient(180deg,#4a2e1a_0%,#2c1810_100%)] px-4 text-[0.8125rem] font-semibold text-cream-50 shadow-[var(--relieve-oscuro),0_8px_20px_rgb(44_24_16/0.25)] anim-tostada lg:bottom-8 lg:left-[calc(50%+14rem)]">
           <Icono nombre="audio" tam={15} />Volver a la voz
         </button>
       ) : null}
@@ -233,7 +234,7 @@ function useCapitulos(doc: DetalleDocumento): Capitulo[] {
 function EscenarioVideo({ hueco, inst, propio, pantalla }: { hueco: React.RefObject<HTMLDivElement | null>; inst: Instantanea; propio: boolean; pantalla: React.RefObject<HTMLDivElement | null> }) {
   const aspecto = (propio && inst.aspecto) || 16 / 9;
   return (
-    <div className="escenario relative mx-auto w-full overflow-hidden rounded-xl bg-coffee-900 shadow-[var(--levantado)] ring-1 ring-[#1a0f0a]/60" style={{ aspectRatio: String(aspecto) }}>
+    <div className="escenario relative mx-auto w-full max-w-[calc(var(--alto-escenario)*var(--aspecto))] overflow-hidden rounded-xl bg-coffee-900 shadow-[var(--levantado)] ring-1 ring-[#1a0f0a]/60 [--alto-escenario:27dvh] lg:[--alto-escenario:52dvh]" style={{ aspectRatio: String(aspecto), ['--aspecto' as string]: String(aspecto) }}>
       <div ref={hueco} className="absolute inset-0" />
       {propio && inst.virtual ? <LaminaVirtual /> : null}
       <Superposicion inst={inst} propio={propio} pantalla={pantalla} />
@@ -301,7 +302,8 @@ function Superposicion({ inst, propio, pantalla }: { inst: Instantanea; propio: 
   const [recorrido, setRecorrido] = useState<string | null>(null);
 
   const estado = propio ? inst.estado : 'vacio';
-  const quieto = !(propio && inst.quiere) && estado !== 'error';
+  // El botón grande, solo antes de la primera vez o al terminar: en una pausa a mitad no tapa la imagen.
+  const quieto = !(propio && inst.quiere) && estado !== 'error' && (!propio || !inst.haSonado || estado === 'terminado');
   const esperando = estado === 'esperando' || estado === 'buscando' || estado === 'cargando';
   const [esperaVisible, setEsperaVisible] = useState(false);
   useEffect(() => {
@@ -445,9 +447,10 @@ function BotonMando({ etiqueta, alPulsar, children, activo, deshabilitado, class
   );
 }
 
-function Controles({ inst, propio, duracion, esVideo, transcripcion, capitulos, fotogramas, marca, pantalla, documento, alAyuda }: {
+function Controles({ inst, propio, duracion, esVideo, transcripcion, capitulos, fotogramas, marca, pantalla, documento, alAyuda, buscar, alBuscar }: {
   inst: Instantanea; propio: boolean; duracion: number; esVideo: boolean; transcripcion: Transcripcion | null; capitulos: Capitulo[];
   fotogramas: ReturnType<typeof useFotogramas>; marca: number | null; pantalla: React.RefObject<HTMLDivElement | null>; documento: string; alAyuda: () => void;
+  buscar: boolean; alBuscar: () => void;
 }) {
   const m = motor();
   const reloj = useRef<HTMLSpanElement>(null);
@@ -458,27 +461,48 @@ function Controles({ inst, propio, duracion, esVideo, transcripcion, capitulos, 
   return (
     <div className={cx('controles mt-2', oscuro && 'controles-oscuros')}>
       <LineaTiempo duracion={duracion} transcripcion={transcripcion} capitulos={capitulos} fotogramas={esVideo ? fotogramas : null} marca={marca} oscura={oscuro} />
-      <div className="-mt-1 flex items-center gap-1 sm:gap-1.5">
+      <div className={cx('-mt-2.5 mb-1 flex justify-between font-mono text-[0.75rem] tnum', oscuro ? 'text-cream-200' : 'text-coffee-600')}>
+        <span ref={reloj}>0:00</span><span className={oscuro ? 'text-cream-300' : 'text-apagado'}>{tiempoACadena(duracion)}</span>
+      </div>
+      <div className="flex items-center gap-0.5 sm:gap-1">
         <button type="button" onClick={() => m.alternar()} aria-label={sonando ? 'Pausa' : 'Reproducir'}
           className="mr-1 grid h-11 w-11 shrink-0 place-items-center rounded-full border border-[#1a0f0a] bg-[linear-gradient(180deg,#4a2e1a_0%,#2c1810_100%)] text-cream-50 shadow-[var(--relieve-oscuro)] transition-transform hover:-translate-y-px active:translate-y-px active:shadow-[var(--pulsado)]">
           <Icono nombre={sonando ? 'pausa' : 'play'} tam={17} grosor={2.4} />
         </button>
         <BotonMando etiqueta="10 segundos atrás (J)" alPulsar={() => m.saltar(-10)} oscuro={oscuro}><IconoR nombre="atras" tam={19} /></BotonMando>
         <BotonMando etiqueta="10 segundos adelante (L)" alPulsar={() => m.saltar(10)} oscuro={oscuro}><IconoR nombre="adelante" tam={19} /></BotonMando>
-        <span className={cx('ml-1 whitespace-nowrap font-mono text-[0.8125rem] tnum', oscuro ? 'text-cream-100' : 'text-coffee-800')}>
-          <span ref={reloj}>0:00</span><span className={oscuro ? 'text-cream-300' : 'text-apagado'}> / {tiempoACadena(duracion)}</span>
-        </span>
-        <span className="flex-1" />
+        <QuienHabla transcripcion={transcripcion} oscuro={oscuro} />
         <MenuVelocidad velocidad={inst.velocidad} oscuro={oscuro} />
         {esVideo ? <BotonMando etiqueta={inst.subtitulos ? 'Quitar subtítulos (C)' : 'Subtítulos (C)'} activo={inst.subtitulos} deshabilitado={!inst.hayPista} alPulsar={() => m.alternarSubtitulos()} oscuro={oscuro}><IconoR nombre="subtitulos" tam={19} /></BotonMando> : null}
         <Volumen inst={inst} oscuro={oscuro} />
-        <BotonMando etiqueta="Copiar enlace a este minuto" alPulsar={() => void copiar(enlaceAlMinuto(documento, m.tiempo()), `Enlace al minuto ${tiempoACadena(m.tiempo())} copiado.`)} className="hidden sm:grid" oscuro={oscuro}><IconoR nombre="enlace" tam={18} /></BotonMando>
-        {esVideo && m.pipDisponible ? <BotonMando etiqueta="Imagen dentro de imagen (I)" activo={inst.pip} alPulsar={() => void m.alternarPip()} className="hidden sm:grid" oscuro={oscuro}><IconoR nombre="pip" tam={19} /></BotonMando> : null}
         {esVideo ? <BotonMando etiqueta={inst.pantallaCompleta ? 'Salir de pantalla completa (F)' : 'Pantalla completa (F)'} alPulsar={() => void m.alternarPantallaCompleta(pantalla.current)} oscuro={oscuro}><IconoR nombre={inst.pantallaCompleta ? 'reducir' : 'ampliar'} tam={18} /></BotonMando> : null}
+        <BotonMando etiqueta="Buscar en la transcripción" activo={buscar} alPulsar={alBuscar} className="lg:hidden" oscuro={oscuro}><Icono nombre="buscar" tam={18} /></BotonMando>
         <MenuMas documento={documento} esVideo={esVideo} pip={inst.pip} alAyuda={alAyuda} />
       </div>
       <p className="sr-only" aria-live="polite">{anuncio}</p>
     </div>
+  );
+}
+
+/** En el hueco central de los mandos: quién habla ahora (cambia solo al cambiar de turno). */
+function QuienHabla({ transcripcion: tr, oscuro }: { transcripcion: Transcripcion | null; oscuro: boolean }) {
+  const [h, setH] = useState(-1);
+  useEffect(() => {
+    if (!tr?.turnos.length) return;
+    return motor().escucharTiempo((t) => {
+      const i = buscarIndice(tr.iniciosTurno, t + 0.25);
+      setH(i >= 0 ? tr.turnos[i]!.h : -1);
+    });
+  }, [tr]);
+  return (
+    <span className="flex min-w-0 flex-1 items-center justify-center gap-1.5 px-1" aria-hidden>
+      {tr && h >= 0 ? (
+        <span className="hidden min-w-0 items-center gap-1.5 sm:flex">
+          <FormaHablante h={h} tam={8} />
+          <span className={cx('truncate text-[0.75rem] font-medium', oscuro ? 'text-cream-100' : 'text-coffee-600')}>{tr.hablantes[h]}</span>
+        </span>
+      ) : null}
+    </span>
   );
 }
 
@@ -528,8 +552,8 @@ function MenuMas({ documento, esVideo, pip, alAyuda }: { documento: string; esVi
         </button>
       </MenuDisparador>
       <MenuContenido alinear="end" lado="top">
-        <MenuElemento icono="enlace" alElegir={() => void copiar(enlaceAlMinuto(documento, m.tiempo()), `Enlace al minuto ${tiempoACadena(m.tiempo())} copiado.`)}>Copiar enlace a este minuto</MenuElemento>
         {esVideo && m.pipDisponible ? <MenuElemento icono="video" alElegir={() => void m.alternarPip()}>{pip ? 'Salir de imagen dentro de imagen' : 'Imagen dentro de imagen'}</MenuElemento> : null}
+        <MenuElemento icono="enlace" alElegir={() => void copiar(enlaceAlMinuto(documento, m.tiempo()), `Enlace al minuto ${tiempoACadena(m.tiempo())} copiado.`)}>Copiar enlace a este minuto</MenuElemento>
         <MenuElemento icono="teclado" alElegir={alAyuda}>Teclas del reproductor</MenuElemento>
       </MenuContenido>
     </MenuRaiz>

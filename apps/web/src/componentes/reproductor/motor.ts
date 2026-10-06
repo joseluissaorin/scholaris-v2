@@ -51,6 +51,8 @@ export interface Instantanea {
   /** Instante desde el que se retomó automáticamente (para ofrecer «Desde el principio»). */
   retomado: number | null;
   virtual: boolean;
+  /** Ya sonó alguna vez desde que se cargó (el botón grande solo hace falta antes). */
+  haSonado: boolean;
   /** Proporción del vídeo (ancho / alto) en cuanto se conoce. */
   aspecto: number | null;
   /** Mensaje breve sobre la imagen («+10 s», «1,25×»). `n` cambia en cada aviso. */
@@ -123,6 +125,7 @@ export class Motor {
   private pantalla = false;
   private pip = false;
   private error: string | null = null;
+  private haSonado = false;
 
   constructor() {
     this.inst = this.calcular();
@@ -169,6 +172,7 @@ export class Motor {
       tipoError: this.b.error?.tipo ?? null,
       retomado: this.retomado,
       virtual: !!this.virtual,
+      haSonado: this.haSonado,
       aspecto: this.video && !this.virtual && this.video.videoWidth ? this.video.videoWidth / this.video.videoHeight : null,
       osd: this.osd,
     };
@@ -185,8 +189,13 @@ export class Motor {
     for (const o of this.oyentes) o();
   }
 
+  /** Los últimos eventos y decisiones (para diagnosticar; en desarrollo, en `window.__motor`). */
+  readonly registro: string[] = [];
+
   private despachar(e: Evento) {
     const { banderas, accion } = transicion(this.b, e);
+    this.registro.push(`${Math.round(performance.now())} ${e.tipo}${'codigo' in e ? `:${e.codigo}` : ''} → ${estadoDe(banderas)}${banderas.quiere ? ' (quiere)' : ''}${accion ? ` · ${accion.tipo} ${accion.esperaMs} ms` : ''}`);
+    if (this.registro.length > 80) this.registro.shift();
     this.b = banderas;
     if (accion?.tipo === 'renovar') this.renovar(accion.esperaMs);
     this.vigilar();
@@ -274,10 +283,12 @@ export class Motor {
     en('resize', () => this.emitir());
     en('canplay', () => this.medio() === el && this.despachar({ tipo: 'datos' }));
     en('play', () => { if (this.medio() === el) { this.despachar({ tipo: 'play' }); this.arrancarBucle(); } });
-    en('playing', () => { if (this.medio() === el) { this.despachar({ tipo: 'avanza' }); this.arrancarBucle(); } });
+    en('playing', () => { if (this.medio() === el) { this.haSonado = true; this.despachar({ tipo: 'avanza' }); this.arrancarBucle(); } });
     en('pause', () => {
       if (this.pausasPropias > 0) { this.pausasPropias--; return; }
       if (this.medio() !== el) return;
+      // Chrome pausa el elemento tras un error de red: no es la persona, y la intención de sonar se conserva para la recarga.
+      if ((el as HTMLVideoElement).error) return;
       this.despachar({ tipo: 'pausa' });
       this.guardarPosicion(true);
       this.avisarTiempo();
@@ -319,6 +330,7 @@ export class Motor {
     this.fuente = fuente;
     this.b = INICIAL;
     this.error = null;
+    this.haSonado = false;
     const inicio = puntoDePartida(o.t, posicionGuardada(fuente.documento), fuente.duracion);
     this.retomado = inicio.retomado ? inicio.t : null;
     this.pendiente = inicio.t;
@@ -648,6 +660,9 @@ let unico: Motor | null = null;
 
 /** El motor de la aplicación (uno solo, creado al primer uso). */
 export function motor(): Motor {
-  unico ??= new Motor();
+  if (!unico) {
+    unico = new Motor();
+    if (import.meta.env.DEV && typeof window !== 'undefined') (window as unknown as { __motor: Motor }).__motor = unico;
+  }
   return unico;
 }
