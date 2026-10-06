@@ -35,7 +35,37 @@ export const ESQUEMA_PLATAFORMA = [
     parrafos TEXT NOT NULL DEFAULT '[]', propuestas TEXT NOT NULL DEFAULT '[]', bibliografia TEXT NOT NULL DEFAULT '[]',
     estilo TEXT NOT NULL, error TEXT, creada TEXT NOT NULL
   )`,
+  // Lotes: llenar una biblioteca de golpe, con una cola de concurrencia limitada.
+  `CREATE TABLE IF NOT EXISTS pl_lotes (
+    id TEXT PRIMARY KEY, nombre TEXT NOT NULL, biblioteca TEXT, modo TEXT NOT NULL, concurrencia INTEGER NOT NULL, estado TEXT NOT NULL,
+    estimacion TEXT, creado TEXT NOT NULL, actualizado TEXT NOT NULL
+  )`,
+  `CREATE TABLE IF NOT EXISTS pl_lote_elementos (
+    lote TEXT NOT NULL, n INTEGER NOT NULL, clase TEXT NOT NULL, nombre TEXT NOT NULL, ruta TEXT, mime TEXT, bytes INTEGER, huella TEXT, url TEXT,
+    tipo TEXT, paginas INTEGER, minutos REAL, metadatos TEXT, estado TEXT NOT NULL, documento TEXT, tarea TEXT, error TEXT,
+    intentos INTEGER NOT NULL DEFAULT 0, actualizado TEXT NOT NULL, PRIMARY KEY (lote, n)
+  )`,
+  `CREATE INDEX IF NOT EXISTS pl_lote_elementos_estado ON pl_lote_elementos(lote, estado)`,
+  `CREATE INDEX IF NOT EXISTS pl_lote_elementos_documento ON pl_lote_elementos(documento)`,
 ];
+
+/** Columnas añadidas después a tablas que ya existían en las estanterías (entran en la huella). */
+export const COLUMNAS_NUEVAS: Array<[tabla: string, columna: string, tipo: string]> = [
+  ['pl_bibliotecas', 'derechos', 'TEXT'],
+  ['pl_bibliotecas', 'nota_derechos', 'TEXT'],
+  ['pl_bibliotecas', 'copiada_de', 'TEXT'],
+];
+
+async function anadirColumnas(sql: SQL): Promise<void> {
+  const porTabla = new Map<string, Set<string>>();
+  for (const [t, c, tipo] of COLUMNAS_NUEVAS) {
+    if (!porTabla.has(t)) porTabla.set(t, new Set((await sql.ejecutar<{ name: string }>(`PRAGMA table_info(${t})`)).map((f) => f.name)));
+    if (porTabla.get(t)!.has(c)) continue;
+    try { await sql.ejecutar(`ALTER TABLE ${t} ADD COLUMN ${c} ${tipo}`); } catch (e) {
+      if (!/duplicate column/i.test((e as Error).message)) throw e;
+    }
+  }
+}
 
 /** Aplica los tres esquemas (SPDF, funciones, plataforma). Idempotente. */
 /**
@@ -44,7 +74,7 @@ export const ESQUEMA_PLATAFORMA = [
  * no tiene que repetirlos (cientos de sentencias en frío).
  */
 export const HUELLA_ESQUEMA = (() => {
-  const texto = [ESQUEMA_V4, esquemaFunciones, ...ESQUEMA_PLATAFORMA].join('\u0000');
+  const texto = [ESQUEMA_V4, esquemaFunciones, ...ESQUEMA_PLATAFORMA, JSON.stringify(COLUMNAS_NUEVAS)].join('\u0000');
   let h = 0x811c9dc5;
   for (let i = 0; i < texto.length; i++) h = Math.imul(h ^ texto.charCodeAt(i), 0x01000193) >>> 0;
   return `${texto.length.toString(36)}-${h.toString(36)}`;
@@ -63,5 +93,6 @@ export async function prepararEstanteria(sql: SQL): Promise<boolean> {
     completo = false;
   }
   for (const s of ESQUEMA_PLATAFORMA) await sql.ejecutar(s);
+  await anadirColumnas(sql);
   return completo;
 }

@@ -42,7 +42,65 @@ export const ESQUEMA_CUENTAS = [
     usuario TEXT NOT NULL, accion TEXT NOT NULL, detalle TEXT, cuando TEXT NOT NULL
   )`,
   `CREATE INDEX IF NOT EXISTS auditoria_usuario ON auditoria(usuario, cuando)`,
+  // Enlaces de solo lectura (sin cuenta) a una biblioteca o a un documento.
+  `CREATE TABLE IF NOT EXISTS enlaces (
+    id TEXT PRIMARY KEY, token TEXT NOT NULL UNIQUE, propietario TEXT NOT NULL, biblioteca TEXT, documento TEXT, titulo TEXT NOT NULL,
+    clave TEXT, caduca TEXT, creado TEXT NOT NULL, revocado TEXT, visitas INTEGER NOT NULL DEFAULT 0
+  )`,
+  `CREATE INDEX IF NOT EXISTS enlaces_biblioteca ON enlaces(propietario, biblioteca)`,
+  `CREATE TABLE IF NOT EXISTS notificaciones (
+    id TEXT PRIMARY KEY, usuario TEXT, correo TEXT, tipo TEXT NOT NULL, texto TEXT NOT NULL, biblioteca TEXT, destino TEXT,
+    creada TEXT NOT NULL, leida TEXT
+  )`,
+  `CREATE INDEX IF NOT EXISTS notificaciones_usuario ON notificaciones(usuario, creada)`,
+  `CREATE INDEX IF NOT EXISTS notificaciones_correo ON notificaciones(correo)`,
+  // Copias sin duplicar binarios: quién apunta a los ficheros de otro, y los que se
+  // quedan en el almacén porque su dueño los borró mientras alguien los usaba.
+  `CREATE TABLE IF NOT EXISTS referencias_almacen (
+    prefijo TEXT NOT NULL, usuario TEXT NOT NULL, documento TEXT NOT NULL, creada TEXT NOT NULL, PRIMARY KEY (prefijo, usuario, documento)
+  )`,
+  `CREATE INDEX IF NOT EXISTS referencias_usuario ON referencias_almacen(usuario, documento)`,
+  `CREATE TABLE IF NOT EXISTS prefijos_retenidos (prefijo TEXT PRIMARY KEY, propietario TEXT NOT NULL, desde TEXT NOT NULL)`,
 ];
+
+/** Columnas que se añadieron después a `comparticiones` (invitaciones con estado, rol, caducidad y mensaje). */
+const COLUMNAS_COMPARTICIONES: Array<[string, string]> = [
+  ['id', 'TEXT'], ['estado', "TEXT NOT NULL DEFAULT 'aceptada'"], ['token', 'TEXT'], ['mensaje', 'TEXT'], ['caduca', 'TEXT'],
+  ['invitador', 'TEXT'], ['respondida', 'TEXT'], ['enlace', 'TEXT'], ['descripcion', 'TEXT'], ['derechos', 'TEXT'],
+];
+
+export type PermisoCompartido = 'lectura' | 'edicion' | 'administrador';
+
+export interface FilaComparticion {
+  id: string; biblioteca: string; propietario: string; correo: string; usuario: string | null; permiso: PermisoCompartido;
+  nombre: string | null; desde: string; estado: 'pendiente' | 'aceptada' | 'rechazada'; token: string | null; mensaje: string | null;
+  caduca: string | null; invitador: string | null; respondida: string | null; enlace: string | null; descripcion: string | null; derechos: string | null;
+}
+
+export interface FilaEnlace {
+  id: string; token: string; propietario: string; biblioteca: string | null; documento: string | null; titulo: string;
+  clave: string | null; caduca: string | null; creado: string; revocado: string | null; visitas: number;
+}
+
+const azar = (n = 18) => aBase64Url(crypto.getRandomValues(new Uint8Array(n)));
+
+/** Huella de una contraseña de enlace (PBKDF2, 100 000 vueltas: el máximo de Workers). */
+export async function huellaClave(clave: string, sal = azar(12)): Promise<string> {
+  const base = await crypto.subtle.importKey('raw', new TextEncoder().encode(clave), 'PBKDF2', false, ['deriveBits']);
+  const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', hash: 'SHA-256', salt: new TextEncoder().encode(sal), iterations: 100_000 }, base, 256);
+  return `pbkdf2$${sal}$${aBase64Url(new Uint8Array(bits))}`;
+}
+
+export async function comprobarClave(clave: string, guardada: string): Promise<boolean> {
+  const [, sal] = guardada.split('$');
+  if (!sal) return false;
+  const h = await huellaClave(clave, sal);
+  if (h.length !== guardada.length) return false;
+  let d = 0;
+  for (let i = 0; i < h.length; i++) d |= h.charCodeAt(i) ^ guardada.charCodeAt(i);
+  return d === 0;
+}
+
 
 export const PREFERENCIAS_POR_DEFECTO: Preferencias = {
   idioma: 'es',
@@ -70,7 +128,19 @@ export class Cuentas {
   preparar(): Promise<void> {
     this.listo ??= (async () => {
       for (const s of ESQUEMA_CUENTAS) await this.sql.ejecutar(s);
+      // Columnas nuevas de las invitaciones: solo las que falten (una consulta en frío).
+      const hay = new Set((await this.sql.ejecutar<{ name: string }>('PRAGMA table_info(comparticiones)')).map((f) => f.name));
+      for (const [c, tipo] of COLUMNAS_COMPARTICIONES) {
+        if (hay.has(c)) continue;
+        try { await this.sql.ejecutar(`ALTER TABLE comparticiones ADD COLUMN ${c} ${tipo}`); } catch (e) {
+          if (!/duplicate column/i.test((e as Error).message)) throw e;
+        }
+      }
+      if (!hay.has('id')) await this.sql.ejecutar("UPDATE comparticiones SET id = 'i' || lower(hex(randomblob(8))) WHERE id IS NULL");
+      await this.sql.ejecutar('CREATE UNIQUE INDEX IF NOT EXISTS comparticiones_id ON comparticiones(id)');
+      await this.sql.ejecutar('CREATE INDEX IF NOT EXISTS comparticiones_token ON comparticiones(token)');
     })();
+    this.listo.catch(() => { this.listo = null; });
     return this.listo;
   }
 
@@ -123,6 +193,8 @@ export class Cuentas {
     await this.q('DELETE FROM ajustes WHERE usuario = ?', usuario);
     await this.q('DELETE FROM uso WHERE usuario = ?', usuario);
     await this.q('DELETE FROM comparticiones WHERE propietario = ? OR usuario = ?', usuario, usuario);
+    await this.q('UPDATE enlaces SET revocado = ? WHERE propietario = ? AND revocado IS NULL', ahora(), usuario);
+    await this.q('DELETE FROM notificaciones WHERE usuario = ?', usuario);
   }
 
   // -------------------------------------------------------------------------
@@ -284,45 +356,273 @@ export class Cuentas {
   }
 
   // -------------------------------------------------------------------------
-  // Bibliotecas compartidas
+  // Bibliotecas compartidas: invitaciones, miembros y quien las sigue
   // -------------------------------------------------------------------------
 
-  async compartir(biblioteca: string, propietario: string, nombre: string, correo: string, permiso: 'edicion' | 'lectura') {
+  /** Condición SQL (alias `c`) de una compartición que da acceso ahora mismo. */
+  private static readonly VIGENTE = `c.estado = 'aceptada' AND (c.caduca IS NULL OR c.caduca > ?)
+    AND (c.enlace IS NULL OR EXISTS (SELECT 1 FROM enlaces e WHERE e.id = c.enlace AND e.revocado IS NULL AND (e.caduca IS NULL OR e.caduca > ?)))`;
+
+  /**
+   * Invita por correo. Si ya había invitación, se actualiza (permiso, mensaje,
+   * caducidad); una rechazada vuelve a quedar pendiente. Quien ya aceptó solo
+   * cambia de permiso.
+   */
+  async invitar(i: {
+    biblioteca: string; propietario: string; invitador: string; nombre: string; descripcion?: string | null; derechos?: string | null;
+    correo: string; permiso: PermisoCompartido; mensaje?: string | null; caducaDias?: number | null;
+  }): Promise<FilaComparticion> {
+    const correo = i.correo.trim().toLowerCase();
     const usuario = await this.usuarioPorCorreo(correo);
-    const desde = ahora();
+    const caduca = i.caducaDias ? new Date(Date.now() + i.caducaDias * 86400_000).toISOString() : null;
     await this.q(
-      `INSERT INTO comparticiones (biblioteca, propietario, correo, usuario, permiso, nombre, desde) VALUES (?, ?, ?, ?, ?, ?, ?)
-       ON CONFLICT(biblioteca, correo) DO UPDATE SET permiso = excluded.permiso, nombre = excluded.nombre`,
-      biblioteca, propietario, correo.toLowerCase(), usuario, permiso, nombre, desde,
+      `INSERT INTO comparticiones (id, biblioteca, propietario, correo, usuario, permiso, nombre, desde, estado, token, mensaje, caduca, invitador, descripcion, derechos)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pendiente', ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(biblioteca, correo) DO UPDATE SET permiso = excluded.permiso, nombre = excluded.nombre, mensaje = excluded.mensaje,
+         caduca = excluded.caduca, invitador = excluded.invitador, descripcion = excluded.descripcion, derechos = excluded.derechos,
+         usuario = COALESCE(comparticiones.usuario, excluded.usuario), enlace = NULL,
+         estado = CASE WHEN comparticiones.estado = 'rechazada' THEN 'pendiente' ELSE comparticiones.estado END,
+         token = COALESCE(comparticiones.token, excluded.token)`,
+      `i${azar(9).toLowerCase().replace(/[^a-z0-9]/g, '')}`, i.biblioteca, i.propietario, correo, usuario, i.permiso, i.nombre, ahora(),
+      azar(24), i.mensaje ?? null, caduca, i.invitador, i.descripcion ?? null, i.derechos ?? null,
     );
-    await this.auditar(propietario, 'biblioteca_compartida', { biblioteca, correo });
-    return { usuario: usuario ?? undefined, correo: correo.toLowerCase(), permiso, pendiente: !usuario, desde };
+    await this.auditar(i.invitador, 'biblioteca_compartida', { biblioteca: i.biblioteca, correo, permiso: i.permiso });
+    const fila = (await this.q<FilaComparticion>('SELECT * FROM comparticiones WHERE biblioteca = ? AND correo = ?', i.biblioteca, correo))[0]!;
+    if (fila.estado === 'pendiente') {
+      const quien = (await this.usuario(i.invitador))?.nombre || 'Alguien';
+      await this.notificar({ usuario, correo, tipo: 'invitacion', texto: `${quien} te invita a ${i.permiso === 'lectura' ? 'leer' : 'trabajar en'} «${i.nombre}».`, biblioteca: i.biblioteca, destino: '/invitaciones' });
+    }
+    return fila;
+  }
+
+  /** Compatibilidad: invitar con lo mínimo. */
+  async compartir(biblioteca: string, propietario: string, nombre: string, correo: string, permiso: PermisoCompartido) {
+    const f = await this.invitar({ biblioteca, propietario, invitador: propietario, nombre, correo, permiso });
+    return { usuario: f.usuario ?? undefined, correo: f.correo, permiso: f.permiso, pendiente: f.estado !== 'aceptada', desde: f.desde };
   }
 
   async miembros(biblioteca: string) {
-    return (await this.q<{ usuario: string | null; correo: string; permiso: 'edicion' | 'lectura'; desde: string }>(
-      'SELECT usuario, correo, permiso, desde FROM comparticiones WHERE biblioteca = ? ORDER BY desde', biblioteca,
-    )).map((f) => ({ usuario: f.usuario ?? undefined, correo: f.correo, permiso: f.permiso, pendiente: !f.usuario, desde: f.desde }));
+    return (await this.q<FilaComparticion & { unombre: string | null }>(
+      `SELECT c.*, u.nombre AS unombre FROM comparticiones c LEFT JOIN usuarios u ON u.id = c.usuario
+       WHERE c.biblioteca = ? AND c.estado <> 'rechazada' AND c.enlace IS NULL ORDER BY c.desde`, biblioteca,
+    )).map((f) => ({
+      usuario: f.usuario ?? undefined, correo: f.correo, nombre: f.unombre || undefined, permiso: f.permiso, pendiente: f.estado !== 'aceptada',
+      estado: f.estado, invitacion: f.id, token: f.token ?? undefined, caduca: f.caduca ?? undefined, desde: f.desde,
+    }));
   }
 
+  /** Cuántos tienen acceso o invitación (para el distintivo «compartida»). */
+  async cuantosMiembros(bibliotecas: string[]): Promise<Map<string, number>> {
+    const m = new Map<string, number>();
+    if (!bibliotecas.length) return m;
+    const filas = await this.q<{ biblioteca: string; n: number }>(
+      "SELECT biblioteca, COUNT(*) AS n FROM comparticiones WHERE biblioteca IN (SELECT value FROM json_each(?)) AND estado <> 'rechazada' GROUP BY biblioteca",
+      JSON.stringify(bibliotecas));
+    for (const f of filas) m.set(f.biblioteca, f.n);
+    return m;
+  }
+
+  async cambiarPermiso(biblioteca: string, propietario: string, quien: string, permiso: PermisoCompartido): Promise<boolean> {
+    const r = await this.q('UPDATE comparticiones SET permiso = ? WHERE biblioteca = ? AND propietario = ? AND (usuario = ? OR correo = ?) RETURNING id',
+      permiso, biblioteca, propietario, quien, quien.toLowerCase());
+    return r.length > 0;
+  }
+
+  /** Revoca el acceso (o la invitación pendiente) de un usuario o un correo. */
   async dejarDeCompartir(biblioteca: string, propietario: string, usuarioOCorreo: string): Promise<void> {
-    await this.q('DELETE FROM comparticiones WHERE biblioteca = ? AND propietario = ? AND (usuario = ? OR correo = ?)', biblioteca, propietario, usuarioOCorreo, usuarioOCorreo.toLowerCase());
+    const filas = await this.q<FilaComparticion>('DELETE FROM comparticiones WHERE biblioteca = ? AND propietario = ? AND (usuario = ? OR correo = ?) RETURNING *',
+      biblioteca, propietario, usuarioOCorreo, usuarioOCorreo.toLowerCase());
+    for (const f of filas) {
+      if (f.estado === 'aceptada' && f.usuario) await this.notificar({ usuario: f.usuario, tipo: 'acceso_retirado', texto: `Ya no tienes acceso a «${f.nombre ?? 'una biblioteca compartida'}».`, biblioteca });
+    }
   }
 
   async borrarComparticiones(biblioteca: string): Promise<void> {
     await this.q('DELETE FROM comparticiones WHERE biblioteca = ?', biblioteca);
+    await this.q('UPDATE enlaces SET revocado = ? WHERE biblioteca = ? AND revocado IS NULL', ahora(), biblioteca);
   }
 
-  /** Bibliotecas que otros comparten conmigo. */
+  /** Cambia el nombre, la descripción o los derechos que ven los invitados. */
+  async actualizarDatosBiblioteca(biblioteca: string, d: { nombre?: string | null; descripcion?: string | null; derechos?: string | null }): Promise<void> {
+    await this.q('UPDATE comparticiones SET nombre = COALESCE(?, nombre), descripcion = COALESCE(?, descripcion), derechos = COALESCE(?, derechos) WHERE biblioteca = ?',
+      d.nombre ?? null, d.descripcion ?? null, d.derechos ?? null, biblioteca);
+  }
+
+  /** Invitaciones que me esperan (por mi usuario o por mi correo). */
+  async invitacionesPara(usuario: string, correo: string) {
+    const t = ahora();
+    return this.q<FilaComparticion & { pnombre: string | null; pcorreo: string | null; inombre: string | null }>(
+      `SELECT c.*, p.nombre AS pnombre, p.correo AS pcorreo, i.nombre AS inombre FROM comparticiones c
+       LEFT JOIN usuarios p ON p.id = c.propietario LEFT JOIN usuarios i ON i.id = c.invitador
+       WHERE c.estado = 'pendiente' AND (c.caduca IS NULL OR c.caduca > ?) AND (c.usuario = ? OR (c.usuario IS NULL AND c.correo = ?))
+       ORDER BY c.desde DESC`, t, usuario, correo.toLowerCase());
+  }
+
+  /** Una invitación por su id o por el token del enlace del correo. */
+  async invitacion(idOToken: string) {
+    const [f] = await this.q<FilaComparticion & { pnombre: string | null; pcorreo: string | null; inombre: string | null }>(
+      `SELECT c.*, p.nombre AS pnombre, p.correo AS pcorreo, i.nombre AS inombre FROM comparticiones c
+       LEFT JOIN usuarios p ON p.id = c.propietario LEFT JOIN usuarios i ON i.id = c.invitador
+       WHERE c.id = ? OR c.token = ? LIMIT 1`, idOToken, idOToken);
+    return f ?? null;
+  }
+
+  /**
+   * Acepta o rechaza. Por id vale si la invitación es para mí (usuario o
+   * correo); con el token del correo, si nadie la ha reclamado aún (el token es
+   * el que llegó a ese correo).
+   */
+  async responder(idOToken: string, yo: { id: string; correo: string; nombre: string }, aceptar: boolean): Promise<FilaComparticion | 'no_encontrada' | 'ajena' | 'caducada'> {
+    const f = await this.invitacion(idOToken);
+    if (!f || f.enlace) return 'no_encontrada';
+    const porToken = f.token === idOToken;
+    const mia = f.usuario === yo.id || (!f.usuario && (porToken || f.correo === yo.correo.toLowerCase()));
+    if (!mia) return 'ajena';
+    if (f.caduca && f.caduca <= ahora()) return 'caducada';
+    if (f.propietario === yo.id) return 'ajena';
+    const t = ahora();
+    await this.q('UPDATE comparticiones SET estado = ?, usuario = ?, respondida = ?, desde = CASE WHEN ? THEN ? ELSE desde END WHERE id = ?',
+      aceptar ? 'aceptada' : 'rechazada', yo.id, t, aceptar ? 1 : 0, t, f.id);
+    await this.q("UPDATE notificaciones SET leida = ? WHERE tipo = 'invitacion' AND biblioteca = ? AND (usuario = ? OR correo = ?)", t, f.biblioteca, yo.id, yo.correo.toLowerCase());
+    await this.notificar({
+      usuario: f.invitador ?? f.propietario, tipo: aceptar ? 'invitacion_aceptada' : 'invitacion_rechazada',
+      texto: `${yo.nombre || yo.correo} ${aceptar ? 'ha aceptado' : 'no ha aceptado'} tu invitación a «${f.nombre ?? 'la biblioteca'}».`, biblioteca: f.biblioteca,
+    });
+    return { ...f, estado: aceptar ? 'aceptada' : 'rechazada', usuario: yo.id };
+  }
+
+  /** Bibliotecas que otros comparten conmigo y que sigo (aceptadas y vigentes). */
   async compartidasConmigo(usuario: string) {
-    return this.q<{ biblioteca: string; propietario: string; permiso: 'edicion' | 'lectura'; nombre: string | null; desde: string }>(
-      'SELECT biblioteca, propietario, permiso, nombre, desde FROM comparticiones WHERE usuario = ?', usuario,
+    const t = ahora();
+    return this.q<FilaComparticion & { pnombre: string | null; pcorreo: string | null }>(
+      `SELECT c.*, p.nombre AS pnombre, p.correo AS pcorreo FROM comparticiones c LEFT JOIN usuarios p ON p.id = c.propietario
+       WHERE c.usuario = ? AND ${Cuentas.VIGENTE} ORDER BY c.nombre COLLATE NOCASE`, usuario, t, t);
+  }
+
+  async permisoSobre(biblioteca: string, usuario: string): Promise<{ propietario: string; permiso: PermisoCompartido } | null> {
+    const t = ahora();
+    const [f] = await this.q<{ propietario: string; permiso: PermisoCompartido }>(
+      `SELECT c.propietario, c.permiso FROM comparticiones c WHERE c.biblioteca = ? AND c.usuario = ? AND ${Cuentas.VIGENTE}`, biblioteca, usuario, t, t);
+    return f ?? null;
+  }
+
+  /** Dejar de seguir (o salir de) una biblioteca compartida. */
+  async salir(biblioteca: string, usuario: string): Promise<boolean> {
+    const r = await this.q('DELETE FROM comparticiones WHERE biblioteca = ? AND usuario = ? RETURNING id', biblioteca, usuario);
+    return r.length > 0;
+  }
+
+  /** Seguir una biblioteca desde un enlace de solo lectura: lectura, mientras el enlace viva. */
+  async seguirPorEnlace(e: FilaEnlace, yo: { id: string; correo: string }, nombre: string): Promise<void> {
+    const correo = (yo.correo || `${yo.id}@sin-correo`).toLowerCase();
+    await this.q(
+      `INSERT INTO comparticiones (id, biblioteca, propietario, correo, usuario, permiso, nombre, desde, estado, enlace, invitador)
+       VALUES (?, ?, ?, ?, ?, 'lectura', ?, ?, 'aceptada', ?, ?)
+       ON CONFLICT(biblioteca, correo) DO NOTHING`,
+      `i${azar(9).toLowerCase().replace(/[^a-z0-9]/g, '')}`, e.biblioteca!, e.propietario, correo, yo.id, nombre, ahora(), e.id, e.propietario,
     );
   }
 
-  async permisoSobre(biblioteca: string, usuario: string): Promise<{ propietario: string; permiso: 'edicion' | 'lectura' } | null> {
-    const [f] = await this.q<{ propietario: string; permiso: 'edicion' | 'lectura' }>('SELECT propietario, permiso FROM comparticiones WHERE biblioteca = ? AND usuario = ?', biblioteca, usuario);
-    return f ?? null;
+  // -------------------------------------------------------------------------
+  // Enlaces de solo lectura
+  // -------------------------------------------------------------------------
+
+  async crearEnlace(e: { propietario: string; biblioteca?: string | null; documento?: string | null; titulo: string; clave?: string | null; caducaDias?: number | null }): Promise<FilaEnlace> {
+    const id = nuevoId('e');
+    const token = azar(18);
+    const caduca = e.caducaDias ? new Date(Date.now() + e.caducaDias * 86400_000).toISOString() : null;
+    await this.q('INSERT INTO enlaces (id, token, propietario, biblioteca, documento, titulo, clave, caduca, creado) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      id, token, e.propietario, e.biblioteca ?? null, e.documento ?? null, e.titulo, e.clave ? await huellaClave(e.clave) : null, caduca, ahora());
+    await this.auditar(e.propietario, 'enlace_creado', { id, biblioteca: e.biblioteca, documento: e.documento });
+    return (await this.q<FilaEnlace>('SELECT * FROM enlaces WHERE id = ?', id))[0]!;
+  }
+
+  async enlaces(propietario: string, biblioteca?: string): Promise<FilaEnlace[]> {
+    return biblioteca
+      ? this.q<FilaEnlace>('SELECT * FROM enlaces WHERE propietario = ? AND biblioteca = ? AND revocado IS NULL ORDER BY creado DESC', propietario, biblioteca)
+      : this.q<FilaEnlace>('SELECT * FROM enlaces WHERE propietario = ? AND revocado IS NULL ORDER BY creado DESC', propietario);
+  }
+
+  async enlace(id: string): Promise<FilaEnlace | null> {
+    return (await this.q<FilaEnlace>('SELECT * FROM enlaces WHERE id = ?', id))[0] ?? null;
+  }
+
+  async enlacePorToken(token: string): Promise<FilaEnlace | null> {
+    if (!/^[A-Za-z0-9_-]{10,64}$/.test(token)) return null;
+    return (await this.q<FilaEnlace>('SELECT * FROM enlaces WHERE token = ?', token))[0] ?? null;
+  }
+
+  async revocarEnlace(propietario: string, id: string): Promise<boolean> {
+    const r = await this.q('UPDATE enlaces SET revocado = ? WHERE id = ? AND propietario = ? AND revocado IS NULL RETURNING id', ahora(), id, propietario);
+    if (r.length) await this.auditar(propietario, 'enlace_revocado', { id });
+    return r.length > 0;
+  }
+
+  async contarVisita(id: string): Promise<void> {
+    await this.q('UPDATE enlaces SET visitas = visitas + 1 WHERE id = ?', id);
+  }
+
+  // -------------------------------------------------------------------------
+  // Notificaciones
+  // -------------------------------------------------------------------------
+
+  async notificar(n: { usuario?: string | null; correo?: string | null; tipo: string; texto: string; biblioteca?: string | null; destino?: string | null }): Promise<void> {
+    if (!n.usuario && !n.correo) return;
+    await this.q('INSERT INTO notificaciones (id, usuario, correo, tipo, texto, biblioteca, destino, creada) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      nuevoId('n'), n.usuario ?? null, n.usuario ? null : (n.correo ?? '').toLowerCase(), n.tipo, n.texto, n.biblioteca ?? null, n.destino ?? null, ahora());
+  }
+
+  async notificaciones(usuario: string, correo: string, pendientes = false) {
+    const filas = await this.q<{ id: string; tipo: string; texto: string; biblioteca: string | null; destino: string | null; creada: string; leida: string | null }>(
+      `SELECT id, tipo, texto, biblioteca, destino, creada, leida FROM notificaciones WHERE (usuario = ? OR (usuario IS NULL AND correo = ?))
+       ${pendientes ? 'AND leida IS NULL' : ''} ORDER BY creada DESC LIMIT 100`, usuario, correo.toLowerCase());
+    return filas;
+  }
+
+  async marcarLeidas(usuario: string, correo: string, ids?: string[]): Promise<void> {
+    if (ids?.length) {
+      await this.q('UPDATE notificaciones SET leida = ? WHERE leida IS NULL AND (usuario = ? OR (usuario IS NULL AND correo = ?)) AND id IN (SELECT value FROM json_each(?))',
+        ahora(), usuario, correo.toLowerCase(), JSON.stringify(ids));
+    } else {
+      await this.q('UPDATE notificaciones SET leida = ? WHERE leida IS NULL AND (usuario = ? OR (usuario IS NULL AND correo = ?))', ahora(), usuario, correo.toLowerCase());
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // Copias que apuntan a los binarios de otro (sin duplicar bytes)
+  // -------------------------------------------------------------------------
+
+  async referenciar(prefijo: string, usuario: string, documento: string): Promise<void> {
+    await this.q('INSERT INTO referencias_almacen (prefijo, usuario, documento, creada) VALUES (?, ?, ?, ?) ON CONFLICT DO NOTHING', prefijo, usuario, documento, ahora());
+  }
+
+  /** ¿Alguien más usa estos binarios? Si es así, quedan retenidos al borrar el documento de su dueño. */
+  async retenerSiReferenciado(prefijo: string, propietario: string): Promise<boolean> {
+    const [f] = await this.q<{ n: number }>('SELECT COUNT(*) AS n FROM referencias_almacen WHERE prefijo = ?', prefijo);
+    if (!f?.n) return false;
+    await this.q('INSERT INTO prefijos_retenidos (prefijo, propietario, desde) VALUES (?, ?, ?) ON CONFLICT DO NOTHING', prefijo, propietario, ahora());
+    return true;
+  }
+
+  /**
+   * Quita las referencias de un documento copiado. Devuelve los prefijos que se
+   * han quedado sin nadie y cuyo dueño ya los había borrado: hay que borrarlos.
+   */
+  async soltarReferencias(usuario: string, documento: string): Promise<string[]> {
+    const prefijos = (await this.q<{ prefijo: string }>('DELETE FROM referencias_almacen WHERE usuario = ? AND documento = ? RETURNING prefijo', usuario, documento)).map((f) => f.prefijo);
+    const huerfanos: string[] = [];
+    for (const p of prefijos) {
+      const [r] = await this.q<{ n: number }>('SELECT COUNT(*) AS n FROM referencias_almacen WHERE prefijo = ?', p);
+      if (r?.n) continue;
+      const borrado = await this.q('DELETE FROM prefijos_retenidos WHERE prefijo = ? RETURNING prefijo', p);
+      if (borrado.length) huerfanos.push(p);
+    }
+    return huerfanos;
+  }
+
+  /** ¿Hay referencias de otros a algo dentro de este prefijo (p. ej. «u/<usuario>/»)? */
+  async prefijosReferenciados(prefijo: string): Promise<string[]> {
+    return (await this.q<{ prefijo: string }>("SELECT DISTINCT prefijo FROM referencias_almacen WHERE substr(prefijo, 1, length(?)) = ?", prefijo, prefijo)).map((f) => f.prefijo);
   }
 
   // -------------------------------------------------------------------------

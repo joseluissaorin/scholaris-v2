@@ -53,8 +53,13 @@ export async function borrarDocumentoCompleto(p: PuertosUsuario, id: string): Pr
   p.segundoPlano((async () => {
     await alBorrarDocumento(await puertosFunciones(p), id).catch((e: unknown) => console.error('alBorrarDocumento', e));
     if (p.indice && ids.length) for (let i = 0; i < ids.length; i += 500) await p.indice.borrar(p.config.espacioNombres(p.usuario.id), ids.slice(i, i + 500));
-    await p.almacen.borrarPrefijo(prefijoDocumento(p.usuario.id, id));
-    for (const k of claves) if (!k.startsWith(prefijoDocumento(p.usuario.id, id))) await p.almacen.borrar(k).catch(() => undefined);
+    const propio = prefijoDocumento(p.usuario.id, id);
+    // Si alguien tiene una copia que apunta a estos binarios, se quedan hasta que la borre.
+    if (!(await p.cuentas.retenerSiReferenciado(propio, p.usuario.id))) await p.almacen.borrarPrefijo(propio);
+    // Fuera del prefijo, solo lo propio: las claves de otro usuario son de una copia y no se tocan.
+    for (const k of claves) if (!k.startsWith(propio) && k.startsWith(`u/${p.usuario.id}/`)) await p.almacen.borrar(k).catch(() => undefined);
+    // Si era una copia: suelta sus referencias; lo que ya nadie usa y su dueño había borrado, fuera.
+    for (const pref of await p.cuentas.soltarReferencias(p.usuario.id, id)) await p.almacen.borrarPrefijo(pref);
     const t = await totalesEstanteria(p.sql);
     await p.cuentas.totales(p.usuario.id, t.documentos, t.bytes);
   })().catch((e) => console.error('borrado en segundo plano', e)));
@@ -83,7 +88,8 @@ export function rutasDocumentos(app: Hono<Entorno>): void {
     const params: ValorSQL[] = [];
     if (q.q) { donde.push('(titulo LIKE ? OR autores LIKE ?)'); params.push(`%${q.q}%`, `%${q.q}%`); }
     const amb = c.get('usuario').ambito;
-    if (amb) q.biblioteca = amb.biblioteca;
+    if (amb?.documento) { donde.push('id = ?'); params.push(amb.documento); }
+    else if (amb) q.biblioteca = amb.biblioteca;
     if (q.biblioteca) { donde.push('EXISTS (SELECT 1 FROM json_each(documentos.bibliotecas) je WHERE je.value = ?)'); params.push(q.biblioteca); }
     const tipos = c.req.queries('tipo') ?? [];
     if (tipos.length) { const l = enLista(tipos); donde.push(`tipo IN ${l.sql}`); params.push(l.param); }

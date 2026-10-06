@@ -344,6 +344,13 @@ describe('bibliotecas compartidas', () => {
 
     expect((await api(`/bibliotecas/${bib.id}/compartir`, { token: dueno, cuerpo: { correo: 'user_lector@prueba.es', permiso: 'lectura' } })).estado).toBe(201);
     expect((await api(`/bibliotecas/${bib.id}/compartir`, { token: dueno, cuerpo: { correo: 'user_editor@prueba.es', permiso: 'edicion' } })).estado).toBe(201);
+    // Una invitación no da acceso hasta que se acepta.
+    expect((await api(`/compartidas/${bib.id}/documentos`, { token: lector })).estado).toBe(404);
+    for (const t of [lector, editor]) {
+      const inv = (await api('/invitaciones', { token: t })).cuerpo as Array<{ id: string; biblioteca: string }>;
+      const mia = inv.find((x) => x.biblioteca === bib.id)!;
+      expect((await api(`/invitaciones/${mia.id}/aceptar`, { token: t, cuerpo: {} })).estado).toBe(200);
+    }
 
     const lista = (await api('/bibliotecas', { token: lector })).cuerpo as Array<{ id: string; permiso: string; propietario: string }>;
     expect(lista.find((b) => b.id === bib.id)).toMatchObject({ permiso: 'lectura', propietario: 'user_dueno' });

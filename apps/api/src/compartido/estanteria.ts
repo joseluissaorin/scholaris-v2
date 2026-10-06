@@ -160,6 +160,10 @@ export function filaABiblioteca(f: Fila, propietario: string): Biblioteca {
   };
   if (f.descripcion) b.descripcion = s(f.descripcion);
   if (f.color) b.color = s(f.color);
+  b.derechos = (s(f.derechos) || 'sin_indicar') as NonNullable<Biblioteca['derechos']>;
+  if (f.nota_derechos) b.notaDerechos = s(f.nota_derechos);
+  const copiada = j<Biblioteca['copiadaDe'] | null>(f.copiada_de, null);
+  if (copiada) b.copiadaDe = copiada;
   return b;
 }
 

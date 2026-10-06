@@ -1,23 +1,30 @@
 /** Bibliotecas (ver contrato/bibliotecas.ts). */
 import type { Hono } from 'hono';
 import { nuevoId } from '@scholaris/nucleo';
-import type { AnadirDocumentos, Biblioteca, Compartir, NuevaBiblioteca } from '@scholaris/contrato';
+import { DERECHOS, type AnadirDocumentos, type Biblioteca, type Derechos, type NuevaBiblioteca } from '@scholaris/contrato';
 import type { Entorno } from '../entorno.js';
-import { cuerpoJson, exigir, fallo, noEncontrado } from '../compartido/errores.js';
+import { cuerpoJson, exigir, noEncontrado } from '../compartido/errores.js';
 import { ahora, cambiarBiblioteca, leerBiblioteca, listarBibliotecasPropias } from '../compartido/estanteria.js';
 import { exigirEscritura, prm, puertos, type Ctx } from './util.js';
 
 const COLOR = /^#[0-9a-f]{6}$/i;
+/** Los colores con nombre de la web (rojo, azul, amarillo, tinta) o uno hexadecimal. */
+const colorValido = (c?: string) => !c || COLOR.test(c) || /^[a-z]{3,12}$/.test(c);
+const derechosValidos = (d?: string) => d === undefined || d in DERECHOS;
 
 export function rutasBibliotecas(app: Hono<Entorno>): void {
   app.get('/bibliotecas', async (c: Ctx) => {
     const p = puertos(c);
     const propias = await listarBibliotecasPropias(p.sql, p.usuario.id);
-    const compartidasPorMi = new Set((await Promise.all(propias.map(async (b) => ((await p.cuentas.miembros(b.id)).length ? b.id : null)))).filter(Boolean));
-    for (const b of propias) b.compartida = compartidasPorMi.has(b.id);
+    // Las de una sesión encerrada en un ámbito (invitado) no ven las bibliotecas del propietario.
+    if (c.get('usuario').ambito) return c.json([]);
+    const cuantos = await p.cuentas.cuantosMiembros(propias.map((b) => b.id));
+    for (const b of propias) b.compartida = (cuantos.get(b.id) ?? 0) > 0;
     const ajenas: Biblioteca[] = (await p.cuentas.compartidasConmigo(p.usuario.id)).map((f) => ({
       id: f.biblioteca, nombre: f.nombre ?? 'Biblioteca compartida', documentos: 0, creada: f.desde, actualizada: f.desde,
       propietario: f.propietario, permiso: f.permiso, compartida: true,
+      ...(f.pnombre ? { propietarioNombre: f.pnombre } : {}), ...(f.descripcion ? { descripcion: f.descripcion } : {}),
+      derechos: (f.derechos ?? 'sin_indicar') as Derechos,
     }));
     return c.json([...propias, ...ajenas]);
   });
@@ -27,11 +34,12 @@ export function rutasBibliotecas(app: Hono<Entorno>): void {
     const p = puertos(c);
     const b = await cuerpoJson<NuevaBiblioteca>(c);
     exigir(typeof b.nombre === 'string' && b.nombre.trim().length > 0 && b.nombre.length <= 200, 'La biblioteca necesita un nombre (hasta 200 caracteres).');
-    exigir(!b.color || COLOR.test(b.color), 'El color debe ser hexadecimal, como «#b5523b».');
+    exigir(colorValido(b.color), 'El color debe ser hexadecimal, como «#b5523b».');
+    exigir(derechosValidos(b.derechos), 'Los derechos no son válidos.');
     const id = nuevoId('b');
     const t = ahora();
-    await p.sql.ejecutar('INSERT INTO pl_bibliotecas (id, nombre, descripcion, color, creada, actualizada) VALUES (?, ?, ?, ?, ?, ?)',
-      id, b.nombre.trim(), b.descripcion ?? null, b.color ?? null, t, t);
+    await p.sql.ejecutar('INSERT INTO pl_bibliotecas (id, nombre, descripcion, color, creada, actualizada, derechos, nota_derechos, copiada_de) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      id, b.nombre.trim(), b.descripcion ?? null, b.color ?? null, t, t, b.derechos ?? null, b.notaDerechos ?? null, b.copiadaDe ? JSON.stringify(b.copiadaDe) : null);
     return c.json((await leerBiblioteca(p.sql, id, p.usuario.id))!, 201);
   });
 
@@ -39,7 +47,9 @@ export function rutasBibliotecas(app: Hono<Entorno>): void {
     const p = puertos(c);
     const b = await leerBiblioteca(p.sql, prm(c, 'id'), p.usuario.id);
     if (!b) noEncontrado('La biblioteca');
-    b.compartida = (await p.cuentas.miembros(b.id)).length > 0;
+    b.compartida = ((await p.cuentas.cuantosMiembros([b.id])).get(b.id) ?? 0) > 0;
+    const amb = c.get('usuario').ambito;
+    if (amb) b.permiso = amb.permiso;
     return c.json(b);
   });
 
@@ -50,9 +60,13 @@ export function rutasBibliotecas(app: Hono<Entorno>): void {
     if (!(await leerBiblioteca(p.sql, id, p.usuario.id))) noEncontrado('La biblioteca');
     const b = await cuerpoJson<Partial<NuevaBiblioteca>>(c);
     exigir(b.nombre === undefined || (typeof b.nombre === 'string' && b.nombre.trim().length > 0), 'El nombre no puede quedar vacío.');
-    exigir(!b.color || COLOR.test(b.color), 'El color debe ser hexadecimal, como «#b5523b».');
-    await p.sql.ejecutar('UPDATE pl_bibliotecas SET nombre = COALESCE(?, nombre), descripcion = COALESCE(?, descripcion), color = COALESCE(?, color), actualizada = ? WHERE id = ?',
-      b.nombre?.trim() ?? null, b.descripcion ?? null, b.color ?? null, ahora(), id);
+    exigir(colorValido(b.color), 'El color debe ser hexadecimal, como «#b5523b».');
+    exigir(derechosValidos(b.derechos), 'Los derechos no son válidos.');
+    await p.sql.ejecutar(`UPDATE pl_bibliotecas SET nombre = COALESCE(?, nombre), descripcion = COALESCE(?, descripcion), color = COALESCE(?, color),
+      derechos = COALESCE(?, derechos), nota_derechos = COALESCE(?, nota_derechos), actualizada = ? WHERE id = ?`,
+      b.nombre?.trim() ?? null, b.descripcion ?? null, b.color ?? null, b.derechos ?? null, b.notaDerechos ?? null, ahora(), id);
+    // Lo que ven los invitados (nombre, descripción, derechos) se guarda también en las cuentas.
+    if (b.nombre || b.descripcion || b.derechos) await p.cuentas.actualizarDatosBiblioteca(id, { nombre: b.nombre?.trim() ?? null, descripcion: b.descripcion ?? null, derechos: b.derechos ?? null });
     return c.json((await leerBiblioteca(p.sql, id, p.usuario.id))!);
   });
 
@@ -87,37 +101,5 @@ export function rutasBibliotecas(app: Hono<Entorno>): void {
     await cambiarBiblioteca(p.sql, id, [prm(c, 'documento')], false);
     return c.json((await leerBiblioteca(p.sql, id, p.usuario.id))!);
   });
-
-  app.get('/bibliotecas/:id/miembros', async (c: Ctx) => {
-    const p = puertos(c);
-    const id = prm(c, 'id');
-    if (!(await leerBiblioteca(p.sql, id, p.usuario.id))) noEncontrado('La biblioteca');
-    return c.json([
-      { usuario: p.usuario.id, correo: p.usuario.correo, permiso: 'propietario', pendiente: false, desde: '' },
-      ...(await p.cuentas.miembros(id)),
-    ]);
-  });
-
-  app.post('/bibliotecas/:id/compartir', async (c: Ctx) => {
-    exigirEscritura(c);
-    const p = puertos(c);
-    if (p.config.modo === 'local') fallo('no_disponible', 'Compartir bibliotecas solo está disponible en la versión en la nube.');
-    const id = prm(c, 'id');
-    const bib = await leerBiblioteca(p.sql, id, p.usuario.id);
-    if (!bib) noEncontrado('La biblioteca');
-    const b = await cuerpoJson<Compartir>(c);
-    exigir(typeof b.correo === 'string' && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(b.correo), 'El correo no es válido.');
-    exigir(b.permiso === 'lectura' || b.permiso === 'edicion', 'El permiso debe ser «lectura» o «edicion».');
-    if (b.correo.toLowerCase() === p.usuario.correo.toLowerCase()) fallo('peticion_invalida', 'No puedes compartir una biblioteca contigo.');
-    return c.json(await p.cuentas.compartir(id, p.usuario.id, bib.nombre, b.correo, b.permiso), 201);
-  });
-
-  app.delete('/bibliotecas/:id/miembros/:usuario', async (c: Ctx) => {
-    exigirEscritura(c);
-    const p = puertos(c);
-    const id = prm(c, 'id');
-    if (!(await leerBiblioteca(p.sql, id, p.usuario.id))) noEncontrado('La biblioteca');
-    await p.cuentas.dejarDeCompartir(id, p.usuario.id, prm(c, 'usuario'));
-    return c.json({ ok: true });
-  });
+  // Miembros, invitaciones y enlaces: los atiende la puerta (rutas/social.ts), que ve las cuentas.
 }

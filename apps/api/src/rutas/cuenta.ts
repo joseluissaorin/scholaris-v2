@@ -37,11 +37,16 @@ export function rutasCuenta(app: Hono<Entorno>): void {
     const ids: string[] = [];
     for (const d of docs) ids.push(...(await idsIndiceDeDocumento(p.sql, d)));
     await p.cuentas.auditar(p.usuario.id, 'cuenta_borrada', { documentos: docs.length });
+    // Lo que otros copiaron de esta cuenta sigue en el almacén (sus copias apuntan ahí).
+    const usados = await p.cuentas.prefijosReferenciados(`u/${p.usuario.id}/`);
+    for (const pref of usados) await p.cuentas.retenerSiReferenciado(pref, p.usuario.id);
+    for (const d of docs) await p.cuentas.soltarReferencias(p.usuario.id, d).catch(() => []);
     await p.cuentas.borrarUsuario(p.usuario.id);
     await p.vaciarEstanteria();
     p.segundoPlano((async () => {
       if (p.indice) for (let i = 0; i < ids.length; i += 500) await p.indice.borrar(p.config.espacioNombres(p.usuario.id), ids.slice(i, i + 500));
-      await p.almacen.borrarPrefijo(`u/${p.usuario.id}/`);
+      if (!usados.length) await p.almacen.borrarPrefijo(`u/${p.usuario.id}/`);
+      else for (const o of await p.almacen.listar(`u/${p.usuario.id}/`)) if (!usados.some((u) => o.clave.startsWith(u))) await p.almacen.borrar(o.clave).catch(() => undefined);
     })().catch((e) => console.error('baja en segundo plano', e)));
     return c.json({ ok: true });
   });

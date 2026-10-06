@@ -24,7 +24,8 @@
  *
  *   GET    /documentos/:id/volcado                 → VolcadoDocumento  (para armar el .spdf en el navegador)
  *   GET    /documentos/:id/spdf                    → application/x-spdf (reserva: lo arma el servidor)
- *   POST   /documentos/importar   cuerpo binario .spdf (v3 o v4) → ImportacionSpdf
+ *   POST   /documentos/importar?biblioteca=&deduplicar=1   cuerpo binario .spdf (v3 o v4) → ImportacionSpdf
+ *   GET    /documentos/:id/spdf?incrustar=0&originales=0&vectores=0&referencias=1   (referencias: claves completas, sin copiar binarios)
  *
  * Importación por el almacén (.spdf grandes, sin límite de memoria del servidor):
  *   1. POST /documentos/importar/recursos  ImportarRecursos → RecursosFirmados
@@ -258,6 +259,8 @@ export interface ImportacionSpdf {
   /** Si faltaban vectores del espacio base, se lanza una tarea para calcularlos. */
   tarea?: string;
   avisos: string[];
+  /** Con `?deduplicar=1`: ya estaba en la estantería (misma huella) y no se ha copiado nada. */
+  repetido?: boolean;
 }
 
 /** Cómo está un audio o vídeo para reproducirse en el navegador. */

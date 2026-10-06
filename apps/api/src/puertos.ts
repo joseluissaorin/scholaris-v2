@@ -43,7 +43,21 @@ export interface UsuarioSesion {
    * estantería, su almacén, sus cuotas), restringida a esa biblioteca y con el
    * permiso del invitado, que queda apuntado aquí.
    */
-  ambito?: { biblioteca: string; permiso: 'lectura' | 'edicion'; invitado: { id: string; correo: string; nombre: string } };
+  ambito?: {
+    /** La biblioteca compartida ('' si el enlace es de un solo documento). */
+    biblioteca: string;
+    permiso: 'lectura' | 'edicion' | 'administrador';
+    invitado: { id: string; correo: string; nombre: string };
+    /** Enlace de un solo documento: solo ese. */
+    documento?: string;
+    /** Por un enlace de solo lectura, sin cuenta: solo leer y buscar. */
+    publico?: boolean;
+  };
+  /**
+   * Lo pone solo la puerta al copiar una biblioteca ajena: la importación acepta
+   * las claves de binarios de otros usuarios (por referencia, sin copiar bytes).
+   */
+  importarDe?: { propietario: string; biblioteca?: string; nombre?: string; de?: string };
 }
 
 /** Datos con los que se lanza la ingesta de un documento (serializables). */

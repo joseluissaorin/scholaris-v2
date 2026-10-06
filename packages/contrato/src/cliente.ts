@@ -23,6 +23,11 @@ import type {
 import type { ContenidoDocumento, FiguraEncontrada, FragmentoInspeccion, MapaVectores, UnidadInspeccion } from './contenido.js';
 import type { AnadirDocumentos, Biblioteca, Compartir, Miembro, NuevaBiblioteca } from './bibliotecas.js';
 import type {
+  BibliotecaSeguida, BuscarConjunta, Copiar, DetalleLote, ElementoLote, Enlace, EstimacionLote, EstimarLote, Invitacion, InvitacionRecibida,
+  Lote, Notificacion, NuevoEnlace, NuevoLote, OpcionesPaquete, ParcheElemento, PermisoInvitado, RespuestaConjunta, ResultadoCopia, VistaPublica,
+} from './comunidad.js';
+import { consultaPaquete } from './paquete.js';
+import type {
   Buscar, BuscarMultilingue, EventoBusquedaEnDos, EventoRespuesta, Responder, RespuestaBusqueda, RespuestaMultilingue, ResultadoVista, Similares,
 } from './busqueda.js';
 import type {
@@ -49,6 +54,8 @@ export interface OpcionesCliente {
   fetch?: typeof fetch;
   /** Trabajar dentro de una biblioteca que otro usuario comparte conmigo. */
   compartida?: string;
+  /** Sin cuenta, por un enlace de solo lectura (`/p/<token>`), con el pase si tiene contraseña. */
+  publico?: { token: string; pase?: string };
 }
 
 type Metodo = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
@@ -108,7 +115,9 @@ export function crearCliente(opciones: OpcionesCliente) {
       body = JSON.stringify(cuerpo);
       h['content-type'] = 'application/json';
     }
-    const prefijo = opciones.compartida ? `/compartidas/${encodeURIComponent(opciones.compartida)}` : '';
+    if (opciones.publico?.pase) h['x-scholaris-pase'] = opciones.publico.pase;
+    const prefijo = opciones.publico ? `/publico/${encodeURIComponent(opciones.publico.token)}`
+      : opciones.compartida ? `/compartidas/${encodeURIComponent(opciones.compartida)}` : '';
     const res = await f(`${base}${PREFIJO_API}${prefijo}${ruta}${aConsulta(consulta)}`, { method: metodo, headers: h, body, ...(body instanceof ReadableStream ? { duplex: 'half' } : {}) } as RequestInit);
     if (!res.ok) {
       let e: CuerpoError | null = null;
@@ -144,6 +153,8 @@ export function crearCliente(opciones: OpcionesCliente) {
 
     /** El mismo cliente, dentro de una biblioteca compartida conmigo (rutas /compartidas/:id/…). */
     compartida: (biblioteca: string) => crearCliente({ ...opciones, compartida: biblioteca }),
+    /** El mismo cliente, sin cuenta, por un enlace de solo lectura (rutas /publico/:token/…). */
+    publico: (token: string, pase?: string) => crearCliente({ ...opciones, token: null, publico: { token, ...(pase ? { pase } : {}) } }),
 
     config: () => get<ConfigPublica>('/config'),
     salud: () => get<{ ok: true; version: string }>('/salud'),
@@ -215,9 +226,77 @@ export function crearCliente(opciones: OpcionesCliente) {
       anadir: (id: string, p: AnadirDocumentos) => post<Biblioteca>(`/bibliotecas/${e(id)}/documentos`, p),
       quitar: (id: string, documento: string) => del<Biblioteca>(`/bibliotecas/${e(id)}/documentos/${e(documento)}`),
       miembros: (id: string) => get<Miembro[]>(`/bibliotecas/${e(id)}/miembros`),
-      compartir: (id: string, p: Compartir) => post<Miembro>(`/bibliotecas/${e(id)}/compartir`, p),
-      dejarDeCompartir: (id: string, usuario: string) => del(`/bibliotecas/${e(id)}/miembros/${e(usuario)}`),
-      exportar: async (id: string) => (await bruto('GET', `/bibliotecas/${e(id)}/exportar`)).blob(),
+      /** Invita por correo (con permiso, mensaje y caducidad). La invitación hay que aceptarla. */
+      compartir: (id: string, p: Compartir) => post<Invitacion>(`/bibliotecas/${e(id)}/compartir`, p),
+      cambiarPermiso: (id: string, quien: string, permiso: PermisoInvitado) => patch<Miembro>(`/bibliotecas/${e(id)}/miembros/${e(quien)}`, { permiso }),
+      dejarDeCompartir: (id: string, quien: string) => del(`/bibliotecas/${e(id)}/miembros/${e(quien)}`),
+      enlaces: (id: string) => get<Enlace[]>(`/bibliotecas/${e(id)}/enlaces`),
+      /** El paquete .scholaris en flujo (Response: `.body` para guardarlo sin cargarlo entero, o `.blob()`). */
+      paquete: (id: string, o: OpcionesPaquete = {}) => bruto('GET', `/bibliotecas/${e(id)}/paquete`, undefined, consultaPaquete(o)),
+      /** @deprecated: `paquete`. */
+      exportar: async (id: string) => (await bruto('GET', `/bibliotecas/${e(id)}/paquete`)).blob(),
+    },
+
+    invitaciones: {
+      listar: () => get<InvitacionRecibida[]>('/invitaciones'),
+      porToken: (token: string) => get<InvitacionRecibida>(`/invitaciones/token/${e(token)}`),
+      /** Acepta (y empieza a seguir la biblioteca). Vale el id o el token del enlace del correo. */
+      aceptar: (idOToken: string) => post<BibliotecaSeguida>(`/invitaciones/${e(idOToken)}/aceptar`),
+      rechazar: (idOToken: string) => post<Ok>(`/invitaciones/${e(idOToken)}/rechazar`),
+    },
+
+    seguidas: {
+      listar: () => get<BibliotecaSeguida[]>('/seguidas'),
+      dejar: (biblioteca: string) => del(`/seguidas/${e(biblioteca)}`),
+    },
+
+    notificaciones: {
+      listar: (pendientes = false) => get<Notificacion[]>('/notificaciones', { pendientes: pendientes ? 1 : undefined }),
+      leidas: (ids?: string[]) => post<Ok>('/notificaciones/leidas', ids ? { ids } : {}),
+    },
+
+    copias: {
+      /** Una tanda; para todo, `copiarTodo`. */
+      copiar: (p: Copiar) => post<ResultadoCopia>('/copias', p),
+      /** Copia a mi biblioteca por tandas hasta terminar. Sin volver a leer nada ni duplicar binarios. */
+      copiarTodo: async (p: Copiar, alAvance?: (r: ResultadoCopia) => void): Promise<ResultadoCopia> => {
+        let r = await post<ResultadoCopia>('/copias', p);
+        const total: ResultadoCopia = { ...r, copiados: [...r.copiados], repetidos: [...r.repetidos], fallidos: [...r.fallidos] };
+        alAvance?.(total);
+        while (r.pendientes.length) {
+          r = await post<ResultadoCopia>('/copias', { ...p, destino: { biblioteca: total.biblioteca }, documentos: r.pendientes });
+          total.copiados.push(...r.copiados); total.repetidos.push(...r.repetidos); total.fallidos.push(...r.fallidos);
+          total.pendientes = r.pendientes;
+          alAvance?.(total);
+        }
+        return total;
+      },
+    },
+
+    enlaces: {
+      crear: (p: NuevoEnlace) => post<Enlace>('/enlaces', p),
+      revocar: (id: string) => del(`/enlaces/${e(id)}`),
+    },
+
+    /** Lo que se ve de un enlace de solo lectura sin cuenta (`crearCliente({ base })`, sin token). */
+    enlacePublico: {
+      vista: (token: string) => get<VistaPublica>(`/publico/${e(token)}`),
+      acceso: (token: string, clave: string) => post<{ pase: string; caduca: string }>(`/publico/${e(token)}/acceso`, { clave }),
+    },
+
+    lotes: {
+      estimar: (p: EstimarLote) => post<EstimacionLote>('/lotes/estimar', p),
+      crear: (p: NuevoLote) => post<DetalleLote>('/lotes', p),
+      listar: () => get<Lote[]>('/lotes'),
+      obtener: (id: string) => get<DetalleLote>(`/lotes/${e(id)}`),
+      pausar: (id: string) => post<DetalleLote>(`/lotes/${e(id)}/pausar`),
+      reanudar: (id: string) => post<DetalleLote>(`/lotes/${e(id)}/reanudar`),
+      cancelar: (id: string) => post<DetalleLote>(`/lotes/${e(id)}/cancelar`),
+      /** El conductor (navegador o SDK) reserva hasta `max` archivos que subir; vacío si está en pausa o lleno. */
+      siguientes: (id: string, max: number) => post<ElementoLote[]>(`/lotes/${e(id)}/siguientes`, { max }),
+      apuntar: (id: string, n: number, p: ParcheElemento) => patch<ElementoLote>(`/lotes/${e(id)}/elementos/${n}`, p),
+      reintentar: (id: string, n: number) => post<DetalleLote>(`/lotes/${e(id)}/elementos/${n}/reintentar`),
+      omitir: (id: string, n: number) => post<DetalleLote>(`/lotes/${e(id)}/elementos/${n}/omitir`),
     },
 
     busqueda: {
@@ -236,6 +315,8 @@ export function crearCliente(opciones: OpcionesCliente) {
       responder: (p: Responder) => sse<EventoRespuesta>('/busqueda/responder', p),
       similares: (p: Similares) => post<RespuestaBusqueda>('/busqueda/similares', p),
       multilingue: (p: BuscarMultilingue) => post<RespuestaMultilingue>('/busqueda/multilingue', p),
+      /** En lo mío y en lo que sigo (con `alcance`); cada pasaje dice de dónde sale. */
+      conjunta: (p: BuscarConjunta) => post<RespuestaConjunta>('/busqueda/conjunta', p),
     },
 
     citas: {
