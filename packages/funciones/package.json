@@ -22,5 +22,8 @@
     "better-sqlite3": "^13.0.3",
     "hono": "^4.9.0",
     "sql.js": "^1.14.2"
+  },
+  "peerDependencies": {
+    "hono": "^4.9.0"
   }
 }
