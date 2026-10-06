@@ -32,6 +32,13 @@ En audio y vídeo la ficha es la del episodio (`fichaDeEmision` en `src/enriquec
 - `anio` y `fecha` son los de la emisión del catálogo. Así salió un error real: la entrevista a Facundo Cabral se emitió el **2 de julio de 1978**, no en 1977 como decía la ficha anterior (la lectura lo sacaba del nombre del archivo, «serrano1977fondo»). La de Cortázar es del 20 de marzo de 1977;
 - en un vídeo de una serie (3Blue1Brown), el capítulo es el título («Vectors») y la serie, el contenedor.
 
+**Nada sin pruebas de la grabación.** En el preview, una entrevista a Facundo Cabral salió como «Entrevista a Alberto Cortez». El episodio del catálogo se elige ahora por lo que respalda la propia grabación:
+- cuántas veces se nombra en la transcripción entera a la persona del título del episodio;
+- si es uno de los hablantes con nombre (solo suma si además se le nombra, porque ese nombre también lo puso un modelo);
+- si la duración cuadra con la del catálogo (entre el 40 % y el 115 %).
+
+El mejor episodio tiene que sacarle al segundo al menos el triple; si no, no se asigna ninguno y el motivo queda en la procedencia. Un invitado que la transcripción no nombra se descarta, y el título que lo nombra también. El banco tiene este caso: la entrevista a Cabral subida como «A fondo - Alberto Cortez.mp4» sale «Facundo Cabral», 2-7-1978, con 303 puntos frente a 13.
+
 Para rehacer solo la ficha de un documento ya leído, sin volver a leerlo: `POST /documentos/:id/metadatos/rehacer` (en el cliente, `documentos.rehacerMetadatos(id)`). Usa `rehacerFicha` y conserva lo que editó el usuario.
 
 ## Resultados (banco, 6 de octubre de 2026)
@@ -57,13 +64,14 @@ pnpm --filter @scholaris/bench exec tsx src/metadatos.ts
 | partícula («Lope» / «de Vega…») | 1 | 1/1 | 1/1 |
 | «s. f.» con horquilla y fundamento | 1 | 0/1 | 1/1 |
 | entrevistador aparte (Soler Serrano) | 2 | 0/2 | 2/2 |
-| **Total** | 45 | **28/45** | **45/45** |
+| sin el invitado falso (nombre de archivo engañoso) | 1 | 0/1 | 1/1 |
+| **Total** | 52 | **28/52** | **52/52** |
 
 Por documento:
 
 - ***The Discarded Image*.** C. S. Lewis, Cambridge University Press, Cambridge, 1964. Según la página de créditos («First printed 1964 / Reprinted 1964»), la edición es la de 1964 y la obra también. Queda «reimpr. 1964» como mención de edición y se quita un ORCID falso que OpenAlex le daba a Lewis.
 - ***Attention Is All You Need*.** 2017, *paper-conference*, contenedor «31st Conference on Neural Information Processing Systems (NIPS 2017)», `arxiv.org/abs/1706.03762` y DOI 10.48550/arxiv.1706.03762. Un primer intento cogía el arXiv de una referencia (1607.06450). Ahora solo vale el sello del margen y el registro tiene que casar.
-- ***El perseguidor*.** Julio Cortázar, obra de 1959 (Wikidata y Open Library coinciden: confianza 0,95), *chapter* dentro de *Las armas secretas* (Wikipedia, entre las obras del mismo autor en Wikidata).
+- ***El perseguidor*.** Julio Cortázar, obra de 1959 (Wikidata y Open Library coinciden: confianza 0,95), *chapter* dentro de *Las armas secretas* (Wikipedia, entre las obras del mismo autor en Wikidata). Sin pruebas de la edición que se tiene delante, se cita la primera del libro: Editorial Sudamericana, Buenos Aires (ficha de Wikipedia y sede de la editorial en Wikidata, confianza 0,7).
 - ***El casamiento en la muerte*.** Lope de Vega Carpio, suelta impresa en Sevilla por la Viuda de Francisco de Leefdael. Sin año, «s. f.» con horquilla 1729-1753 (BNE, autoridad XX4965433, «fl. 1729-1753?») y confianza 0,6. Open Library proponía «1700» como año de la obra: era una edición suelta y se descarta.
 - ***A fondo*.** «Facundo Cabral» (2-7-1978) y «Julio Cortázar» (20-3-1977), las dos de RTVE, *broadcast*, contenedor «A fondo», con el entrevistado como autor y Joaquín Soler Serrano como entrevistador. Cada una lleva su dirección de RTVE Play.
 - **3Blue1Brown.** «Vectors», contenedor «Essence of linear algebra», Grant Sanderson.
@@ -72,7 +80,8 @@ Con la red de casa y la caché vacía, cada documento tarda entre 1,1 y 5,9 s. E
 
 ## Límites y notas honestas
 
-- Son 6 documentos y 40 comprobaciones. Las fichas de referencia las hice yo, y el código se afinó mirando estos mismos casos. Hacen falta más documentos (traducciones con ISBN, tesis, capítulos de libros colectivos) antes de dar la cifra por general. Las pruebas unitarias (`test/enriquecimiento.test.ts`) cubren además una traducción con «©», una edición Canto con ISBN y una edición numerada en palabras, con respuestas reales recortadas de los catálogos.
-- datos.bne.es y el CERL Thesaurus bloquean a los clientes automáticos (403 y un reto anti-bots). Por eso los años de los impresores salen de una tabla corta con fichas de autoridad comprobadas, más Wikidata, que casi no tiene impresores antiguos. Cada entrada nueva de la tabla tiene que llevar su fuente.
+- Son 8 casos (7 documentos) y 52 comprobaciones. Las fichas de referencia las hice yo, y el código se afinó mirando estos mismos casos. Hacen falta más documentos (traducciones con ISBN, tesis, capítulos de libros colectivos) antes de dar la cifra por general. Las pruebas unitarias (`test/enriquecimiento.test.ts`) cubren además una traducción con «©», una edición Canto con ISBN y una edición numerada en palabras, con respuestas reales recortadas de los catálogos.
+- OpenAlex sin clave agota un presupuesto diario por IP («Rate limit exceeded»); en Workers la IP es compartida. El paso sigue, pero sin esa fuente. Con una clave gratuita se evitaría.
+- datos.bne.es, el CERL Thesaurus y DBLP bloquean a los clientes automáticos (403 y un reto anti-bots). Por eso los años de los impresores salen de una tabla corta con fichas de autoridad comprobadas, más Wikidata, que casi no tiene impresores antiguos. Cada entrada nueva de la tabla tiene que llevar su fuente.
 - Solo RTVE tiene catálogo de episodios. En otras cadenas y en los pódcast, el título del episodio sale de la lectura o del nombre de los invitados, y el año, de la transcripción. YouTube sin clave no da metadatos.
 - `@scholaris/citas` ya imprime el contenedor, los traductores, el título original, la horquilla de «s. f.» y, desde ahora, el entrevistador. Con «s. f.», la autocita no tiene año y se salta el análisis temporal. Podría usar `sinFecha.hasta` como cota.
