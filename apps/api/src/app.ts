@@ -250,7 +250,8 @@ export function crearPuerta(pl: Plataforma) {
         usuariosVistos.set(u.id, conocido);
       }
     }
-    if (!conocido || conocido.plan !== u.plan || Date.now() - conocido.cuando > 600_000 || (!u.correo && !conocido.correo)) {
+    // Sin correo en el token ni guardado no se reintenta en cada petición (costaba ~1 s de D1 en cada una): cada 10 min, como todos.
+    if (!conocido || conocido.plan !== u.plan || Date.now() - conocido.cuando > 600_000) {
       await pl.cuentas.asegurarUsuario(u);
       const guardado = u.correo ? null : await pl.cuentas.usuario(u.id);
       const v = { plan: u.plan, cuando: Date.now(), correo: u.correo || guardado?.correo || '', nombre: guardado?.nombre || u.nombre };

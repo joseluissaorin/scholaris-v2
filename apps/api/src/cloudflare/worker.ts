@@ -43,6 +43,7 @@ function plataforma(env: Env, peticion: Request): Plataforma {
         ...(env.CLERK_EMISOR ? { emisor: env.CLERK_EMISOR } : {}),
         ...(env.CLERK_JWKS ? { jwks: env.CLERK_JWKS } : {}),
         ...(env.CLERK_ORIGENES ? { origenes: env.CLERK_ORIGENES.split(',').map((s) => s.trim()).filter(Boolean) } : {}),
+        cache: cacheSesionesCf,
       });
       verificadores.set(clave, clerk);
     }

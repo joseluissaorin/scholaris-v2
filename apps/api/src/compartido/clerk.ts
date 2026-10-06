@@ -16,6 +16,8 @@ export interface ConfigClerk {
   origenes?: string[];
   /** JWKS en JSON para verificar sin red (pruebas, o para no depender de Clerk en cada arranque). */
   jwks?: string;
+  /** Caché compartida (en Cloudflare, la Cache API de la ubicación): un aislamiento nuevo no va a Clerk por el JWKS. */
+  cache?: { leer(clave: string): Promise<string | null>; guardar(clave: string, valor: string, segundos: number): Promise<void> };
 }
 
 export interface IdentidadClerk {
@@ -78,11 +80,20 @@ export function crearVerificadorClerk(cfg: ConfigClerk) {
   // que en Workers puede quedarse colgada); se vuelven a pedir cada hora o si llega un kid nuevo.
   let local = cfg.jwks ? createLocalJWKSet(JSON.parse(cfg.jwks) as JSONWebKeySet) : null;
   let pedidas = 0;
-  const refrescar = async () => {
+  const claveCache = `jwks:${emisor}`;
+  const refrescar = async (desdeCache = true) => {
+    const enCache = desdeCache && cfg.cache ? await cfg.cache.leer(claveCache).catch(() => null) : null;
+    if (enCache) {
+      local = createLocalJWKSet(JSON.parse(enCache) as JSONWebKeySet);
+      pedidas = Date.now();
+      return;
+    }
     const r = await fetch(`${emisor}/.well-known/jwks.json`);
     if (!r.ok) throw new Error(`JWKS de Clerk: ${r.status}`);
-    local = createLocalJWKSet((await r.json()) as JSONWebKeySet);
+    const texto = await r.text();
+    local = createLocalJWKSet(JSON.parse(texto) as JSONWebKeySet);
     pedidas = Date.now();
+    if (cfg.cache) await cfg.cache.guardar(claveCache, texto, 3600).catch(() => undefined);
   };
   const jwks: Parameters<typeof jwtVerify>[1] = async (cabecera, token) => {
     if (!cfg.jwks && (!local || Date.now() - pedidas > 3600_000)) await refrescar();
@@ -90,7 +101,8 @@ export function crearVerificadorClerk(cfg: ConfigClerk) {
       return await (local as ReturnType<typeof createLocalJWKSet>)(cabecera, token);
     } catch (e) {
       if (cfg.jwks || Date.now() - pedidas < 30_000) throw e;
-      await refrescar();
+      // Un kid nuevo (rotación): directo a Clerk, sin la caché.
+      await refrescar(false);
       return (local as ReturnType<typeof createLocalJWKSet>)(cabecera, token);
     }
   };
