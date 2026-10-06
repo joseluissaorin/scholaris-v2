@@ -3,7 +3,7 @@
 import type { EntornoFunciones } from '../puertos.js';
 import {
   buscarEntidades, caminoEntidades, encolarEntidades, entidadesDocumento, entidadesLector, estadoEntidades, estadoExtraccion,
-  extraerEntidadesDocumento, fichaEntidad, hayEntidadesPendientes, lineaTemporalEntidad, mencionesEntidad, reanudarEntidades,
+  extraerEntidadesDocumento, fichaEntidad, hayEntidadesPendientes, lineaTemporalEntidad, mencionesEntidad, reanudarEntidades, rehacerEnlacesEntidades,
   vecindarioEntidad,
 } from '../entidades/index.js';
 import { ErrorFunciones } from '../util.js';
@@ -35,6 +35,16 @@ export function rutasEntidades<E extends EntornoFunciones>(app: AppFunciones<E>)
       return c.json({ reanudados: [...pendientes, ...nuevos] }, 202);
     }
     return c.json({ reanudados: await reanudarEntidades(p, { todos }) });
+  }));
+
+  // Rehace el enlace con Wikidata y la fusión de toda la biblioteca, sin volver a extraer.
+  app.post('/entidades/rehacer-enlaces', manejar(async (c, p) => {
+    const redactor = p.inteligencia?.redactor;
+    if (p.enSegundoPlano && qBool(c, 'esperar') !== true) {
+      p.enSegundoPlano(rehacerEnlacesEntidades(p.sql, redactor).catch((e) => console.error('rehacer enlaces', e)));
+      return c.json({ enMarcha: true }, 202);
+    }
+    return c.json(await rehacerEnlacesEntidades(p.sql, redactor));
   }));
 
   app.get('/entidades/camino', manejar(async (c, { sql }) => {

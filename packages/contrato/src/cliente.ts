@@ -421,6 +421,7 @@ export function crearCliente(opciones: OpcionesCliente) {
       buscar: (p: { q?: string; tipo?: TipoEntidad; documento?: string } & ParamsPagina = {}) => get<Pagina<Entidad>>('/entidades', p),
       estado: () => get<EstadoEntidades>('/entidades/estado'),
       reanudar: (todos = false) => post<{ reanudados: string[] }>('/entidades/reanudar', { todos }),
+      rehacerEnlaces: () => post<Record<string, unknown>>('/entidades/rehacer-enlaces'),
       obtener: (id: string) => get<FichaEntidad>(`/entidades/${e(id)}`),
       menciones: (id: string, p: { documento?: string } & ParamsPagina = {}) => get<Pagina<MencionEntidad>>(`/entidades/${e(id)}/menciones`, p),
       vecinos: (id: string, p: { limite?: number; saltos?: 1 | 2 } = {}) => get<VecindarioEntidad>(`/entidades/${e(id)}/vecinos`, p),

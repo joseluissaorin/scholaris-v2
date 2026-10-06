@@ -122,7 +122,9 @@ describe('normalizar y localizar', () => {
     expect(elegirCandidato('Johnny Carter', 'persona', johnny, true)).toBeNull();
     expect(elegirCandidato('Johnny Carter', 'persona', johnny.slice(1))).toBeNull();
     expect(elegirCandidato('Amorous', 'obra', [{ id: 'Q3', etiqueta: 'Amorous', descripcion: 'videojuego de 2018' }])).toBeNull();
-    expect(elegirCandidato('Rayuela', 'obra', [{ id: 'Q4', etiqueta: 'Rayuela', descripcion: 'novela de Julio Cortázar' }])?.id).toBe('Q4');
+    // Sin pistas de autor, una obra no se enlaza (si hay duda, no); con ellas, sí.
+    expect(elegirCandidato('Rayuela', 'obra', [{ id: 'Q4', etiqueta: 'Rayuela', descripcion: 'novela de Julio Cortázar' }])).toBeNull();
+    expect(elegirCandidato('Rayuela', 'obra', [{ id: 'Q4', etiqueta: 'Rayuela', descripcion: 'novela de Julio Cortázar' }], false, { apellidos: ['Cortázar'], anios: [1963] })?.id).toBe('Q4');
   });
 });
 

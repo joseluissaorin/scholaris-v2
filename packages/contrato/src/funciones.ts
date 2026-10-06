@@ -82,6 +82,7 @@
  *   GET    /entidades?q=&tipo=&documento=&limite=&cursor= → Pagina<Entidad>
  *   GET    /entidades/estado                 → EstadoEntidades   (y reanuda lo que se quedó a medias)
  *   POST   /entidades/reanudar  { todos? }   → { reanudados: string[] }
+ *   POST   /entidades/rehacer-enlaces?esperar=1 → resumen (202 { enMarcha } en segundo plano): rehace Wikidata y fusiones sin volver a extraer
  *   GET    /entidades/camino?desde=&hasta=   → CaminoEntidades
  *   GET    /entidades/documentos/:documento  → EntidadesDocumento
  *   GET    /entidades/documentos/:documento/lector → EntidadesLector  (formas por unidad, para resaltar)

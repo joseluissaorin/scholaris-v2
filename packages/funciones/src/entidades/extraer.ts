@@ -11,7 +11,7 @@
 
 import type { Ancla, Redactor } from '@scholaris/nucleo';
 import type { TipoEntidad } from '@scholaris/contrato';
-import { buscarFormas, CODIGOS_TIPO, rangosExcluidos, sinSolapes } from './normalizar.js';
+import { buscarFormas, CODIGOS_TIPO, formaCompatible, rangosExcluidos, sinSolapes } from './normalizar.js';
 
 export interface FragmentoEntidades {
   id: string;
@@ -187,7 +187,8 @@ export function localizarMenciones(lote: Lote, entidades: readonly EntidadExtrai
     const excluidos = rangosExcluidos(f.texto);
     const candidatas: Array<MencionLocalizada> = [];
     for (const e of entidades) {
-      const formas = [...new Set([...e.formas, e.nombre])];
+      // Solo las formas que pueden nombrar a la entidad («Dédée» no es una forma de Johnny Carter).
+      const formas = [...new Set([...e.formas.filter((x) => formaCompatible(x, e.nombre, e.tipo)), e.nombre])];
       const propio = e.tipo !== 'concepto';
       for (const c of buscarFormas(f.texto, formas, propio, excluidos)) {
         candidatas.push({ fragmento: f.id, orden: f.orden, ancla: f.ancla, ini: c.ini, fin: c.fin, texto: f.texto.slice(c.ini, c.fin), nombre: e.nombre, tipo: e.tipo, ...(e.ficticia ? { ficticia: true } : {}) });

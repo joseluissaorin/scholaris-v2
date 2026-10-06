@@ -7,3 +7,4 @@ export * from './wikidata.js';
 export * from './aristas.js';
 export * from './trabajo.js';
 export * from './consultas.js';
+export * from './reparar.js';

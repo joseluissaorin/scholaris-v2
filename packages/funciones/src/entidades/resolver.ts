@@ -16,7 +16,7 @@
 import { nuevoId, type SQL } from '@scholaris/nucleo';
 import type { TipoEntidad } from '@scholaris/contrato';
 import { ahora, deJSON, marcas, normalizarClave, num } from '../util.js';
-import { claveEntidad, palabrasSignificativas } from './normalizar.js';
+import { claveEntidad, formaCompatible, palabrasSignificativas } from './normalizar.js';
 import type { MencionLocalizada } from './extraer.js';
 
 const MAX_ALIAS = 30;
@@ -48,6 +48,7 @@ interface FilaEntidad {
   descripcion: string | null;
   fusionada_en: string | null;
   n_menciones: number;
+  ficticia: number | null;
 }
 
 /** La entidad activa a la que lleva un id (sigue las fusiones). */
@@ -65,27 +66,35 @@ export async function entidadActiva(sql: SQL, id: string): Promise<FilaEntidad |
 /** Busca (o crea) la entidad de un nombre y le suma las formas vistas. Devuelve el id activo. */
 export const DESCRIPCION_FICCION = 'personaje de ficción';
 
-export async function obtenerEntidad(sql: SQL, tipo: TipoEntidad, nombre: string, formas: Iterable<string>, ficticia = false): Promise<string> {
+/** `ficticia`: true personaje, false persona real, null sin saber (no cambia lo que hubiera). */
+export async function obtenerEntidad(sql: SQL, tipo: TipoEntidad, nombre: string, formas: Iterable<string>, ficticia: boolean | null = false): Promise<string> {
   const clave = claveEntidad(nombre, tipo);
   const [f] = await sql.ejecutar<FilaEntidad>('SELECT * FROM entidades WHERE tipo = ? AND clave = ?', tipo, clave);
   const t = ahora();
   if (!f) {
     const id = nuevoId('ent');
-    const alias = unirAlias(nombre, [], formas);
+    const alias = unirAlias(nombre, [], [...formas].filter((x) => formaCompatible(x, nombre, tipo)));
     await sql.ejecutar(
-      `INSERT INTO entidades (id, tipo, clave, nombre, alias, busqueda, descripcion, creada, actualizada) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      id, tipo, clave, nombre, JSON.stringify(alias), textoBusqueda(clave, alias), ficticia ? DESCRIPCION_FICCION : null, t, t,
+      `INSERT INTO entidades (id, tipo, clave, nombre, alias, busqueda, descripcion, ficticia, creada, actualizada) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      id, tipo, clave, nombre, JSON.stringify(alias), textoBusqueda(clave, alias), ficticia ? DESCRIPCION_FICCION : null, tipo === 'persona' && ficticia !== null ? (ficticia ? 1 : 0) : null, t, t,
     );
     return id;
   }
   const activa = f.fusionada_en ? await entidadActiva(sql, f.id) : f;
   if (!activa) return f.id;
   const actuales = deJSON<string[]>(activa.alias, []);
-  const alias = unirAlias(activa.nombre, actuales, [...formas, ...(activa.id !== f.id ? [nombre] : [])]);
-  // Si un documento dice que es un personaje y estaba enlazado con una persona
-  // real homónima («Johnny Carter, cantante»), se deshace el enlace.
-  if (ficticia && activa.descripcion !== DESCRIPCION_FICCION && !/personaje|character|ficti|ficción|fiction/i.test(activa.descripcion ?? '')) {
-    await sql.ejecutar('UPDATE entidades SET descripcion = ?, wikidata = NULL, wikidata_visto = 1 WHERE id = ?', DESCRIPCION_FICCION, activa.id);
+  const alias = unirAlias(activa.nombre, actuales, [...formas, ...(activa.id !== f.id ? [nombre] : [])].filter((x) => formaCompatible(x, activa.nombre, tipo)));
+  // Basta con que un documento diga que es un personaje: desde entonces lo es,
+  // y si estaba enlazado con una persona real homónima («Johnny Carter,
+  // cantante»), se deshace el enlace.
+  const ficcionEnWikidata = /personaje|character|ficti|ficción|fiction/i.test(activa.descripcion ?? '') && !!activa.wikidata;
+  if (tipo === 'persona' && ficticia && (num(activa.ficticia) !== 1 || (activa.wikidata && !ficcionEnWikidata))) {
+    await sql.ejecutar(
+      'UPDATE entidades SET ficticia = 1, descripcion = ?, wikidata = ?, wikidata_visto = 0 WHERE id = ?',
+      ficcionEnWikidata ? activa.descripcion : DESCRIPCION_FICCION, ficcionEnWikidata ? activa.wikidata : null, activa.id,
+    );
+  } else if (tipo === 'persona' && ficticia === false && activa.ficticia === null) {
+    await sql.ejecutar('UPDATE entidades SET ficticia = 0 WHERE id = ?', activa.id);
   }
   if (alias.length !== actuales.length) {
     await sql.ejecutar('UPDATE entidades SET alias = ?, busqueda = ?, actualizada = ? WHERE id = ?', JSON.stringify(alias), textoBusqueda(activa.clave, alias), t, activa.id);
@@ -177,6 +186,9 @@ interface Candidata {
   wikidata: string | null;
   menciones: number;
   docs: Set<string>;
+  /** Personas: 1 personaje, 0 real, null sin saber. Nunca se fusionan distintas. */
+  ficticia?: number | null;
+  nombre?: string;
 }
 
 /** Cuál se queda al fusionar: la enlazada con Wikidata, la de nombre más completo, la más mencionada. */
@@ -202,6 +214,9 @@ export function decidirFusiones(cs: readonly Candidata[]): Array<[string, string
   const unir = (x: string, y: string) => {
     const rx = raiz(x), ry = raiz(y);
     if (rx === ry) return;
+    // Una persona real y un personaje no son nunca la misma entidad (ni sus grupos).
+    const fx = porId.get(rx)!.ficticia ?? null, fy = porId.get(ry)!.ficticia ?? null;
+    if (porId.get(rx)!.tipo === 'persona' && fx !== fy) return;
     const g = prefiere(porId.get(rx)!, porId.get(ry)!);
     if (g.id === rx) padre.set(ry, rx); else padre.set(rx, ry);
   };
@@ -224,6 +239,7 @@ export function decidirFusiones(cs: readonly Candidata[]): Array<[string, string
         const k = claveEntidad(a, tipo);
         const otra = porClave.get(k);
         if (!otra || otra.id === c.id) continue;
+        if (c.nombre && !formaCompatible(a, c.nombre, tipo)) continue;
         // Una forma de varias palabras es una prueba fuerte. Una de una sola
         // («Dédée» dicha de Johnny en un lote) solo arrastra a una entidad
         // residual (tres menciones o menos) del mismo documento.
@@ -269,6 +285,7 @@ export async function resolverBiblioteca(sql: SQL): Promise<{ fusiones: number; 
   const cs: Candidata[] = filas.map((f) => ({
     id: f.id, tipo: f.tipo, clave: f.clave, palabras: palabrasSignificativas(f.clave), alias: deJSON<string[]>(f.alias, []),
     wikidata: f.wikidata, menciones: num(f.n_menciones), docs: docs.get(f.id) ?? new Set(),
+    ficticia: f.ficticia === null || f.ficticia === undefined ? null : num(f.ficticia), nombre: f.nombre,
   }));
   const fusiones = decidirFusiones(cs);
   const documentos = new Set<string>();

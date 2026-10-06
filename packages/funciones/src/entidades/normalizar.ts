@@ -113,3 +113,45 @@ export function contextoMencion(texto: string, ini: number, fin: number, radio =
   const limpiar = (s: string) => s.replace(/\*\*|__|(?<!\w)[*_](?!\s)|(?<!\s)[*_](?!\w)/g, '').replace(/\s+/g, ' ');
   return `${a > 0 ? '…' : ''}${limpiar(antes).trimStart()}⟦${limpiar(texto.slice(ini, fin))}⟧${limpiar(despues).trimEnd()}${b < texto.length ? '…' : ''}`;
 }
+
+function prefijoComun(a: string, b: string): number {
+  let i = 0;
+  while (i < a.length && i < b.length && a[i] === b[i]) i++;
+  return i;
+}
+
+/** Dos palabras que pueden ser la misma («plato»/«platon», «aristotle»/«aristoteles»). */
+function palabrasCompatibles(a: string, b: string): boolean {
+  if (a === b) return true;
+  if (Math.min(a.length, b.length) >= 3 && (a.startsWith(b) || b.startsWith(a))) return true;
+  return prefijoComun(a, b) >= 5;
+}
+
+/**
+ * ¿Puede una forma escrita nombrar a esta persona? Ha de compartir una palabra
+ * con el nombre («Cortázar» de «Julio Cortázar»), o ser sus iniciales en orden
+ * («CH.P.» de «Charlie Parker»). Lo demás («Dédée» dicho de Johnny Carter,
+ * «Johnny» dicho de Charlie Parker, apodos como «Bird») no se acepta: si hay
+ * duda, la forma es de otra entidad. Para los demás tipos no se exige nada
+ * (las obras se traducen: «Paradise Lost», «El paraíso perdido»).
+ */
+export function formaCompatible(forma: string, nombre: string, tipo: TipoEntidad): boolean {
+  if (tipo !== 'persona') return true;
+  const f = normalizarClave(forma), n = normalizarClave(nombre);
+  if (!f || f === n) return true;
+  const pn = palabrasSignificativas(n);
+  const pf = palabrasSignificativas(f);
+  if (pf.some((x) => x.length >= 3 && pn.some((y) => palabrasCompatibles(x, y)))) return true;
+  // Iniciales: cada trozo es el comienzo de una palabra del nombre, en orden.
+  const trozos = forma.split(/[\s.]+/).map((t) => normalizarClave(t)).filter(Boolean);
+  if (trozos.length >= 2 && trozos.every((t) => t.length <= 3)) {
+    let j = 0;
+    for (const t of trozos) {
+      while (j < pn.length && !pn[j]!.startsWith(t)) j++;
+      if (j >= pn.length) return false;
+      j++;
+    }
+    return true;
+  }
+  return false;
+}

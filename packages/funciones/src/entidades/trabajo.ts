@@ -202,6 +202,8 @@ export async function extraerEntidadesDocumento(p: PuertosFunciones, documento: 
   const afectados = new Set<string>([documento]);
   for (const d of (await resolverBiblioteca(sql)).documentos) afectados.add(d);
   if (o.wikidata !== false) {
+    // Las pistas de Wikidata (autores, años, vecinos) salen de las aristas: primero se tejen.
+    await reconstruirAristasDocumento(sql, documento);
     await progreso('wikidata', 'inicio', 'Enlazando con Wikidata');
     try {
       const w = await enlazarWikidata(sql, o.wikidata ?? {});

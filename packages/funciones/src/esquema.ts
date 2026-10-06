@@ -324,6 +324,7 @@ export const SENTENCIAS_FUNCIONES: readonly string[] = [
     wikidata     TEXT,
     descripcion  TEXT,
     wikidata_visto INTEGER NOT NULL DEFAULT 0,
+    ficticia     INTEGER,             -- 1 personaje de ficción, 0 persona real, null sin saber
     fusionada_en TEXT,
     n_menciones  INTEGER NOT NULL DEFAULT 0,
     n_documentos INTEGER NOT NULL DEFAULT 0,
@@ -435,6 +436,7 @@ export const COLUMNAS_TARDIAS: Readonly<Record<string, ReadonlyArray<readonly [s
     ['fusionada_en', 'TEXT'],
     ['n_menciones', 'INTEGER NOT NULL DEFAULT 0'],
     ['n_documentos', 'INTEGER NOT NULL DEFAULT 0'],
+    ['ficticia', 'INTEGER'],
   ],
 };
 
