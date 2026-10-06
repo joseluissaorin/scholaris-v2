@@ -48,6 +48,8 @@ function Editor({ alListo }: { alListo: (id: string) => void }) {
   const [umbral, setUmbral] = useState(0.7);
   const [enviando, setEnviando] = useState(false);
   const [extrayendo, setExtrayendo] = useState(false);
+  /** Fichero original subido para la autocita: su formato se conserva al exportar a DOCX. */
+  const [original, setOriginal] = useState<{ clave: string; nombre: string; texto: string } | null>(null);
   const archivo = useRef<HTMLInputElement>(null);
   const { data: estilos } = useQuery(q.estilos());
   const parrafos = texto.split(/\n\s*\n/).filter((p) => p.trim()).length;
@@ -57,8 +59,15 @@ function Editor({ alListo }: { alListo: (id: string) => void }) {
   async function extraer(f: File) {
     setExtrayendo(true);
     try {
-      if (/\.(txt|md|markdown)$/i.test(f.name)) setTexto(await f.text());
-      else { const r = await api().citas.extraerTexto(f, f.type || 'application/octet-stream'); setTexto(r.parrafos.join('\n\n') || r.texto); }
+      if (/\.pdf$/i.test(f.name)) {
+        const r = await api().citas.extraerTexto(f, f.type || 'application/pdf');
+        setTexto(r.parrafos.join('\n\n') || r.texto); setOriginal(null);
+      } else {
+        const mime = f.type || (/\.docx$/i.test(f.name) ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' : 'text/plain');
+        const r = await api().citas.subir(f, mime, f.name);
+        const t = r.parrafos.join('\n\n') || r.texto;
+        setTexto(t); setOriginal({ clave: r.clave, nombre: r.nombre, texto: t });
+      }
     } catch { avisar('No se pudo leer ese archivo.', { tono: 'error' }); }
     setExtrayendo(false);
   }
@@ -66,7 +75,9 @@ function Editor({ alListo }: { alListo: (id: string) => void }) {
   async function enviar() {
     setEnviando(true);
     try {
-      const r = await api().citas.autocita({ texto, estilo, umbral, titulo: texto.trim().slice(0, 60) });
+      // Si el texto sigue siendo el del DOCX subido, se manda la clave: así la exportación conserva su formato.
+      const conOriginal = original && original.texto === texto;
+      const r = await api().citas.autocita({ ...(conOriginal ? { subida: original.clave, titulo: original.nombre.replace(/\.[^.]+$/, '') } : { texto, titulo: texto.trim().slice(0, 60) }), estilo, umbral });
       ponerPreferencia('estilo', estilo);
       alListo(r.autocita);
     } catch (e) { avisar(e instanceof Error ? e.message : 'No se pudo empezar.', { tono: 'error' }); setEnviando(false); }
@@ -85,7 +96,8 @@ function Editor({ alListo }: { alListo: (id: string) => void }) {
           <div className="mt-3 flex flex-wrap items-center gap-2">
             <input ref={archivo} type="file" hidden accept=".docx,.pdf,.txt,.md,.odt,.rtf" onChange={(e) => { const f = e.target.files?.[0]; if (f) void extraer(f); e.target.value = ''; }} />
             <Boton variante="linea" icono="subir" onClick={() => archivo.current?.click()}>Abrir DOCX, PDF o TXT</Boton>
-            {!texto ? <Boton variante="fantasma" onClick={() => setTexto(EJEMPLO)}>Probar con un ejemplo</Boton> : <Boton variante="fantasma" onClick={() => setTexto('')}>Vaciar</Boton>}
+            {!texto ? <Boton variante="fantasma" onClick={() => setTexto(EJEMPLO)}>Probar con un ejemplo</Boton> : <Boton variante="fantasma" onClick={() => { setTexto(''); setOriginal(null); }}>Vaciar</Boton>}
+            {original && original.texto === texto ? <span className="flex items-center gap-1.5 text-[0.8125rem] text-tinta-2"><Icono nombre="documento" tam={14} />{original.nombre} · se conserva su formato</span> : null}
             <Rotulo className="ml-auto">{parrafos} párrafos · {texto.trim() ? texto.trim().split(/\s+/).length : 0} palabras</Rotulo>
           </div>
         </div>

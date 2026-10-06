@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
-import { useQuery, useSuspenseQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient, useSuspenseQuery } from '@tanstack/react-query';
 import type { DetalleDocumento, MapaFolios, ResumenDocumento } from '@scholaris/contrato';
 import { Dialog } from 'radix-ui';
 import {
@@ -16,7 +16,7 @@ import { Flujo, useUnidadEnCache, type ManejadorFlujo, type ModoLectura } from '
 import { Medio, type ManejadorMedio } from '../componentes/lector/medio';
 import { Ficha } from '../componentes/lector/ficha';
 import { BarraSeleccion, useSeleccion } from '../componentes/lector/seleccion';
-import { MenuDocumento } from '../componentes/biblioteca/documento';
+import { MenuDocumento, reintentarDocumento } from '../componentes/biblioteca/documento';
 
 export const Route = createFileRoute('/lector/$id')({
   validateSearch: (s: Record<string, unknown>): BusquedaLector => validarBusquedaLector(s),
@@ -48,6 +48,7 @@ function Lector() {
   const busqueda = Route.useSearch();
   const navegar = useNavigate({ from: '/lector/$id' });
   const { data: doc } = useSuspenseQuery(q.documento(id));
+  const qc = useQueryClient();
   const { data: bibliotecas = [] } = useQuery(q.bibliotecas());
   const { data: folios } = useQuery(q.folios(id));
   const ingesta = useIngestas().find((i) => i.documento === id && i.etapa !== 'listo');
@@ -142,6 +143,19 @@ function Lector() {
             <button type="button" aria-label="Más acciones" className="grid h-10 w-10 shrink-0 place-items-center rounded-s text-tinta-2 hover:bg-hondo hover:text-tinta"><Icono nombre="opciones" tam={18} /></button>
           </MenuDocumento>
         </div>
+        {doc.avisos?.some((a) => a.codigo === 'vectores_pendientes') && doc.estado === 'listo' ? (
+          <div className="flex items-center gap-3 border-t border-filete bg-hoja px-4 py-2 text-[0.8125rem] text-tinta-2 md:px-6">
+            <Icono nombre="historial" tam={14} className="shrink-0" />
+            <span>Ya se puede leer, citar y buscar por texto. La búsqueda por significado se completa sola en unos minutos.</span>
+          </div>
+        ) : null}
+        {doc.estado === 'error' ? (
+          <div className="flex flex-wrap items-center gap-3 border-t border-filete bg-rojo-suave/60 px-4 py-2 text-[0.8125rem] md:px-6">
+            <span className="h-2 w-2 shrink-0 bg-rojo" />
+            <span className="flex-1">{doc.error ?? 'No se pudo leer este documento.'}</span>
+            <Boton variante="linea" tam="p" icono="rayo" className="bg-papel" onClick={() => void reintentarDocumento(qc, doc.id)}>Reintentar</Boton>
+          </div>
+        ) : null}
         {ingesta || doc.estado === 'procesando' ? (
           <div className="flex items-center gap-3 border-t border-filete bg-amarillo-suave/60 px-4 py-2 text-[0.8125rem] md:px-6">
             <span className="h-2 w-2 shrink-0 rounded-full bg-rojo anim-pulso" />

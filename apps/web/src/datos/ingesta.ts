@@ -253,7 +253,7 @@ function comunPrefijo(nombres: string[]) {
 }
 
 export async function ingerirUrl(url: string, biblioteca?: string): Promise<Ingesta> {
-  const tipo: TipoEntrada = /youtu\.?be|vimeo/.test(url) ? 'video' : /\.pdf($|\?)/i.test(url) ? 'pdf' : 'web';
+  const tipo: TipoEntrada = /youtu\.?be|vimeo/.test(url) ? 'video' : /\.pdf($|\?)/i.test(url) ? 'pdf' : /\.(mp3|m4a|ogg|opus|wav)($|\?)|podcast|anchor\.fm|ivoox|spotify\.com\/episode/i.test(url) ? 'audio' : /\.(mp4|webm|mov)($|\?)/i.test(url) ? 'video' : 'web';
   const i = nueva(url.replace(/^https?:\/\/(www\.)?/, ''), tipo, 0);
   try {
     poner(i.id, { mensaje: 'Pidiendo la página…', etapa: 'procesando' });
@@ -405,7 +405,8 @@ function manejar(e: EventoTiempoReal) {
 
 /** Al abrir la app: las tareas que ya estaban en marcha (otra pestaña, otro día) vuelven a la mesa. */
 let recuperacion: Promise<void> | null = null;
-export function recuperarTareas(): Promise<void> {
+export function recuperarTareas(otraVez = false): Promise<void> {
+  if (otraVez) recuperacion = null;
   recuperacion ??= recuperarTareasAhora();
   return recuperacion;
 }

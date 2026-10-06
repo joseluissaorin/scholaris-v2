@@ -489,6 +489,10 @@ ruta('GET', '/citas/autocita/:id/exportar', async (m, _c, q) => {
 });
 ruta('GET', '/citas/estilos', (_m, _c, q) => { const n = normalizar(q.get('q') ?? ''); return json(ESTILOS.filter((e) => normalizar(e.titulo).includes(n))); });
 ruta('POST', '/citas/extraer-texto', () => json({ texto: '', parrafos: [] }));
+ruta('POST', '/citas/subir', (_m, _c, q) => json({ clave: `u/yo/citas/${Date.now()}`, nombre: q.get('nombre') ?? 'texto.docx', caduca: hace(-60 * 24 * 7), texto: 'En la demostración no se lee el DOCX: pega el texto.', parrafos: ['En la demostración no se lee el DOCX: pega el texto.'] }));
+ruta('POST', '/documentos/:id/reintentar', (m) => { const d = docs.get(m[1]!); if (d) { d.estado = 'procesando'; d.tarea = `tarea-${d.id}`; simularIngesta(d.id, d.tarea, d.unidades || 10, 1.4); } return json({ documento: m[1], tarea: `tarea-${m[1]}` }); });
+ruta('GET', '/bibliotecas/:id/miembros', (m) => json([{ usuario: 'yo', correo: 'jl@joseluissaorin.com', permiso: 'propietario', pendiente: false, desde: hace(60 * 24 * 30) }, ...(m[1] === 'b-clases' ? [{ usuario: 'u-isabel', correo: 'isabel@example.org', permiso: 'edicion', pendiente: false, desde: hace(60 * 24 * 5) }] : [])]));
+ruta('POST', '/bibliotecas/:id/compartir', (_m, c) => json({ correo: c.correo, permiso: c.permiso, pendiente: true, desde: ahora() }));
 
 ruta('GET', '/historial', () => json({ elementos: historial.filter((h) => !h.oculto), total: historial.length }));
 ruta('POST', '/historial/:id/fijar', (m, c) => { const h = historial.find((x) => x.id === m[1]); if (h) h.fijado = c.fijado; return ok(); });

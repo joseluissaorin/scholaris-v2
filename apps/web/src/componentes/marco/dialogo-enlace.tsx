@@ -13,7 +13,7 @@ export default function DialogoEnlace({ alCerrar, alEnviar }: { alCerrar: () => 
       abierto
       alCambiar={(v) => !v && alCerrar()}
       titulo="Desde un enlace"
-      descripcion="Una página web, un artículo, un PDF en línea o un vídeo de YouTube. Guardamos una copia fechada para que la cita no caduque."
+      descripcion="Una página web, un PDF en línea, un vídeo de YouTube o Vimeo, o un episodio de pódcast. De las webs guardamos una copia fechada para que la cita no caduque; de los medios, la transcripción con sus marcas de tiempo."
       pie={<><Boton variante="fantasma" onClick={alCerrar}>Cancelar</Boton><Boton variante="tinta" disabled={!valido} onClick={enviar}>Añadir</Boton></>}
     >
       <form onSubmit={(e) => { e.preventDefault(); enviar(); }}>

@@ -1,15 +1,22 @@
 import { memo } from 'react';
 import { Link } from '@tanstack/react-router';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQueryClient, type QueryClient } from '@tanstack/react-query';
 import type { Biblioteca, Pagina, ResumenDocumento } from '@scholaris/contrato';
 import { avisar, conDeshacer, cx, Icono, MenuContenido, MenuDisparador, MenuElemento, MenuRaiz, MenuRotulo, MenuSeparador, Rotulo } from '@scholaris/ui';
 import { api } from '../../datos/api';
+import { recuperarTareas } from '../../datos/ingesta';
 import { duracion, haceCuanto, ICONO_TIPO, NOMBRE_TIPO, nombreUnidad, esMedio } from '../../lib/formato';
 import { preferencia } from '../../lib/acciones';
 import { Portada } from '../comunes/portada';
 
 const COLOR_COL: Record<string, string> = { rojo: 'bg-rojo', azul: 'bg-azul', amarillo: 'bg-amarillo', tinta: 'bg-tinta' };
 export const puntoColeccion = (c?: string) => COLOR_COL[c ?? 'tinta'] ?? 'bg-tinta';
+
+/** Vuelve a leer un documento que falló o se quedó a medias: retoma donde se quedó. */
+export async function reintentarDocumento(qc: QueryClient, id: string) {
+  try { await api().documentos.reintentar(id); avisar('Vuelve a la imprenta: retoma donde se quedó.'); void qc.invalidateQueries({ queryKey: ['documentos'] }); void qc.invalidateQueries({ queryKey: ['documento', id] }); void recuperarTareas(true); }
+  catch (e) { avisar(e instanceof Error ? e.message : 'No se pudo reintentar.', { tono: 'error' }); }
+}
 
 /** Acciones de un documento: las mismas en la rejilla, en la lista y en el lector. */
 export function MenuDocumento({ doc, bibliotecas, children }: { doc: ResumenDocumento; bibliotecas: Biblioteca[]; children: React.ReactNode }) {
@@ -51,10 +58,7 @@ export function MenuDocumento({ doc, bibliotecas, children }: { doc: ResumenDocu
     );
   }
 
-  async function reprocesar() {
-    try { await api().documentos.reprocesar(doc.id, { fases: ['lectura', 'folios', 'metadatos', 'estructura', 'contexto', 'vectores', 'figuras'] }); avisar('Vuelve a la imprenta.'); void qc.invalidateQueries({ queryKey: ['documentos'] }); }
-    catch (e) { avisar(e instanceof Error ? e.message : 'No se pudo volver a leer.', { tono: 'error' }); }
-  }
+  const reintentar = () => reintentarDocumento(qc, doc.id);
 
   async function exportarSpdf() {
     avisar(`Preparando «${doc.titulo}.spdf»…`);
@@ -80,7 +84,7 @@ export function MenuDocumento({ doc, bibliotecas, children }: { doc: ResumenDocu
         <MenuElemento icono="citar" alElegir={() => void copiarCita()}>Copiar la referencia</MenuElemento>
         <MenuElemento icono="descargar" alElegir={() => void descargar()}>Descargar el original</MenuElemento>
         <MenuElemento icono="pila" alElegir={() => void exportarSpdf()}>Exportar como .spdf</MenuElemento>
-        {doc.estado !== 'listo' && doc.estado !== 'procesando' ? <MenuElemento icono="rayo" alElegir={() => void reprocesar()}>Volver a leer</MenuElemento> : null}
+        {doc.estado === 'error' || doc.estado === 'pendiente' ? <MenuElemento icono="rayo" alElegir={() => void reintentar()}>Reintentar</MenuElemento> : null}
         {bibliotecas.length ? (
           <>
             <MenuSeparador />
@@ -117,13 +121,14 @@ export const FichaDocumento = memo(function FichaDocumento({ doc, bibliotecas, i
           {doc.estado === 'procesando' ? (
             <span className="rotulo absolute left-2 top-2 flex items-center gap-1.5 rounded-full bg-papel/95 px-2 py-1 text-tinta"><span className="h-1.5 w-1.5 rounded-full bg-rojo anim-pulso" />Leyendo</span>
           ) : null}
-          {doc.estado === 'error' ? <span className="rotulo absolute left-2 top-2 rounded-full bg-rojo px-2 py-1 text-[#fbf5ec]">Con errores</span> : null}
+          {doc.estado === 'error' ? <span className="rotulo absolute left-2 top-2 rounded-full bg-rojo px-2 py-1 text-[#fbf5ec]">No se pudo leer</span> : null}
           {doc.estado === 'pendiente' ? <span className="rotulo absolute left-2 top-2 rounded-full bg-amarillo px-2 py-1 text-tinta">Sin leer</span> : null}
           <span className="absolute bottom-2 right-2 grid h-6 w-6 place-items-center rounded-full bg-papel/90 text-tinta-2"><Icono nombre={ICONO_TIPO[doc.tipo]} tam={14} /></span>
         </div>
         <h3 className="mt-3 line-clamp-2 text-[1rem] leading-[1.2] tracking-[-0.01em] text-tinta">{doc.titulo}</h3>
       </Link>
       <p className="mt-1 truncate text-[0.8125rem] text-tinta-2">{doc.autores || 'Sin autor'}{doc.anio ? `, ${doc.anio}` : ''}</p>
+      {doc.estado === 'error' || doc.estado === 'pendiente' ? <ReintentarFicha id={doc.id} /> : null}
       <div className="mt-1 flex items-center gap-2">
         <Rotulo className="truncate">{lineaMeta(doc)}</Rotulo>
         <MenuDocumento doc={doc} bibliotecas={bibliotecas}>
@@ -135,6 +140,11 @@ export const FichaDocumento = memo(function FichaDocumento({ doc, bibliotecas, i
     </article>
   );
 });
+
+function ReintentarFicha({ id }: { id: string }) {
+  const qc = useQueryClient();
+  return <button type="button" onClick={() => void reintentarDocumento(qc, id)} className="mt-1.5 flex items-center gap-1.5 self-start text-[0.8125rem] text-rojo underline underline-offset-4"><Icono nombre="rayo" tam={13} />Reintentar</button>;
+}
 
 /** Fila en la vista de lista: densa, alineada en columnas. */
 export const FilaDocumento = memo(function FilaDocumento({ doc, bibliotecas }: { doc: ResumenDocumento; bibliotecas: Biblioteca[] }) {

@@ -1,4 +1,4 @@
-import { useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useWindowVirtualizer } from '@tanstack/react-virtual';
@@ -15,6 +15,8 @@ import { Cabecera } from '../componentes/comunes/cabecera';
 import { FichaDocumento, FilaDocumento, puntoColeccion } from '../componentes/biblioteca/documento';
 import { TarjetaIngesta } from '../componentes/biblioteca/ingesta';
 import { TECLA_MOD } from '../componentes/marco/navegacion';
+
+const Compartir = lazy(() => import('../componentes/biblioteca/compartir'));
 
 const GRUPOS: Array<{ id: string; nombre: string; tipos: TipoEntrada[] }> = [
   { id: 'libros', nombre: 'Libros y artículos', tipos: ['pdf', 'epub'] },
@@ -67,6 +69,7 @@ function PaginaBiblioteca() {
   const [texto, setTexto] = useState(busqueda.q ?? '');
   const diferido = useDeferredValue(texto);
   const [nueva, setNueva] = useState(false);
+  const [compartir, setCompartir] = useState(false);
   const orden = busqueda.orden ?? 'recientes';
   const vista = busqueda.vista ?? 'rejilla';
 
@@ -145,6 +148,8 @@ function PaginaBiblioteca() {
               </Chip>
             ))}
             <Chip icono="mas" onClick={() => setNueva(true)}>Nueva</Chip>
+            {coleccion && coleccion.permiso === 'propietario' ? <Chip icono="enlace" onClick={() => setCompartir(true)}>Compartir</Chip> : null}
+            {coleccion && coleccion.permiso !== 'propietario' ? <Rotulo className="ml-1 shrink-0">compartida contigo · {coleccion.permiso === 'edicion' ? 'puedes editar' : 'solo lectura'}</Rotulo> : null}
           </div>
         ) : null}
 
@@ -179,6 +184,7 @@ function PaginaBiblioteca() {
       </div>
 
       <NuevaColeccion abierta={nueva} alCambiar={setNueva} />
+      {compartir && coleccion ? <Suspense fallback={null}><Compartir biblioteca={coleccion} alCerrar={() => setCompartir(false)} /></Suspense> : null}
     </>
   );
 }
