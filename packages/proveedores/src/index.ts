@@ -13,5 +13,7 @@ export * from './workersai.js';
 export * from './openrouter.js';
 export * from './jev.js';
 export * from './inferbox.js';
+export * from './compatible.js';
+export * from './sin-conexion.js';
 export * from './cascada.js';
 export * from './inteligencia.js';
