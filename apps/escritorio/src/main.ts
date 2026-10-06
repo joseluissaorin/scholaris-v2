@@ -98,6 +98,7 @@ async function main(): Promise<void> {
         ws.data.quitar = s.tiempoReal.suscribir(ws.data.canal, (e) => ws.send(JSON.stringify(e)));
       },
       message(ws, m) {
+        if (String(m) === 'ping') { ws.send('pong'); return; }
         try {
           const msg = JSON.parse(String(m)) as MensajeCliente;
           if (msg.tipo === 'ping') ws.send(JSON.stringify({ tipo: 'pong', t: msg.t }));

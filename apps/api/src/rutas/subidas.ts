@@ -8,7 +8,8 @@ import type {
 import type { Entorno } from '../entorno.js';
 import { cuerpoJson, exigir, fallo, noEncontrado } from '../compartido/errores.js';
 import { LIMITES } from '../compartido/planes.js';
-import { crearDocumentoPendiente, crearTarea, documentoPorHuella, marcarDocumento, ahora } from '../compartido/estanteria.js';
+import { crearDocumentoPendiente, crearTarea, documentoPorHuella, marcarDocumento, ahora, pendientesPorHuella } from '../compartido/estanteria.js';
+import { borrarDocumentoCompleto } from './documentos.js';
 import type { ParamsIngesta, PuertosUsuario } from '../puertos.js';
 import { exigirEscritura, extension, prm, puertos, type Ctx } from './util.js';
 
@@ -105,6 +106,8 @@ export function rutasSubidas(app: Hono<Entorno>): void {
     const tipo = b.tipo ?? deducirTipo(b.nombre, b.mime);
     if (!tipo) fallo('peticion_invalida', `No sé leer ficheros «${extension(b.nombre) || b.mime}». Prueba con PDF, EPUB, DOCX, audio, vídeo o imágenes.`);
     if (b.huella) {
+      // Lo que quedó a medias con la misma huella se reemplaza: nunca cuenta como duplicado.
+      for (const viejo of await pendientesPorHuella(p.sql, b.huella)) await borrarDocumentoCompleto(p, viejo);
       const dup = await documentoPorHuella(p.sql, b.huella);
       if (dup) {
         return c.json<SubidaCreada>({ subida: '', documento: dup, tipo, original: { modo: 'simple', clave: '' }, prefijo: prefijoDocumento(p.usuario.id, dup), duplicado: dup });

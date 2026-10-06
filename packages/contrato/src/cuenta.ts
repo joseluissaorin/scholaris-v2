@@ -99,6 +99,11 @@ export interface ClaveApi {
 
 export interface CrearClaveApi {
   nombre: string;
+  /**
+   * Qué puede hacer la clave: «lectura» (consultar y buscar), «escritura»
+   * (subir, editar, borrar) y «mcp» (servidor MCP). Si no se indica, solo
+   * lectura y MCP: la interfaz debe ofrecerlo explícitamente.
+   */
   alcances?: AlcanceClave[];
   /** Días de validez; sin valor, no caduca. */
   dias?: number;

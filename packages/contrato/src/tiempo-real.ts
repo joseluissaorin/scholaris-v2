@@ -15,6 +15,10 @@
  * usuario (todas sus tareas y alertas).
  *
  * Cliente → servidor: MensajeCliente. Servidor → cliente: EventoTiempoReal.
+ *
+ * Latido: el cliente manda el texto «ping» cada 25 s y recibe «pong» (sin
+ * JSON). Al conectar (o reconectar) el servidor reenvía el último progreso o
+ * el `fin` de la tarea, así que nadie se pierde el final por llegar tarde.
  */
 
 import type { FaseIngesta, Progreso } from '@scholaris/nucleo';

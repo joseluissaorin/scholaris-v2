@@ -22,6 +22,7 @@
     "wrangler": "^4.147.0"
   },
   "dependencies": {
+    "@cloudflare/containers": "^0.3.7",
     "@scholaris/busqueda": "workspace:^",
     "@scholaris/citas": "workspace:^",
     "@scholaris/contrato": "workspace:^",

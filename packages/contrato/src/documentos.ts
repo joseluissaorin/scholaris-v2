@@ -22,6 +22,15 @@
  *   POST   /documentos/importar   cuerpo binario .spdf (v3 o v4) → ImportacionSpdf
  *
  *   GET    /binarios?clave=&exp=&sig=              → binario firmado (con Range). Lo generan las URLs `…Url`.
+ *
+ * Numeración: `orden` de las unidades es BASE 0 (la página física 1 es el orden 0),
+ * y lo mismo `MapaFolios.folios[].orden`, `SeccionVista.unidadDesde/unidadHasta`,
+ * `FragmentoVista.unidad`, `FiguraVista.unidad` y los parámetros `desde`/`hasta`
+ * (también los del evento de tiempo real «unidades»). Lo que se enseña a la
+ * persona es la `etiqueta` del ancla («p. 23»), nunca el orden.
+ *
+ * Mientras se procesa, las unidades ya leídas aparecen con id «prov:…» y se
+ * sustituyen por las definitivas al terminar (llega «unidades» con todo el rango).
  */
 
 import type {

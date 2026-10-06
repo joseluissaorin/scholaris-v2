@@ -319,3 +319,47 @@ describe('bibliotecas compartidas', () => {
     expect((await api(`${C}/documentos`, { token: ajeno })).estado).toBe(404);
   });
 });
+
+describe('imágenes de página', () => {
+  it('las URLs firmadas de las unidades resuelven la clave relativa del paquete', async () => {
+    const t = await token('user_imagenes', { fea: 'u:scholaris' });
+    const pdf = new TextEncoder().encode('%PDF-1.4 falso');
+    const s = await api('/subidas', { token: t, cuerpo: { nombre: 'libro.pdf', mime: 'application/pdf', bytes: pdf.byteLength } });
+    await SELF.fetch(s.cuerpo.original.url, { method: 'PUT', body: pdf });
+    const cuerpo = 'Este es el cuerpo de la página con texto suficiente para que la capa se considere útil y no haga falta visión.';
+    const paginas = [1, 2].map((fisica) => ({
+      fisica, ancho: 595, alto: 842, rotacion: 0, etiqueta: String(fisica), clase: 'pdf' as const,
+      texto: { util: true, calidad: 0.95, origen: 'digital' as const, caracteres: cuerpo.length, basura: 0, palabrasRaras: 0, coberturaImagen: 0 },
+      cuerpo, lineas: [], bloques: [{ x: 0.1, y: 0.1, w: 0.8, h: 0.1, lineas: [], texto: cuerpo, tam: 10 }], cabecera: [], pie: [], candidatosFolio: [], imagenes: [],
+      imagen: `paginas/000${fisica}.jpg`, ms: 1,
+    }));
+    const paquete = {
+      version: 1, tipo: 'pdf', origen: { nombre: 'libro.pdf', mime: 'application/pdf', bytes: pdf.byteLength, huella: 'h-libro' }, metadatos: { titulo: 'Libro' }, unidades: 2,
+      contenido: { clase: 'pdf', paginas, esquema: [], etiquetas: ['1', '2'], mixto: false, paginasEscaneadas: [], titulillos: { cabecera: [], pie: [] }, info: {}, xmp: null, cifrado: false },
+      partes: paginas.map((p) => ({ id: p.imagen, clase: 'pagina', mime: 'image/jpeg', bytes: 4, unidad: p.fisica })), reserva: null, avisos: [], entorno: 'navegador', tiempos: {},
+    };
+    const rec = await api(`/subidas/${s.cuerpo.subida}/recursos`, { token: t, cuerpo: { recursos: [{ ruta: 'paquete.json', mime: 'application/json' }, ...paginas.map((p) => ({ ruta: p.imagen, mime: 'image/jpeg' }))] } });
+    for (const r of rec.cuerpo.recursos) {
+      await SELF.fetch(r.subida.url, { method: 'PUT', body: r.ruta === 'paquete.json' ? JSON.stringify(paquete) : new Uint8Array([0xff, 0xd8, 0xff, 0xd9]), headers: r.subida.cabeceras });
+    }
+    const ing = await api(`/subidas/${s.cuerpo.subida}/ingestar`, { token: t, cuerpo: { paquete: 'paquete.json' } });
+    expect((await esperarTarea(t, ing.cuerpo.tarea)).estado).toBe('listo');
+    const us = await api(`/documentos/${ing.cuerpo.documento}/unidades?desde=0&hasta=5`, { token: t });
+    expect(us.cuerpo).toHaveLength(2);
+    expect(us.cuerpo[0].orden).toBe(0);
+    expect(us.cuerpo.every((u: { id: string }) => !u.id.startsWith('prov:'))).toBe(true);
+    const img = await SELF.fetch(us.cuerpo[0].imagenUrl);
+    expect(img.status).toBe(200);
+    expect(new Uint8Array(await img.arrayBuffer())[0]).toBe(0xff);
+    const lista = await api('/documentos', { token: t });
+    expect((await SELF.fetch(lista.cuerpo.elementos[0].portadaUrl)).status).toBe(200);
+  });
+
+  it('una subida a medias con la misma huella no cuenta como duplicada', async () => {
+    const t = await token('user_reanuda');
+    const a = await api('/subidas', { token: t, cuerpo: { nombre: 'x.pdf', mime: 'application/pdf', bytes: 10, huella: 'h-reanuda' } });
+    const b = await api('/subidas', { token: t, cuerpo: { nombre: 'x.pdf', mime: 'application/pdf', bytes: 10, huella: 'h-reanuda' } });
+    expect(b.cuerpo.duplicado).toBeUndefined();
+    expect((await api(`/documentos/${a.cuerpo.documento}`, { token: t })).estado).toBe(404);
+  });
+});

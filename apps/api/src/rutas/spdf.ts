@@ -13,7 +13,7 @@ import { ahora, totalesEstanteria } from '../compartido/estanteria.js';
 import { invalidarBuscador } from '../compartido/servicios.js';
 import { volcarDocumento } from './documentos.js';
 import { lanzarIngesta, prefijoDocumento } from './subidas.js';
-import { exigirEscritura, prm, puertos, type Ctx } from './util.js';
+import { claveDe, exigirEscritura, prm, puertos, type Ctx } from './util.js';
 import type { PuertosUsuario } from '../puertos.js';
 
 /** Máximo que se incrusta en un .spdf armado en el servidor (memoria del Worker). */
@@ -27,12 +27,13 @@ async function armarSpdf(p: PuertosUsuario, d: Documento, incrustar: boolean): P
     const blobs = new Map<string, string>();
     if (incrustar) {
       for (const clave of Object.keys(v.binarios)) {
-        const cab = await p.almacen.cabecera(clave);
+        const real = claveDe(p.usuario.id, d.id, clave);
+        const cab = await p.almacen.cabecera(real);
         if (!cab || usados + cab.bytes > MAX_INCRUSTADO) continue;
-        const bytes = await p.almacen.bytes(clave);
+        const bytes = await p.almacen.bytes(real);
         if (!bytes) continue;
         // En el fichero las claves son relativas: «original.pdf», «paginas/0001.jpg».
-        const rel = clave.startsWith(prefijoDocumento(p.usuario.id, d.id)) ? clave.slice(prefijoDocumento(p.usuario.id, d.id).length) : clave.split('/').pop()!;
+        const rel = !clave.startsWith('u/') ? clave : clave.startsWith(prefijoDocumento(p.usuario.id, d.id)) ? clave.slice(prefijoDocumento(p.usuario.id, d.id).length) : clave.split('/').pop()!;
         await a.ponerBlob(rel, v.binarios[clave]!.mime, bytes);
         blobs.set(clave, rel);
         usados += cab.bytes;

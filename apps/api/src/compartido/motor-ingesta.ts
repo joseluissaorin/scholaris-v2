@@ -16,7 +16,7 @@
 import type {
   FuentePaquete, Pliego, ResultadoIngesta,
 } from '@scholaris/ingesta';
-import { ejecutarIngesta, leerPliego, planificar, transcribirTramo, vectorizar, textoVectorizable, escribirVectores as escribirVectoresIngesta, entradasIndice } from '@scholaris/ingesta';
+import { cuerpoDominante, leerCapaPagina, ejecutarIngesta, leerPliego, planificar, transcribirTramo, vectorizar, textoVectorizable, escribirVectores as escribirVectoresIngesta, entradasIndice } from '@scholaris/ingesta';
 import type { PaqueteConversion } from '@scholaris/imprenta';
 import { abrirCortador, type CortadorPdf } from '@scholaris/imprenta';
 import type { Documento, IndiceVectorial, Inteligencia, Lector, PaginaLeida, Progreso, SQL, Transcripcion, Transcriptor, Vector } from '@scholaris/nucleo';
@@ -43,9 +43,21 @@ export interface ContextoMotor {
    * Imprenta del servidor (local: `@scholaris/imprenta/node`). Si está, se usa
    * para los ficheros que llegan sin paquete en vez de la reserva mínima.
    */
-  convertir?(archivo: { nombre: string; mime: string; bytes: Uint8Array; tipo?: string }): Promise<{ paquete: PaqueteConversion; datos: Map<string, Uint8Array> }>;
+  convertir?(archivo: ArchivoConvertir, guardar: (id: string, datos: Uint8Array, mime: string) => Promise<void>): Promise<PaqueteConversion>;
+  /** Unidades nuevas ya legibles (orden base 0, ambos incluidos): la interfaz las enseña al momento. */
+  alUnidades?(desde: number, hasta: number): Promise<void> | void;
   /** Clave (y gateway) de Gemini para transcribir YouTube por URL. */
   gemini?: ConfigGemini;
+}
+
+export interface ArchivoConvertir {
+  nombre: string;
+  mime: string;
+  tipo?: string;
+  bytes: number;
+  /** El original, leído del almacén cuando haga falta (entero o como flujo). */
+  leer(): Promise<Uint8Array>;
+  flujo(): Promise<ReadableStream<Uint8Array>>;
 }
 
 export interface InfoPlan {
@@ -179,6 +191,14 @@ function inteligenciaConMemoria(ia: Inteligencia, almacen: AlmacenAmpliado, raiz
   };
 }
 
+function archivoDe(almacen: AlmacenAmpliado, clave: string, nombre: string, mime: string, tipo?: string): ArchivoConvertir {
+  return {
+    nombre, mime, ...(tipo ? { tipo } : {}), bytes: 0,
+    async leer() { const b = await almacen.bytes(clave); if (!b) throw new ErrorReserva('No encuentro el original en el almacén.'); return b; },
+    async flujo() { const o = await almacen.obtener(clave); if (!o) throw new ErrorReserva('No encuentro el original en el almacén.'); return o.cuerpo as ReadableStream<Uint8Array>; },
+  };
+}
+
 const EXT_MIME: Record<string, string> = { mp3: 'audio/mpeg', m4a: 'audio/mp4', aac: 'audio/aac', ogg: 'audio/ogg', opus: 'audio/ogg', wav: 'audio/wav', flac: 'audio/flac', mp4: 'video/mp4', webm: 'video/webm', mov: 'video/quicktime' };
 
 /** Baja un medio al almacén en partes de 16 MB (R2 o disco), sin cargarlo entero en memoria. */
@@ -215,6 +235,41 @@ async function descargarAlAlmacen(almacen: AlmacenAmpliado, url: string, clave: 
 }
 
 // ---------------------------------------------------------------------------
+// Unidades provisionales: se ven mientras se procesa; las definitivas las sustituyen
+// ---------------------------------------------------------------------------
+
+interface Provisional {
+  orden: number; ancla: Record<string, unknown>; texto: string; notas?: string[]; cabecera?: string; pie?: string;
+  imagen?: string; miniatura?: string; lector: string; confianza: number; impresa?: string | null; t0?: number; t1?: number;
+}
+
+async function escribirProvisionales(ctx: ContextoMotor, params: ParamsIngesta, us: Provisional[]): Promise<void> {
+  if (!us.length) return;
+  await ctx.sql.transaccion(async (tx) => {
+    for (const u of us) {
+      await tx.ejecutar(
+        `INSERT OR REPLACE INTO unidades (id, documento, orden, ancla, texto, notas, cabecera, pie, imagen, miniatura, lector, confianza, impresa, t0, t1)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `prov:${params.documento}:${u.orden}`, params.documento, u.orden, JSON.stringify(u.ancla), u.texto, u.notas?.length ? JSON.stringify(u.notas) : null,
+        u.cabecera || null, u.pie || null, u.imagen ?? null, u.miniatura ?? null, u.lector, u.confianza, u.impresa ?? null, u.t0 ?? null, u.t1 ?? null,
+      );
+    }
+  });
+  await (ctx.sql as { vaciarPendientes?: () => Promise<void> }).vaciarPendientes?.();
+  const ordenes = us.map((u) => u.orden);
+  await ctx.alUnidades?.(Math.min(...ordenes), Math.max(...ordenes));
+}
+
+function provisionalDePagina(u: { orden: number; fisica: number; texto: string; notas: string[]; cabecera: string; pie: string; folioVisto: string | null; lector: string; confianza: number }, paquete: PaqueteConversion): Provisional {
+  const pag = paquete.contenido.clase === 'pdf' ? paquete.contenido.paginas[u.fisica - 1] : paquete.contenido.clase === 'imagenes' ? paquete.contenido.paginas[u.fisica - 1] : undefined;
+  return {
+    orden: u.orden, texto: u.texto, notas: u.notas, cabecera: u.cabecera, pie: u.pie, lector: u.lector, confianza: u.confianza, impresa: u.folioVisto,
+    ancla: { tipo: 'pagina', fisica: u.fisica, impresa: u.folioVisto, romana: false, origen: u.folioVisto ? 'leido' : 'ninguno', confianza: u.folioVisto ? 0.5 : 0 },
+    ...(pag?.imagen ? { imagen: pag.imagen } : {}), ...(pag?.miniatura ? { miniatura: pag.miniatura } : {}),
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Pasos
 // ---------------------------------------------------------------------------
 
@@ -231,12 +286,10 @@ export async function preparar(ctx: ContextoMotor, params: ParamsIngesta): Promi
     descargado = { original, mime: m.mime ?? d.mime, bytes: d.bytes };
     const tipo = descargado.mime.startsWith('video/') ? 'video' : 'audio';
     if (ctx.convertir) {
-      const b = await ctx.almacen.bytes(original);
-      const r = await ctx.convertir({ nombre: m.titulo ?? params.nombre, mime: descargado.mime, bytes: b!, tipo });
-      for (const [id, datos] of r.datos) await ctx.almacen.poner(`${params.prefijo}${id}`, datos, r.paquete.partes.find((x) => x.id === id)?.mime);
-      r.paquete.metadatos = { ...r.paquete.metadatos, url: params.url, ...(m.titulo ? { titulo: m.titulo } : {}) };
+      const paquete = await ctx.convertir(archivoDe(ctx.almacen, original, m.titulo ?? params.nombre, descargado.mime, tipo), (id, datos, mime) => ctx.almacen.poner(`${params.prefijo}${id}`, datos, mime));
+      paquete.metadatos = { ...paquete.metadatos, url: params.url, ...(m.titulo ? { titulo: m.titulo } : {}) };
       clave = `${params.prefijo}paquete.json`;
-      await ctx.almacen.poner(clave, JSON.stringify(r.paquete), 'application/json');
+      await ctx.almacen.poner(clave, JSON.stringify(paquete), 'application/json');
     } else {
       const paquete = await convertirEnServidor({
         tipo, nombre: m.titulo ?? params.nombre, mime: descargado.mime, rutaOriginal: original.slice(params.prefijo.length),
@@ -248,15 +301,9 @@ export async function preparar(ctx: ContextoMotor, params: ParamsIngesta): Promi
     }
   }
   if (!clave && !params.url && params.original && ctx.convertir) {
-    const original = await ctx.almacen.bytes(params.original);
-    if (!original) throw new ErrorReserva('No encuentro el original en el almacén.');
-    const r = await ctx.convertir({ nombre: params.nombre, mime: params.mime, bytes: original, tipo: params.tipo });
-    for (const [id, datos] of r.datos) {
-      const mime = r.paquete.partes.find((x) => x.id === id)?.mime;
-      await ctx.almacen.poner(`${params.prefijo}${id}`, datos, mime);
-    }
+    const paquete = await ctx.convertir(archivoDe(ctx.almacen, params.original, params.nombre, params.mime, params.tipo), (id, datos, mime) => ctx.almacen.poner(`${params.prefijo}${id}`, datos, mime));
     clave = `${params.prefijo}paquete.json`;
-    await ctx.almacen.poner(clave, JSON.stringify(r.paquete), 'application/json');
+    await ctx.almacen.poner(clave, JSON.stringify(paquete), 'application/json');
   }
   if (!clave) {
     const original = params.original ? await ctx.almacen.bytes(params.original) : null;
@@ -277,6 +324,15 @@ export async function preparar(ctx: ContextoMotor, params: ParamsIngesta): Promi
   }
   const paquete = await leerPaquete(ctx.almacen, clave);
   const plan = planificar(paquete, OPCIONES_PLAN);
+  // El total se conoce ya; las páginas con capa de texto se pueden enseñar desde ahora.
+  await ctx.sql.ejecutar('UPDATE documentos SET unidades = ? WHERE id = ?', plan.unidades, params.documento);
+  if (paquete.contenido.clase === 'pdf') {
+    const paginas = paquete.contenido.paginas;
+    const base = cuerpoDominante(paginas);
+    const capa = paginas.map((p, i) => (plan.vias[i] === 'capa' ? provisionalDePagina(leerCapaPagina(p, i, base), paquete) : null)).filter((x): x is Provisional => !!x);
+    for (let i = 0; i < capa.length; i += 50) await escribirProvisionales(ctx, params, capa.slice(i, i + 50));
+  }
+  await (ctx.sql as { vaciarPendientes?: () => Promise<void> }).vaciarPendientes?.();
   const coste = plan.modo === 'medio' ? Math.ceil((paquete.duracion ?? plan.tramos.length * 600) / 60) : plan.unidades;
   return { paquete: clave, modo: plan.modo, unidades: plan.unidades, pliegos: plan.pliegos.map((p) => p.id), tramos: plan.tramos.map((t) => t.n), coste, ...(descargado ?? {}) };
 }
@@ -288,6 +344,7 @@ export async function leerUnPliego(ctx: ContextoMotor, params: ParamsIngesta, in
   if (!pliego) return 0;
   const ia = inteligenciaConMemoria(ctx.inteligencia, ctx.almacen, trabajo(params), ctx.gemini);
   const r = await leerPliego(pliego, paquete, fuenteDesdeAlmacen(ctx.almacen, params, paquete), [ia.lector, ...(ia.lectoresReserva ?? [])], { ...(params.pista ? { pista: params.pista } : {}) });
+  await escribirProvisionales(ctx, params, r.paginas.map((u) => provisionalDePagina(u, paquete)));
   return r.paginas.length;
 }
 
@@ -298,6 +355,13 @@ export async function transcribirUnTramo(ctx: ContextoMotor, params: ParamsInges
   if (!tramo) return 0;
   const ia = inteligenciaConMemoria(ctx.inteligencia, ctx.almacen, trabajo(params), ctx.gemini);
   const r = await transcribirTramo(tramo, fuenteDesdeAlmacen(ctx.almacen, params, paquete), ia.transcriptor, { ...(params.pista ? { pista: params.pista } : {}) });
+  const texto = r.palabras.map((w) => w.texto).join(' ').trim();
+  if (texto) {
+    await escribirProvisionales(ctx, params, [{
+      orden: tramo.n - 1, texto, lector: ctx.inteligencia.transcriptor.nombre, confianza: 0.8, t0: tramo.t0, t1: tramo.t1,
+      ancla: { tipo: 'tiempo', t0: tramo.t0, t1: tramo.t1 },
+    }]);
+  }
   return r.palabras.length;
 }
 
@@ -348,8 +412,11 @@ export async function componer(ctx: ContextoMotor, params: ParamsIngesta, info: 
       }
     },
   });
+  // Fuera las provisionales: ya están las definitivas.
+  await ctx.sql.ejecutar("DELETE FROM unidades WHERE documento = ? AND id LIKE 'prov:%'", params.documento);
   // Por si el puerto SQL acumula escrituras (Workflow): que lleguen todas antes de cerrar.
   await (ctx.sql as { vaciarPendientes?: () => Promise<void> }).vaciarPendientes?.();
+  await ctx.alUnidades?.(0, Math.max(0, r.unidades.length - 1));
   return {
     documento: r.documento.id, unidades: r.unidades.length, fragmentos: r.fragmentos.length, secciones: r.secciones.length,
     figuras: r.figuras.length, vectores: r.vectores, tiempos: r.tiempos, avisos: r.avisos,

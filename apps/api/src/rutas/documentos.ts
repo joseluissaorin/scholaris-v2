@@ -18,7 +18,7 @@ import { invalidarBuscador, puertosFunciones } from '../compartido/servicios.js'
 import { alBorrarDocumento } from '@scholaris/funciones';
 import type { PuertosUsuario } from '../puertos.js';
 import { lanzarIngesta, prefijoDocumento } from './subidas.js';
-import { cursorADesplazamiento, desplazamientoACursor, entero, etiquetaAncla, exigirEscritura, json, prm, puertos, type Ctx } from './util.js';
+import { claveDe, cursorADesplazamiento, desplazamientoACursor, entero, etiquetaAncla, exigirEscritura, json, prm, puertos, type Ctx } from './util.js';
 
 type Fila = Record<string, ValorSQL>;
 
@@ -30,14 +30,14 @@ async function documentoOError(p: PuertosUsuario, id: string): Promise<Documento
   return (await leerDocumento(p.sql, id)) ?? noEncontrado('El documento');
 }
 
-async function urlOpcional(p: PuertosUsuario, clave: string | null | undefined): Promise<string | undefined> {
-  return clave ? p.almacen.urlLectura(clave) : undefined;
+async function urlOpcional(p: PuertosUsuario, documento: string, clave: string | null | undefined): Promise<string | undefined> {
+  return clave ? p.almacen.urlLectura(claveDe(p.usuario.id, documento, clave)) : undefined;
 }
 
 /** Miniatura de la primera unidad, como portada. */
 async function portada(p: PuertosUsuario, documento: string): Promise<string | undefined> {
   const [f] = await p.sql.ejecutar<{ m: string | null; i: string | null }>('SELECT miniatura AS m, imagen AS i FROM unidades WHERE documento = ? ORDER BY orden LIMIT 1', documento);
-  return urlOpcional(p, f?.m ?? f?.i);
+  return urlOpcional(p, documento, f?.m ?? f?.i);
 }
 
 export async function borrarDocumentoCompleto(p: PuertosUsuario, id: string): Promise<void> {
@@ -108,7 +108,7 @@ export function rutasDocumentos(app: Hono<Entorno>): void {
       if (f.anio != null) r.anio = Number(f.anio);
       if (f.idioma) r.idioma = String(f.idioma);
       if (f.duracion != null) r.duracion = Number(f.duracion);
-      if (f.portada) r.portadaUrl = await p.almacen.urlLectura(String(f.portada));
+      if (f.portada) r.portadaUrl = await p.almacen.urlLectura(claveDe(p.usuario.id, String(f.id), String(f.portada)));
       if (f.tarea) r.tarea = String(f.tarea);
       return r;
     }));
@@ -185,7 +185,7 @@ export function rutasDocumentos(app: Hono<Entorno>): void {
     const filas = await p.sql.ejecutar<Fila>('SELECT * FROM unidades WHERE documento = ? AND orden BETWEEN ? AND ? ORDER BY orden', id, desde, hasta);
     if (!filas.length && !(await leerDocumento(p.sql, id))) noEncontrado('El documento');
     return c.json(await Promise.all(filas.map(async (f) => unidadAVista(f, {
-      imagen: await urlOpcional(p, f.imagen as string | null), miniatura: await urlOpcional(p, f.miniatura as string | null),
+      imagen: await urlOpcional(p, id, f.imagen as string | null), miniatura: await urlOpcional(p, id, f.miniatura as string | null),
     }))));
   });
 
@@ -193,7 +193,8 @@ export function rutasDocumentos(app: Hono<Entorno>): void {
     const p = puertos(c);
     const [f] = await p.sql.ejecutar<Fila>('SELECT * FROM unidades WHERE documento = ? AND orden = ?', prm(c, 'id'), entero(prm(c, 'orden'), 1));
     if (!f) noEncontrado('La unidad');
-    return c.json(unidadAVista(f, { imagen: await urlOpcional(p, f.imagen as string | null), miniatura: await urlOpcional(p, f.miniatura as string | null) }));
+    const doc = prm(c, 'id');
+    return c.json(unidadAVista(f, { imagen: await urlOpcional(p, doc, f.imagen as string | null), miniatura: await urlOpcional(p, doc, f.miniatura as string | null) }));
   });
 
   app.get('/documentos/:id/unidades/:orden/imagen', async (c: Ctx) => {
@@ -201,7 +202,7 @@ export function rutasDocumentos(app: Hono<Entorno>): void {
     const [f] = await p.sql.ejecutar<{ imagen: string | null; miniatura: string | null }>('SELECT imagen, miniatura FROM unidades WHERE documento = ? AND orden = ?', prm(c, 'id'), entero(prm(c, 'orden'), 1));
     const clave = c.req.query('miniatura') ? (f?.miniatura ?? f?.imagen) : (f?.imagen ?? f?.miniatura);
     if (!clave) noEncontrado('La imagen de la unidad');
-    return c.redirect(await p.almacen.urlLectura(clave), 302);
+    return c.redirect(await p.almacen.urlLectura(claveDe(p.usuario.id, prm(c, 'id'), clave)), 302);
   });
 
   app.get('/documentos/:id/folios', async (c: Ctx) => {
@@ -257,7 +258,7 @@ export function rutasDocumentos(app: Hono<Entorno>): void {
     const ordenes = new Map((await p.sql.ejecutar<{ id: string; orden: number }>('SELECT id, orden FROM unidades WHERE documento = ?', id)).map((f) => [f.id, f.orden]));
     const figuras = await leerFiguras(p.sql, id);
     return c.json<FiguraVista[]>(await Promise.all(figuras.map(async (g) => {
-      const v: FiguraVista = { id: g.id, unidad: ordenes.get(g.unidad) ?? 0, imagenUrl: await p.almacen.urlLectura(g.imagen), ancla: g.ancla, etiqueta: etiquetaAncla(g.ancla) };
+      const v: FiguraVista = { id: g.id, unidad: ordenes.get(g.unidad) ?? 0, imagenUrl: g.imagen ? await p.almacen.urlLectura(claveDe(p.usuario.id, id, g.imagen)) : '', ancla: g.ancla, etiqueta: etiquetaAncla(g.ancla) };
       if (g.pie) v.pie = g.pie;
       if (g.descripcion) v.descripcion = g.descripcion;
       return v;
@@ -302,7 +303,7 @@ export async function volcarDocumento(p: PuertosUsuario, d: Documento): Promise<
     }
   }
   const binarios: VolcadoDocumento['binarios'] = {};
-  const poner = async (k: string | undefined, mime: string) => { if (k && !binarios[k]) binarios[k] = { url: await p.almacen.urlLectura(k, { segundos: 3600 }), mime }; };
+  const poner = async (k: string | undefined, mime: string) => { if (k && !binarios[k]) binarios[k] = { url: await p.almacen.urlLectura(claveDe(p.usuario.id, d.id, k), { segundos: 3600 }), mime }; };
   await poner(d.original || undefined, d.mime);
   for (const u of unidades) { await poner(u.imagen, 'image/jpeg'); await poner(u.miniatura, 'image/webp'); }
   for (const g of figuras) await poner(g.imagen, 'image/jpeg');

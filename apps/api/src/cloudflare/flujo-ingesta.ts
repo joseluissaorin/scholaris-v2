@@ -14,6 +14,7 @@ import type { Env } from './env.js';
 import { SqlRemoto } from './sql.js';
 import { almacenDesdeEnv, cuentasDesdeEnv, emisorDesdeEnv, geminiPara, indiceDesdeEnv, inteligenciaPara, origenDe } from './puertos-cf.js';
 import { espacioNombresDe } from './indice-vectorize.js';
+import { conversorCF } from './conversor.js';
 
 const REINTENTOS = { limit: 5, delay: '10 seconds', backoff: 'exponential' } as const;
 
@@ -39,6 +40,8 @@ export class FlujoIngesta extends WorkflowEntrypoint<Env, ParamsIngesta> {
       ...(env.CORREO_CONTACTO ? { correoContacto: env.CORREO_CONTACTO } : {}),
       ...(env.SIN_VERIFICACION === '1' ? { sinVerificacion: true } : {}),
       ...(gemini ? { gemini } : {}),
+      alUnidades: async (desde: number, hasta: number) => { await emisor.emitir(`usuario:${p.usuario}`, { tipo: 'unidades', tarea: p.tarea, documento: p.documento, desde, hasta }); },
+      ...(conversorCF(env) ? { convertir: conversorCF(env)! } : {}),
       alProgreso: emitir,
       emitir,
     };
@@ -65,7 +68,7 @@ export class FlujoIngesta extends WorkflowEntrypoint<Env, ParamsIngesta> {
         return r;
       }
 
-      const info: InfoPlan = await step.do('preparar', { retries: { limit: 3, delay: '5 seconds', backoff: 'exponential' }, timeout: '10 minutes' }, async () => {
+      const info: InfoPlan = await step.do('preparar', { retries: { limit: 3, delay: '5 seconds', backoff: 'exponential' }, timeout: '30 minutes' }, async () => {
         const ctx = await this.contexto(p);
         await ctx.emitir(progreso('conversion', 0, 0.01, p.paquete ? 'Planificando la lectura' : 'Convirtiendo en el servidor'));
         try {

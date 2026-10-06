@@ -344,8 +344,9 @@ export function crearCliente(opciones: OpcionesCliente) {
         let ws: WebSocket | null = null;
         let cerrado = false;
         let espera = 1000;
-        // Latido cada 30 s: los proxies cierran los WebSocket callados (unos 100 s en Cloudflare).
-        const latido = setInterval(() => { if (ws?.readyState === 1) ws.send(JSON.stringify({ tipo: 'ping', t: Date.now() })); }, 30_000);
+        // Latido cada 25 s: los proxies cierran los WebSocket callados (unos 100 s en Cloudflare).
+        // Es el texto «ping», al que el servidor contesta «pong» sin despertar al Durable Object.
+        const latido = setInterval(() => { if (ws?.readyState === 1) ws.send('ping'); }, 25_000);
         const abrir = async () => {
           try {
             const b = await post<Billete>('/tiempo-real/billete', { tarea: opciones.tarea });
@@ -356,7 +357,10 @@ export function crearCliente(opciones: OpcionesCliente) {
             }
             ws = new WebSocket(url);
             ws.addEventListener('open', () => { espera = 1000; });
-            ws.addEventListener('message', (m: { data: unknown }) => { try { alEvento(JSON.parse(String(m.data)) as EventoTiempoReal); } catch { /* mensaje no JSON */ } });
+            ws.addEventListener('message', (m: { data: unknown }) => {
+              if (m.data === 'pong') return;
+              try { alEvento(JSON.parse(String(m.data)) as EventoTiempoReal); } catch { /* mensaje no JSON */ }
+            });
             ws.addEventListener('close', () => { if (!cerrado) setTimeout(abrir, (espera = Math.min(espera * 2, 30000))); });
             ws.addEventListener('error', (ev: unknown) => opciones.alError?.(ev));
           } catch (err) {

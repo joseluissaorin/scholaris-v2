@@ -57,3 +57,12 @@ export function prm(c: Ctx, k: string): string {
   if (v === undefined || v === '') fallo('peticion_invalida', `Falta el parámetro «${k}».`);
   return v;
 }
+
+/**
+ * Clave completa en el almacén de un binario de un documento. La ingesta
+ * guarda las rutas relativas al documento («paginas/0001.jpg»); las importadas
+ * y los originales ya llevan el prefijo «u/<usuario>/d/<documento>/».
+ */
+export function claveDe(usuario: string, documento: string, clave: string): string {
+  return clave.startsWith('u/') ? clave : `u/${usuario}/d/${documento}/${clave.replace(/^\/+/, '')}`;
+}

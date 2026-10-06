@@ -9,12 +9,15 @@ import type { Tarea } from './tarea-do.js';
 import type { Limitador } from './limitador-do.js';
 import type { ParamsIngesta } from '../puertos.js';
 import type { MensajeCola } from './cola.js';
+import type { Conversor } from './conversor.js';
 
 export interface Env {
   ESTANTERIA: DurableObjectNamespace<Estanteria>;
   TAREA: DurableObjectNamespace<Tarea>;
   LIMITADOR: DurableObjectNamespace<Limitador>;
   INGESTA: Workflow<ParamsIngesta>;
+  /** Contenedor de conversión (opcional; ver deploy/contenedor). */
+  CONVERSOR?: DurableObjectNamespace<Conversor>;
   DB: D1Database;
   BUCKET: R2Bucket;
   VECTORES?: VectorizeIndex;
@@ -36,6 +39,8 @@ export interface Env {
   SIN_VERIFICACION?: string;
   ORIGENES_CORS?: string;
   R2_BUCKET_NAME?: string;
+  CONVERSOR_ACTIVO?: string;
+  CONVERSOR_INSTANCIAS?: string;
 
   // Secretos
   SECRETO: string;

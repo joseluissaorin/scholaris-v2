@@ -109,6 +109,7 @@ export class ColaLocal implements Orquestador {
         ...(this.d.convertir ? { convertir: this.d.convertir } : {}),
         ...(this.d.sinVerificacion ? { sinVerificacion: true } : {}),
         ...(this.d.gemini ? { gemini: await this.d.gemini(p.usuario) } : {}),
+        alUnidades: async (desde: number, hasta: number) => { await puertos.emisor.emitir(`usuario:${p.usuario}`, { tipo: 'unidades', tarea: p.tarea, documento: p.documento, desde, hasta }); },
         alProgreso: async (pr: Progreso) => {
           if (this.canceladas.has(p.tarea)) throw new Cancelada('Cancelada.');
           const t = await leerTarea(puertos.sql, p.tarea);

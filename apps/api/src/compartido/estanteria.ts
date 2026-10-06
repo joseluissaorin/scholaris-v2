@@ -106,8 +106,13 @@ export async function marcarDocumento(sql: SQL, documento: string, estado: Docum
 }
 
 export async function documentoPorHuella(sql: SQL, huella: string): Promise<string | null> {
-  const [f] = await sql.ejecutar<{ id: string }>("SELECT id FROM documentos WHERE huella = ? AND estado <> 'error' LIMIT 1", huella);
+  const [f] = await sql.ejecutar<{ id: string }>("SELECT id FROM documentos WHERE huella = ? AND estado IN ('listo','procesando') LIMIT 1", huella);
   return f?.id ?? null;
+}
+
+/** Documentos con esa huella que se quedaron a medias (subida cortada o error). */
+export async function pendientesPorHuella(sql: SQL, huella: string): Promise<string[]> {
+  return (await sql.ejecutar<{ id: string }>("SELECT id FROM documentos WHERE huella = ? AND estado IN ('pendiente','error')", huella)).map((f) => f.id);
 }
 
 export async function totalesEstanteria(sql: SQL): Promise<{ documentos: number; bytes: number }> {

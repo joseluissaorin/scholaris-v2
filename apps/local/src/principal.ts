@@ -21,6 +21,8 @@ import * as sqliteVec from 'sqlite-vec';
 import { crearServidorLocal, type DriverSqlite } from './servidor.js';
 import type { BaseSqlite } from './sql.js';
 import type { MensajeCliente } from '@scholaris/contrato';
+import type { ArchivoConvertir } from '@scholaris/api/compartido/motor-ingesta';
+import { conversorRemoto } from '@scholaris/api/compartido/conversor-remoto';
 
 export const driverNode: DriverSqlite = {
   abrir: (ruta) => new Database(ruta) as unknown as BaseSqlite,
@@ -29,8 +31,11 @@ export const driverNode: DriverSqlite = {
 
 export async function imprentaNode() {
   const m = await import('@scholaris/imprenta/node');
-  return async (a: { nombre: string; mime: string; bytes: Uint8Array; tipo?: string }) =>
-    m.recolectar(m.convertir({ nombre: a.nombre, mime: a.mime, bytes: a.bytes }, a.tipo ? { tipo: a.tipo as never } : {}));
+  return async (a: ArchivoConvertir, guardar: (id: string, datos: Uint8Array, mime: string) => Promise<void>) => {
+    const r = await m.recolectar(m.convertir({ nombre: a.nombre, mime: a.mime, bytes: await a.leer() }, a.tipo ? { tipo: a.tipo as never } : {}));
+    for (const [id, d] of r.datos) await guardar(id, d, r.paquete.partes.find((x) => x.id === id)?.mime ?? 'application/octet-stream');
+    return r.paquete;
+  };
 }
 
 /**
@@ -50,7 +55,10 @@ export async function arrancarNode(opciones: { puerto?: number; datos?: string; 
     puerto,
     web: opciones.web ?? process.env.WEB_DIR ?? resolve(aqui, '../../web/dist'),
     driver: driverNode,
-    ...(process.env.SCHOLARIS_IMPRENTA === '0' ? {} : { convertir: await imprentaNode() }),
+    // Conversor: uno remoto (SCHOLARIS_CONVERSOR_URL, p. ej. el contenedor), la imprenta de Node, o ninguno.
+    ...(process.env.SCHOLARIS_CONVERSOR_URL
+      ? { convertir: conversorRemoto((r) => fetch(new URL(new URL(r.url).pathname + new URL(r.url).search, process.env.SCHOLARIS_CONVERSOR_URL), r)) }
+      : process.env.SCHOLARIS_IMPRENTA === '0' ? {} : { convertir: await imprentaNode() }),
   });
 
   const http = createServer(getRequestListener((req) => s.fetch(req)));
@@ -69,6 +77,7 @@ export async function arrancarNode(opciones: { puerto?: number; datos?: string; 
         ws.send(JSON.stringify({ tipo: 'hola', usuario, ...(tarea ? { tarea } : {}) }));
         const quitar = s.tiempoReal.suscribir(canal, (e) => ws.send(JSON.stringify(e)));
         ws.on('message', (m) => {
+          if (String(m) === 'ping') { ws.send('pong'); return; }
           try {
             const msg = JSON.parse(String(m)) as MensajeCliente;
             if (msg.tipo === 'ping') ws.send(JSON.stringify({ tipo: 'pong', t: msg.t }));

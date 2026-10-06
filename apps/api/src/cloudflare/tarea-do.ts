@@ -9,6 +9,12 @@ import type { EventoTiempoReal, MensajeCliente } from '@scholaris/contrato';
 import type { Env } from './env.js';
 
 export class Tarea extends DurableObject<Env> {
+  constructor(ctx: DurableObjectState, env: Env) {
+    super(ctx, env);
+    // El latido del cliente («ping») se contesta sin despertar al objeto hibernado.
+    ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair('ping', 'pong'));
+  }
+
   async fetch(peticion: Request): Promise<Response> {
     if (peticion.headers.get('upgrade')?.toLowerCase() !== 'websocket') return new Response('Solo WebSocket', { status: 426 });
     const par = new WebSocketPair();

@@ -12,7 +12,7 @@ import type { Entorno } from '../entorno.js';
 import { cuerpoJson, exigir, fallo } from '../compartido/errores.js';
 import { obtenerBuscador } from '../compartido/servicios.js';
 import type { PuertosUsuario } from '../puertos.js';
-import { citaCorta, etiquetaAncla, puertos, type Ctx } from './util.js';
+import { citaCorta, claveDe, etiquetaAncla, puertos, type Ctx } from './util.js';
 import { filtrosEnAmbito } from './ambito.js';
 
 const INTENCION: Record<string, IntencionConsulta> = { conceptual: 'conceptual', visual: 'visual', cita: 'literal', temporal: 'temporal' };
@@ -26,7 +26,7 @@ export async function aVista(p: PuertosUsuario, r: Resultado): Promise<Resultado
     citaCorta: citaCorta(r.documento.metadatos, r.fragmento.ancla, r.fragmento.anclaFin),
   };
   const [u] = await p.sql.ejecutar<{ m: string | null }>('SELECT COALESCE(miniatura, imagen) AS m FROM unidades WHERE id = ?', r.fragmento.unidad);
-  if (u?.m) v.miniaturaUrl = await p.almacen.urlLectura(u.m);
+  if (u?.m) v.miniaturaUrl = await p.almacen.urlLectura(claveDe(p.usuario.id, r.documento.id, u.m));
   return v;
 }
 
