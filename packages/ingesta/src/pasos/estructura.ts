@@ -149,3 +149,32 @@ export function rutaDe(seccion: Seccion | undefined, porId: Map<string, Seccion>
   while (s) { ruta.unshift(s.titulo); s = s.padre ? porId.get(s.padre) : undefined; }
   return ruta;
 }
+
+/**
+ * Los titulillos (cabecera corrida: título del libro o del capítulo) a veces se
+ * cuelan en el cuerpo como «## The Discarded Image». Se quitan los párrafos
+ * cortos al principio o al final de la página, y los títulos, que repiten una
+ * cabecera o pie vistos en al menos tres páginas.
+ */
+export function quitarTitulillos(unidades: UnidadLeida[]): number {
+  const forma = (t: string) => normalizar(t).replace(/\b[\divxlcdm]+\b/g, '').replace(/\s+/g, ' ').trim();
+  const cuenta = new Map<string, number>();
+  for (const u of unidades) for (const z of [u.cabecera, u.pie]) for (const parte of z.split(/\s+\/\s+|\n/)) {
+    const f = forma(parte);
+    if (f.length >= 4) cuenta.set(f, (cuenta.get(f) ?? 0) + 1);
+  }
+  const titulillos = new Set([...cuenta].filter(([, n]) => n >= 3).map(([f]) => f));
+  if (!titulillos.size) return 0;
+  let quitados = 0;
+  for (const u of unidades) {
+    const ps = partirParrafos(u.texto);
+    const quedan = ps.filter((p, i) => {
+      const t = esTituloMarkdown(p)?.texto ?? (p.length < 90 && (i === 0 || i === ps.length - 1) ? p : null);
+      const fuera = t !== null && titulillos.has(forma(t));
+      if (fuera) quitados++;
+      return !fuera;
+    });
+    if (quedan.length !== ps.length) u.texto = quedan.join('\n\n');
+  }
+  return quitados;
+}

@@ -95,3 +95,14 @@ describe('anclas de bloques', () => {
     expect(fr[0]?.ancla).toEqual({ tipo: 'seccion', ruta: ['Vigilar'], parrafo: 1 });
   });
 });
+
+describe('titulillos', () => {
+  it('quita la cabecera corrida que se cuela como título', async () => {
+    const { quitarTitulillos } = await import('../src/pasos/estructura.js');
+    const us = [0, 1, 2, 3].map((i) => ({ ...unidad(i, `${i % 2 ? '## The Discarded Image\n\n' : ''}${parrafo(3)}`), cabecera: i % 2 ? '' : 'The Discarded Image' }));
+    us[2]!.cabecera = 'The Discarded Image 14';
+    us[3]!.cabecera = 'The Discarded Image';
+    expect(quitarTitulillos(us)).toBe(2);
+    expect(us[1]?.texto.startsWith('This is')).toBe(true);
+  });
+});

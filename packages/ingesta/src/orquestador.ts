@@ -18,7 +18,7 @@ import { leerPaginas } from './pasos/lectura.js';
 import { segmentarTranscripcion, transcribirMedio } from './pasos/medios.js';
 import { unidadesDeBloques } from './pasos/bloques.js';
 import { pasoFolios, type OpcionesFolios } from './pasos/folios.js';
-import { pasoEstructura } from './pasos/estructura.js';
+import { pasoEstructura, quitarTitulillos } from './pasos/estructura.js';
 import { pasoFragmentos } from './pasos/fragmentos.js';
 import { pasoMetadatos } from './pasos/metadatos.js';
 import { pasoContexto } from './pasos/contexto.js';
@@ -185,6 +185,10 @@ export async function ejecutarIngesta(paquete: PaqueteConversion, puertos: Puert
     procedencia.push({ fase: 'lectura', proveedor: 'imprenta', ms: reloj() - tLectura, detalle: { unidades: unidades.length } });
   }
   resolverPrimeras(unidades.slice(0, nPrimeras));
+  if (plan.modo === 'paginas') {
+    const quitados = quitarTitulillos(unidades);
+    if (quitados) procedencia.push({ fase: 'lectura', proveedor: 'titulillos', ms: 0, detalle: { quitados } });
+  }
   marcar('lectura', tLectura);
   emitir('lectura', 1, `${unidades.length} unidades leídas`);
 
