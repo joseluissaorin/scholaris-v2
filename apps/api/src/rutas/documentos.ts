@@ -78,6 +78,8 @@ export function rutasDocumentos(app: Hono<Entorno>): void {
     const donde: string[] = [];
     const params: ValorSQL[] = [];
     if (q.q) { donde.push('(titulo LIKE ? OR autores LIKE ?)'); params.push(`%${q.q}%`, `%${q.q}%`); }
+    const amb = c.get('usuario').ambito;
+    if (amb) q.biblioteca = amb.biblioteca;
     if (q.biblioteca) { donde.push('EXISTS (SELECT 1 FROM json_each(documentos.bibliotecas) je WHERE je.value = ?)'); params.push(q.biblioteca); }
     const tipos = c.req.queries('tipo') ?? [];
     if (tipos.length) { donde.push(`tipo IN (${tipos.map(() => '?').join(',')})`); params.push(...tipos); }

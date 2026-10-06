@@ -32,6 +32,12 @@ export interface UsuarioSesion {
   via: 'clerk' | 'clave_api' | 'local';
   /** Alcances si entró con clave de API. */
   alcances?: string[];
+  /**
+   * Acceso a una biblioteca compartida: la sesión es la del PROPIETARIO (su
+   * estantería, su almacén, sus cuotas), restringida a esa biblioteca y con el
+   * permiso del invitado, que queda apuntado aquí.
+   */
+  ambito?: { biblioteca: string; permiso: 'lectura' | 'edicion'; invitado: { id: string; correo: string; nombre: string } };
 }
 
 /** Datos con los que se lanza la ingesta de un documento (serializables). */

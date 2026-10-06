@@ -43,6 +43,8 @@ export interface OpcionesCliente {
   token?: FuenteToken;
   /** fetch alternativo (pruebas, SSR). */
   fetch?: typeof fetch;
+  /** Trabajar dentro de una biblioteca que otro usuario comparte conmigo. */
+  compartida?: string;
 }
 
 type Metodo = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
@@ -102,7 +104,8 @@ export function crearCliente(opciones: OpcionesCliente) {
       body = JSON.stringify(cuerpo);
       h['content-type'] = 'application/json';
     }
-    const res = await f(`${base}${PREFIJO_API}${ruta}${aConsulta(consulta)}`, { method: metodo, headers: h, body, ...(body instanceof ReadableStream ? { duplex: 'half' } : {}) } as RequestInit);
+    const prefijo = opciones.compartida ? `/compartidas/${encodeURIComponent(opciones.compartida)}` : '';
+    const res = await f(`${base}${PREFIJO_API}${prefijo}${ruta}${aConsulta(consulta)}`, { method: metodo, headers: h, body, ...(body instanceof ReadableStream ? { duplex: 'half' } : {}) } as RequestInit);
     if (!res.ok) {
       let e: CuerpoError | null = null;
       try { e = (await res.json()) as CuerpoError; } catch { /* sin cuerpo JSON */ }
@@ -134,6 +137,9 @@ export function crearCliente(opciones: OpcionesCliente) {
     /** Acceso de bajo nivel para lo que no tenga método propio. */
     pedir,
     bruto,
+
+    /** El mismo cliente, dentro de una biblioteca compartida conmigo (rutas /compartidas/:id/…). */
+    compartida: (biblioteca: string) => crearCliente({ ...opciones, compartida: biblioteca }),
 
     config: () => get<ConfigPublica>('/config'),
     salud: () => get<{ ok: true; version: string }>('/salud'),

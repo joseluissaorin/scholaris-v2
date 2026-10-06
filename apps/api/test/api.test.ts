@@ -49,10 +49,10 @@ function paqueteDocumento(texto: string[]): PaqueteConversion {
   };
 }
 
-async function esperarTarea(t: string, tarea: string, ms = 45_000) {
+async function esperarTarea(t: string, tarea: string, ms = 45_000, prefijo = '') {
   const fin = Date.now() + ms;
   while (Date.now() < fin) {
-    const r = await api(`/tareas/${tarea}`, { token: t });
+    const r = await api(`${prefijo}/tareas/${tarea}`, { token: t });
     if (r.cuerpo.estado === 'listo' || r.cuerpo.estado === 'error') return r.cuerpo;
     await new Promise((res) => setTimeout(res, 250));
   }
@@ -253,5 +253,69 @@ describe('tiempo real y MCP', () => {
     expect(r.status).toBe(200);
     const j = (await r.json()) as { result: { tools: Array<{ name: string }> } };
     expect(j.result.tools.map((x) => x.name)).toEqual(['search', 'cite', 'open_page', 'verify_claim']);
+  });
+});
+
+/** Sube e ingiere un documento de texto y devuelve su id. */
+async function ingestar(t: string, nombre: string, textos: string[], bibliotecas: string[] = [], prefijo = ''): Promise<string> {
+  const original = new TextEncoder().encode(textos.join('\n\n'));
+  const s = await api(`${prefijo}/subidas`, { token: t, cuerpo: { nombre, mime: 'text/markdown', bytes: original.byteLength, bibliotecas } });
+  expect(s.estado).toBe(201);
+  await SELF.fetch(s.cuerpo.original.url, { method: 'PUT', body: original });
+  const rec = await api(`${prefijo}/subidas/${s.cuerpo.subida}/recursos`, { token: t, cuerpo: { recursos: [{ ruta: 'paquete.json', mime: 'application/json' }] } });
+  const p = paqueteDocumento(textos);
+  p.origen = { ...p.origen, nombre, huella: `h-${nombre}` };
+  p.metadatos = { titulo: nombre, autores: [{ nombre: 'Ana', apellidos: 'Autora' }] };
+  await SELF.fetch(rec.cuerpo.recursos[0].subida.url, { method: 'PUT', body: JSON.stringify(p) });
+  const ing = await api(`${prefijo}/subidas/${s.cuerpo.subida}/ingestar`, { token: t, cuerpo: { paquete: 'paquete.json' } });
+  expect(ing.estado).toBe(202);
+  const tarea = await esperarTarea(t, ing.cuerpo.tarea, 45_000, prefijo);
+  expect(tarea.estado).toBe('listo');
+  return ing.cuerpo.documento;
+}
+
+describe('bibliotecas compartidas', () => {
+  it('el invitado lee y busca solo dentro de la biblioteca, con su permiso', async () => {
+    const dueno = await token('user_dueno', { fea: 'u:scholaris' });
+    const lector = await token('user_lector');
+    const editor = await token('user_editor');
+    const ajeno = await token('user_ajeno');
+    for (const t of [lector, editor, ajeno]) await api('/auth/yo', { token: t }); // alta con su correo
+
+    const bib = (await api('/bibliotecas', { token: dueno, cuerpo: { nombre: 'Seminario de Foucault' } })).cuerpo;
+    const dentro = await ingestar(dueno, 'Compartido', ['El panóptico es una máquina de ver sin ser visto.'], [bib.id]);
+    const fuera = await ingestar(dueno, 'Privado', ['Mis notas privadas sobre el panóptico y la sociedad disciplinaria.']);
+
+    expect((await api(`/bibliotecas/${bib.id}/compartir`, { token: dueno, cuerpo: { correo: 'user_lector@prueba.es', permiso: 'lectura' } })).estado).toBe(201);
+    expect((await api(`/bibliotecas/${bib.id}/compartir`, { token: dueno, cuerpo: { correo: 'user_editor@prueba.es', permiso: 'edicion' } })).estado).toBe(201);
+
+    const lista = (await api('/bibliotecas', { token: lector })).cuerpo as Array<{ id: string; permiso: string; propietario: string }>;
+    expect(lista.find((b) => b.id === bib.id)).toMatchObject({ permiso: 'lectura', propietario: 'user_dueno' });
+
+    const C = `/compartidas/${bib.id}`;
+    const docs = await api(`${C}/documentos`, { token: lector });
+    expect(docs.cuerpo.elementos.map((d: { id: string }) => d.id)).toEqual([dentro]);
+    expect((await api(`${C}/documentos/${dentro}`, { token: lector })).estado).toBe(200);
+    expect((await api(`${C}/documentos/${fuera}`, { token: lector })).estado).toBe(404);
+
+    const b = await api(`${C}/busqueda`, { token: lector, cuerpo: { consulta: 'panóptico' } });
+    expect(b.estado).toBe(200);
+    expect(b.cuerpo.resultados.length).toBeGreaterThan(0);
+    expect(b.cuerpo.resultados.every((r: { documento: { id: string } }) => r.documento.id === dentro)).toBe(true);
+
+    // El lector no edita ni sale de la biblioteca; tampoco toca lo del propietario.
+    expect((await api(`${C}/documentos/${dentro}/metadatos`, { token: lector, metodo: 'PATCH', cuerpo: { titulo: 'X' } })).estado).toBe(403);
+    expect((await api(`${C}/claves`, { token: lector })).estado).toBe(403);
+    expect((await api(`${C}/historial`, { token: lector })).estado).toBe(403);
+    expect((await api(`/documentos/${dentro}`, { token: lector })).estado).toBe(404);
+
+    // El editor cambia metadatos y sube a la biblioteca (entra en la estantería del propietario).
+    expect((await api(`${C}/documentos/${dentro}/metadatos`, { token: editor, metodo: 'PATCH', cuerpo: { titulo: 'Compartido (revisado)' } })).estado).toBe(200);
+    const nuevo = await ingestar(editor, 'Aportado', ['Un texto que aporta el editor sobre la vigilancia.'], [], C);
+    const delDueno = await api('/documentos', { token: dueno });
+    expect(delDueno.cuerpo.elementos.find((d: { id: string }) => d.id === nuevo)?.bibliotecas).toEqual([bib.id]);
+
+    // Quien no está invitado no ve nada.
+    expect((await api(`${C}/documentos`, { token: ajeno })).estado).toBe(404);
   });
 });

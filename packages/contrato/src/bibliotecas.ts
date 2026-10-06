@@ -12,6 +12,15 @@
  *   POST   /bibliotecas/:id/compartir  Compartir → Miembro
  *   DELETE /bibliotecas/:id/miembros/:usuario   → Ok
  *   GET    /bibliotecas/:id/exportar            → ZIP con los .spdf de la biblioteca
+ *
+ * Bibliotecas que otros comparten conmigo: las mismas rutas con el prefijo
+ * `/compartidas/:biblioteca`, que trabajan sobre la estantería del propietario
+ * y solo con los documentos de esa biblioteca (el cliente: `api.compartida(id)`).
+ *   lectura: GET /bibliotecas/:id, GET /documentos[...], POST /busqueda[/responder|/similares|/multilingue],
+ *            POST /citas/verificar | /citas/exportar | /citas/bibliografia
+ *   edicion: además PATCH /documentos/:id/metadatos, subidas (el documento entra en la biblioteca),
+ *            GET /tareas/:id, añadir y quitar documentos de la biblioteca
+ * Lo demás responde 403; un documento de fuera de la biblioteca, 404.
  */
 
 export interface Biblioteca {

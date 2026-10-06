@@ -36,6 +36,7 @@ import { rutasCitas } from './rutas/citas.js';
 import { rutasSpdf } from './rutas/spdf.js';
 import { montarFunciones } from './rutas/funciones.js';
 import { rutasMcp } from './rutas/mcp.js';
+import { restringirAmbito } from './rutas/ambito.js';
 
 export { VERSION } from './version.js';
 
@@ -57,6 +58,7 @@ export function crearAppUsuario() {
     c.set('usuario', p.usuario);
     await next();
   });
+  app.use('*', restringirAmbito);
   const sub = app as unknown as Hono<Entorno>;
   rutasCuenta(sub);
   rutasSubidas(sub);
@@ -211,6 +213,24 @@ export function crearPuerta(pl: Plataforma) {
     ws.pathname = `${PREFIJO_API}/tiempo-real`;
     ws.search = `?billete=${encodeURIComponent(billete)}`;
     return c.json<Billete>({ billete, url: ws.toString(), caduca: new Date(Date.now() + 60_000).toISOString() });
+  });
+
+  // Bibliotecas compartidas: a la estantería del PROPIETARIO, con el ámbito del invitado.
+  app.all(`${PREFIJO_API}/compartidas/:biblioteca/*`, async (c) => {
+    const u = c.get('usuario');
+    const biblioteca = c.req.param('biblioteca');
+    const p = await pl.cuentas.permisoSobre(biblioteca, u.id);
+    if (!p) return c.json(cuerpoError('no_encontrado', 'La biblioteca no existe o no está compartida contigo.'), 404);
+    const dueno = await pl.cuentas.usuario(p.propietario);
+    if (!dueno) return c.json(cuerpoError('no_encontrado', 'La biblioteca ya no existe.'), 404);
+    const url = new URL(c.req.url);
+    url.pathname = url.pathname.replace(`${PREFIJO_API}/compartidas/${encodeURIComponent(biblioteca)}`, PREFIJO_API).replace(`${PREFIJO_API}/compartidas/${biblioteca}`, PREFIJO_API);
+    const sesion: UsuarioSesion = {
+      id: dueno.id, correo: dueno.correo, nombre: dueno.nombre, plan: dueno.plan, funciones: dueno.plan === 'pro' ? ['scholaris'] : [],
+      via: u.via, ...(u.alcances ? { alcances: u.alcances } : {}),
+      ambito: { biblioteca, permiso: p.permiso, invitado: { id: u.id, correo: u.correo, nombre: u.nombre } },
+    };
+    return pl.atender(sesion, new Request(url.toString(), c.req.raw));
   });
 
   // Todo lo demás: a la estantería del usuario.

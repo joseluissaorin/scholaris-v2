@@ -13,6 +13,7 @@ import { cuerpoJson, exigir, fallo } from '../compartido/errores.js';
 import { obtenerBuscador } from '../compartido/servicios.js';
 import type { PuertosUsuario } from '../puertos.js';
 import { citaCorta, etiquetaAncla, puertos, type Ctx } from './util.js';
+import { filtrosEnAmbito } from './ambito.js';
 
 const INTENCION: Record<string, IntencionConsulta> = { conceptual: 'conceptual', visual: 'visual', cita: 'literal', temporal: 'temporal' };
 
@@ -40,6 +41,20 @@ async function consumirBusqueda(p: PuertosUsuario): Promise<void> {
 function validar(b: Buscar): void {
   exigir(typeof b.consulta === 'string' && b.consulta.trim().length > 0, 'Escribe algo que buscar.');
   exigir(b.consulta.length <= 4000, 'La consulta es demasiado larga (máximo 4000 caracteres).');
+}
+
+/** Encierra la petición en la biblioteca compartida (y sin historial del propietario). */
+function enAmbito<T extends Buscar | Similares>(c: Ctx, b: T): T {
+  if (!c.get('usuario').ambito) return b;
+  return { ...b, filtros: filtrosEnAmbito(c, b.filtros), ...('consulta' in b ? { sinHistorial: true } : {}) };
+}
+
+/** Por si acaso: fuera lo que no sea de la biblioteca compartida. */
+async function soloAmbito(c: Ctx, rs: Resultado[]): Promise<Resultado[]> {
+  const a = c.get('usuario').ambito;
+  if (!a) return rs;
+  const ok = new Set((await puertos(c).sql.ejecutar<{ id: string }>('SELECT d.id FROM documentos d, json_each(d.bibliotecas) je WHERE je.value = ?', a.biblioteca)).map((f) => f.id));
+  return rs.filter((r) => ok.has(r.documento.id));
 }
 
 function opciones(b: Buscar): OpcionesBusqueda {
@@ -75,12 +90,13 @@ function confianzaDe(resultados: Resultado[]): 'alta' | 'media' | 'baja' {
 export function rutasBusqueda(app: Hono<Entorno>): void {
   app.post('/busqueda', async (c: Ctx) => {
     const p = puertos(c);
-    const b = await cuerpoJson<Buscar>(c);
+    const b = enAmbito(c, await cuerpoJson<Buscar>(c));
     validar(b);
     await consumirBusqueda(p);
     const t0 = Date.now();
     const buscador = await obtenerBuscador(p);
     const r = await buscador.buscar(b.consulta, opciones(b));
+    r.resultados = await soloAmbito(c, r.resultados);
     const ms = Date.now() - t0;
     const salida: RespuestaBusqueda = {
       resultados: await Promise.all(r.resultados.map((x) => aVista(p, x))),
@@ -95,7 +111,7 @@ export function rutasBusqueda(app: Hono<Entorno>): void {
 
   app.post('/busqueda/responder', async (c: Ctx) => {
     const p = puertos(c);
-    const b = await cuerpoJson<Responder>(c);
+    const b = enAmbito(c, await cuerpoJson<Responder>(c));
     validar(b);
     await consumirBusqueda(p);
     const ia = await p.inteligencia();
@@ -108,6 +124,7 @@ export function rutasBusqueda(app: Hono<Entorno>): void {
       try {
         for await (const ev of responder(buscador, ia.redactor, b.consulta, { busqueda: opciones(b), contexto: Math.min(12, b.k ?? 8) })) {
           if (ev.tipo === 'busqueda') {
+            ev.busqueda.resultados = await soloAmbito(c, ev.busqueda.resultados);
             busqueda = ev.busqueda;
             await enviar({ tipo: 'resultados', resultados: await Promise.all(ev.busqueda.resultados.map((x) => aVista(p, x))), intencion: INTENCION[ev.busqueda.comprension.intencion] ?? 'conceptual' });
           } else if (ev.tipo === 'texto') {
@@ -136,7 +153,7 @@ export function rutasBusqueda(app: Hono<Entorno>): void {
 
   app.post('/busqueda/similares', async (c: Ctx) => {
     const p = puertos(c);
-    const b = await cuerpoJson<Similares>(c);
+    const b = enAmbito(c, await cuerpoJson<Similares>(c));
     exigir(b.fragmento || b.documento, 'Indica un fragmento o un documento de partida.');
     const t0 = Date.now();
     const k = Math.min(50, Math.max(1, b.k ?? 10));
@@ -170,12 +187,13 @@ export function rutasBusqueda(app: Hono<Entorno>): void {
       resultados = r.resultados.filter((x) => x.fragmento.id !== b.fragmento);
     }
     if (excluirDoc) resultados = resultados.filter((x) => x.documento.id !== excluirDoc);
+    resultados = await soloAmbito(c, resultados);
     return c.json<RespuestaBusqueda>({ resultados: await Promise.all(resultados.slice(0, k).map((x) => aVista(p, x))), ms: Date.now() - t0 });
   });
 
   app.post('/busqueda/multilingue', async (c: Ctx) => {
     const p = puertos(c);
-    const b = await cuerpoJson<BuscarMultilingue>(c);
+    const b = enAmbito(c, await cuerpoJson<BuscarMultilingue>(c));
     validar(b);
     await consumirBusqueda(p);
     const t0 = Date.now();
@@ -190,7 +208,7 @@ export function rutasBusqueda(app: Hono<Entorno>): void {
       const prev = vistos.get(r.fragmento.id);
       if (!prev || prev.puntuacion < r.puntuacion) vistos.set(r.fragmento.id, r);
     }
-    const resultados = [...vistos.values()].sort((a, z) => z.puntuacion - a.puntuacion).slice(0, Math.min(100, b.k ?? 20));
+    const resultados = (await soloAmbito(c, [...vistos.values()])).sort((a, z) => z.puntuacion - a.puntuacion).slice(0, Math.min(100, b.k ?? 20));
     const ms = Date.now() - t0;
     const salida: RespuestaMultilingue = {
       resultados: await Promise.all(resultados.map((x) => aVista(p, x))), traducciones,

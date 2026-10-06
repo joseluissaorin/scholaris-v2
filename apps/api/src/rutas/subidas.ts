@@ -98,6 +98,7 @@ export function rutasSubidas(app: Hono<Entorno>): void {
     exigirEscritura(c);
     const p = puertos(c);
     const b = await cuerpoJson<NuevaSubida>(c);
+    if (c.get('usuario').ambito) b.bibliotecas = [c.get('usuario').ambito!.biblioteca];
     exigir(typeof b.nombre === 'string' && b.nombre.length > 0 && b.nombre.length <= 500, 'Falta el nombre del fichero.');
     exigir(typeof b.mime === 'string', 'Falta el tipo MIME del fichero.');
     exigir(Number.isFinite(b.bytes) && b.bytes > 0, 'El tamaño del fichero no es válido.');
@@ -135,6 +136,7 @@ export function rutasSubidas(app: Hono<Entorno>): void {
     exigirEscritura(c);
     const p = puertos(c);
     const b = await cuerpoJson<SubidaUrl>(c);
+    if (c.get('usuario').ambito) b.bibliotecas = [c.get('usuario').ambito!.biblioteca];
     let url: URL;
     try { url = new URL(b.url); } catch { return fallo('peticion_invalida', 'La URL no es válida.'); }
     exigir(url.protocol === 'https:' || url.protocol === 'http:', 'Solo se admiten URLs http y https.');

@@ -16,6 +16,7 @@ import { cuerpoJson, exigir, fallo, noEncontrado } from '../compartido/errores.j
 import { ahora, crearTarea, terminarTarea } from '../compartido/estanteria.js';
 import { obtenerBuscador } from '../compartido/servicios.js';
 import type { PuertosUsuario } from '../puertos.js';
+import { filtrosEnAmbito } from './ambito.js';
 import { cursorADesplazamiento, desplazamientoACursor, entero, exigirEscritura, json, prm, puertos, type Ctx } from './util.js';
 
 type Fila = Record<string, ValorSQL>;
@@ -184,7 +185,7 @@ export function rutasCitas(app: Hono<Entorno>): void {
     const ia = await p.inteligencia();
     const buscador = await obtenerBuscador(p);
     return c.json(await verificarAfirmacion(b.afirmacion, { buscador, juez: ia.juez }, {
-      ...(b.fragmentos ? { fragmentos: b.fragmentos } : {}), ...(b.filtros ? { filtros: b.filtros } : {}),
+      ...(b.fragmentos && !c.get('usuario').ambito ? { fragmentos: b.fragmentos } : {}), ...(filtrosEnAmbito(c, b.filtros) ? { filtros: filtrosEnAmbito(c, b.filtros)! } : {}),
       ...(b.anioTexto ? { anioTexto: b.anioTexto } : {}), ...(b.k ? { k: b.k } : {}),
     }));
   });
@@ -192,6 +193,7 @@ export function rutasCitas(app: Hono<Entorno>): void {
   app.post('/citas/exportar', async (c: Ctx) => {
     const p = puertos(c);
     const b = await cuerpoJson<ExportarReferencias>(c);
+    if (c.get('usuario').ambito) { b.biblioteca = c.get('usuario').ambito!.biblioteca; delete b.documentos; }
     exigir(['bibtex', 'ris', 'csl-json'].includes(b.formato), 'Formatos: bibtex, ris, csl-json.');
     const texto = exportarReferencias(await documentosDe(p, b.documentos, b.biblioteca), b.formato);
     const tipo = b.formato === 'csl-json' ? 'application/vnd.citationstyles.csl+json' : b.formato === 'ris' ? 'application/x-research-info-systems' : 'application/x-bibtex';
@@ -201,6 +203,7 @@ export function rutasCitas(app: Hono<Entorno>): void {
   app.post('/citas/bibliografia', async (c: Ctx) => {
     const p = puertos(c);
     const b = await cuerpoJson<PedirBibliografia>(c);
+    if (c.get('usuario').ambito) { b.biblioteca = c.get('usuario').ambito!.biblioteca; delete b.documentos; }
     return c.json(await bibliografia(await documentosDe(p, b.documentos, b.biblioteca), { ...(b.estilo ? { estilo: b.estilo } : {}), ...(b.idioma ? { idioma: b.idioma } : {}), ...(b.formato ? { formato: b.formato } : {}) }));
   });
 
