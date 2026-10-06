@@ -108,7 +108,8 @@ export async function prepararTuberia(ctx: ContextoMotor, params: ParamsIngesta 
   const paquete = adelgazar(await leerPaquete(ctx.almacen, clave));
   const ligero = `${trabajo(params)}paquete.ligero.json`;
   await ctx.almacen.poner(ligero, JSON.stringify(paquete), 'application/json');
-  const plan = planificar(paquete, { modo: params.modo ?? 'rapido' });
+  // Pliegos de dos páginas: la salida del lector manda en la latencia, y la primera página llega antes.
+  const plan = planificar(paquete, { modo: params.modo ?? 'rapido', paginasPorPliego: 2 });
   await ctx.almacen.poner(clavePlan(params), JSON.stringify(plan), 'application/json');
   // Un fichero pequeño por tanda: cada paso carga solo sus páginas (128 MB por aislamiento).
   await enParalelo(plan.tandas, 16, (t) => ctx.almacen.poner(claveTanda(params, t.id), JSON.stringify({
@@ -174,11 +175,13 @@ export async function procesarTanda(
   }
   const lectura = await leerTanda(t, ctxT, resultadosLote ? { resultadosLote } : {});
   // La tanda de la primera página saca los metadatos; las demás los usan si ya están.
-  let metadatos = await metadatosGuardados(ctx, params.documento);
+  // Sin esperarlos: la tanda escribe antes sus unidades y su texto (legible y buscable)
+  // y luego espera a los metadatos para el contexto y los vectores.
+  const guardados = await metadatosGuardados(ctx, params.documento);
   const primera = (t.clase === 'tramo' ? t.tramo === 1 : t.desde <= 1) || info.tandas[0]?.id === id;
-  if (!metadatos && primera && lectura.unidades.length) {
-    metadatos = (await metadatosTempranos(ctxT, lectura.unidades.slice(0, 5)).catch(() => null))?.metadatos ?? null;
-  }
+  const metadatos: Promise<MetadatosDocumento | null> | MetadatosDocumento | null = guardados ?? (primera && lectura.unidades.length
+    ? metadatosTempranos(ctxT, lectura.unidades.slice(0, 5)).then((m) => m.metadatos).catch(() => null)
+    : null);
   const r = await indexarTanda(t, lectura, ctxT, { metadatos, alBuscables: (b) => { void Promise.resolve(avisos.alBuscables?.(b)).catch(() => undefined); } });
   await (ctx.sql as { vaciarPendientes?: () => Promise<void> }).vaciarPendientes?.();
   return { ...r, ...(pendientes.vectores ? { vectoresPendientes: true } : {}) };
