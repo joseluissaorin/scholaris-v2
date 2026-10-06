@@ -20,6 +20,7 @@ import { BarraSeleccion, useSeleccion } from '../componentes/lector/seleccion';
 import { MenuDocumento, reintentarDocumento } from '../componentes/biblioteca/documento';
 import { BotonReferencia } from '../componentes/comunes/boton-referencia';
 import { copiarReferencia } from '../lib/referencia';
+import { NotaMargen } from '../bocetos/nota-margen';
 import { PanelFiguras } from '../componentes/inspector/panel-figuras';
 import { hojear } from '../movimiento/hojear';
 import { Portada } from '../componentes/comunes/portada';
@@ -149,7 +150,11 @@ function Lector() {
             <p className="truncate text-[0.75rem] text-coffee-500">{autores(doc.metadatos) || 'Sin autor'} · {anioVisible(doc.metadatos)}{contenedorVisible(doc.metadatos) ? <> · <em>{contenedorVisible(doc.metadatos)}</em></> : null} · <span className="text-apagado">{NOMBRE_TIPO[doc.tipo]}</span></p>
           </div>
 
-          <IrA etiqueta={etiquetaActual} total={medio ? tiempoACadena(doc.duracion ?? 0) : String(Math.max(doc.unidades, ingesta?.unidades ?? 0))} alIr={irA} medio={medio} />
+          <span className="relative">
+            <IrA etiqueta={etiquetaActual} total={medio ? tiempoACadena(doc.duracion ?? 0) : String(Math.max(doc.unidades, ingesta?.unidades ?? 0))} alIr={irA} medio={medio} />
+            {/* La primera vez: el folio se puede pulsar para ir a cualquier página. */}
+            <NotaMargen id="lector-folio" nombre="nota-folio" className="left-1/2 top-full mt-1 hidden w-28 -translate-x-1/2 md:block" espera={1600} />
+          </span>
 
           {paginado ? (
             <div role="group" aria-label="Modo de lectura" className="hidden rounded-xl border border-cream-400 bg-cream-200/70 p-1 shadow-[var(--hundido)] md:flex">
