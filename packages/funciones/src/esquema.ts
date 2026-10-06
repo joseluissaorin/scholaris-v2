@@ -420,9 +420,91 @@ export const SENTENCIAS_FUNCIONES: readonly string[] = [
 /** El esquema completo, legible, por si alguien lo quiere volcar o comparar. */
 export const esquemaFunciones = SENTENCIAS_FUNCIONES.map((s) => s.trim() + ';').join('\n\n');
 
-/** Crea (o completa) las tablas de las funciones. Idempotente. */
+/**
+ * Columnas que se añadieron después de crear una tabla (o que una base a medio
+ * crear puede no tener). `ALTER TABLE … ADD COLUMN` solo admite columnas con
+ * valor por defecto o anulables, y así están declaradas.
+ */
+export const COLUMNAS_TARDIAS: Readonly<Record<string, ReadonlyArray<readonly [string, string]>>> = {
+  entidades: [
+    ['alias', "TEXT NOT NULL DEFAULT '[]'"],
+    ['busqueda', "TEXT NOT NULL DEFAULT ''"],
+    ['wikidata', 'TEXT'],
+    ['descripcion', 'TEXT'],
+    ['wikidata_visto', 'INTEGER NOT NULL DEFAULT 0'],
+    ['fusionada_en', 'TEXT'],
+    ['n_menciones', 'INTEGER NOT NULL DEFAULT 0'],
+    ['n_documentos', 'INTEGER NOT NULL DEFAULT 0'],
+  ],
+};
+
+/** Tipo y nombre del objeto que crea una sentencia («table», «entidades»). */
+export function objetoDeSentencia(s: string): { tipo: 'table' | 'index' | 'trigger'; nombre: string } | null {
+  const m = /^\s*CREATE\s+(VIRTUAL\s+TABLE|TABLE|INDEX|UNIQUE\s+INDEX|TRIGGER)\s+IF\s+NOT\s+EXISTS\s+(\w+)/i.exec(s);
+  if (!m) return null;
+  const t = m[1]!.toUpperCase();
+  return { tipo: t.includes('TABLE') ? 'table' : t.includes('INDEX') ? 'index' : 'trigger', nombre: m[2]! };
+}
+
+async function columnasDe(sql: SQL, tabla: string): Promise<Set<string>> {
+  const t = tabla.replace(/[^\w]/g, '');
+  let filas: Array<{ name: string }>;
+  try {
+    filas = await sql.ejecutar<{ name: string }>(`SELECT name FROM pragma_table_info('${t}')`);
+  } catch {
+    // Algunas plataformas no admiten las funciones de pragma; la sentencia sí.
+    filas = await sql.ejecutar<{ name: string }>(`PRAGMA table_info(${t})`);
+  }
+  return new Set(filas.map((f) => String(f.name)));
+}
+
+/**
+ * Crea (o completa, o repara) las tablas de las funciones. Idempotente, y
+ * aguanta una base a medio crear:
+ *   1. si un nombre que el esquema necesita lo ocupa un objeto de otro tipo
+ *      (un índice con el nombre de una tabla), el índice se quita: los índices
+ *      se rehacen, las tablas nunca se borran;
+ *   2. se crean las tablas;
+ *   3. se añaden las columnas que falten (`COLUMNAS_TARDIAS`);
+ *   4. índices y disparadores.
+ * Si una sentencia falla se siguen aplicando las demás y al final se lanza un
+ * error con todas: una tabla rota no deja sin crear las otras.
+ */
 export async function aplicarEsquemaFunciones(sql: SQL): Promise<void> {
-  for (const s of SENTENCIAS_FUNCIONES) await sql.ejecutar(s);
+  const existentes = new Map(
+    (await sql.ejecutar<{ type: string; name: string }>("SELECT type, name FROM sqlite_master WHERE type IN ('table', 'index', 'trigger', 'view')"))
+      .map((f) => [String(f.name), String(f.type)]),
+  );
+  const errores: string[] = [];
+  const intentar = async (s: string) => {
+    try { await sql.ejecutar(s); } catch (e) { errores.push(`${objetoDeSentencia(s)?.nombre ?? s.slice(0, 60)}: ${(e as Error).message}`); }
+  };
+  // 1. Nombres ocupados por un objeto de otro tipo.
+  for (const s of SENTENCIAS_FUNCIONES) {
+    const o = objetoDeSentencia(s);
+    if (!o) continue;
+    const tipo = existentes.get(o.nombre);
+    if (!tipo || tipo === o.tipo) continue;
+    if (tipo === 'index') await intentar(`DROP INDEX IF EXISTS "${o.nombre}"`);
+    else if (tipo === 'trigger') await intentar(`DROP TRIGGER IF EXISTS "${o.nombre}"`);
+    else errores.push(`${o.nombre}: el nombre lo ocupa un objeto de tipo ${tipo}`);
+  }
+  // 2. Tablas.
+  const tablas = SENTENCIAS_FUNCIONES.filter((s) => objetoDeSentencia(s)?.tipo === 'table');
+  for (const s of tablas) await intentar(s);
+  // 3. Columnas que falten.
+  for (const [tabla, columnas] of Object.entries(COLUMNAS_TARDIAS)) {
+    try {
+      const hay = await columnasDe(sql, tabla);
+      if (!hay.size) continue;
+      for (const [c, def] of columnas) if (!hay.has(c)) await intentar(`ALTER TABLE ${tabla} ADD COLUMN ${c} ${def}`);
+    } catch (e) {
+      errores.push(`${tabla}: ${(e as Error).message}`);
+    }
+  }
+  // 4. El resto (índices, disparadores).
+  for (const s of SENTENCIAS_FUNCIONES) if (!tablas.includes(s)) await intentar(s);
+  if (errores.length) throw new Error(`Esquema de funciones incompleto: ${errores.join(' · ')}`);
   await sql.ejecutar(
     `INSERT INTO funciones_ajustes (clave, valor) VALUES ('esquema_funciones', ?)
      ON CONFLICT(clave) DO UPDATE SET valor = excluded.valor`,
