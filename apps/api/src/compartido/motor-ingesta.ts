@@ -114,12 +114,32 @@ export function leerPaquete(almacen: AlmacenAmpliado, clave: string): Promise<Pa
   return p;
 }
 
+/** Quita la maquetación línea a línea (la ingesta trabaja con bloques, cabecera y pie). */
+function adelgazar(p: PaqueteConversion): PaqueteConversion {
+  if (p.contenido.clase !== 'pdf') return p;
+  return { ...p, contenido: { ...p.contenido, paginas: p.contenido.paginas.map((x) => ({ ...x, lineas: [] })) } };
+}
+
+/** El paquete con solo las páginas [desde, hasta] (las demás, vacías para conservar los índices). */
+function miniPaquete(p: PaqueteConversion, desde: number, hasta: number): PaqueteConversion {
+  const enRango = (f?: number) => f !== undefined && f >= desde && f <= hasta;
+  if (p.contenido.clase === 'pdf') {
+    return { ...p, partes: p.partes.filter((x) => enRango(x.unidad)), contenido: { ...p.contenido, esquema: [], paginas: p.contenido.paginas.filter((x) => enRango(x.fisica)) } };
+  }
+  if (p.contenido.clase === 'imagenes') {
+    return { ...p, partes: p.partes.filter((x) => enRango(x.unidad)), contenido: { ...p.contenido, paginas: p.contenido.paginas.filter((x) => enRango(x.fisica)) } };
+  }
+  return p;
+}
+
 /** Por encima de esto no se abre el PDF original en memoria (pdf-lib lo multiplica). */
 const MAX_PDF_CORTABLE = 12 * 1024 * 1024;
 
 export function fuenteDesdeAlmacen(almacen: AlmacenAmpliado, params: ParamsIngesta, paquete: PaqueteConversion): FuentePaquete {
   const mimes = new Map(paquete.partes.map((x) => [x.id, x.mime]));
-  const esPdf = paquete.contenido.clase === 'pdf' && /pdf/i.test(params.mime || paquete.origen.mime);
+  // Con imágenes de página (las pone la imprenta) se usan ellas: cortar el PDF cuesta memoria.
+  const conImagenes = paquete.contenido.clase === 'pdf' && paquete.contenido.paginas.some((x) => x.imagen);
+  const esPdf = paquete.contenido.clase === 'pdf' && !conImagenes && /pdf/i.test(params.mime || paquete.origen.mime);
   return {
     async parte(id) {
       if (id.startsWith('youtube:')) {
@@ -361,8 +381,16 @@ export async function preparar(ctx: ContextoMotor, params: ParamsIngesta): Promi
     clave = `${params.prefijo}paquete.json`;
     await ctx.almacen.poner(clave, JSON.stringify(paquete), 'application/json');
   }
-  const paquete = await leerPaquete(ctx.almacen, clave);
+  const completo = await leerPaquete(ctx.almacen, clave);
+  // Paquete ligero (sin la maquetación línea a línea, que la ingesta no usa) y un fichero
+  // pequeño por pliego: cada paso de lectura carga solo lo suyo (límite de 128 MB por aislamiento).
+  const paquete = adelgazar(completo);
+  const ligero = `${params.prefijo}trabajo/paquete.ligero.json`;
+  await ctx.almacen.poner(ligero, JSON.stringify(paquete), 'application/json');
   const plan = planificar(paquete, OPCIONES_PLAN);
+  for (const pl of plan.pliegos) {
+    await ctx.almacen.poner(`${params.prefijo}trabajo/pliegos/${pl.id}.json`, JSON.stringify({ pliego: pl, paquete: miniPaquete(paquete, pl.desde, pl.hasta) }), 'application/json');
+  }
   // El total se conoce ya; las páginas con capa de texto se pueden enseñar desde ahora.
   await ctx.sql.ejecutar('UPDATE documentos SET unidades = ? WHERE id = ?', plan.unidades, params.documento);
   // Mientras se lee, mejor el título y los autores del propio fichero que el nombre del archivo.
@@ -383,13 +411,17 @@ export async function preparar(ctx: ContextoMotor, params: ParamsIngesta): Promi
   }
   await (ctx.sql as { vaciarPendientes?: () => Promise<void> }).vaciarPendientes?.();
   const coste = plan.modo === 'medio' ? Math.ceil((paquete.duracion ?? plan.tramos.length * 600) / 60) : plan.unidades;
-  return { paquete: clave, modo: plan.modo, unidades: plan.unidades, pliegos: plan.pliegos.map((p) => p.id), tramos: plan.tramos.map((t) => t.n), coste, ...(descargado ?? {}) };
+  return { paquete: ligero, modo: plan.modo, unidades: plan.unidades, pliegos: plan.pliegos.map((p) => p.id), tramos: plan.tramos.map((t) => t.n), coste, ...(descargado ?? {}) };
 }
 
 export async function leerUnPliego(ctx: ContextoMotor, params: ParamsIngesta, info: InfoPlan, id: number): Promise<number> {
-  const paquete = await leerPaquete(ctx.almacen, info.paquete);
-  const plan = planificar(paquete, OPCIONES_PLAN);
-  const pliego = plan.pliegos.find((p) => p.id === id) as Pliego | undefined;
+  const b = await ctx.almacen.bytes(`${params.prefijo}trabajo/pliegos/${id}.json`);
+  let pliego: Pliego | undefined, paquete: PaqueteConversion;
+  if (b) ({ pliego, paquete } = JSON.parse(new TextDecoder().decode(b)) as { pliego: Pliego; paquete: PaqueteConversion });
+  else {
+    paquete = await leerPaquete(ctx.almacen, info.paquete);
+    pliego = planificar(paquete, OPCIONES_PLAN).pliegos.find((p) => p.id === id);
+  }
   if (!pliego) return 0;
   const ia = inteligenciaConMemoria(ctx.inteligencia, ctx.almacen, trabajo(params), ctx.gemini);
   const t0 = Date.now();
@@ -397,6 +429,24 @@ export async function leerUnPliego(ctx: ContextoMotor, params: ParamsIngesta, in
   const t1 = Date.now();
   await escribirProvisionales(ctx, params, r.paginas.map((u) => provisionalDePagina(u, paquete)));
   console.log(JSON.stringify({ que: 'pliego', id, leer: t1 - t0, provisionales: Date.now() - t1 }));
+  return r.paginas.length;
+}
+
+/**
+ * La primera página sola, para enseñarla en unos segundos (un escaneo tarda en
+ * leerse por pliegos). Se vuelve a leer dentro de su pliego: cuesta una página más.
+ */
+export async function leerPrimeraPagina(ctx: ContextoMotor, params: ParamsIngesta, info: InfoPlan): Promise<number> {
+  const primero = info.pliegos[0];
+  if (primero === undefined) return 0;
+  const b = await ctx.almacen.bytes(`${params.prefijo}trabajo/pliegos/${primero}.json`);
+  if (!b) return 0;
+  const { pliego, paquete } = JSON.parse(new TextDecoder().decode(b)) as { pliego: Pliego; paquete: PaqueteConversion };
+  if (pliego.desde === pliego.hasta) return 0; // ya es de una página
+  const solo: Pliego = { ...pliego, id: -1, hasta: pliego.desde, envio: 'imagenes' };
+  const ia = inteligenciaConMemoria(ctx.inteligencia, ctx.almacen, trabajo(params), ctx.gemini);
+  const r = await leerPliego(solo, paquete, fuenteDesdeAlmacen(ctx.almacen, params, paquete), [ia.lector, ...(ia.lectoresReserva ?? [])], { ...(params.pista ? { pista: params.pista } : {}) });
+  await escribirProvisionales(ctx, params, r.paginas.map((u) => provisionalDePagina(u, paquete)));
   return r.paginas.length;
 }
 

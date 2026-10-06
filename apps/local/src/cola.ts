@@ -8,7 +8,7 @@ import type { Progreso, SQL } from '@scholaris/nucleo';
 import { enParalelo } from '@scholaris/nucleo';
 import type { Orquestador, ParamsIngesta, PuertosUsuario } from '@scholaris/api/puertos';
 import {
-  componer, ErrorReserva, leerUnPliego, limpiarTrabajo, preparar, revectorizar, soloVectores, transcribirUnTramo, type ContextoMotor,
+  componer, ErrorReserva, leerPrimeraPagina, leerUnPliego, limpiarTrabajo, preparar, revectorizar, soloVectores, transcribirUnTramo, type ContextoMotor,
 } from '@scholaris/api/compartido/motor-ingesta';
 import { cerrarIngesta } from '@scholaris/api/compartido/cierre';
 import { apuntarProgreso, leerTarea } from '@scholaris/api/compartido/estanteria';
@@ -136,7 +136,9 @@ export class ColaLocal implements Orquestador {
         let hechos = 0;
         const paso = async () => { hechos++; await avisar('lectura', hechos / Math.max(1, total), 0.03 + 0.22 * (hechos / Math.max(1, total)), `${hechos} de ${total}`); };
         await avisar('lectura', 0, 0.03, `${info.unidades} unidades; ${info.pliegos.length} pliegos de visión`);
+        const primera = info.modo === 'paginas' ? leerPrimeraPagina(ctx, p, info).catch(() => 0) : Promise.resolve(0);
         await enParalelo(info.pliegos, this.d.pliegosEnParalelo ?? 6, async (id) => { await leerUnPliego(ctx, p, info, id); await paso(); });
+        await primera;
         await enParalelo(info.tramos, this.d.pliegosEnParalelo ?? 6, async (n) => { await transcribirUnTramo(ctx, p, info, n); await paso(); });
         const [sub] = await puertos.sql.ejecutar<{ metadatos: string | null }>('SELECT metadatos FROM pl_subidas WHERE documento = ? ORDER BY creada DESC LIMIT 1', p.documento);
         const metadatosUsuario = sub?.metadatos ? (JSON.parse(sub.metadatos) as Record<string, unknown>) : null;

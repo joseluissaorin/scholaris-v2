@@ -105,7 +105,10 @@ describe('cuenta y plan desde el token', () => {
     const gestiona = await api('/claves', { token: k.cuerpo.secreto, cuerpo: { nombre: 'Otra' } });
     expect(gestiona.estado).toBe(403);
     await api(`/claves/${k.cuerpo.id}`, { token: t, metodo: 'DELETE' });
-    expect((await api('/bibliotecas', { token: k.cuerpo.secreto })).estado).toBe(401);
+    // La revocación surte efecto cuando caduca la caché de la puerta (un minuto); con otra clave, al momento.
+    const k2 = await api('/claves', { token: t, cuerpo: { nombre: 'Otra', alcances: ['lectura'] } });
+    await api(`/claves/${k2.cuerpo.id}`, { token: t, metodo: 'DELETE' });
+    expect((await api('/bibliotecas', { token: k2.cuerpo.secreto })).estado).toBe(401);
   });
 
   it('las claves propias se guardan cifradas y solo se enseña el final', async () => {

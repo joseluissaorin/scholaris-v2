@@ -103,6 +103,11 @@ export interface Plataforma {
   tiempoReal(peticion: Request, canal: { usuario: string; tarea?: string }): Promise<Response>;
 }
 
+const clavesVistas = new Map<string, { sesion: UsuarioSesion; hasta: number }>();
+
+/** Usuarios ya dados de alta en este aislamiento (valores resueltos, no promesas). */
+const usuariosVistos = new Map<string, { plan: string; cuando: number; correo: string; nombre: string }>();
+
 /** Ruta de los billetes: usuario y tarea opcional, firmados 60 s. */
 interface DatosBillete { u: string; t?: string }
 
@@ -186,27 +191,39 @@ export function crearPuerta(pl: Plataforma) {
       return { ...u, funciones: u.plan === 'pro' ? ['scholaris'] : [], via: 'admin' };
     }
     if (token.startsWith('sch_')) {
+      // Resultado ya resuelto en caché un minuto (una revocación tarda como mucho eso en surtir efecto).
+      const hay = clavesVistas.get(token);
+      if (hay && hay.hasta > Date.now()) return hay.sesion;
       const k = await pl.cuentas.autenticarClave(token);
       if (!k) fallo('no_autenticado', 'La clave de API no es válida, ha caducado o se ha revocado.');
       const u = await pl.cuentas.usuario(k.usuario);
       if (!u) fallo('no_autenticado', 'La cuenta de esta clave ya no existe.');
-      return { ...u, funciones: u.plan === 'pro' ? ['scholaris'] : [], via: 'clave_api', alcances: k.alcances };
+      const sesion: UsuarioSesion = { ...u, funciones: u.plan === 'pro' ? ['scholaris'] : [], via: 'clave_api', alcances: k.alcances };
+      clavesVistas.set(token, { sesion, hasta: Date.now() + 60_000 });
+      if (clavesVistas.size > 2000) clavesVistas.delete(clavesVistas.keys().next().value as string);
+      return sesion;
     }
     if (!pl.clerk) fallo('no_autenticado', 'Esta instancia no tiene inicio de sesión configurado.');
     const id = await pl.clerk(token);
     if (!id) fallo('no_autenticado', 'La sesión ha caducado. Vuelve a iniciar sesión.');
     const u: UsuarioSesion = { id: id.id, correo: id.correo, nombre: id.nombre, plan: id.plan, funciones: id.funciones, via: 'clerk' };
     if (id.imagen) u.imagen = id.imagen;
-    await pl.cuentas.asegurarUsuario(u);
-    // El token de sesión de Clerk no siempre lleva el correo: se completa con lo guardado.
-    if (!u.correo) {
-      const guardado = await pl.cuentas.usuario(u.id);
-      if (guardado?.correo) { u.correo = guardado.correo; u.nombre = guardado.nombre || u.nombre; }
+    // D1 solo cuando hace falta: alta, cambio de plan, o cada diez minutos (para «visto»).
+    const conocido = usuariosVistos.get(u.id);
+    if (!conocido || conocido.plan !== u.plan || Date.now() - conocido.cuando > 600_000 || (!u.correo && !conocido.correo)) {
+      await pl.cuentas.asegurarUsuario(u);
+      const guardado = u.correo ? null : await pl.cuentas.usuario(u.id);
+      usuariosVistos.set(u.id, { plan: u.plan, cuando: Date.now(), correo: u.correo || guardado?.correo || '', nombre: guardado?.nombre || u.nombre });
+      if (usuariosVistos.size > 5000) usuariosVistos.delete(usuariosVistos.keys().next().value as string);
     }
+    // El token de sesión de Clerk no siempre lleva el correo: se completa con lo guardado.
+    const v = usuariosVistos.get(u.id)!;
+    if (!u.correo && v.correo) { u.correo = v.correo; u.nombre = v.nombre || u.nombre; }
     return u;
   };
 
   app.use(`${PREFIJO_API}/*`, async (c, next) => {
+    c.set('inicio' as never, Date.now() as never);
     const u = await autenticar(c.req.raw);
     if (pl.admitir) {
       const l = LIMITES[pl.config.modo === 'local' ? 'local' : u.plan];
@@ -249,8 +266,12 @@ export function crearPuerta(pl: Plataforma) {
     return pl.atender(sesion, new Request(url.toString(), c.req.raw));
   });
 
-  // Todo lo demás: a la estantería del usuario.
-  app.all(`${PREFIJO_API}/*`, async (c) => pl.atender(c.get('usuario'), c.req.raw));
+  // Todo lo demás: a la estantería del usuario (con lo que tardó la puerta, para diagnosticar).
+  app.all(`${PREFIJO_API}/*`, async (c) => {
+    const h = new Headers(c.req.raw.headers);
+    h.set('x-scholaris-ms-puerta', String(Date.now() - (c.get('inicio' as never) as number ?? Date.now())));
+    return pl.atender(c.get('usuario'), new Request(c.req.raw, { headers: h }));
+  });
 
   // MCP (fuera de /api/v2): la autenticación es la misma.
   app.all('/mcp', async (c) => {

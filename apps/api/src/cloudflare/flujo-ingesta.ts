@@ -9,7 +9,8 @@ import { WorkflowEntrypoint, type WorkflowEvent, type WorkflowStep } from 'cloud
 import { NonRetryableError } from 'cloudflare:workflows';
 import type { Progreso } from '@scholaris/nucleo';
 import type { ParamsIngesta } from '../puertos.js';
-import { componer, ErrorReserva, leerUnPliego, limpiarTrabajo, preparar, revectorizar, soloVectores, transcribirUnTramo, type ContextoMotor, type InfoPlan } from '../compartido/motor-ingesta.js';
+import { enParalelo } from '@scholaris/nucleo';
+import { componer, ErrorReserva, leerPrimeraPagina, leerUnPliego, limpiarTrabajo, preparar, revectorizar, soloVectores, transcribirUnTramo, type ContextoMotor, type InfoPlan } from '../compartido/motor-ingesta.js';
 import type { Env } from './env.js';
 import { SqlRemoto } from './sql.js';
 import { almacenDesdeEnv, cuentasDesdeEnv, emisorDesdeEnv, geminiPara, indiceDesdeEnv, inteligenciaPara, origenDe } from './puertos-cf.js';
@@ -101,8 +102,12 @@ export class FlujoIngesta extends WorkflowEntrypoint<Env, ParamsIngesta> {
         const hechos = await contador.sumar('lectura');
         await ctx.emitir(progreso('lectura', hechos / Math.max(1, total), 0.03 + 0.22 * (hechos / Math.max(1, total)), `${hechos} de ${total}`));
       };
-      await Promise.all([
-        ...info.pliegos.map((id) => step.do(`pliego-${id}`, { retries: REINTENTOS, timeout: '6 minutes' }, async () => {
+      // Como mucho OLEADA pasos a la vez: los pasos en paralelo de una instancia comparten aislamiento (128 MB).
+      const OLEADA = 12;
+      const pasosLectura: Array<() => Promise<unknown>> = [
+        // La primera página, sola y la primera: se ve en unos segundos.
+        ...(info.modo === 'paginas' && info.pliegos.length ? [() => step.do('primera-pagina', { retries: { limit: 2, delay: '2 seconds' }, timeout: '2 minutes' }, async () => leerPrimeraPagina(await this.contexto(p), p, info).catch(() => 0))] : []),
+        ...info.pliegos.map((id) => () => step.do(`pliego-${id}`, { retries: REINTENTOS, timeout: '6 minutes' }, async () => {
           const t0 = Date.now();
           const ctx = await this.contexto(p);
           const t1 = Date.now();
@@ -112,13 +117,14 @@ export class FlujoIngesta extends WorkflowEntrypoint<Env, ParamsIngesta> {
           console.log(JSON.stringify({ que: 'paso', paso: `pliego-${id}`, contexto: t1 - t0, leer: t2 - t1, avisar: Date.now() - t2 }));
           return n;
         })),
-        ...info.tramos.map((n) => step.do(`tramo-${n}`, { retries: REINTENTOS, timeout: '12 minutes' }, async () => {
+        ...info.tramos.map((n) => () => step.do(`tramo-${n}`, { retries: REINTENTOS, timeout: '12 minutes' }, async () => {
           const ctx = await this.contexto(p);
           const palabras = await transcribirUnTramo(ctx, p, info, n);
           await avisar(ctx);
           return palabras;
         })),
-      ]);
+      ];
+      await enParalelo(pasosLectura, OLEADA, (f) => f());
 
       const metadatosUsuario = await step.do('metadatos-usuario', async () => (await estanteria.metadatosSubida(p.documento)) ?? null);
 

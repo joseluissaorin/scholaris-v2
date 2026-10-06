@@ -11,6 +11,7 @@ import { compactarResultados, registrarBusqueda } from '@scholaris/funciones';
 import type { Entorno } from '../entorno.js';
 import { cuerpoJson, exigir, fallo } from '../compartido/errores.js';
 import { obtenerBuscador } from '../compartido/servicios.js';
+import { LIMITES } from '../compartido/planes.js';
 import type { PuertosUsuario } from '../puertos.js';
 import { citaCorta, claveDe, etiquetaAncla, puertos, type Ctx } from './util.js';
 import { filtrosEnAmbito } from './ambito.js';
@@ -33,9 +34,14 @@ export async function aVista(p: PuertosUsuario, r: Resultado): Promise<Resultado
 /** Comprueba y consume la cuota diaria de búsquedas. */
 async function consumirBusqueda(p: PuertosUsuario): Promise<void> {
   const plan = p.config.modo === 'local' ? 'local' : p.usuario.plan;
-  if (!(await p.cuentas.consumir(p.usuario.id, plan, 'busquedasDia'))) {
-    fallo(plan === 'gratis' ? 'requiere_pro' : 'cuota_superada', 'Has llegado al máximo de búsquedas de hoy en tu plan. Vuelve mañana o pásate a Pro.', { cuota: 'busquedasDia' });
-  }
+  const limite = LIMITES[plan].busquedasDia;
+  if (limite === null) return;
+  // El contador del día vive en la estantería (local y atómico); D1 se pone al día después.
+  const dia = new Date().toISOString().slice(0, 10);
+  await p.sql.ejecutar('INSERT INTO pl_uso (metrica, periodo, n) VALUES (?, ?, 0) ON CONFLICT DO NOTHING', 'busquedasDia', dia);
+  const f = await p.sql.ejecutar<{ n: number }>('UPDATE pl_uso SET n = n + 1 WHERE metrica = ? AND periodo = ? AND n + 1 <= ? RETURNING n', 'busquedasDia', dia, limite);
+  if (!f.length) fallo(plan === 'gratis' ? 'requiere_pro' : 'cuota_superada', 'Has llegado al máximo de búsquedas de hoy en tu plan. Vuelve mañana o pásate a Pro.', { cuota: 'busquedasDia' });
+  p.segundoPlano(p.cuentas.consumir(p.usuario.id, plan, 'busquedasDia').catch(() => false));
 }
 
 function validar(b: Buscar): void {
@@ -115,6 +121,7 @@ export function rutasBusqueda(app: Hono<Entorno>): void {
       intencion: INTENCION[r.comprension.intencion] ?? 'conceptual',
       expansion: r.comprension.expansiones.map((e) => e.texto),
       ms,
+      tiempos: { ...r.tiempos, puerta: Number(c.req.header('x-scholaris-ms-puerta') ?? 0) },
     };
     const evento = await grabar(p, 'busqueda', b, r, { ms });
     if (evento) salida.evento = evento;
