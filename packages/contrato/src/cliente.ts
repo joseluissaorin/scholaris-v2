@@ -24,7 +24,7 @@ import type {
   Buscar, BuscarMultilingue, EventoRespuesta, Responder, RespuestaBusqueda, RespuestaMultilingue, Similares,
 } from './busqueda.js';
 import type {
-  Autocita, Bibliografia, CitaDocumento, DecisionesAutocita, DetalleAutocita, EstiloCsl, ExportarReferencias,
+  Autocita, AutocitaIniciada, Bibliografia, CitaDocumento, DecisionesAutocita, DetalleAutocita, EstiloCsl, ExportarReferencias,
   ImportacionBibtex, ImportarBibtex, InsertarEnDocx, PedirBibliografia, ResumenAutocita, TextoExtraido, Verificacion, Verificar,
 } from './citas.js';
 import type {
@@ -199,7 +199,7 @@ export function crearCliente(opciones: OpcionesCliente) {
     },
 
     citas: {
-      autocita: (p: Autocita) => post<RefTarea>('/citas/autocita', p),
+      autocita: (p: Autocita) => post<AutocitaIniciada>('/citas/autocita', p),
       autocitas: (p: ParamsPagina = {}) => get<Pagina<ResumenAutocita>>('/citas/autocita', p),
       detalleAutocita: (id: string) => get<DetalleAutocita>(`/citas/autocita/${e(id)}`),
       decidir: (id: string, p: DecisionesAutocita) => patch<DetalleAutocita>(`/citas/autocita/${e(id)}`, p),
@@ -343,14 +343,14 @@ export function crearCliente(opciones: OpcionesCliente) {
             const b = await post<Billete>('/tiempo-real/billete', { tarea: opciones.tarea });
             let url = b.url;
             if (url.startsWith('/')) {
-              const origen = base || (typeof location !== 'undefined' ? location.origin : '');
+              const origen = base || ((globalThis as { location?: { origin: string } }).location?.origin ?? '');
               url = origen.replace(/^http/, 'ws') + url;
             }
             ws = new WebSocket(url);
-            ws.onopen = () => { espera = 1000; };
-            ws.onmessage = (m) => { try { alEvento(JSON.parse(String(m.data)) as EventoTiempoReal); } catch { /* mensaje no JSON */ } };
-            ws.onclose = () => { if (!cerrado) setTimeout(abrir, (espera = Math.min(espera * 2, 30000))); };
-            ws.onerror = (ev) => opciones.alError?.(ev);
+            ws.addEventListener('open', () => { espera = 1000; });
+            ws.addEventListener('message', (m: { data: unknown }) => { try { alEvento(JSON.parse(String(m.data)) as EventoTiempoReal); } catch { /* mensaje no JSON */ } });
+            ws.addEventListener('close', () => { if (!cerrado) setTimeout(abrir, (espera = Math.min(espera * 2, 30000))); });
+            ws.addEventListener('error', (ev: unknown) => opciones.alError?.(ev));
           } catch (err) {
             opciones.alError?.(err);
             if (!cerrado) setTimeout(abrir, (espera = Math.min(espera * 2, 30000)));

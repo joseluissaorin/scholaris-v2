@@ -1,0 +1,40 @@
+{
+  "name": "@scholaris/api",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./app": "./src/app.ts",
+    "./puertos": "./src/puertos.ts",
+    "./compartido/*": "./src/compartido/*.ts"
+  },
+  "scripts": {
+    "dev": "wrangler dev -c ../../deploy/cloudflare/wrangler.jsonc",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "tipos": "wrangler types -c ../../deploy/cloudflare/wrangler.jsonc src/worker-configuration.d.ts"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "^0.22.0",
+    "@cloudflare/workers-types": "^5.20261006.1",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.7",
+    "wrangler": "^4.147.0"
+  },
+  "dependencies": {
+    "@scholaris/busqueda": "workspace:^",
+    "@scholaris/citas": "workspace:^",
+    "@scholaris/contrato": "workspace:^",
+    "@scholaris/folios": "workspace:^",
+    "@scholaris/funciones": "workspace:^",
+    "@scholaris/imprenta": "workspace:^",
+    "@scholaris/ingesta": "workspace:^",
+    "@scholaris/nucleo": "workspace:^",
+    "@scholaris/proveedores": "workspace:^",
+    "@scholaris/spdf": "workspace:^",
+    "aws4fetch": "^1.0.20",
+    "fflate": "^0.8.3",
+    "hono": "^4.9.0",
+    "jose": "^6.2.12"
+  }
+}

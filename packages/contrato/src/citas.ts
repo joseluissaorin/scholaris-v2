@@ -1,7 +1,7 @@
 /**
  * Citas.
  *
- *   POST   /citas/autocita              Autocita → RefTarea      (el resultado llega por /tiempo-real y GET)
+ *   POST   /citas/autocita              Autocita → AutocitaIniciada  (el resultado llega por /tiempo-real y GET)
  *   GET    /citas/autocita?…ParamsPagina          → Pagina<ResumenAutocita>
  *   GET    /citas/autocita/:id                    → DetalleAutocita
  *   PATCH  /citas/autocita/:id  { decisiones }    → DetalleAutocita   (aceptar/rechazar citas propuestas)
@@ -153,3 +153,7 @@ export interface CitaDocumento {
 }
 
 export type { RefTarea };
+
+export interface AutocitaIniciada extends RefTarea {
+  autocita: string;
+}
