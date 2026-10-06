@@ -26,6 +26,7 @@ import { Route as EscribirCuadernosRouteImport } from './rutas/escribir.cuaderno
 import { Route as ExplorarIndexRouteImport } from './rutas/explorar.index'
 import { Route as ExplorarConceptosRouteImport } from './rutas/explorar.conceptos'
 import { Route as ExplorarCorpusRouteImport } from './rutas/explorar.corpus'
+import { Route as ExplorarEntidadesRouteImport } from './rutas/explorar.entidades'
 import { Route as ExplorarGrafoRouteImport } from './rutas/explorar.grafo'
 import { Route as ExplorarPerspectivasRouteImport } from './rutas/explorar.perspectivas'
 import { Route as LectorIdRouteImport } from './rutas/lector.$id'
@@ -115,6 +116,11 @@ const ExplorarCorpusRoute = ExplorarCorpusRouteImport.update({
   path: '/corpus',
   getParentRoute: () => ExplorarRoute,
 } as any)
+const ExplorarEntidadesRoute = ExplorarEntidadesRouteImport.update({
+  id: '/entidades',
+  path: '/entidades',
+  getParentRoute: () => ExplorarRoute,
+} as any)
 const ExplorarGrafoRoute = ExplorarGrafoRouteImport.update({
   id: '/grafo',
   path: '/grafo',
@@ -145,6 +151,7 @@ export interface FileRoutesByFullPath {
   '/escribir/cuadernos': typeof EscribirCuadernosRoute
   '/explorar/conceptos': typeof ExplorarConceptosRoute
   '/explorar/corpus': typeof ExplorarCorpusRoute
+  '/explorar/entidades': typeof ExplorarEntidadesRoute
   '/explorar/grafo': typeof ExplorarGrafoRoute
   '/explorar/perspectivas': typeof ExplorarPerspectivasRoute
   '/lector/$id': typeof LectorIdRoute
@@ -163,6 +170,7 @@ export interface FileRoutesByTo {
   '/escribir/cuadernos': typeof EscribirCuadernosRoute
   '/explorar/conceptos': typeof ExplorarConceptosRoute
   '/explorar/corpus': typeof ExplorarCorpusRoute
+  '/explorar/entidades': typeof ExplorarEntidadesRoute
   '/explorar/grafo': typeof ExplorarGrafoRoute
   '/explorar/perspectivas': typeof ExplorarPerspectivasRoute
   '/lector/$id': typeof LectorIdRoute
@@ -186,6 +194,7 @@ export interface FileRoutesById {
   '/escribir/cuadernos': typeof EscribirCuadernosRoute
   '/explorar/conceptos': typeof ExplorarConceptosRoute
   '/explorar/corpus': typeof ExplorarCorpusRoute
+  '/explorar/entidades': typeof ExplorarEntidadesRoute
   '/explorar/grafo': typeof ExplorarGrafoRoute
   '/explorar/perspectivas': typeof ExplorarPerspectivasRoute
   '/lector/$id': typeof LectorIdRoute
@@ -210,6 +219,7 @@ export interface FileRouteTypes {
     | '/escribir/cuadernos'
     | '/explorar/conceptos'
     | '/explorar/corpus'
+    | '/explorar/entidades'
     | '/explorar/grafo'
     | '/explorar/perspectivas'
     | '/lector/$id'
@@ -228,6 +238,7 @@ export interface FileRouteTypes {
     | '/escribir/cuadernos'
     | '/explorar/conceptos'
     | '/explorar/corpus'
+    | '/explorar/entidades'
     | '/explorar/grafo'
     | '/explorar/perspectivas'
     | '/lector/$id'
@@ -250,6 +261,7 @@ export interface FileRouteTypes {
     | '/escribir/cuadernos'
     | '/explorar/conceptos'
     | '/explorar/corpus'
+    | '/explorar/entidades'
     | '/explorar/grafo'
     | '/explorar/perspectivas'
     | '/lector/$id'
@@ -389,6 +401,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ExplorarCorpusRouteImport
       parentRoute: typeof ExplorarRoute
     }
+    '/explorar/entidades': {
+      id: '/explorar/entidades'
+      path: '/entidades'
+      fullPath: '/explorar/entidades'
+      preLoaderRoute: typeof ExplorarEntidadesRouteImport
+      parentRoute: typeof ExplorarRoute
+    }
     '/explorar/grafo': {
       id: '/explorar/grafo'
       path: '/grafo'
@@ -462,6 +481,7 @@ const EscribirRouteWithChildren = EscribirRoute._addFileChildren(
 interface ExplorarRouteChildren {
   ExplorarConceptosRoute: typeof ExplorarConceptosRoute
   ExplorarCorpusRoute: typeof ExplorarCorpusRoute
+  ExplorarEntidadesRoute: typeof ExplorarEntidadesRoute
   ExplorarGrafoRoute: typeof ExplorarGrafoRoute
   ExplorarPerspectivasRoute: typeof ExplorarPerspectivasRoute
   ExplorarIndexRoute: typeof ExplorarIndexRoute
@@ -470,6 +490,7 @@ interface ExplorarRouteChildren {
 const ExplorarRouteChildren: ExplorarRouteChildren = {
   ExplorarConceptosRoute: ExplorarConceptosRoute,
   ExplorarCorpusRoute: ExplorarCorpusRoute,
+  ExplorarEntidadesRoute: ExplorarEntidadesRoute,
   ExplorarGrafoRoute: ExplorarGrafoRoute,
   ExplorarPerspectivasRoute: ExplorarPerspectivasRoute,
   ExplorarIndexRoute: ExplorarIndexRoute,

@@ -5,7 +5,7 @@
  */
 import { QueryClient, queryOptions, keepPreviousData } from '@tanstack/react-query';
 import type { Filtros } from '@scholaris/nucleo';
-import type { FiltrosDocumentos } from '@scholaris/contrato';
+import type { FiltrosDocumentos, TipoEntidad } from '@scholaris/contrato';
 import { api } from './api';
 
 export const clienteConsultas = new QueryClient({
@@ -54,6 +54,13 @@ export const q = {
   grupo: (i: number) => queryOptions({ queryKey: ['mapa', 'grupo', i], queryFn: () => api().mapa.grupo(i) }),
   grafo: () => queryOptions({ queryKey: ['grafo'], queryFn: () => api().grafo.obtener() }),
   huerfanas: () => queryOptions({ queryKey: ['grafo', 'huerfanas'], queryFn: () => api().grafo.huerfanas() }),
+  entidades: (consulta = '', tipo?: TipoEntidad) => queryOptions({ queryKey: ['entidades', 'lista', consulta, tipo ?? ''], queryFn: () => api().entidades.buscar({ q: consulta || undefined, tipo, limite: 120 }), placeholderData: keepPreviousData }),
+  entidad: (id: string) => queryOptions({ queryKey: ['entidades', 'ficha', id], queryFn: () => api().entidades.obtener(id) }),
+  vecindario: (id: string) => queryOptions({ queryKey: ['entidades', 'vecindario', id], queryFn: () => api().entidades.vecinos(id, { saltos: 2 }), placeholderData: keepPreviousData }),
+  lineaEntidad: (id: string) => queryOptions({ queryKey: ['entidades', 'linea', id], queryFn: () => api().entidades.linea(id) }),
+  caminoEntidades: (desde: string, hasta: string) => queryOptions({ queryKey: ['entidades', 'camino', desde, hasta], queryFn: () => api().entidades.camino(desde, hasta), enabled: !!desde && !!hasta }),
+  estadoEntidades: () => queryOptions({ queryKey: ['entidades', 'estado'], queryFn: () => api().entidades.estado() }),
+  entidadesLector: (documento: string) => queryOptions({ queryKey: ['entidades', 'lector', documento], queryFn: () => api().entidades.lector(documento), staleTime: 5 * 60_000, retry: 0 }),
   arqueologia: () => queryOptions({ queryKey: ['perspectivas', 'arqueologia'], queryFn: () => api().perspectivas.arqueologia() }),
   huecos: () => queryOptions({ queryKey: ['perspectivas', 'huecos'], queryFn: () => api().perspectivas.huecos() }),
   recomendaciones: () => queryOptions({ queryKey: ['perspectivas', 'recomendaciones'], queryFn: () => api().perspectivas.recomendaciones() }),

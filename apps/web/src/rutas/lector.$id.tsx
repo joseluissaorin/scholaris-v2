@@ -15,6 +15,7 @@ import { anioVisible, contenedorVisible, autores, ESTILOS_RAPIDOS, esMedio, tiem
 import { Flujo, useUnidadEnCache, type ManejadorFlujo, type ModoLectura } from '../componentes/lector/flujo';
 import { Medio, type ManejadorMedio } from '../componentes/lector/medio';
 import { Ficha } from '../componentes/lector/ficha';
+import { ProveedorEntidades } from '../componentes/lector/entidades';
 import { BarraSeleccion, useSeleccion } from '../componentes/lector/seleccion';
 import { MenuDocumento, reintentarDocumento } from '../componentes/biblioteca/documento';
 
@@ -169,7 +170,9 @@ function Lector() {
           {medio ? (
             <Medio ref={reproductor} doc={doc} url={original?.url || null} inicial={busqueda.t ?? 0} resaltar={busqueda.q} alVer={alVerMedio} />
           ) : (
-            <Flujo ref={flujo} doc={doc} modo={modo} inicial={inicial} resaltar={busqueda.q} leidas={ingesta ? ingesta.leidas : undefined} total={ingesta?.unidades ?? undefined} alVer={alVer} />
+            <ProveedorEntidades documento={doc.id}>
+              <Flujo ref={flujo} doc={doc} modo={modo} inicial={inicial} resaltar={busqueda.q} leidas={ingesta ? ingesta.leidas : undefined} total={ingesta?.unidades ?? undefined} alVer={alVer} />
+            </ProveedorEntidades>
           )}
         </div>
         {panel ? (
