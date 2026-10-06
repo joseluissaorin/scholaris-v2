@@ -18,7 +18,11 @@
     "directory": "../../apps/web/dist",
     "binding": "ASSETS",
     "not_found_handling": "single-page-application",
-    "run_worker_first": ["/", "/api/*", "/mcp", "/oauth/*", "/.well-known/*"]
+    "run_worker_first": [
+      "/", "/api/*", "/mcp", "/oauth/*", "/.well-known/*",
+      // Páginas públicas: el Worker negocia el Markdown (Accept: text/markdown) y añade la cabecera Link.
+      "/acerca*", "/en", "/en.md", "/en/api*", "/en/knowledge*", "/en/agents*", "/api", "/api.md", "/saber*", "/agentes*"
+    ]
   },
 
   "durable_objects": {

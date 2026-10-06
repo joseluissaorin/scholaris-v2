@@ -139,6 +139,7 @@ function cabeza(t: TextosGuia): string {
 <link rel="alternate" hreflang="en" href="${ORIGEN}/en/api">
 <link rel="alternate" type="application/json" title="OpenAPI" href="${B}/openapi.json">
 <link rel="alternate" type="text/plain" title="llms.txt" href="${ORIGEN}/llms.txt">
+<link rel="alternate" type="text/markdown" title="${esc(t.titulo)} (Markdown)" href="${ORIGEN}${t.ruta}.md">
 <meta name="theme-color" content="#F5F0E8">
 <meta name="color-scheme" content="light">
 <link rel="icon" href="/favicon.ico" sizes="any">
@@ -252,7 +253,7 @@ ${seccion('anclas', t.anclas.rubrica, t.anclas.parrafos.map((p) => `<p>${conCodi
 </main>
 <footer class="pie">
 <span>${esc(t.pie)}</span>
-<nav aria-label="${lengua === 'es' ? 'Pie' : 'Footer'}"><a href="${B}/openapi.json">OpenAPI</a><a href="/llms.txt">llms.txt</a><a href="${t.otra.ruta}" hreflang="${t.otra.hreflang}">${esc(t.otra.nombre)}</a><a href="https://joseluissaorin.com" rel="author">joseluissaorin.com</a></nav>
+<nav aria-label="${lengua === 'es' ? 'Pie' : 'Footer'}"><a href="${B}/openapi.json">OpenAPI</a><a href="/llms.txt">llms.txt</a><a href="${lengua === 'es' ? '/saber' : '/en/knowledge'}">${lengua === 'es' ? 'Cómo funciona' : 'How it works'}</a><a href="${lengua === 'es' ? '/agentes' : '/en/agents'}">${lengua === 'es' ? 'Para agentes' : 'For agents'}</a><a href="${t.otra.ruta}" hreflang="${t.otra.hreflang}">${esc(t.otra.nombre)}</a><a href="https://joseluissaorin.com" rel="author">joseluissaorin.com</a></nav>
 </footer>
 <script>${SCRIPT}</script>
 </body>

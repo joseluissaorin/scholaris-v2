@@ -20,6 +20,7 @@ import { crearInteligencia, type EntornoInteligencia } from '@scholaris/proveedo
 import { crearAppUsuario, crearPuerta, VERSION, type Plataforma } from '@scholaris/api/app';
 import type { ConfigInstancia, PuertosUsuario, UsuarioSesion } from '@scholaris/api/puertos';
 import { Cuentas } from '@scholaris/api/compartido/cuentas';
+import { servirPublica } from '@scholaris/api/compartido/markdown-publico';
 import { crearVerificadorClerk } from '@scholaris/api/compartido/clerk';
 import { prepararEstanteria } from '@scholaris/api/compartido/esquema-plataforma';
 import { verificarBillete } from '@scholaris/api/compartido/firmas';
@@ -65,6 +66,7 @@ const TIPOS: Record<string, string> = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',
   '.json': 'application/json', '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.webp': 'image/webp', '.ico': 'image/x-icon',
   '.woff2': 'font/woff2', '.woff': 'font/woff', '.wasm': 'application/wasm', '.txt': 'text/plain; charset=utf-8', '.webmanifest': 'application/manifest+json',
+  '.md': 'text/markdown; charset=utf-8', '.xml': 'application/xml; charset=utf-8',
 };
 
 function secretos(datos: string): { secreto: string; claveMaestra: string } {
@@ -263,6 +265,9 @@ export async function crearServidorLocal(o: OpcionesServidor): Promise<ServidorL
     async fetch(peticion) {
       const url = new URL(peticion.url);
       if (url.pathname.startsWith('/api/') || url.pathname === '/mcp') return puerta.fetch(peticion);
+      // Páginas públicas: Markdown con «Accept: text/markdown» y cabecera Link en el HTML.
+      const publica = await servirPublica(peticion, async (ruta) => estatico(ruta) ?? (/\.[a-z0-9]+$/i.test(ruta) ? null : estatico(`${ruta}.html`)));
+      if (publica) return publica;
       // Las páginas prerenderizadas (/acerca, /api, /en/api) se sirven sin «.html», como en Cloudflare.
       const r = estatico(url.pathname) ?? (/\.[a-z0-9]+$/i.test(url.pathname) ? null : estatico(`${url.pathname.replace(/\/$/, '')}.html`));
       if (r) return r;

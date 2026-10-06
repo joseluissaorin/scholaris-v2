@@ -85,12 +85,7 @@ export function portada(): Plugin {
           for (const x of laminas) writeFileSync(join(carpeta, x.fichero), x.svg);
           config.logger.info(`portada: ${p.fichero} (${(Buffer.byteLength(html) / 1024).toFixed(1)} KB) y ${laminas.length} láminas`);
         }
-        // robots.txt y sitemap.xml con el origen de ESTE despliegue (SCHOLARIS_ORIGEN), nunca uno fijo.
-        const o = (m as unknown as { ORIGEN: string }).ORIGEN;
-        writeFileSync(join(salida, 'robots.txt'), `User-agent: *\nAllow: /acerca\nAllow: /en\nAllow: /api\nDisallow: /\n\nSitemap: ${o}/sitemap.xml\n`);
-        const alt = `<xhtml:link rel="alternate" hreflang="es" href="${o}/acerca"/><xhtml:link rel="alternate" hreflang="en" href="${o}/en"/>`;
-        writeFileSync(join(salida, 'sitemap.xml'), `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">\n  <url><loc>${o}/acerca</loc>${alt}</url>\n  <url><loc>${o}/en</loc>${alt}</url>\n  <url><loc>${o}/api</loc></url>\n</urlset>\n`);
-        config.logger.info(`portada: robots.txt y sitemap.xml para ${o}`);
+        // robots.txt y sitemap.xml (con todas las páginas públicas) los escribe publico-agentes/vite-publico.ts.
       } finally {
         await vite.close();
       }

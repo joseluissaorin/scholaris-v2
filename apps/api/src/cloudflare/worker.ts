@@ -9,6 +9,7 @@
  */
 import type { MensajeCorreo } from '../rutas/social.js';
 import { recordarDemostracion, redireccionPortada } from './portada.js';
+import { servirPublica } from '../compartido/markdown-publico.js';
 import { prepararMotorWorkers } from '@scholaris/spdf/workers';
 import { PREFIJO_API, PREFIJO_V1 } from '@scholaris/contrato';
 import { crearPuerta, type Plataforma } from '../app.js';
@@ -107,6 +108,9 @@ const normal: ExportedHandler<Env> = {
     }
     // La web: estáticos y, para las rutas de la SPA, index.html.
     if (!env.ASSETS) return new Response('Scholaris API', { status: 200 });
+    // Páginas públicas: Markdown con «Accept: text/markdown» y cabecera Link en el HTML.
+    const publica = await servirPublica(peticion, (ruta, p) => env.ASSETS!.fetch(new Request(new URL(ruta, p.url), p)));
+    if (publica) return publica;
     // «/» sin sesión de Clerk: directo a la portada estática, sin cargar la aplicación.
     const portada = redireccionPortada(peticion);
     if (portada) return portada;

@@ -85,6 +85,8 @@ function cabeza(t: Textos): string {
     description: t.descripcion,
     image: tarjeta,
     author: { '@type': 'Person', name: 'José Luis Saorín Ferrer', url: 'https://joseluissaorin.com' },
+    offers: { '@type': 'Offer', price: '0', priceCurrency: 'EUR', url: `${ORIGEN}${t.lengua === 'es' ? '/saber/planes' : '/en/knowledge/plans'}` },
+    softwareHelp: { '@type': 'CreativeWork', url: `${ORIGEN}${t.lengua === 'es' ? '/saber' : '/en/knowledge'}` },
   };
   return `<head>
 <meta charset="utf-8">
@@ -95,6 +97,8 @@ function cabeza(t: Textos): string {
 <link rel="alternate" hreflang="es" href="${ORIGEN}/acerca">
 <link rel="alternate" hreflang="en" href="${ORIGEN}/en">
 <link rel="alternate" hreflang="x-default" href="${ORIGEN}/acerca">
+<link rel="alternate" type="text/markdown" title="${esc(t.titulo)} (Markdown)" href="${ORIGEN}${t.ruta}.md">
+<link rel="alternate" type="text/plain" title="llms.txt" href="${ORIGEN}/llms.txt">
 <meta name="theme-color" content="#F5F0E8">
 <meta name="color-scheme" content="light">
 <link rel="icon" href="/favicon.ico" sizes="any">
@@ -225,6 +229,7 @@ ${cabeza(t)}
 <a class="marca" href="${t.ruta}" aria-label="${esc(t.nav.inicio)}"><img src="/portada/logo-96.webp" width="46" height="46" alt="" fetchpriority="low"><span>Scholaris</span></a>
 <nav aria-label="${lengua === 'es' ? 'Principal' : 'Main'}">
 <a class="ensayo-enlace" href="#texto">${esc(t.nav.ensayo)}</a>
+<a href="${lengua === 'es' ? '/saber' : '/en/knowledge'}">${lengua === 'es' ? 'Saber' : 'Knowledge'}</a>
 <a href="${t.otra.ruta}" hreflang="${t.otra.hreflang}" lang="${t.otra.hreflang}" title="${esc(t.otra.etiqueta)}">${esc(t.otra.nombre)}</a>
 <a class="boton boton-papel boton-p" href="${ENTRAR}">${esc(t.nav.entrar)}</a>
 </nav>
@@ -236,7 +241,7 @@ ${colofon(t)}
 </main>
 <footer class="pie">
 <span>${esc(t.colofon.pie)} · ${lengua === 'es' ? 'una biblioteca leída y citable' : 'a library, read and citable'}</span>
-<nav aria-label="${lengua === 'es' ? 'Pie' : 'Footer'}"><a href="${ENTRAR}">${esc(t.nav.entrar)}</a><a href="${DEMOSTRACION}">${esc(t.heroe.probar)}</a><a href="${t.otra.ruta}" hreflang="${t.otra.hreflang}" lang="${t.otra.hreflang}">${esc(t.otra.nombre)}</a><a href="https://joseluissaorin.com" rel="author">joseluissaorin.com</a></nav>
+<nav aria-label="${lengua === 'es' ? 'Pie' : 'Footer'}"><a href="${ENTRAR}">${esc(t.nav.entrar)}</a><a href="${DEMOSTRACION}">${esc(t.heroe.probar)}</a><a href="${t.otra.ruta}" hreflang="${t.otra.hreflang}" lang="${t.otra.hreflang}">${esc(t.otra.nombre)}</a><a href="${lengua === 'es' ? '/saber' : '/en/knowledge'}">${lengua === 'es' ? 'Cómo funciona' : 'How it works'}</a><a href="${lengua === 'es' ? '/agentes' : '/en/agents'}">${lengua === 'es' ? 'Para agentes' : 'For agents'}</a><a href="https://joseluissaorin.com" rel="author">joseluissaorin.com</a></nav>
 </footer>
 <script>${SCRIPT_PIE}</script>
 </body>

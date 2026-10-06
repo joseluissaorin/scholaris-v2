@@ -1,0 +1,112 @@
+/*
+ * La base de conocimiento pública (/saber, /en/knowledge) y la página para
+ * agentes: el papel y la tinta de la portada, en dos columnas (el índice al
+ * margen y el texto), con un boceto pequeño en el margen de cada hoja.
+ * Los primitivos (variables, botones, cabecera, bloques de código) vienen de
+ * portada.css y guia.css; aquí solo lo propio.
+ */
+main { max-width: none; padding: 0; }
+.marco {
+  max-width: 74rem; margin: 0 auto; padding: 0 var(--canal) 4rem;
+  display: grid; grid-template-columns: 15.5rem minmax(0, 1fr); column-gap: clamp(1.5rem, 4vw, 3.5rem);
+}
+
+/* El índice al margen */
+.indice-saber { grid-column: 1; grid-row: 1; padding-top: 2.4rem; font-family: var(--sans); font-size: 0.92rem; }
+.indice-saber .pegado { position: sticky; top: 1rem; max-height: calc(100vh - 2rem); overflow-y: auto; padding-right: 0.4rem; }
+.indice-saber h2 { font: 500 0.72rem/1.4 var(--mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--apagado); margin: 0 0 0.6rem; }
+.indice-saber ol { list-style: none; margin: 0 0 1.6rem; padding: 0; counter-reset: hoja; }
+.indice-saber li { counter-increment: hoja; }
+.indice-saber li a {
+  display: grid; grid-template-columns: 2.5rem 1fr; padding: 0.28rem 0.4rem; border-radius: 8px;
+  text-decoration: none; color: var(--tinta-2); line-height: 1.35;
+}
+.indice-saber li a::before { content: counter(hoja, lower-roman) '.'; font-family: var(--mono); font-size: 0.72rem; color: var(--filete-2); padding-top: 0.15rem; }
+.indice-saber li a:hover { background: rgb(212 196 176 / 0.28); color: var(--tinta); }
+.indice-saber li a[aria-current='page'] { background: var(--hoja); color: var(--tinta); box-shadow: var(--relieve); }
+.indice-saber li a[aria-current='page']::before { color: var(--rojo); }
+.indice-saber .formatos a { display: block; padding: 0.2rem 0.4rem; color: var(--apagado); text-decoration-color: var(--filete-2); }
+
+/* La hoja */
+.doc { grid-column: 2; grid-row: 1; min-width: 0; max-width: 46rem; padding-top: 2.2rem; }
+.miga { font: 0.72rem/1.4 var(--mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--apagado); margin: 0 0 1rem; }
+.miga ol { list-style: none; display: flex; flex-wrap: wrap; gap: 0.3rem 0.5rem; margin: 0; padding: 0; }
+.miga li + li::before { content: '›'; margin-right: 0.5rem; color: var(--filete-2); }
+.miga a { text-decoration: none; }
+.miga a:hover { color: var(--rojo); }
+.cabeza-doc { position: relative; padding-right: clamp(0rem, 16vw, 10rem); margin-bottom: 1.6rem; }
+.cabeza-doc h1 { margin: 0 0 0.9rem; font-weight: normal; letter-spacing: -0.02em; line-height: 1.06; font-size: clamp(2rem, 5vw, 3.2rem); text-wrap: balance; }
+.cabeza-doc .entradilla { font-size: 1.12rem; color: var(--tinta-2); margin: 0 0 1rem; max-width: 38rem; }
+.boceto-margen { position: absolute; right: 0; top: 0.2rem; width: clamp(5.5rem, 14vw, 9.5rem); opacity: 0.92; pointer-events: none; }
+.boceto-margen svg { width: 100%; height: auto; }
+.datos-doc { display: flex; flex-wrap: wrap; gap: 0.4rem 1.2rem; font: 0.78rem/1.4 var(--mono); color: var(--apagado); margin: 0; }
+.datos-doc a { color: var(--tinta-2); text-decoration-color: var(--filete-2); }
+
+.en-esta { margin: 0 0 2rem; padding: 0.9rem 1.1rem; background: rgb(237 230 214 / 0.55); border-radius: 12px; box-shadow: var(--pulsado); font-family: var(--sans); font-size: 0.9rem; }
+.en-esta h2 { font: 500 0.7rem/1.4 var(--mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--apagado); margin: 0 0 0.4rem; }
+.en-esta ol { margin: 0; padding-left: 1.2rem; columns: 2 14rem; column-gap: 1.6rem; }
+.en-esta li { break-inside: avoid; margin: 0 0 0.2rem; }
+.en-esta li::marker { color: var(--rojo); font-family: var(--mono); font-size: 0.8em; }
+.en-esta a { text-decoration: none; }
+.en-esta a:hover { text-decoration: underline; text-decoration-color: var(--rojo); }
+
+.cuerpo-doc h2 {
+  margin: 2.6rem 0 1rem; padding-top: 1.6rem; border-top: 1px solid var(--filete);
+  font-weight: normal; color: var(--rojo); font-size: 1.3rem; letter-spacing: 0.04em; font-variant-caps: all-small-caps;
+}
+.cuerpo-doc h3 { margin: 1.9rem 0 0.5rem; font-weight: normal; font-size: 1.15rem; }
+.cuerpo-doc h4 { margin: 1.4rem 0 0.4rem; font-weight: normal; font-style: italic; font-size: 1.02rem; }
+.cuerpo-doc h2 + h3 { margin-top: 0.8rem; }
+.cuerpo-doc p, .cuerpo-doc ul, .cuerpo-doc ol, .cuerpo-doc dl { margin: 0 0 1rem; }
+.cuerpo-doc ul, .cuerpo-doc ol { padding-left: 1.3rem; }
+.cuerpo-doc li { margin: 0 0 0.45rem; padding-left: 0.2rem; }
+.cuerpo-doc li::marker { color: var(--rojo); }
+.cuerpo-doc a { text-decoration-color: var(--filete-2); text-underline-offset: 0.18em; }
+.cuerpo-doc a:hover { text-decoration-color: var(--rojo); }
+.cuerpo-doc hr { border: 0; border-top: 1px dashed var(--filete-2); margin: 2rem 0; }
+.cuerpo-doc blockquote { margin: 0 0 1.2rem; padding: 0.2rem 0 0.2rem 1.1rem; border-left: 3px solid var(--rojo); color: var(--tinta-2); font-style: italic; }
+.cuerpo-doc blockquote p:last-child { margin-bottom: 0; }
+
+.cuerpo-doc dl { display: grid; grid-template-columns: minmax(7rem, 12rem) minmax(0, 1fr); gap: 0.15rem 1.2rem; }
+.cuerpo-doc dt { font-variant-caps: all-small-caps; letter-spacing: 0.03em; font-size: 1.08rem; color: var(--tinta); padding-top: 0.55rem; border-top: 1px solid var(--filete); scroll-margin-top: 1rem; }
+.cuerpo-doc dd { margin: 0; padding: 0.55rem 0 0.3rem; border-top: 1px solid var(--filete); }
+.cuerpo-doc dt + dd ~ dd { border-top: 0; padding-top: 0; grid-column: 2; }
+.cuerpo-doc dt:target, .cuerpo-doc dt:target + dd { background: rgb(232 168 56 / 0.18); }
+
+.tabla { overflow-x: auto; margin: 0 0 1.4rem; }
+.cuerpo-doc table { width: 100%; border-collapse: collapse; font-size: 0.93rem; font-variant-numeric: lining-nums tabular-nums; }
+.cuerpo-doc thead th { text-align: left; font: 500 0.7rem/1.3 var(--mono); letter-spacing: 0.07em; text-transform: uppercase; color: var(--apagado); padding: 0.4rem 0.7rem 0.4rem 0; vertical-align: bottom; }
+.cuerpo-doc tbody th, .cuerpo-doc tbody td { border-top: 1px solid var(--filete); padding: 0.5rem 0.7rem 0.5rem 0; vertical-align: top; text-align: left; font-weight: normal; }
+.cuerpo-doc tbody th { color: var(--tinta); }
+.cuerpo-doc .num { text-align: right; white-space: nowrap; }
+
+.pie-doc { margin-top: 3rem; padding-top: 1.2rem; border-top: 1px solid var(--filete); font-size: 0.92rem; color: var(--apagado); }
+.pie-doc nav { display: flex; justify-content: space-between; gap: 1rem; flex-wrap: wrap; margin-bottom: 1rem; font-family: var(--sans); }
+.pie-doc nav a { text-decoration: none; color: var(--tinta-2); max-width: 48%; }
+.pie-doc nav a:hover { color: var(--rojo); }
+.pie-doc nav .sig { margin-left: auto; text-align: right; }
+.pie-doc nav span { display: block; font: 0.7rem var(--mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--apagado); }
+
+/* El índice de la base, en la portada de /saber */
+.hojas { list-style: none; padding: 0; margin: 0 0 2rem; display: grid; grid-template-columns: repeat(auto-fill, minmax(17rem, 1fr)); gap: 0.9rem; }
+.hojas li { margin: 0; padding: 0; }
+.hojas a { display: block; height: 100%; padding: 0.9rem 1rem; background: var(--hoja); border: 1px solid var(--filete); border-radius: 14px; box-shadow: var(--relieve); text-decoration: none; transition: transform 150ms ease-out, box-shadow 150ms ease-out; }
+.hojas a:hover { transform: translateY(-1px); box-shadow: var(--relieve-alto); }
+.hojas strong { display: block; font-weight: normal; font-size: 1.05rem; margin-bottom: 0.2rem; }
+.hojas span { display: block; font-size: 0.9rem; color: var(--apagado); line-height: 1.45; }
+
+@media (max-width: 900px) {
+  .marco { grid-template-columns: minmax(0, 1fr); }
+  .doc { grid-column: 1; }
+  .indice-saber { grid-column: 1; grid-row: 2; padding-top: 1rem; border-top: 1px solid var(--filete); margin-top: 2rem; }
+  .indice-saber .pegado { position: static; max-height: none; }
+  .cabeza-doc { padding-right: 6.5rem; }
+  .boceto-margen { width: 6rem; }
+  .cuerpo-doc dl { grid-template-columns: minmax(0, 1fr); }
+  .cuerpo-doc dt + dd ~ dd { grid-column: 1; }
+  .cuerpo-doc dd { border-top: 0; padding-top: 0.1rem; }
+}
+@media print {
+  .indice-saber, .en-esta, .pie-doc nav, .copiar { display: none; }
+  .marco { display: block; }
+}

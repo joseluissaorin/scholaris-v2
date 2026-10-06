@@ -4,6 +4,7 @@ import tailwindcss from '@tailwindcss/vite';
 import { tanstackRouter } from '@tanstack/router-plugin/vite';
 import { portada } from './src/portada/vite-portada';
 import { guiaApi } from './src/guia-api/vite-guia-api';
+import { publicoAgentes } from './src/publico-agentes/vite-publico';
 
 // La API (apps/api en wrangler dev o apps/local) escucha en 8787 durante el desarrollo.
 const API = process.env.SCHOLARIS_API ?? 'http://localhost:8787';
@@ -18,6 +19,9 @@ export default defineConfig({
     portada(),
     // La guía de la API (/api, /en/api) y /llms.txt: también estáticos prerenderizados.
     guiaApi(),
+    // La base de conocimiento (/saber, /en/knowledge), /agentes, los gemelos .md, llms.txt,
+    // robots.txt, sitemap.xml y /.well-known: para personas, buscadores y agentes.
+    publicoAgentes(),
   ],
   server: {
     port: 5180,

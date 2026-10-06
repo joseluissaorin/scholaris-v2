@@ -63,7 +63,8 @@ export function guiaApi(): Plugin {
           writeFileSync(destino, html);
           config.logger.info(`guía de la API: ${p.fichero} (${(Buffer.byteLength(html) / 1024).toFixed(1)} KB)`);
         }
-        writeFileSync(join(salida, 'llms.txt'), m.llmsTxt());
+        // /llms.txt (el índice de todo lo público) lo escribe publico-agentes/vite-publico.ts;
+        // las instrucciones de la API siguen en /api/v1/llms.txt.
       } finally {
         await vite.close();
       }
