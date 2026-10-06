@@ -292,15 +292,16 @@ export async function wikidataPrograma(titulo: string, autores: Autor[], red: Co
     if (!titulosCasan(titulo, e.etiqueta, 0.9)) continue;
     if (!ES_PROGRAMA.test(`${e.clase ?? ''} ${e.descripcion ?? ''}`)) continue;
     const presentadores = e.presentadores.map((p) => autorDe(p, 'es'));
+    // Si el presentador no figura entre los autores (solo se oyó al invitado), vale igual, con menos confianza.
     const casa = autoresCasan(autores, presentadores);
-    if (casa === false && autores.length) continue;
     const d: Partial<MetadatosDocumento> = { contenedor: e.etiqueta, tipoCSL: 'broadcast' };
     // El dueño de la cadena («RTVE») antes que la cadena de hoy («La 1»): es quien emite en el archivo.
     const editorial = [...e.propietarios].sort((a, b) => a.length - b.length)[0] ?? e.red;
     if (editorial) d.editorial = editorial;
     if (presentadores.length) d.autores = presentadores;
     return {
-      fuente: 'wikidata', confianza: casa ? 0.9 : 0.7, datos: d, id: `https://www.wikidata.org/wiki/${e.id}`,
+      // Que es un programa de televisión y quién lo emite lo dice el catálogo con seguridad, aunque el reparto no case.
+      fuente: 'wikidata', confianza: casa ? 0.9 : 0.75, porCampo: { tipoCSL: 0.9, contenedor: 0.9, editorial: 0.9 }, datos: d, id: `https://www.wikidata.org/wiki/${e.id}`,
       control: { ...(e.inicio ? { desde: e.inicio } : {}), ...(e.fin ? { hasta: e.fin } : {}) },
     };
   }

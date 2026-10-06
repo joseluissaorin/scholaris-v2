@@ -191,7 +191,8 @@ export async function enriquecer(e: EntradaEnriquecimiento, red: Consultor | nul
       const presentadores = wp.datos.autores ?? [];
       delete wp.datos.autores;
       const faltan = presentadores.filter((p) => !autores.some((a) => claveAutor(a).split('|')[0] === claveAutor(p).split('|')[0]));
-      if (faltan.length && autores.length) wp.datos.autores = [...faltan, ...autores];
+      // Lista ampliada (presentador + los de la lectura): gana a la lectura sola.
+      if (faltan.length && autores.length) { wp.datos.autores = [...faltan, ...autores]; wp.porCampo = { ...wp.porCampo, autores: 0.85 }; }
       const { desde, hasta } = wp.control ?? {};
       if (base.anio && desde && (base.anio < desde || base.anio > (hasta ?? actual()))) {
         avisos.push(`El año ${base.anio} cae fuera de los años en antena de «${programa}» (${desde}-${hasta ?? 'hoy'}).`);
