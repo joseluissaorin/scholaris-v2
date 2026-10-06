@@ -44,23 +44,21 @@ interface Props {
 /** La fuente del motor para un documento: la primera URL de la caché (precargada), las siguientes nuevas. */
 function useFuente(doc: DetalleDocumento): FuenteMedio {
   const qc = useQueryClient();
-  return useMemo(() => {
-    let primera = true;
-    return {
-      documento: doc.id,
-      tipo: doc.tipo === 'video' ? 'video' : 'audio',
-      titulo: doc.metadatos.titulo || 'Sin título',
-      autores: autores(doc.metadatos),
-      ...(doc.portadaUrl ? { portada: doc.portadaUrl } : {}),
-      ...(doc.duracion ? { duracion: doc.duracion } : {}),
-      url: async () => {
-        if (primera) { primera = false; return (await qc.fetchQuery(q.original(doc.id))).url || null; }
-        const r = await api().documentos.original(doc.id);
-        qc.setQueryData(q.original(doc.id).queryKey, r);
-        return r.url || null;
-      },
-    } satisfies FuenteMedio;
-  }, [doc.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  return useMemo(() => ({
+    documento: doc.id,
+    tipo: doc.tipo === 'video' ? 'video' : 'audio',
+    titulo: doc.metadatos.titulo || 'Sin título',
+    autores: autores(doc.metadatos),
+    ...(doc.portadaUrl ? { portada: doc.portadaUrl } : {}),
+    ...(doc.duracion ? { duracion: doc.duracion } : {}),
+    url: async (renovar?: boolean) => {
+      // La primera vez vale la de la caché (el cargador del lector ya la pidió); al renovar, una nueva.
+      if (!renovar) return (await qc.fetchQuery(q.original(doc.id))).url || null;
+      const r = await api().documentos.original(doc.id);
+      qc.setQueryData(q.original(doc.id).queryKey, r);
+      return r.url || null;
+    },
+  } satisfies FuenteMedio), [doc.id]); // eslint-disable-line react-hooks/exhaustive-deps
 }
 
 export const Reproductor = forwardRef<ManejadorMedio, Props>(function Reproductor({ doc, inicial, resaltar, alVer, pendientes }, ref) {
@@ -167,7 +165,7 @@ export const Reproductor = forwardRef<ManejadorMedio, Props>(function Reproducto
         <div className="hidden lg:block">
           {tr && tr.hablantes.length ? <Hablantes tr={tr} /> : null}
           {capitulos.length ? <Capitulos capitulos={capitulos} /> : null}
-          {esVideo && fotogramas ? <Escenas fotogramas={fotogramas} /> : null}
+          {esVideo && fotogramas ? <Escenas fotogramas={fotogramas} cargar={propio && inst.estado !== 'vacio' && inst.estado !== 'cargando'} /> : null}
           <p className="mt-6 flex flex-wrap items-center gap-x-2 gap-y-1 text-[0.75rem] text-apagado">
             <Teclas>Espacio</Teclas> reproduce · <Teclas>J</Teclas><Teclas>L</Teclas> 10 s · <Teclas>[</Teclas><Teclas>]</Teclas> velocidad ·
             <button type="button" onClick={abrirAyuda} className="underline decoration-filete-fuerte underline-offset-4 hover:text-coffee-800">todas las teclas</button>
@@ -610,7 +608,10 @@ function Capitulos({ capitulos }: { capitulos: Capitulo[] }) {
 }
 
 /** Escenas: nueve fotogramas clave repartidos por el vídeo (sin los fundidos a negro); la actual, marcada. */
-function Escenas({ fotogramas }: { fotogramas: NonNullable<ReturnType<typeof useFotogramas>> }) {
+function Escenas({ fotogramas, cargar }: { fotogramas: NonNullable<ReturnType<typeof useFotogramas>>; cargar: boolean }) {
+  // Las imágenes esperan a que el vídeo tenga su índice: los primeros bytes son para el vídeo.
+  const [pedir, setPedir] = useState(cargar);
+  useEffect(() => { if (cargar) setPedir(true); }, [cargar]);
   const elegidos = useMemo(() => {
     const validos = Array.from(fotogramas.t, (_, i) => i).filter((i) => !/negr|en blanco|vac[ií]o/i.test(fotogramas.descripcion[i] ?? ''));
     if (validos.length <= 9) return validos;
@@ -637,7 +638,7 @@ function Escenas({ fotogramas }: { fotogramas: NonNullable<ReturnType<typeof use
           <li key={i}>
             <button type="button" data-escena onClick={() => motor().irA(fotogramas.t[i]!, { sonar: true })} aria-label={`Ir a ${tiempoACadena(fotogramas.t[i]!)}${fotogramas.descripcion[i] ? `: ${fotogramas.descripcion[i]}` : ''}`}
               className="escena group block w-full overflow-hidden rounded-lg border border-cream-400 bg-cream-50 text-left shadow-[var(--relieve)] transition-[transform,box-shadow] hover:-translate-y-px hover:shadow-[var(--levantado)]">
-              <img src={fotogramas.url[i]} alt="" loading="lazy" decoding="async" className="block aspect-video w-full bg-coffee-900 object-cover" />
+              {pedir ? <img src={fotogramas.url[i]} alt="" loading="lazy" decoding="async" className="block aspect-video w-full bg-coffee-900 object-cover" /> : <span className="block aspect-video w-full bg-coffee-900/80" />}
               <span className="block px-1.5 py-1 font-mono text-[0.6875rem] tnum text-coffee-600">{tiempoACadena(fotogramas.t[i]!)}</span>
             </button>
           </li>

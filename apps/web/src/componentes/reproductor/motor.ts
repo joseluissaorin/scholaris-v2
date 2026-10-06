@@ -24,8 +24,11 @@ export interface FuenteMedio {
   portada?: string;
   /** Duración conocida (de la ficha), antes de que lleguen los metadatos. */
   duracion?: number;
-  /** URL firmada nueva cada vez que se llama (null: no hay archivo; reloj virtual). */
-  url: () => Promise<string | null>;
+  /**
+   * URL firmada del archivo (null: no hay archivo; reloj virtual). Con `renovar`
+   * hay que pedir una nueva (la anterior caducó o falló); sin él vale la de la caché.
+   */
+  url: (renovar?: boolean) => Promise<string | null>;
 }
 
 export interface Instantanea {
@@ -126,6 +129,8 @@ export class Motor {
   private pip = false;
   private error: string | null = null;
   private haSonado = false;
+  /** Soltar el medio al salir del lector se aplaza un instante: si otro escenario lo acoge enseguida (un remontaje), no se suelta. */
+  private soltar: ReturnType<typeof setTimeout> | null = null;
 
   constructor() {
     this.inst = this.calcular();
@@ -350,7 +355,8 @@ export class Motor {
       return;
     }
     const v = this.crearVideo();
-    v.src = url;
+    // Fragmento de medio (#t=): el navegador pide el rango de ese instante en cuanto lee el índice, sin esperar a este código.
+    v.src = this.pendiente ? `${url}#t=${this.pendiente.toFixed(2)}` : url;
     v.load();
     if (this.b.quiere) this.reproducirElemento();
     this.avisarTiempo();
@@ -392,7 +398,7 @@ export class Motor {
     setTimeout(async () => {
       if (ficha !== this.ficha) return;
       let url: string | null = null;
-      try { url = await fuente.url(); } catch { /* se reintenta abajo */ }
+      try { url = await fuente.url(true); } catch { /* se reintenta abajo */ }
       if (ficha !== this.ficha) return;
       if (!url) { this.despachar({ tipo: 'error', codigo: 2 }); return; }
       this.pendiente = t;
@@ -584,6 +590,7 @@ export class Motor {
   /** El escenario del lector o del reproductor pequeño acoge el marco. */
   alojar(nodo: HTMLElement, lugar: 'lector' | 'mini') {
     if (!this.marco) return;
+    if (this.soltar) { clearTimeout(this.soltar); this.soltar = null; }
     if (this.marco.parentElement !== nodo) nodo.appendChild(this.marco);
     this.anfitrion = nodo;
     this.lugar = lugar;
@@ -603,7 +610,7 @@ export class Motor {
     this.lugar = null;
     if (lugar === 'lector') {
       if (this.fuente && this.b.quiere && !this.b.error && !this.pip) this.miniActivo = true;
-      else if (this.fuente && !this.pip) this.descargar();
+      else if (this.fuente && !this.pip) this.soltar = setTimeout(() => { this.soltar = null; if (!this.anfitrion) this.descargar(); }, 0);
     }
     this.emitir();
   }

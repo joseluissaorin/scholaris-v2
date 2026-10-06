@@ -21,15 +21,20 @@ import { MenuDocumento, reintentarDocumento } from '../componentes/biblioteca/do
 
 export const Route = createFileRoute('/lector/$id')({
   validateSearch: (s: Record<string, unknown>): BusquedaLector => validarBusquedaLector(s),
-  loaderDeps: ({ search }) => ({ u: search.u }),
+  // «conT»: un enlace con ?t= es de audio o vídeo (y no cambia cada vez que la URL sigue al reproductor).
+  loaderDeps: ({ search }) => ({ u: search.u, conT: search.t != null }),
   loader: async ({ context, params, deps }) => {
     const c = context.consultas;
     void c.prefetchQuery(q.secciones(params.id));
     void c.prefetchQuery(q.folios(params.id));
     void c.prefetchQuery(q.bloque(params.id, Math.floor(((deps.u ?? 1) - 1) / BLOQUE)));
-    const d = await c.ensureQueryData(q.documento(params.id));
     // Audio y vídeo: la URL firmada del archivo antes del primer pintado (el vídeo empieza a cargar al montar).
-    if (esMedio(d.tipo)) await c.prefetchQuery(q.original(params.id));
+    // Si ya se sabe que es un medio (por el enlace o por la biblioteca), se pide a la vez que el documento.
+    const tipoSabido = c.getQueryData(q.documento(params.id).queryKey)?.tipo
+      ?? c.getQueriesData<{ elementos?: Array<{ id: string; tipo: DetalleDocumento['tipo'] }> }>({ queryKey: ['documentos'] }).flatMap(([, v]) => v?.elementos ?? []).find((x) => x.id === params.id)?.tipo;
+    const original = deps.conT || (tipoSabido && esMedio(tipoSabido)) ? c.prefetchQuery(q.original(params.id)) : null;
+    const d = await c.ensureQueryData(q.documento(params.id));
+    if (esMedio(d.tipo)) await (original ?? c.prefetchQuery(q.original(params.id)));
   },
   pendingComponent: EsperaLector,
   component: Lector,
