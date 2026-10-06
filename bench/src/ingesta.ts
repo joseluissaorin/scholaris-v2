@@ -12,7 +12,7 @@ import { createCanvas, loadImage } from '@napi-rs/canvas';
 import { convertirEnMemoria, abrirCortador, type PaqueteEnMemoria, type OpcionesConversion } from '@scholaris/imprenta/node';
 import { crearInteligencia, type UsoProveedor } from '@scholaris/proveedores';
 import { crearSpdf } from '@scholaris/spdf';
-import { ejecutarIngesta, type FuentePaquete, type OpcionesOrquestador } from '@scholaris/ingesta';
+import { ejecutarIngesta, type FuentePaquete, type OpcionesOrquestador, type PuertosIngesta } from '@scholaris/ingesta';
 import { sha256, type Progreso, type Transcripcion, type Transcriptor } from '@scholaris/nucleo';
 import { cargarEntorno } from './entorno.js';
 
@@ -110,7 +110,7 @@ export async function ingerir(ruta: string, o: OpcionesBanco = {}) {
   const pasos: Record<string, number> = {};
   const muestras: string[] = [];
   const ia = crearInteligencia(cargarEntorno(), {
-    onUso: (u) => usos.push(u), concurrencia: 48, calidadLector,
+    onUso: (u) => usos.push(u), concurrencia: 48, calidadLector, ...(o.modo === 'economico' ? { lotes: true } : {}),
     alPasarLector: (i) => { const k = `${i.lector.split(':').pop()} → ${i.motivo.slice(0, 80)}`; pasos[k] = (pasos[k] ?? 0) + i.paginas.length; if (muestras.length < 5 && /red/.test(i.motivo)) muestras.push(i.motivo.slice(0, 400)); },
   });
   if (o.cacheTranscripciones !== false) ia.transcriptor = transcriptorConCache(ia.transcriptor);
@@ -152,7 +152,12 @@ export async function ingerir(ruta: string, o: OpcionesBanco = {}) {
       }
     },
   };
-  const r = await ejecutarIngesta(paquete, { inteligencia: ia, fuente, sql: archivo.sql, correoContacto: 'jl@joseluissaorin.com' }, opciones);
+  const iaEco = ia as typeof ia & { lotes?: PuertosIngesta['lotes']; lectorEconomico?: PuertosIngesta['lectorEconomico'] };
+  const r = await ejecutarIngesta(paquete, {
+    inteligencia: ia, fuente, sql: archivo.sql, correoContacto: 'jl@joseluissaorin.com',
+    ...(o.modo === 'economico' && iaEco.lotes ? { lotes: iaEco.lotes } : {}),
+    ...(o.modo === 'economico' && iaEco.lectorEconomico ? { lectorEconomico: iaEco.lectorEconomico } : {}),
+  }, { ...opciones, ...(o.modo === 'economico' ? { esperaLote: { cadaMs: 30_000, maximoMs: 3 * 3600_000 } } : {}) });
   const msIngesta = Date.now() - tIngesta;
 
   // 3. Blobs: miniaturas, fotogramas y figuras (el SPDF se ve sin el original); el original, opcional.
