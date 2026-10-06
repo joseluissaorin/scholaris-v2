@@ -200,7 +200,11 @@ export function Teclas({ children, className }: { children: ReactNode; className
   );
 }
 
-/** Barra de avance: un carril hundido con la tinta llenándolo. Sin valor es indeterminada. */
+/**
+ * Barra de avance: un carril hundido con la tinta llenándolo. Sin valor es indeterminada.
+ * Es `relative` (su relleno se posiciona dentro): para fijarla arriba, envuélvela en un
+ * contenedor `fixed`; una clase `fixed` aquí perdería contra `relative`.
+ */
 export function BarraAvance({ valor, className, etiqueta, tono = 'rojo' }: { valor?: number; className?: string; etiqueta?: string; tono?: 'rojo' | 'azul' | 'tinta' }) {
   const color = tono === 'azul' ? 'bg-azul' : tono === 'tinta' ? 'bg-coffee-800' : 'bg-rojo';
   return (

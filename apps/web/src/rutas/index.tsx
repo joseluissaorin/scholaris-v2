@@ -43,9 +43,12 @@ export const Route = createFileRoute('/')({
     vista: s.vista === 'lista' ? 'lista' : undefined,
   }),
   // La mesa de entrada se conoce antes del primer pintado: nada empuja la rejilla después.
+  // Espera a los datos como mucho 250 ms (así casi nunca salta la mesa de entrada); si
+  // tardan más, se pinta ya con esqueletos y los datos entran al llegar.
   loader: async ({ context }) => {
     void context.consultas.prefetchQuery(q.bibliotecas());
-    await Promise.all([context.consultas.ensureQueryData(q.documentos()), recuperarTareas()]);
+    const datos = Promise.all([context.consultas.ensureQueryData(q.documentos()), recuperarTareas()]).catch(() => undefined);
+    await Promise.race([datos, new Promise((r) => setTimeout(r, 250))]);
   },
   component: PaginaBiblioteca,
 });

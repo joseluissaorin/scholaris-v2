@@ -7,11 +7,16 @@ import { Entrada } from '../componentes/marco/entrada';
 import { alDisparar } from '../lib/acciones';
 import { recuperarTareas } from '../datos/ingesta';
 import { NoEncontrado, ErrorDeRuta } from '../componentes/comunes/errores';
+import { EsperaMarco } from '../componentes/marco/espera';
 
 const Paleta = lazy(() => import('../componentes/marco/paleta'));
 
 export const Route = createRootRouteWithContext<{ consultas: QueryClient }>()({
   component: Marco,
+  // Si la raíz espera (primera carga), el armazón entero: barra, cabecera y esqueletos.
+  pendingComponent: EsperaMarco,
+  pendingMs: 0,
+  pendingMinMs: 0,
   notFoundComponent: NoEncontrado,
   errorComponent: ErrorDeRuta,
 });
@@ -20,7 +25,8 @@ export const Route = createRootRouteWithContext<{ consultas: QueryClient }>()({
 function IndicadorCarga() {
   const cargando = useRouterState({ select: (s) => s.status === 'pending' });
   if (!cargando) return null;
-  return <BarraAvance className="fixed inset-x-0 top-0 z-[80]" etiqueta="Cargando" />;
+  // Fuera del flujo: un contenedor fijo. Dentro de la fila flexible empujaría la barra lateral.
+  return <div className="pointer-events-none fixed inset-x-0 top-0 z-[80]"><BarraAvance className="rounded-none" etiqueta="Cargando" /></div>;
 }
 
 function Marco() {

@@ -48,8 +48,8 @@
   </head>
   <body>
     <!-- Primer pintado sin JavaScript: la barra café con el logo, en su sitio definitivo. React lo sustituye. -->
-    <div id="raiz"><div style="display:flex;min-height:100dvh"><div class="pre-barra" style="width:14rem;background:#2c1810"><div style="height:3.5rem;display:flex;align-items:center;gap:.625rem;padding:0 1.25rem;border-bottom:1px solid #4a2e1a"><img src="/logo.webp" width="32" height="32" alt="" style="filter:invert(1) sepia(.2) brightness(.95);mix-blend-mode:lighten" /><span style="font:600 1.125rem system-ui,sans-serif;letter-spacing:.025em;color:#faf7f0">Scholaris</span></div></div></div></div>
-    <style>@media (max-width:1023px){.pre-barra{display:none!important}}</style>
+    <div id="raiz"><div style="display:flex;min-height:100dvh;background:#f5f0e8"><div class="pre-barra" style="width:14rem;background:#2c1810;flex-shrink:0"><div style="height:3.5rem;display:flex;align-items:center;gap:.625rem;padding:0 1.25rem;border-bottom:1px solid #4a2e1a"><img src="/logo.webp" width="32" height="32" alt="" style="filter:invert(1) sepia(.2) brightness(.95);mix-blend-mode:lighten" /><span style="font:600 1.125rem 'DM Sans',system-ui,sans-serif;letter-spacing:.025em;color:#faf7f0">Scholaris</span></div></div><div style="flex:1;min-width:0"><div class="pre-cabecera" style="height:3.5rem;display:flex;align-items:center;gap:.5rem;padding:0 1rem;background:#2c1810"><img src="/logo.webp" width="28" height="28" alt="" style="filter:invert(1) sepia(.2) brightness(.95);mix-blend-mode:lighten" /><span style="font:600 1.0625rem 'DM Sans',system-ui,sans-serif;color:#faf7f0">Scholaris</span></div></div></div></div>
+    <style>@media (max-width:1023px){.pre-barra{display:none!important}}@media (min-width:1024px){.pre-cabecera{display:none!important}}</style>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
