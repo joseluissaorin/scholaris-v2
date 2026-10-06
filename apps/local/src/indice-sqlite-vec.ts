@@ -67,8 +67,9 @@ export class IndiceSqliteVec implements IndiceVectorial {
       for (const e of entradas) {
         borrar.run(e.id);
         const m = e.metadatos;
-        poner.run(e.id, this.bytes(e.valores), String(m.objetivo ?? ''), String(m.documento ?? ''), m.tipo == null ? null : String(m.tipo),
-          typeof m.anio === 'number' ? BigInt(Math.trunc(m.anio)) : null, m.idioma == null ? null : String(m.idioma));
+        // vec0 no admite NULL en sus columnas de metadatos: '' y 0 son «sin dato».
+        poner.run(e.id, this.bytes(e.valores), String(m.objetivo ?? ''), String(m.documento ?? ''), m.tipo == null ? '' : String(m.tipo),
+          BigInt(typeof m.anio === 'number' ? Math.trunc(m.anio) : 0), m.idioma == null ? '' : String(m.idioma));
       }
       this.db.exec('RELEASE vec');
     } catch (e) {
@@ -87,12 +88,12 @@ export class IndiceSqliteVec implements IndiceVectorial {
       `SELECT id, distance, ${META.join(', ')} FROM ${this.tabla} WHERE embedding MATCH ? AND k = ?${obj ? ' AND objetivo = ?' : ''} ORDER BY distance`,
     ).all(...[this.bytes(vector), k, ...(obj ? [obj] : [])]) as Array<Record<string, unknown> & { id: string; distance: number }>;
     return filas
-      .filter((f) => cumple(f, resto))
+      .filter((f) => cumple({ ...f, anio: f.anio === 0 || f.anio === 0n ? undefined : Number(f.anio) }, resto))
       .slice(0, op.k)
       .map((f) => ({
         id: f.id,
         puntuacion: 1 - f.distance,
-        ...(op.conMetadatos ? { metadatos: Object.fromEntries(META.filter((m) => f[m] != null).map((m) => [m, f[m] as string | number])) } : {}),
+        ...(op.conMetadatos ? { metadatos: Object.fromEntries(META.filter((m) => f[m] != null && f[m] !== '' && f[m] !== 0).map((m) => [m, typeof f[m] === 'bigint' ? Number(f[m]) : (f[m] as string | number)])) } : {}),
       }));
   }
 
