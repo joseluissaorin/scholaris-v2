@@ -38,7 +38,7 @@ import type {
   TipoEntrada,
   ValorSQL,
 } from '@scholaris/nucleo';
-import { aRomano, limpiarMarcadoOCR, sha256, tiempoACadena } from '@scholaris/nucleo';
+import { aRomano, limpiarDescripcionV1, limpiarMarcadoOCR, sha256, tiempoACadena } from '@scholaris/nucleo';
 import { deducirFolios, type FolioPagina, type PaginaFolio } from '@scholaris/folios';
 import { abrirBaseCruda, ArchivoSpdf, bytesSqlite, GENERADOR } from './archivo.js';
 import { rellenarTextoBusqueda } from './esquema.js';
@@ -781,7 +781,7 @@ class Migracion {
         }
         const u = this.unidadPorPdf.get(num(f.pdf_page) ?? -1) ?? this.unidades[0];
         if (!u) continue;
-        const partes = [esVacio(f.description) ? '' : limpiarEspacios(txt(f.description)), esVacio(f.ocr_text) ? '' : `Texto en la imagen: ${limpiarEspacios(txt(f.ocr_text))}`].filter(Boolean);
+        const partes = [esVacio(f.description) ? '' : limpiarEspacios(limpiarDescripcionV1(txt(f.description))), esVacio(f.ocr_text) ? '' : `Texto en la imagen: ${limpiarEspacios(txt(f.ocr_text))}`].filter(Boolean);
         const id = `${this.id}:i${v3id}`;
         insertar(id, u.id, clave, partes.join('\n\n') || null, u.ancla);
         this.vector('figura', id, base, bytesDe(f.embedding));

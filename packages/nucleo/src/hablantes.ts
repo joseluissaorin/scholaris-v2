@@ -91,3 +91,15 @@ export function limpiarMarcadoOCR(texto: string): string {
     .replace(/\n{3,}/g, '\n\n')
     .trim();
 }
+
+/**
+ * Descripciones de figuras de la v1: «Image type: ARTWORK Description: …»
+ * (a veces con negritas de Markdown). Se queda solo la descripción.
+ */
+export function limpiarDescripcionV1(texto: string | null | undefined): string {
+  if (!texto) return '';
+  return texto
+    .replace(/^\s*\**\s*Image\s+type\s*:?\s*\**\s*[A-Z_ /-]+?\s*\**\s*Description\s*:?\s*\**\s*/i, '')
+    .replace(/\*\*/g, '')
+    .trim();
+}

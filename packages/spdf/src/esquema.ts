@@ -9,7 +9,7 @@
  */
 
 import type { SQL, ValorSQL } from "@scholaris/nucleo";
-import { limpiarMarcadoOCR } from "@scholaris/nucleo";
+import { limpiarDescripcionV1, limpiarMarcadoOCR } from "@scholaris/nucleo";
 import { epocaDeDocumento, lenguaDe, textoBusqueda, type Epoca } from "@scholaris/normalizacion";
 
 export const VERSION_SPDF = "4.1";
@@ -414,6 +414,20 @@ export async function repararMigrados(sql: SQL): Promise<{ renumerados: number; 
   return { renumerados: docs.length, textos: textos + fragmentos };
 }
 
+/** Segunda reparación: las descripciones de figuras de la v1 («Image type: ARTWORK Description: …»). */
+export const REPARACION_FIGURAS_V1 = 'reparacion_figuras_v1_1';
+export async function repararDescripcionesV1(sql: SQL): Promise<number> {
+  const [hecha] = await sql.ejecutar<{ valor: string }>('SELECT valor FROM spdf WHERE clave = ?', REPARACION_FIGURAS_V1);
+  if (hecha) return 0;
+  let n = 0;
+  for (const f of await sql.ejecutar<{ id: string; descripcion: string }>("SELECT id, descripcion FROM figuras WHERE descripcion LIKE '%Image type%' OR descripcion LIKE '%Description:%'")) {
+    const limpia = limpiarDescripcionV1(f.descripcion);
+    if (limpia !== f.descripcion) { await sql.ejecutar('UPDATE figuras SET descripcion = ? WHERE id = ?', limpia || null, f.id); n++; }
+  }
+  await sql.ejecutar("INSERT INTO spdf(clave, valor) VALUES (?, ?) ON CONFLICT(clave) DO UPDATE SET valor = excluded.valor", REPARACION_FIGURAS_V1, new Date().toISOString());
+  return n;
+}
+
 export async function aplicarEsquema(sql: SQL, opciones: { generador?: string; rellenar?: boolean } = {}): Promise<void> {
   await migrarPalabras(sql);
   const reconstruir = await prepararMigracion41(sql);
@@ -441,4 +455,5 @@ export async function aplicarEsquema(sql: SQL, opciones: { generador?: string; r
     await sql.ejecutar("INSERT INTO spdf(clave, valor) VALUES ('generador', ?) ON CONFLICT(clave) DO UPDATE SET valor = excluded.valor", opciones.generador);
   }
   await repararMigrados(sql);
+  await repararDescripcionesV1(sql);
 }

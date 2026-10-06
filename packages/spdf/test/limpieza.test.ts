@@ -102,3 +102,12 @@ describe('reparación de los documentos migrados con el migrador antiguo', () =>
     expect(await repararMigrados(sql as never)).toEqual({ renumerados: 0, textos: 0 });
   });
 });
+
+describe('descripciones de figuras de la v1', () => {
+  it('se queda solo la descripción, también con negritas', async () => {
+    const { limpiarDescripcionV1 } = await import('@scholaris/nucleo');
+    expect(limpiarDescripcionV1('Image type: ARTWORK Description: Una ilustración.')).toBe('Una ilustración.');
+    expect(limpiarDescripcionV1('**Image type:** DOCUMENT **Description:** A page.')).toBe('A page.');
+    expect(limpiarDescripcionV1('Grabado ovalado con la inscripción «25. Harmony».')).toBe('Grabado ovalado con la inscripción «25. Harmony».');
+  });
+});

@@ -1,7 +1,7 @@
 /** Documentos de la estantería (ver contrato/documentos.ts). */
 import type { Hono } from 'hono';
 import type { Ancla, Documento, MetadatosDocumento, ValorSQL } from '@scholaris/nucleo';
-import { enLista, limpiarMarcadoOCR, vectorABytes } from '@scholaris/nucleo';
+import { enLista, limpiarDescripcionV1, limpiarMarcadoOCR, vectorABytes } from '@scholaris/nucleo';
 import type {
   DetalleDocumento, FiguraVista, FoliosRehechos, FragmentoVista, MapaFolios, Pagina, PaginasRehechas, ParcheMetadatos, RehacerFolios, RehacerPaginas, Reprocesar, ResumenDocumento, SeccionVista,
   UnidadVista, VolcadoDocumento,
@@ -386,7 +386,7 @@ export function rutasDocumentos(app: Hono<Entorno>): void {
     return c.json<FiguraVista[]>(await Promise.all(figuras.map(async (g) => {
       const v: FiguraVista = { id: g.id, unidad: ordenes.get(g.unidad) ?? 0, imagenUrl: g.imagen ? await p.almacen.urlLectura(claveDe(p.usuario.id, id, g.imagen)) : '', ancla: g.ancla, etiqueta: etiquetaAncla(g.ancla) };
       if (g.pie) v.pie = g.pie;
-      if (g.descripcion) v.descripcion = g.descripcion;
+      if (g.descripcion) v.descripcion = limpiarDescripcionV1(g.descripcion);
       Object.assign(v, extrasFigura(g.ancla));
       return v;
     })));
