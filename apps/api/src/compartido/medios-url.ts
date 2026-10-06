@@ -47,26 +47,30 @@ export async function infoYoutube(url: string, f: typeof fetch = fetch): Promise
   if (!id) throw new Error('No es una URL de YouTube válida.');
   const canonica = `https://www.youtube.com/watch?v=${id}`;
   const info: InfoYoutube = { id, url: canonica, miniatura: `https://i.ytimg.com/vi/${id}/hqdefault.jpg` };
-  try {
-    const r = await f('https://www.youtube.com/youtubei/v1/player?prettyPrint=false', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', 'user-agent': NAVEGADOR },
-      body: JSON.stringify({ videoId: id, context: { client: { clientName: 'WEB', clientVersion: '2.20251001.00.00', hl: 'en', gl: 'US' } } }),
-    });
-    if (r.ok) {
-      const j = (await r.json()) as {
-        videoDetails?: { title?: string; author?: string; lengthSeconds?: string; shortDescription?: string };
-        microformat?: { playerMicroformatRenderer?: { publishDate?: string; uploadDate?: string } };
-      };
-      const v = j.videoDetails ?? {};
-      if (v.title) info.titulo = v.title;
-      if (v.author) info.canal = v.author;
-      if (v.lengthSeconds && Number(v.lengthSeconds) > 0) info.duracion = Number(v.lengthSeconds);
-      if (v.shortDescription) info.descripcion = v.shortDescription.slice(0, 2000);
-      const fecha = j.microformat?.playerMicroformatRenderer?.publishDate ?? j.microformat?.playerMicroformatRenderer?.uploadDate;
-      if (fecha && /^\d{4}-\d{2}-\d{2}/.test(fecha)) info.fecha = fecha.slice(0, 10);
-    }
-  } catch { /* sin la API del reproductor */ }
+  // Desde Cloudflare, el cliente «WEB» pide confirmar que no es un robot; el de la web móvil responde.
+  for (const client of [{ clientName: 'MWEB', clientVersion: '2.20251001.00.00', hl: 'en', gl: 'US' }, { clientName: 'WEB', clientVersion: '2.20251001.00.00', hl: 'en', gl: 'US' }]) {
+    if (info.duracion) break;
+    try {
+      const r = await f('https://www.youtube.com/youtubei/v1/player?prettyPrint=false', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'user-agent': NAVEGADOR },
+        body: JSON.stringify({ videoId: id, context: { client } }),
+      });
+      if (r.ok) {
+        const j = (await r.json()) as {
+          videoDetails?: { title?: string; author?: string; lengthSeconds?: string; shortDescription?: string };
+          microformat?: { playerMicroformatRenderer?: { publishDate?: string; uploadDate?: string } };
+        };
+        const v = j.videoDetails ?? {};
+        if (v.title) info.titulo = v.title;
+        if (v.author) info.canal = v.author;
+        if (v.lengthSeconds && Number(v.lengthSeconds) > 0) info.duracion = Number(v.lengthSeconds);
+        if (v.shortDescription) info.descripcion = v.shortDescription.slice(0, 2000);
+        const fecha = j.microformat?.playerMicroformatRenderer?.publishDate ?? j.microformat?.playerMicroformatRenderer?.uploadDate;
+        if (fecha && /^\d{4}-\d{2}-\d{2}/.test(fecha)) info.fecha = fecha.slice(0, 10);
+      }
+    } catch { /* sin la API del reproductor con este cliente */ }
+  }
   if (!info.titulo || !info.canal) {
     try {
       const o = await f(`https://www.youtube.com/oembed?format=json&url=${encodeURIComponent(canonica)}`);

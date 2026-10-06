@@ -97,10 +97,10 @@ export async function convertirEnServidor(e: EntradaReserva): Promise<PaqueteCon
       return {
         ...base, tipo: 'video',
         origen: { nombre: info.titulo ?? info.url, mime: MIME_YOUTUBE, bytes: 0, huella: await sha256(info.url) },
-        // El canal es quien lo publica (editorial), no el autor; YouTube es el contenedor.
+        // El canal es quien lo publica (editorial), no el autor.
         metadatos: {
           ...(info.titulo ? { titulo: info.titulo } : {}), url: info.url, ...(info.idioma ? { idioma: info.idioma } : {}),
-          autores: [], ...(info.canal ? { editorial: info.canal } : {}), contenedor: 'YouTube', tipoCSL: 'motion_picture',
+          autores: [], ...(info.canal ? { editorial: info.canal } : {}), tipoCSL: 'motion_picture',
           ...(info.fecha ? { fecha: info.fecha, anio: Number(info.fecha.slice(0, 4)) } : {}),
         },
         unidades: tramos.length,
