@@ -110,8 +110,12 @@ input.volumen::-moz-range-thumb { height: 12px; width: 12px; border-radius: 9999
   font-display: swap;
   src: url('/portada/mano.woff2') format('woff2');
 }
+/* En la capa de componentes: las utilidades (hidden, md:block…) mandan sobre estos valores. */
+@layer components {
+  .boceto { display: block; }
+  .nota-margen { position: absolute; display: block; width: 7.5rem; cursor: default; }
+}
 .boceto {
-  display: block;
   --d-papel: var(--s-cream-100);
   --d-tinta: var(--s-coffee-800);
   --d-lapiz: #9a8e80;
@@ -200,7 +204,6 @@ html[data-transicion] .backdrop-blur, html[data-transicion] .backdrop-blur-sm { 
 .soltar-mano { animation: s-respira 1.6s ease-in-out 1.4s infinite; }
 
 /* Notas al margen (src/bocetos/nota-margen.tsx): se dibujan, se quedan, se desvanecen. */
-.nota-margen { position: absolute; display: block; width: 7.5rem; cursor: default; }
 .nota-margen-va { animation: s-desvanece 0.5s ease-in both; }
 
 /* Buscar · las coincidencias se entintan: el subrayado amarillo corre de izquierda a derecha (una vez; solo pinta un fondo pequeño). */
