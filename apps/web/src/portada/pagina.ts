@@ -206,7 +206,7 @@ function colofon(t: Textos): string {
   const c = t.colofon;
   return `<section class="colofon" aria-labelledby="h-colofon">
 <h2 id="h-colofon">${esc(c.titulo)}</h2>
-<p class="lampara">${esc(c.texto)}</p>
+<p class="lampara"><span class="cuna cuna-i" aria-hidden="true"></span><span class="cuna cuna-d" aria-hidden="true"></span>${esc(c.texto)}</p>
 <p class="firma">${esc(c.firma)}</p>
 ${diferido('caracol', t.lengua, { clase: 'caracol' })}
 <div class="acciones"><a class="boton boton-tinta boton-g" href="${ENTRAR}">${esc(c.empezar)} <span class="flecha" aria-hidden="true">→</span></a><a class="boton boton-papel boton-g" href="${DEMOSTRACION}">${esc(c.probar)}</a></div>

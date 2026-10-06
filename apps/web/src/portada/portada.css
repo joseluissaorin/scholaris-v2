@@ -280,10 +280,10 @@ img, svg { display: block; max-width: 100%; }
 .colofon { padding: clamp(4rem, 9vw, 7rem) var(--canal) clamp(3rem, 6vw, 5rem); text-align: center; position: relative; overflow: hidden; }
 .colofon h2 { margin: 0 0 1.4rem; font-weight: normal; color: var(--rojo); font-variant-caps: all-small-caps; letter-spacing: 0.06em; font-size: 1.2rem; }
 .colofon .lampara { max-width: 34rem; margin: 0 auto; font-size: 1.12rem; line-height: 1.62; }
-.colofon .lampara::before, .colofon .lampara::after { content: ''; width: 50%; height: 9.8em; }
 .colofon .lampara { display: flow-root; }
-.colofon .lampara::before { float: left; shape-outside: polygon(0 0, 0 100%, 100% 100%); }
-.colofon .lampara::after { float: right; shape-outside: polygon(100% 0, 100% 100%, 0 100%); }
+.colofon .cuna { width: 50%; height: 11.4em; }
+.colofon .cuna-i { float: left; shape-outside: polygon(0 0, 0 100%, 72% 100%); }
+.colofon .cuna-d { float: right; shape-outside: polygon(100% 0, 100% 100%, 28% 100%); }
 .colofon .firma { font-style: italic; color: var(--tinta-2); margin: 1.4rem 0 0; }
 .colofon .caracol { width: min(22rem, 80vw); margin: 2rem auto 0; }
 .colofon .acciones { justify-content: center; margin-top: 2.2rem; }
@@ -328,7 +328,7 @@ img, svg { display: block; max-width: 100%; }
   .cabecera nav .ensayo-enlace { display: none; }
   .heroe { padding-top: 6rem; min-height: auto; }
   .heroe-sol { width: 88vw; right: -38vw; top: 3.2rem; }
-  .titular { grid-column: 1 / -1; }
+  .titular { grid-column: 1 / -1; grid-row: auto; }
   .heroe-mano { grid-column: 1 / -1; grid-row: auto; width: calc(100% + var(--canal) * 1.4); margin-top: 0.6rem; }
   .heroe-pie { grid-column: 1 / -1; grid-row: auto; justify-self: stretch; max-width: none; transform: none; margin: 0.4rem 0 0; padding: 1.25rem 1.3rem 1.2rem; gap: 1rem; }
   .heroe .rotulo { display: none; }
@@ -341,6 +341,7 @@ img, svg { display: block; max-width: 100%; }
   .indice .linea { flex-wrap: wrap; }
   .indice .puntos { display: none; }
   .indice .dato { width: 100%; text-align: left; }
+  .colofon .cuna { display: none; }
 }
 
 /* ------------------------------------------------------------------ */
