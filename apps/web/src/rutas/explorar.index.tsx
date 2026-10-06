@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { Resaltado } from '../lib/resaltado';
 import { createFileRoute, Link } from '@tanstack/react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { GrupoMapa, MapaConceptos } from '@scholaris/contrato';
@@ -183,7 +184,7 @@ function Grupo({ grupo, color, alCerrar }: { grupo: GrupoMapa; color: string; al
           <li key={m.id} style={{ ['--i' as string]: k }}>
             <Link to="/lector/$id" params={{ id: m.documento }} className="block rounded-xl border border-cream-400 bg-cream-50 shadow-[var(--levantado)] p-3 hover:border-filete-fuerte">
               <div className="flex items-center gap-2"><span className="min-w-0 flex-1 truncate text-[0.8125rem]">{m.titulo}</span>{m.etiqueta ? <Folio>{m.etiqueta}</Folio> : null}</div>
-              {m.texto ? <p className="mt-1.5 line-clamp-3 text-[0.875rem] text-tinta-2">{m.texto}</p> : null}
+              {m.texto ? <p className="mt-1.5 line-clamp-3 text-[0.875rem] text-tinta-2"><Resaltado html={m.texto} /></p> : null}
             </Link>
           </li>
         ))}

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { Resaltado } from '../lib/resaltado';
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { Filtros, TipoEntrada } from '@scholaris/nucleo';
@@ -14,7 +15,6 @@ import { anclaABusqueda } from '../lib/anclas';
 import { etiquetaCorta, haceCuanto } from '../lib/formato';
 import { useFlip } from '../lib/flip';
 import { AccesoReferencia } from '../componentes/comunes/boton-referencia';
-import { textoLimpio } from '../lib/texto';
 import { numero } from '../lib/numero';
 import { Boceto } from '../bocetos/boceto';
 import { Cifra } from '../movimiento/cifra';
@@ -363,7 +363,7 @@ function Respuesta({ pregunta, filtros }: { pregunta: string; filtros: Filtros }
                     <Folio className="shrink-0">{etiquetaCorta(f.fragmento.ancla, f.etiqueta)}</Folio>
                     <AccesoReferencia documento={f.documento.id} className="-my-1 -mr-1.5 h-7 px-1.5" />
                   </div>
-                  <p className="mt-2 line-clamp-3 text-[0.8125rem] text-tinta-2">{textoLimpio(f.fragmento.texto)}</p>
+                  <p className="mt-2 line-clamp-3 text-[0.8125rem] text-tinta-2"><Resaltado html={f.fragmento.texto} /></p>
                 </Link>
               </li>
             );

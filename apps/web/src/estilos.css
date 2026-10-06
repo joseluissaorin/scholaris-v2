@@ -20,6 +20,19 @@ mark {
   border-radius: 2px;
 }
 
+/* Quién habla en un pasaje de entrevista: etiqueta en versalitas, no Markdown. */
+.hablante {
+  font-family: 'DM Sans', system-ui, sans-serif;
+  font-style: normal;
+  font-weight: 600;
+  font-size: 0.78em;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-azul);
+  margin-right: 0.15em;
+  white-space: nowrap;
+}
+
 /*
  * El fondo Bauhaus de siempre: retícula de cruces, puntos y una diagonal roja
  * muy tenue, detrás del contenido. Fijo: el papel no se mueve al desplazarse.

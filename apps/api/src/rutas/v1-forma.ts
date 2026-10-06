@@ -3,7 +3,7 @@
  * los enlaces al lector y el Markdown que leen los agentes. Sin lógica de
  * dominio: las citas y los localizadores salen siempre del ancla guardada.
  */
-import { anclaACita, type Ancla, type Autor, type MetadatosDocumento } from '@scholaris/nucleo';
+import { anclaACita, repararMarcasHablante, type Ancla, type Autor, type MetadatosDocumento } from '@scholaris/nucleo';
 import type {
   CitaV1, DetalleDocumento, DocumentoV1, EstadoV1, FuenteV1, PasajeV1, ResultadoVista, ResumenDocumento, RespuestaBuscarV1,
   RespuestaCitarV1, RespuestaPreguntarV1, RespuestaVerificarV1, TextoV1,
@@ -104,7 +104,7 @@ export function pasajeDeVista(origen: string, r: ResultadoVista): PasajeV1 {
 // Markdown
 // ---------------------------------------------------------------------------
 
-const cita = (t: string) => t.split('\n').map((l) => `> ${l}`).join('\n');
+const cita = (t: string) => repararMarcasHablante(t).split('\n').map((l) => `> ${l}`).join('\n');
 const autoria = (d: { autores: string[]; anio?: number }) => [d.autores.join('; ') || 's. a.', d.anio ?? 's. f.'].join(', ');
 
 export function mdDocumento(d: DocumentoV1): string {

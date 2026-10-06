@@ -1,4 +1,5 @@
 import { memo, useState } from 'react';
+import { textoLimpio } from '../../lib/texto';
 import { Link } from '@tanstack/react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { ResultadoVista } from '@scholaris/contrato';
@@ -25,7 +26,7 @@ export const Resultado = memo(function Resultado({ r, consulta, indice, compacto
   const destino = { to: '/lector/$id' as const, params: { id: r.documento.id }, search: anclaABusqueda(r.fragmento.ancla, { q: consulta }) };
 
   async function copiar() {
-    try { await navigator.clipboard.writeText(`«${r.fragmento.texto}» ${r.citaCorta}`); avisar(`Cita copiada: ${r.citaCorta}`, { tono: 'exito' }); }
+    try { await navigator.clipboard.writeText(`«${textoLimpio(r.fragmento.texto)}» ${r.citaCorta}`); avisar(`Cita copiada: ${r.citaCorta}`, { tono: 'exito' }); }
     catch { avisar('El navegador no dejó copiar.', { tono: 'error' }); }
   }
   async function verParecidos() {

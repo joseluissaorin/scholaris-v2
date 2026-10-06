@@ -7,6 +7,7 @@
  * Recibe el cliente ya encerrado (`api.publico(token)` o `api.compartida(id)`):
  * todo lo que pide se queda dentro de esa colección.
  */
+import { Resaltado } from '../../lib/resaltado';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import type { ClienteScholaris, ResultadoVista, ResumenDocumento, UnidadVista } from '@scholaris/contrato';
@@ -83,7 +84,7 @@ export function LecturaCompartida({ cliente, clave, posicion, alMover, acciones,
                         <Folio>{r.etiqueta}</Folio>
                         <span className="truncate font-medium text-coffee-700">{r.documento.metadatos.titulo}</span>
                       </div>
-                      <p className="mt-2 line-clamp-3 font-[Georgia] text-[0.9375rem] text-coffee-800">{textoLimpio(r.fragmento.texto)}</p>
+                      <p className="mt-2 line-clamp-3 font-[Georgia] text-[0.9375rem] text-coffee-800"><Resaltado html={r.resaltado ?? r.fragmento.texto} /></p>
                       <p className="mt-1.5 text-[0.75rem] text-coffee-400">{r.citaCorta}</p>
                     </Tarjeta>
                   </li>

@@ -4,10 +4,26 @@
  */
 const ESC: Record<string, string> = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
 
+import { separarHablantes } from '@scholaris/nucleo';
 import { textoLimpio } from './texto';
 
+const ABRE = '\u0002', CIERRA = '\u0003';
+
+/**
+ * Las marcas de hablante salen como etiqueta propia (`.hablante`, en versalitas),
+ * vengan ya separadas por el servidor (`<b class="hablante">`) o crudas en el
+ * texto («**Nombre:**», enteras o partidas por un corte). Ningún asterisco pasa.
+ */
 export function htmlSeguro(html: string): string {
-  return textoLimpio(html).replace(/[&<>"']/g, (c) => ESC[c]!).replace(/&lt;(\/?)mark&gt;/g, '<$1mark>');
+  const deServidor = html.replace(/<b class="hablante">([^<]*)<\/b>\s*/g, (_m, n: string) => `${ABRE}${n}${CIERRA}`);
+  const { texto, hablantes } = separarHablantes(deServidor);
+  let t = texto;
+  for (const h of [...hablantes].reverse()) t = `${t.slice(0, h.pos)}${ABRE}${h.nombre}${CIERRA}${t.slice(h.pos)}`;
+  return textoLimpio(t)
+    .replace(/[&<>"']/g, (c) => ESC[c]!)
+    .replace(/&lt;(\/?)mark&gt;/g, '<$1mark>')
+    .replace(/&amp;(amp;|lt;|gt;|quot;|#39;)/g, '&$1')
+    .replace(new RegExp(`${ABRE}([^${CIERRA}]*)${CIERRA}\\s*`, 'g'), (_m, n: string) => `<span class="hablante">${n}</span> `);
 }
 
 export function Resaltado({ html, className }: { html: string; className?: string }) {

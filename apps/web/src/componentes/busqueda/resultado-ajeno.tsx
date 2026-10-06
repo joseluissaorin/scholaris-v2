@@ -3,10 +3,10 @@
  * sale («de Rosa · Seminario de Foucault») y se abre en la vista de esa
  * colección, en su folio o su minuto.
  */
+import { Resaltado } from '../../lib/resaltado';
 import { Link } from '@tanstack/react-router';
 import type { ResultadoConjunto } from '@scholaris/contrato';
 import { Folio } from '@scholaris/ui';
-import { textoLimpio } from '../../lib/texto';
 
 export function ResultadoAjeno({ r }: { r: ResultadoConjunto }) {
   const a = r.fragmento.ancla;
@@ -23,7 +23,7 @@ export function ResultadoAjeno({ r }: { r: ResultadoConjunto }) {
         </p>
         <Link to="/compartida/$id" params={{ id: r.origen.biblioteca! }} search={destino} className="block">
           <h3 className="truncate text-[0.9375rem] font-semibold text-coffee-800 hover:underline">{r.documento.metadatos.titulo}</h3>
-          <p className="mt-1.5 line-clamp-4 font-[Georgia] text-[0.9375rem] leading-relaxed text-coffee-800">{textoLimpio(r.fragmento.texto)}</p>
+          <p className="mt-1.5 line-clamp-4 font-[Georgia] text-[0.9375rem] leading-relaxed text-coffee-800"><Resaltado html={r.resaltado ?? r.fragmento.texto} /></p>
         </Link>
         <p className="mt-1.5 text-[0.75rem] text-coffee-400">{r.citaCorta}</p>
       </div>

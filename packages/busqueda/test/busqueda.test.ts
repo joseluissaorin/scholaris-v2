@@ -37,6 +37,27 @@ describe('texto', () => {
   });
 });
 
+describe('marcas de hablante en el resaltado', () => {
+  const turno = (n: number) => `palabra${n} relleno de la conversación que sigue y sigue`;
+  const larga = `**Julio Cortázar:** ${Array.from({ length: 12 }, (_, i) => turno(i)).join(' ')} Sí, exacto. **Joaquín Soler Serrano:** ¿Y el jazz? **Julio Cortázar:** El jazz es la libertad. ${Array.from({ length: 12 }, (_, i) => turno(i + 20)).join(' ')}`;
+  it('ningún asterisco llega al resaltado, aunque la ventana parta la marca', () => {
+    for (const q of [['jazz'], ['exacto'], ['libertad'], ['palabra11'], ['palabra25']]) {
+      for (const v of [40, 90, 160, 280]) {
+        const r = resaltar(larga, q, v);
+        expect(r, `${q} ${v}`).not.toContain('*');
+      }
+    }
+  });
+  it('los turnos salen como etiqueta propia, también el que estaba en curso', () => {
+    const r = resaltar(larga, ['jazz'], 120);
+    expect(r).toContain('<b class="hablante">Joaquín Soler Serrano</b> ¿Y el <mark>jazz</mark>?');
+    expect(r).toMatch(/^…<b class="hablante">Julio Cortázar<\/b> /);
+  });
+  it('quita las marcas partidas en los bordes del fragmento', () => {
+    expect(resaltar('errano:** ¿Y el jazz? Mucho. **Julio Cort', ['jazz'])).toBe('¿Y el <mark>jazz</mark>? Mucho.');
+  });
+});
+
 describe('comprensión heurística', () => {
   it('extrae autores conocidos y años', () => {
     const h = analizarHeuristico('el poder en Foucault antes de 1980', { autores: ['Foucault', 'Lewis'] });

@@ -4,6 +4,7 @@
  */
 
 import { variantesConsulta } from '@scholaris/normalizacion';
+import { separarHablantes } from '@scholaris/nucleo';
 
 /** Pliega un carácter: minúscula y sin diacríticos. Devuelve siempre un carácter. */
 function plegarCaracter(c: string): string {
@@ -159,6 +160,11 @@ export function cortarEnFrase(texto: string, objetivo = 500, maximo = 700): stri
   return (espacio > objetivo ? corte.slice(0, espacio) : corte) + '…';
 }
 
+/** La etiqueta de un turno en el resaltado: `<b class="hablante">Nombre</b> `. */
+export function etiquetaHablante(nombre: string): string {
+  return `<b class="hablante">${escaparHtml(nombre)}</b> `;
+}
+
 function escaparHtml(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
@@ -169,7 +175,10 @@ function escaparHtml(s: string): string {
  * zona con más coincidencias. El texto sale escapado como HTML y las
  * coincidencias envueltas en `<mark>`.
  */
-export function resaltar(texto: string, consultaTerminos: string[], ventana = 280): string {
+export function resaltar(textoCrudo: string, consultaTerminos: string[], ventana = 280): string {
+  // Las marcas de hablante («**Nombre:**») se separan antes de recortar: si la
+  // ventana las partiera, el Markdown saldría crudo. Vuelven como etiqueta propia.
+  const { texto, hablantes } = separarHablantes(textoCrudo);
   const plano = plegar(texto);
   const unicos = [...new Set(consultaTerminos.filter((t) => t.length >= 2))].sort((a, b) => b.length - a.length);
   const tramos: Array<[number, number]> = [];
@@ -194,15 +203,24 @@ export function resaltar(texto: string, consultaTerminos: string[], ventana = 28
     hasta = Math.min(texto.length, desde + ventana);
     if (hasta < texto.length) { const e = texto.lastIndexOf(' ', hasta); if (e > desde + ventana / 2) hasta = e; }
   }
+  // El tramo [a, b) escapado, con la etiqueta de cada turno que empiece dentro.
+  const trozo = (a: number, b: number) => {
+    let out = '', c = a;
+    for (const h of hablantes) if (h.pos >= a && h.pos < b) { out += escaparHtml(texto.slice(c, h.pos)) + etiquetaHablante(h.nombre); c = h.pos; }
+    return out + escaparHtml(texto.slice(c, b));
+  };
   let salida = desde > 0 ? '…' : '';
+  // Si la ventana empieza a mitad de un turno, se dice de quién es.
+  const enCurso = desde > 0 && !hablantes.some((h) => h.pos === desde) ? hablantes.filter((h) => h.pos < desde).at(-1) : undefined;
+  if (enCurso) salida += etiquetaHablante(enCurso.nombre);
   let cursor = desde;
   for (const [a, b] of tramos) {
     if (b <= desde || a >= hasta) continue;
     const aa = Math.max(a, desde), bb = Math.min(b, hasta);
-    salida += escaparHtml(texto.slice(cursor, aa)) + '<mark>' + escaparHtml(texto.slice(aa, bb)) + '</mark>';
+    salida += trozo(cursor, aa) + '<mark>' + trozo(aa, bb) + '</mark>';
     cursor = bb;
   }
-  salida += escaparHtml(texto.slice(cursor, hasta));
+  salida += trozo(cursor, hasta);
   if (hasta < texto.length) salida += '…';
   return salida;
 }
