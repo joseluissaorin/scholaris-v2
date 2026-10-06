@@ -5,7 +5,14 @@ import type { AnclaPagina, PaginaLeida } from '@scholaris/nucleo';
  * subconjunto de `PaginaLeida`: se le puede pasar tal cual lo que devuelve el lector.
  */
 export type PaginaFolio = Pick<PaginaLeida, 'fisica'> &
-  Partial<Pick<PaginaLeida, 'cabecera' | 'pie' | 'folio' | 'texto' | 'vacia' | 'confianza' | 'titulos' | 'figuras'>>;
+  Partial<Pick<PaginaLeida, 'cabecera' | 'pie' | 'folio' | 'texto' | 'vacia' | 'confianza' | 'titulos' | 'figuras'>> & {
+    /**
+     * Etiqueta de página del PDF (/PageLabels), si la trae: «xiv», «23», «dj A»,
+     * «Cover». Las del editor mandan cuando cuadran con lo que se ve; las que no
+     * son números (sobrecubierta, cubierta) dejan la página sin folio.
+     */
+    etiqueta?: string | null;
+  };
 
 /** Cómo se reparten las páginas del libro en las páginas físicas. */
 export type Disposicion =
@@ -41,7 +48,12 @@ export interface Candidato {
   lado?: 'r' | 'v';
 }
 
-export type TipoPagina = 'portada' | 'preliminar' | 'cuerpo' | 'final' | 'lamina';
+/**
+ * Qué es cada página física. Sin folio: `portada` (antes de la numeración),
+ * `cubierta` (tapas, sobrecubierta, solapas), `guarda` (blancas tras la última
+ * página con contenido) y `lamina` (sin numerar ni contar dentro del cuerpo).
+ */
+export type TipoPagina = 'portada' | 'cubierta' | 'preliminar' | 'cuerpo' | 'final' | 'lamina' | 'guarda';
 
 /** El folio de una página: un `AnclaPagina` con lo que explica cómo se obtuvo. */
 export interface FolioPagina extends AnclaPagina {
@@ -65,6 +77,8 @@ export interface ResultadoFolios {
   transicion: number | null;
   /** Primera página física que lleva (o cuenta para) número. */
   primeraNumerada: number;
+  /** De dónde sale la numeración: la secuencia de lecturas o las etiquetas del PDF. */
+  fuente: 'secuencia' | 'etiquetas';
   /** Lecturas usadas como anclas tras el filtrado de consistencia. */
   anclas: number;
   /** Preguntas al juez y llamadas hechas (debería ser una sola). */

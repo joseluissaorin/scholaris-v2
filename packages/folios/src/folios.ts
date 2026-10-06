@@ -20,7 +20,7 @@
 
 import type { Juez, PreguntaJuez, RespuestaJuez } from '@scholaris/nucleo';
 import { enParalelo } from '@scholaris/nucleo';
-import { enteroARomano, extraerCandidatos, lineasUtiles, textoDeCandidato } from './candidatos.js';
+import { enteroARomano, extraerCandidatos, lineasUtiles, romanoAEntero, textoDeCandidato } from './candidatos.js';
 import { DeductorPaginas, MARCADORES_FINALES, type Marcador } from './deductor.js';
 import { elegirSecuencia, estimarPaso, type ResultadoSecuencia } from './secuencia.js';
 import type { Candidato, Disposicion, FolioPagina, PaginaFolio, ResultadoFolios, TipoPagina } from './tipos.js';
@@ -48,7 +48,7 @@ export interface OpcionesFolios {
   registro?: (mensaje: string) => void;
 }
 
-interface Preparado {
+export interface Preparado {
   paginas: PaginaFolio[];
   candidatos: Candidato[][];
   paso: number;
@@ -66,8 +66,10 @@ interface Preparado {
 /** Folios sin juez: lógica pura, síncrona. */
 export function deducirFolios(paginas: readonly PaginaFolio[], opciones: OpcionesFolios = {}): ResultadoFolios {
   const prep = preparar(paginas, opciones);
+  const porEtiquetas = foliosDeEtiquetas(prep);
+  if (porEtiquetas) return recortarFueraDelCuerpo(prep, porEtiquetas);
   const sec = elegirSecuencia(prep.candidatos, { paso: prep.paso });
-  return ensamblar(prep, sec, opciones, { llamadas: 0, preguntas: 0 });
+  return recortarFueraDelCuerpo(prep, ensamblar(prep, sec, opciones, { llamadas: 0, preguntas: 0 }));
 }
 
 /**
@@ -77,10 +79,12 @@ export function deducirFolios(paginas: readonly PaginaFolio[], opciones: Opcione
  */
 export async function elegirConJuez(juez: Juez, paginas: readonly PaginaFolio[], opciones: OpcionesFolios = {}): Promise<ResultadoFolios> {
   const prep = preparar(paginas, opciones);
+  const porEtiquetas = foliosDeEtiquetas(prep);
+  if (porEtiquetas) return recortarFueraDelCuerpo(prep, porEtiquetas);
   let sec = elegirSecuencia(prep.candidatos, { paso: prep.paso });
   const previo = ensamblar(prep, sec, opciones, { llamadas: 0, preguntas: 0 });
   const dudosas = paginasDudosas(prep, sec, previo, opciones.umbralDuda ?? 0.75);
-  if (!dudosas.length) return previo;
+  if (!dudosas.length) return recortarFueraDelCuerpo(prep, previo);
 
   const { preguntas, estado, opcionesPorPagina } = construirPreguntas(prep, previo, dudosas);
   const porLlamada = Math.max(1, opciones.preguntasPorLlamada ?? 100);
@@ -107,7 +111,7 @@ export async function elegirConJuez(juez: Juez, paginas: readonly PaginaFolio[],
 
   aplicarRespuestas(prep, respuestas, opcionesPorPagina);
   sec = elegirSecuencia(prep.candidatos, { paso: prep.paso });
-  return ensamblar(prep, sec, opciones, { llamadas: lotes.length, preguntas: claves.length });
+  return recortarFueraDelCuerpo(prep, ensamblar(prep, sec, opciones, { llamadas: lotes.length, preguntas: claves.length }));
 }
 
 /** Con juez si se da, sin él si no. */
@@ -216,7 +220,7 @@ function ensamblar(prep: Preparado, sec: ResultadoSecuencia, opciones: OpcionesF
         tipo: 'pagina', fisica: p.fisica, impresa: null, romana: false, origen: 'ninguno', confianza: 0,
         tipoPagina: 'cuerpo', candidatos: candidatos[i] as Candidato[],
       })),
-      estrategia: 'ninguno', disposicion: prep.disposicion, foliacion: prep.foliacion, transicion: null,
+      estrategia: 'ninguno', fuente: 'secuencia', disposicion: prep.disposicion, foliacion: prep.foliacion, transicion: null,
       primeraNumerada: paginas[0]?.fisica ?? 1, anclas: 0, juez, avisos,
     };
   }
@@ -388,6 +392,7 @@ function ensamblar(prep: Preparado, sec: ResultadoSecuencia, opciones: OpcionesF
   return {
     paginas: salida,
     estrategia: leidas > numeradas * 0.5 ? 'leido' : numeradas ? 'deducido' : 'ninguno',
+    fuente: 'secuencia',
     disposicion: prep.disposicion,
     foliacion: prep.foliacion,
     transicion: transicion === null ? null : (paginas[transicion]?.fisica ?? null),
@@ -451,8 +456,150 @@ function desdeDeductor(prep: Preparado, v3: ReturnType<DeductorPaginas['deducir'
   });
   avisos.push('Sin lecturas del folio: numeración de v3 (de 1 en adelante desde la primera página con texto), con confianza baja.');
   return {
-    paginas, estrategia: 'deducido', disposicion: prep.disposicion, foliacion: prep.foliacion,
+    paginas, estrategia: 'deducido', fuente: 'secuencia', disposicion: prep.disposicion, foliacion: prep.foliacion,
     transicion: v3.transicion, primeraNumerada: v3.primeraNumerada, anclas: 0, juez, avisos,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Fuera del cuerpo numerado: cubiertas, sobrecubiertas, guardas
+// ---------------------------------------------------------------------------
+
+/** Frases de tapas, solapas y sobrecubiertas (en el texto de la página). */
+const SENAL_CUBIERTA = /\b(?:jacket design(?:ed)? by|cover design(?:ed)? by|continued on (?:the )?(?:back|front) flap|(?:front|back|inside) (?:cover|flap)|dust ?jacket|sobrecubierta|contracubierta|solapa|dise[ñn]o de (?:la )?(?:cubierta|portada|colecci[óo]n)|ilustraci[óo]n de (?:la )?(?:cubierta|portada)|couverture|umschlag)\b/i;
+
+/** Etiquetas del PDF que nombran tapas y sobrecubierta: «dj A», «Cover», «C1», «FC», «BC», «IFC». */
+const ETIQUETA_CUBIERTA = /^(?:dj\b.*|jacket.*|(?:front|back|inside)?\s*cover.*|cubierta.*|contracubierta.*|tapa.*|c\d|[ib]?fc|[ib]?bc|ifc|ibc)$/i;
+
+/** ¿La página no tiene nada? `vacia` del lector manda; si no lo dice, se mira si hay algo escrito. */
+export function sinContenido(p: PaginaFolio): boolean {
+  if (p.vacia === true) return true;
+  if (p.vacia === false) return false;
+  return !(p.texto ?? '').trim() && !(p.cabecera ?? '').trim() && !(p.pie ?? '').trim() && !(p.folio ?? '').trim() && !(p.figuras?.length);
+}
+
+/** Señales de que la página es una tapa, solapa o sobrecubierta. */
+export function esCubierta(p: PaginaFolio): boolean {
+  const e = (p.etiqueta ?? '').trim();
+  if (e && ETIQUETA_CUBIERTA.test(e)) return true;
+  return SENAL_CUBIERTA.test(`${p.cabecera ?? ''}\n${(p.texto ?? '').slice(0, 1500)}\n${p.pie ?? ''}`);
+}
+
+/**
+ * Deja sin folio todo lo que queda fuera del cuerpo numerado: las páginas sin
+ * contenido después de la última que tiene algo (guardas, contratapas), las
+ * de antes de la primera, y las cubiertas y sobrecubiertas que quedan antes de
+ * la primera página con folio o después de la última. La secuencia no se
+ * extrapola más allá de la última página con texto.
+ */
+export function recortarFueraDelCuerpo(prep: Preparado, r: ResultadoFolios): ResultadoFolios {
+  const ps = prep.paginas;
+  const n = ps.length;
+  let ultima = n - 1;
+  while (ultima >= 0 && sinContenido(ps[ultima] as PaginaFolio)) ultima--;
+  let primeraC = 0;
+  while (primeraC < n && sinContenido(ps[primeraC] as PaginaFolio)) primeraC++;
+  const conFolio = r.paginas.map((f, i) => (f.impresa !== null ? i : -1)).filter((i) => i >= 0);
+  const primeraF = conFolio.length ? (conFolio[0] as number) : n;
+  const ultimaF = conFolio.length ? (conFolio[conFolio.length - 1] as number) : -1;
+  let guardas = 0, cubiertas = 0;
+  const vaciar = (f: FolioPagina, tipoPagina: TipoPagina): FolioPagina => {
+    const { elegido: _e, impresas: _i, ...resto } = f;
+    return { ...resto, impresa: null, romana: false, origen: 'ninguno', confianza: 0.8, tipoPagina };
+  };
+  const paginas = r.paginas.map((f, i) => {
+    const p = ps[i] as PaginaFolio;
+    if (i > ultima || i < primeraC) {
+      if (f.impresa !== null) guardas++;
+      return vaciar(f, i > ultima ? 'guarda' : 'portada');
+    }
+    // Una cubierta solo pierde el folio si está en el borde del libro (antes de la primera
+    // página con folio leído o después de la última); dentro del cuerpo, manda la secuencia.
+    const enBorde = f.origen !== 'leido' && (i <= primeraF || i >= ultimaF);
+    if (enBorde && esCubierta(p)) {
+      if (f.impresa !== null) cubiertas++;
+      return vaciar(f, 'cubierta');
+    }
+    return f;
+  });
+  const avisos = [...r.avisos];
+  if (guardas) avisos.push(`${guardas} página(s) sin contenido fuera del cuerpo (guardas, contratapas) quedan sin folio.`);
+  if (cubiertas) avisos.push(`${cubiertas} página(s) de cubierta o sobrecubierta quedan sin folio.`);
+  return { ...r, paginas, avisos };
+}
+
+// ---------------------------------------------------------------------------
+// Etiquetas de página del PDF (/PageLabels)
+// ---------------------------------------------------------------------------
+
+function leerEtiqueta(e: string | null | undefined): { valor: number; romana: boolean; mayusculas: boolean } | null {
+  const t = (e ?? '').trim();
+  if (/^\d{1,5}$/.test(t)) return Number(t) > 0 ? { valor: Number(t), romana: false, mayusculas: false } : null;
+  const v = romanoAEntero(t);
+  return v > 0 && (t === t.toLowerCase() || t === t.toUpperCase()) ? { valor: v, romana: true, mayusculas: t === t.toUpperCase() } : null;
+}
+
+/**
+ * Si el PDF trae etiquetas de página informativas (casi todas las páginas, y
+ * no solo «1, 2, 3…» igual a la física) que cuadran con lo que se ve en al
+ * menos la mitad de las páginas comparables, mandan: son del editor. Las que
+ * no son números ni romanos («dj A», «Cover») dejan la página sin folio en
+ * los bordes del libro. Devuelve null si no hay etiquetas utilizables.
+ */
+export function foliosDeEtiquetas(prep: Preparado): ResultadoFolios | null {
+  const ps = prep.paginas;
+  const con = ps.filter((p) => (p.etiqueta ?? '').trim());
+  if (!ps.length || con.length < ps.length * 0.8) return null;
+  if (!con.some((p) => (p.etiqueta ?? '').trim() !== String(p.fisica))) return null;
+  let acuerdo = 0, comparadas = 0;
+  ps.forEach((p, i) => {
+    const e = leerEtiqueta(p.etiqueta);
+    const cs = prep.candidatos[i] as Candidato[];
+    if (!e || !cs.length) return;
+    comparadas++;
+    if (cs.some((c) => c.valor === e.valor && c.romana === e.romana)) acuerdo++;
+  });
+  if (comparadas > 0 && acuerdo / comparadas < 0.5) return null;
+  const numericas = ps.map((p, i) => (leerEtiqueta(p.etiqueta) ? i : -1)).filter((i) => i >= 0);
+  const primeraN = numericas[0] ?? ps.length, ultimaN = numericas[numericas.length - 1] ?? -1;
+  const paginas: FolioPagina[] = ps.map((p, i) => {
+    const cs = prep.candidatos[i] as Candidato[];
+    const e = leerEtiqueta(p.etiqueta);
+    const base: FolioPagina = { tipo: 'pagina', fisica: p.fisica, impresa: null, romana: false, origen: 'ninguno', confianza: 0, tipoPagina: 'cuerpo', candidatos: cs };
+    if (!e) {
+      const texto = (p.etiqueta ?? '').trim();
+      if (!texto || i < primeraN || i > ultimaN || ETIQUETA_CUBIERTA.test(texto)) {
+        return { ...base, confianza: 0.8, tipoPagina: i < primeraN || ETIQUETA_CUBIERTA.test(texto) ? 'cubierta' : 'guarda' };
+      }
+      // Etiqueta no numérica dentro del cuerpo («A-3»): se conserva tal cual, con cautela.
+      return { ...base, impresa: texto, origen: 'deducido', confianza: 0.7 };
+    }
+    const visto = cs.find((c) => c.valor === e.valor && c.romana === e.romana);
+    const f: FolioPagina = {
+      ...base,
+      impresa: e.romana ? enteroARomano(e.valor, e.mayusculas) : String(e.valor),
+      romana: e.romana,
+      origen: visto ? 'leido' : 'deducido',
+      confianza: visto ? 0.99 : comparadas > 0 ? 0.93 : 0.8,
+      tipoPagina: e.romana ? 'preliminar' : 'cuerpo',
+    };
+    if (visto) f.elegido = visto;
+    return f;
+  });
+  const leidas = paginas.filter((f) => f.origen === 'leido').length;
+  const numeradas = paginas.filter((f) => f.impresa !== null).length;
+  const primeraArabiga = paginas.find((f) => f.impresa !== null && !f.romana && /^\d+$/.test(f.impresa));
+  return {
+    paginas,
+    estrategia: leidas > numeradas * 0.5 ? 'leido' : numeradas ? 'deducido' : 'ninguno',
+    fuente: 'etiquetas',
+    disposicion: prep.disposicion,
+    foliacion: false,
+    transicion: paginas.some((f) => f.romana) && primeraArabiga ? primeraArabiga.fisica : null,
+    primeraNumerada: ps[primeraN]?.fisica ?? 1,
+    anclas: leidas,
+    juez: { llamadas: 0, preguntas: 0 },
+    avisos: [`Folios tomados de las etiquetas del PDF (${acuerdo} de ${comparadas} comparables coinciden con lo que se ve).`],
   };
 }
 
