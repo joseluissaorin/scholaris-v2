@@ -100,24 +100,6 @@ export async function ejecutarIngesta(paquete: PaqueteConversion, puertos: Puert
   await prepararDocumento(ctx);
   emitir('lectura', 0, `${plan.unidades} unidades en ${plan.tandas.length} tandas (${plan.pliegos.length} pliegos de visión)`);
 
-  // --- modo económico: lo difícil, a la API por lotes ---------------------
-  let resultadosLote: Awaited<ReturnType<typeof recogerLote>>['resultados'];
-  if (opciones.modo === 'economico' && puertos.lotes) {
-    const t = reloj();
-    const id = await enviarLote(ctx);
-    if (id) {
-      const cada = opciones.esperaLote?.cadaMs ?? 60_000, maximo = opciones.esperaLote?.maximoMs ?? 26 * 3600_000;
-      for (;;) {
-        const r = await recogerLote(ctx, id);
-        if (r.listo) { resultadosLote = r.resultados; break; }
-        if (reloj() - t > maximo) break; // lo que no llegó se lee en línea
-        emitir('lectura', 0, 'Esperando a la API por lotes');
-        await new Promise((res) => setTimeout(res, cada));
-      }
-    }
-    tiempos.lote = reloj() - t;
-  }
-
   // --- metadatos, en cuanto están las primeras páginas -------------------
   const nPrimeras = Math.min(5, plan.unidades || 1);
   const primeras = new Map<number, UnidadLeida>();
@@ -142,7 +124,28 @@ export async function ejecutarIngesta(paquete: PaqueteConversion, puertos: Puert
   /** Una por tanda: se cumple cuando su texto ya es buscable y su estado está guardado. */
   const yaBuscables: Array<Promise<void>> = [];
   let vectorizadas = 0;
-  await enParalelo(plan.tandas, plan.concurrencia, async (t) => {
+  // --- modo económico: lo difícil, a la API por lotes ---------------------
+  // Mientras el lote se procesa (horas), las tandas de capa de texto ya se leen e indexan.
+  let resultadosLote: Awaited<ReturnType<typeof recogerLote>>['resultados'];
+  const esperarLote = async () => {
+  if (opciones.modo === 'economico' && puertos.lotes) {
+    const t = reloj();
+    const id = await enviarLote(ctx);
+    if (id) {
+      const cada = opciones.esperaLote?.cadaMs ?? 60_000, maximo = opciones.esperaLote?.maximoMs ?? 26 * 3600_000;
+      for (;;) {
+        const r = await recogerLote(ctx, id);
+        if (r.listo) { resultadosLote = r.resultados; break; }
+        if (reloj() - t > maximo) break; // lo que no llegó se lee en línea
+        emitir('lectura', 0, 'Esperando a la API por lotes');
+        await new Promise((res) => setTimeout(res, cada));
+      }
+    }
+    tiempos.lote = reloj() - t;
+  }
+  };
+
+  const procesar = async (t: (typeof plan.tandas)[number]) => {
     const lectura = await leerTanda(t, ctx, { cobertura, ...(resultadosLote ? { resultadosLote } : {}) });
     legibles += lectura.unidades.length;
     hito('primeraLegible');
@@ -167,7 +170,13 @@ export async function ejecutarIngesta(paquete: PaqueteConversion, puertos: Puert
     }).then((r) => { vectorizadas += r.vectores; return r; });
     p.catch(() => undefined).finally(() => marcarBuscable());
     indexaciones.push(p);
-  });
+  };
+  const deCapa = plan.tandas.filter((t) => t.clase === 'capa');
+  const resto = plan.tandas.filter((t) => t.clase !== 'capa');
+  if (opciones.modo === 'economico' && puertos.lotes) {
+    await Promise.all([enParalelo(deCapa, plan.concurrencia, procesar), esperarLote()]);
+    await enParalelo(resto, plan.concurrencia, procesar);
+  } else await enParalelo(plan.tandas, plan.concurrencia, procesar);
   hito('lecturaCompleta');
   resolver([...primeras.values()].sort((a, b) => a.fisica - b.fisica));
   // La consolidación empieza ya (folios, secciones, troceado, figuras) y espera a las tandas solo para reaprovechar.
