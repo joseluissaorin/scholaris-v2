@@ -7,8 +7,7 @@
  *   queue      Trabajo de fondo (vigilantes programados).
  *   scheduled  Cron: encola los vigilantes diarios (y los semanales los lunes).
  */
-import wasmSqlite from '@sqlite.org/sqlite-wasm/sqlite3.wasm';
-import { configurarMotor } from '@scholaris/spdf';
+import { prepararMotorWorkers } from '@scholaris/spdf/workers';
 import { PREFIJO_API } from '@scholaris/contrato';
 import { crearPuerta, type Plataforma } from '../app.js';
 import { crearVerificadorClerk } from '../compartido/clerk.js';
@@ -22,7 +21,7 @@ export { Tarea } from './tarea-do.js';
 export { Limitador } from './limitador-do.js';
 export { FlujoIngesta } from './flujo-ingesta.js';
 
-configurarMotor({ moduloWasm: wasmSqlite });
+prepararMotorWorkers();
 
 const verificadores = new Map<string, ReturnType<typeof crearVerificadorClerk>>();
 

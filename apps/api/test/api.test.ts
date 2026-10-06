@@ -190,6 +190,18 @@ describe('subida → ingesta → búsqueda', () => {
     expect(bin.status).toBe(206);
     expect(await bin.text()).toBe('# Vigilar');
 
+    // Exportar el .spdf en el servidor (sqlite-wasm en workerd) e importarlo como copia.
+    const sp = await SELF.fetch(`${BASE}/documentos/${ing.cuerpo.documento}/spdf`, { headers: { authorization: `Bearer ${t}` } });
+    expect(sp.status).toBe(200);
+    const bytesSpdf = new Uint8Array(await sp.arrayBuffer());
+    expect(bytesSpdf[0]).toBe(0x1f); // gzip
+    const imp = await api('/documentos/importar', { token: t, cuerpo: bytesSpdf, cabeceras: { 'content-type': 'application/x-spdf' } });
+    expect(imp.estado).toBe(201);
+    expect(imp.cuerpo.versionOrigen).toBe(400);
+    expect(imp.cuerpo.documento).not.toBe(ing.cuerpo.documento);
+    const copia = await api(`/documentos/${imp.cuerpo.documento}`, { token: t });
+    expect(copia.cuerpo.cuentas.fragmentos).toBe(doc.cuerpo.cuentas.fragmentos);
+
     // Borrar deja la estantería limpia.
     expect((await api(`/documentos/${ing.cuerpo.documento}`, { token: t, metodo: 'DELETE' })).estado).toBe(200);
     expect((await api(`/documentos/${ing.cuerpo.documento}`, { token: t })).estado).toBe(404);

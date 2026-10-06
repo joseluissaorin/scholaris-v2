@@ -37,6 +37,11 @@ export interface ContextoMotor {
   sinVerificacion?: boolean;
   alProgreso?(p: Progreso): Promise<void> | void;
   fetch?: typeof fetch;
+  /**
+   * Imprenta del servidor (local: `@scholaris/imprenta/node`). Si está, se usa
+   * para los ficheros que llegan sin paquete en vez de la reserva mínima.
+   */
+  convertir?(archivo: { nombre: string; mime: string; bytes: Uint8Array; tipo?: string }): Promise<{ paquete: PaqueteConversion; datos: Map<string, Uint8Array> }>;
 }
 
 export interface InfoPlan {
@@ -160,6 +165,17 @@ function inteligenciaConMemoria(ia: Inteligencia, almacen: AlmacenAmpliado, raiz
 
 export async function preparar(ctx: ContextoMotor, params: ParamsIngesta): Promise<InfoPlan> {
   let clave = params.paquete;
+  if (!clave && !params.url && params.original && ctx.convertir) {
+    const original = await ctx.almacen.bytes(params.original);
+    if (!original) throw new ErrorReserva('No encuentro el original en el almacén.');
+    const r = await ctx.convertir({ nombre: params.nombre, mime: params.mime, bytes: original, tipo: params.tipo });
+    for (const [id, datos] of r.datos) {
+      const mime = r.paquete.partes.find((x) => x.id === id)?.mime;
+      await ctx.almacen.poner(`${params.prefijo}${id}`, datos, mime);
+    }
+    clave = `${params.prefijo}paquete.json`;
+    await ctx.almacen.poner(clave, JSON.stringify(r.paquete), 'application/json');
+  }
   if (!clave) {
     const original = params.original ? await ctx.almacen.bytes(params.original) : null;
     const paquete = await convertirEnServidor({
