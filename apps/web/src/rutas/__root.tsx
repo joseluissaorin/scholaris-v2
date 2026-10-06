@@ -8,8 +8,11 @@ import { alDisparar } from '../lib/acciones';
 import { recuperarTareas } from '../datos/ingesta';
 import { NoEncontrado, ErrorDeRuta } from '../componentes/comunes/errores';
 import { EsperaMarco } from '../componentes/marco/espera';
+import { useHayMini } from '../componentes/reproductor/estado-global';
 
 const Paleta = lazy(() => import('../componentes/marco/paleta'));
+// El reproductor pequeño: solo si algo suena fuera del lector.
+const MiniReproductor = lazy(() => import('../componentes/reproductor/mini'));
 
 export const Route = createRootRouteWithContext<{ consultas: QueryClient }>()({
   component: Marco,
@@ -32,6 +35,7 @@ function IndicadorCarga() {
 function Marco() {
   const [paleta, setPaleta] = useState(false);
   const [paletaCargada, setPaletaCargada] = useState(false);
+  const hayMini = useHayMini();
 
   useEffect(() => alDisparar('paleta', () => { setPaletaCargada(true); setPaleta(true); }), []);
   useEffect(() => {
@@ -55,6 +59,7 @@ function Marco() {
       <PieMovil />
       <Entrada />
       {paletaCargada ? <Suspense fallback={null}><Paleta abierta={paleta} alCambiar={setPaleta} /></Suspense> : null}
+      {hayMini ? <Suspense fallback={null}><MiniReproductor /></Suspense> : null}
       <Tostadora />
     </div>
   );

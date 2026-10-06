@@ -13,7 +13,7 @@ import { validarBusquedaLector, type BusquedaLector } from '../lib/anclas';
 import { anotarReciente, ponerPreferencia, preferencia } from '../lib/acciones';
 import { anioVisible, contenedorVisible, autores, ESTILOS_RAPIDOS, esMedio, tiempoACadena, NOMBRE_TIPO } from '../lib/formato';
 import { Flujo, useUnidadEnCache, type ManejadorFlujo, type ModoLectura } from '../componentes/lector/flujo';
-import { Medio, type ManejadorMedio } from '../componentes/lector/medio';
+import { Reproductor, type ManejadorMedio } from '../componentes/reproductor/reproductor';
 import { Ficha } from '../componentes/lector/ficha';
 import { ProveedorEntidades } from '../componentes/lector/entidades';
 import { BarraSeleccion, useSeleccion } from '../componentes/lector/seleccion';
@@ -27,7 +27,9 @@ export const Route = createFileRoute('/lector/$id')({
     void c.prefetchQuery(q.secciones(params.id));
     void c.prefetchQuery(q.folios(params.id));
     void c.prefetchQuery(q.bloque(params.id, Math.floor(((deps.u ?? 1) - 1) / BLOQUE)));
-    await c.ensureQueryData(q.documento(params.id));
+    const d = await c.ensureQueryData(q.documento(params.id));
+    // Audio y vídeo: la URL firmada del archivo antes del primer pintado (el vídeo empieza a cargar al montar).
+    if (esMedio(d.tipo)) await c.prefetchQuery(q.original(params.id));
   },
   pendingComponent: EsperaLector,
   component: Lector,
@@ -64,7 +66,6 @@ function Lector() {
   const zona = useRef<HTMLDivElement>(null);
   const unidad = useUnidadEnCache(id);
   const [sel, limpiarSel] = useSeleccion(zona, unidad);
-  const { data: original } = useQuery({ ...q.original(id), enabled: medio });
 
   // Primera unidad: la del enlace, o la que corresponde a sección y párrafo.
   const { data: secciones } = useQuery(q.secciones(id));
@@ -166,9 +167,9 @@ function Lector() {
       </div>
 
       <div className="flex">
-        <div ref={zona} className="min-w-0 flex-1 px-5 pb-24 md:px-12">
+        <div ref={medio ? undefined : zona} className={cx('min-w-0 flex-1 px-5 md:px-12', !medio && 'pb-24')}>
           {medio ? (
-            <Medio ref={reproductor} doc={doc} url={original?.url || null} inicial={busqueda.t ?? 0} resaltar={busqueda.q} alVer={alVerMedio} />
+            <Reproductor ref={reproductor} doc={doc} inicial={busqueda.t} resaltar={busqueda.q} alVer={alVerMedio} {...(ingesta?.unidades ? { pendientes: Math.max(0, ingesta.unidades - (ingesta.leidas ?? 0)) } : {})} />
           ) : (
             <ProveedorEntidades documento={doc.id}>
               <Flujo ref={flujo} doc={doc} modo={modo} inicial={inicial} resaltar={busqueda.q} leidas={ingesta ? ingesta.leidas : undefined} total={ingesta?.unidades ?? undefined} alVer={alVer} />

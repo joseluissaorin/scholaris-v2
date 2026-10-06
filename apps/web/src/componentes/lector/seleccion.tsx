@@ -3,7 +3,7 @@
  * con su localizador exacto (la página impresa, el segundo); «Parecidos» busca
  * pasajes cercanos; «Al cuaderno» guarda el pasaje.
  */
-import { useEffect, useState, type RefObject } from 'react';
+import { useEffect, useState, type ReactNode, type RefObject } from 'react';
 import { useNavigate } from '@tanstack/react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { Ancla, MetadatosDocumento } from '@scholaris/nucleo';
@@ -62,7 +62,7 @@ export function citaCompleta(texto: string, meta: MetadatosDocumento, ancla: Anc
   return { estilo, cita, completa: estilo === 'chicago-note-bibliography' ? `«${recorte}»\n\n${cita}` : `«${recorte}» ${cita}` };
 }
 
-export function BarraSeleccion({ sel, documento, meta, alCerrar }: { sel: Seleccion; documento: string; meta: MetadatosDocumento; alCerrar: () => void }) {
+export function BarraSeleccion({ sel, documento, meta, alCerrar, extra }: { sel: Seleccion; documento: string; meta: MetadatosDocumento; alCerrar: () => void; /** Acciones propias (el reproductor añade «Enlace»). */ extra?: (clase: string) => ReactNode }) {
   const navegar = useNavigate();
   const qc = useQueryClient();
   const { data: cuadernos } = useQuery(q.cuadernos());
@@ -85,12 +85,13 @@ export function BarraSeleccion({ sel, documento, meta, alCerrar }: { sel: Selecc
   }
 
   const arriba = sel.rect.y > 64;
-  const estilo = { left: Math.max(8, Math.min(window.innerWidth - 330, sel.rect.x + sel.rect.w / 2 - 160)), top: arriba ? sel.rect.y - 52 : sel.rect.y + 28 };
+  const estilo = { left: Math.max(8, Math.min(window.innerWidth - (extra ? 420 : 330), sel.rect.x + sel.rect.w / 2 - 160)), top: arriba ? sel.rect.y - 52 : sel.rect.y + 28 };
   const boton = 'flex h-9 items-center gap-2 rounded-lg px-3 text-[0.8125rem] font-semibold hover:bg-white/10';
   return (
     <div role="toolbar" aria-label="Acciones con el texto seleccionado" style={estilo} className="fixed z-40 flex items-center gap-0.5 rounded-xl border border-[#1a0f0a] bg-[#2c1810] p-1 text-[#faf7f0] shadow-[inset_0_1px_0_rgb(255_255_255/0.1),0_8px_24px_rgb(44_24_16/0.3)] anim-dialogo" onMouseDown={(e) => e.preventDefault()}>
       <button type="button" className={boton} onClick={() => void citar()}><Icono nombre="citar" tam={16} />Citar</button>
       <button type="button" className={boton} onClick={() => { void navegar({ to: '/buscar', search: { q: sel.texto.slice(0, 240) } }); alCerrar(); }}><Icono nombre="buscar" tam={16} />Parecidos</button>
+      {extra?.(boton)}
       <MenuRaiz>
         <MenuDisparador asChild><button type="button" className={boton}><Icono nombre="marcador" tam={15} />Al cuaderno</button></MenuDisparador>
         <MenuContenido alinear="center">

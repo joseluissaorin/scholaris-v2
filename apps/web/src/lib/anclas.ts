@@ -22,7 +22,8 @@ export interface BusquedaLector {
 export function anclaABusqueda(a: Ancla, extra: Pick<BusquedaLector, 'f' | 'q'> = {}): BusquedaLector {
   switch (a.tipo) {
     case 'pagina': return { u: a.fisica, ...extra };
-    case 'tiempo': return { t: Math.floor(a.t0), ...extra };
+    // Con una décima: el lector abre en la palabra exacta, no en la anterior.
+    case 'tiempo': return { t: Math.floor(a.t0 * 10) / 10, ...extra };
     case 'diapositiva': return { u: a.n, ...extra };
     case 'seccion': case 'web': return { sec: a.ruta.at(-1) ?? '', par: a.parrafo, ...extra };
     case 'hoja': return { u: Math.floor((a.filaDesde - 1) / 50) + 1, ...extra };
