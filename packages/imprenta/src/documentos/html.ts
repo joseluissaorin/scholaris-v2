@@ -54,8 +54,12 @@ function leerAtributos(s: string): Record<string, string> {
   return attrs;
 }
 
-/** Analiza HTML o XML en un árbol tolerante. Nombres en minúsculas y sin prefijo de espacio de nombres. */
-export function analizarHtml(html: string): Nodo {
+/**
+ * Analiza HTML o XML en un árbol tolerante. Nombres en minúsculas y sin prefijo
+ * de espacio de nombres. Con `xml`, sin reglas de HTML (elementos vacíos,
+ * cierres implícitos): para OPF, NCX, ODF y OOXML.
+ */
+export function analizarHtml(html: string, xml = false): Nodo {
   const raiz: Nodo = { nombre: '#raiz', attrs: {}, hijos: [] };
   let actual = raiz;
   const re = /<!--[\s\S]*?-->|<!\[CDATA\[([\s\S]*?)\]\]>|<![^>]*>|<\?[\s\S]*?\?>|<\/\s*([^\s>]+)\s*>|<([^\s/>!?]+)((?:[^>"']|"[^"]*"|'[^']*')*)>|([^<]+)|</g;
@@ -73,7 +77,7 @@ export function analizarHtml(html: string): Nodo {
       const n = nombreDe(m[3]);
       const resto = m[4] ?? '';
       const autocierre = /\/\s*$/.test(resto);
-      const cierra = SE_CIERRAN_SOLOS[n];
+      const cierra = xml ? undefined : SE_CIERRAN_SOLOS[n];
       if (cierra) {
         // Un <p>, <li> o <td> abierto se cierra al abrir otro igual.
         let p: Nodo | undefined = actual;
@@ -82,7 +86,7 @@ export function analizarHtml(html: string): Nodo {
           p = p.padre;
         }
       }
-      if (ABREN_BLOQUE.has(n)) {
+      if (!xml && ABREN_BLOQUE.has(n)) {
         // Un bloque dentro de un <p> abierto lo cierra (HTML corriente).
         let p: Nodo | undefined = actual;
         while (p && !CONTENEDORES.has(p.nombre)) {
@@ -92,12 +96,12 @@ export function analizarHtml(html: string): Nodo {
       }
       const nodo: Nodo = { nombre: n, attrs: leerAtributos(resto.replace(/\/\s*$/, '')), hijos: [], padre: actual };
       actual.hijos.push(nodo);
-      if (n === 'script' || n === 'style') {
+      if (!xml && (n === 'script' || n === 'style')) {
         const fin = html.toLowerCase().indexOf(`</${m[3].toLowerCase()}`, re.lastIndex);
         re.lastIndex = fin < 0 ? html.length : fin;
         continue;
       }
-      if (!autocierre && !VACIOS.has(n)) actual = nodo;
+      if (!autocierre && (xml || !VACIOS.has(n))) actual = nodo;
     } else if (m[5] !== undefined) {
       actual.hijos.push({ nombre: '#texto', attrs: {}, hijos: [], texto: decodificarEntidades(m[5]), padre: actual });
     } else {

@@ -18,7 +18,7 @@ function relaciones(zip: Record<string, Uint8Array>, ruta: string): Map<string, 
   const rels = zip[`${partes.join('/')}/_rels/${archivo}.rels`];
   const m = new Map<string, { destino: string; tipo: string }>();
   if (!rels) return m;
-  for (const r of buscarTodos(analizarHtml(strFromU8(rels)), (n) => n.nombre === 'relationship')) {
+  for (const r of buscarTodos(analizarHtml(strFromU8(rels), true), (n) => n.nombre === 'relationship')) {
     m.set(r.attrs.id ?? '', { destino: resolverRuta(ruta, r.attrs.target ?? ''), tipo: r.attrs.type ?? '' });
   }
   return m;
@@ -57,12 +57,12 @@ export async function convertirPresentacion(ctx: Contexto, archivo: ArchivoEntra
   const zip = unzipSync(archivo.bytes, { filter: (f) => f.name.endsWith('.xml') || f.name.endsWith('.rels') });
   const pres = zip['ppt/presentation.xml'];
   const relsPres = relaciones(zip, 'ppt/presentation.xml');
-  const orden = pres ? buscarTodos(analizarHtml(strFromU8(pres)), (n) => n.nombre === 'sldid').map((n) => relsPres.get(n.attrs['r:id'] ?? n.attrs.id ?? '')?.destino).filter((x): x is string => Boolean(x)) : [];
+  const orden = pres ? buscarTodos(analizarHtml(strFromU8(pres), true), (n) => n.nombre === 'sldid').map((n) => relsPres.get(n.attrs['r:id'] ?? n.attrs.id ?? '')?.destino).filter((x): x is string => Boolean(x)) : [];
   const diapositivas: Diapositiva[] = [];
   for (const [i, ruta] of orden.entries()) {
     const xml = zip[ruta];
     if (!xml) continue;
-    const arbol = analizarHtml(strFromU8(xml));
+    const arbol = analizarHtml(strFromU8(xml), true);
     let titulo = '';
     const cuerpo: string[] = [];
     for (const sp of buscarTodos(arbol, (n) => n.nombre === 'sp')) {
@@ -83,7 +83,7 @@ export async function convertirPresentacion(ctx: Contexto, archivo: ArchivoEntra
     const rels = relaciones(zip, ruta);
     const rutaNotas = [...rels.values()].find((r) => r.tipo.endsWith('/notesSlide'))?.destino;
     if (rutaNotas && zip[rutaNotas]) {
-      const an = analizarHtml(strFromU8(zip[rutaNotas] as Uint8Array));
+      const an = analizarHtml(strFromU8(zip[rutaNotas] as Uint8Array), true);
       notas = buscarTodos(an, (n) => n.nombre === 'sp').map(textoForma).filter((f) => f.ph !== 'sldNum' && f.ph !== 'sldImg').flatMap((f) => f.lineas).join('\n').trim();
     }
     diapositivas.push({ n: i + 1, titulo, texto: cuerpo.join('\n'), notas });

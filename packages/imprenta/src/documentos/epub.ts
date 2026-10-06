@@ -82,9 +82,9 @@ export function convertirEpubSincrono(bytes: Uint8Array): { contenido: Contenido
     return b ? strFromU8(b) : null;
   };
   const contenedor = leer('META-INF/container.xml');
-  const rutaOpf = contenedor ? buscar(analizarHtml(contenedor), (n) => n.nombre === 'rootfile')?.attrs['full-path'] : Object.keys(zip).find((k) => k.endsWith('.opf'));
+  const rutaOpf = contenedor ? buscar(analizarHtml(contenedor, true), (n) => n.nombre === 'rootfile')?.attrs['full-path'] : Object.keys(zip).find((k) => k.endsWith('.opf'));
   if (!rutaOpf) throw new Error('EPUB sin OPF');
-  const opf = analizarHtml(leer(rutaOpf) ?? '');
+  const opf = analizarHtml(leer(rutaOpf) ?? '', true);
 
   // --- Metadatos (dc:*) ---
   const md = buscar(opf, (n) => n.nombre === 'metadata');
@@ -100,7 +100,7 @@ export function convertirEpubSincrono(bytes: Uint8Array): { contenido: Contenido
   const papeles = new Map<string, string>();
   if (md) for (const m of buscarTodos(md, (n) => n.nombre === 'meta' && n.attrs.property === 'role')) papeles.set((m.attrs.refines ?? '').replace('#', ''), textoPlano(m).trim());
   for (const { n, t } of dc('creator')) {
-    const papel = n.attrs['opf:role'] ?? n.attrs.role ?? papeles.get(n.attrs.id ?? '') ?? 'aut';
+    const papel = n.attrs['opf:role'] || n.attrs.role || papeles.get(n.attrs.id ?? '') || 'aut';
     const orden = n.attrs['opf:file-as'] ?? n.attrs['file-as'];
     const autor = partirAutores(orden && orden.includes(',') ? orden : t)[0];
     if (!autor) continue;
@@ -134,11 +134,11 @@ export function convertirEpubSincrono(bytes: Uint8Array): { contenido: Contenido
   // --- Índice y lista de páginas ---
   let nav: { toc: EntradaNav[]; paginas: EntradaNav[] } = { toc: [], paginas: [] };
   const itemNav = [...manifiesto.values()].find((m) => /\bnav\b/.test(m.props));
-  if (itemNav) nav = leerNavXhtml(analizarHtml(leer(itemNav.href) ?? ''), itemNav.href);
+  if (itemNav) nav = leerNavXhtml(analizarHtml(leer(itemNav.href) ?? '', true), itemNav.href);
   const idNcx = spine?.attrs.toc;
   const itemNcx = (idNcx && manifiesto.get(idNcx)) || [...manifiesto.values()].find((m) => m.tipo === 'application/x-dtbncx+xml');
   if (itemNcx && (!nav.toc.length || !nav.paginas.length)) {
-    const ncx = leerNcx(analizarHtml(leer(itemNcx.href) ?? ''), itemNcx.href);
+    const ncx = leerNcx(analizarHtml(leer(itemNcx.href) ?? '', true), itemNcx.href);
     if (!nav.toc.length) nav.toc = ncx.toc;
     if (!nav.paginas.length) nav.paginas = ncx.paginas;
   }

@@ -170,9 +170,15 @@ export function bloquesDeRtf(rtf: string): ResultadoBloques & { metadatos: Metad
   let notas = 0;
   const info: Record<string, string> = {};
   let saltar = 0;
-  const salida = (s: string) => {
+  const salida = (texto: string) => {
+    let s = texto;
     if (estado.ignorar) return;
-    if (saltar > 0) { saltar -= s.length; return; }
+    if (saltar > 0) {
+      const n = Math.min(saltar, s.length);
+      saltar -= n;
+      s = s.slice(n);
+      if (!s) return;
+    }
     if (estado.destino === 'footnote') nota += s;
     else if (['title', 'author', 'subject', 'keywords'].includes(estado.destino)) info[estado.destino] = (info[estado.destino] ?? '') + s;
     else parrafo += s;
@@ -272,7 +278,7 @@ function odfAHtml(n: Nodo, notas: Nodo[]): Nodo {
       const id = n.attrs['text:id'] ?? `odt-${notas.length + 1}`;
       const cuerpo = buscar(n, (x) => x.nombre === 'note-body');
       notas.push(nuevo('aside', cuerpo ? cuerpo.hijos.map((h) => odfAHtml(h, notas)) : [], { 'epub:type': 'footnote', id }));
-      return nuevo('sup', [nuevo('a', [{ nombre: '#texto', attrs: {}, hijos: [], texto: id }], { href: `#${id}` })]);
+      return nuevo('sup', [nuevo('a', [{ nombre: '#texto', attrs: {}, hijos: [], texto: id }], { href: `#${id}`, 'epub:type': 'noteref' })]);
     }
     case 'span': return nuevo('span', hijos());
     case 'a': return nuevo('a', hijos(), { href: n.attrs['xlink:href'] ?? n.attrs.href ?? '' });
@@ -285,7 +291,7 @@ export function bloquesDeOdt(bytes: Uint8Array): ResultadoBloques & { metadatos:
   const zip = unzipSync(bytes, { filter: (f) => f.name === 'content.xml' || f.name === 'meta.xml' });
   const contenido = zip['content.xml'];
   if (!contenido) throw new Error('ODT sin content.xml');
-  const arbol = analizarHtml(strFromU8(contenido));
+  const arbol = analizarHtml(strFromU8(contenido), true);
   const texto = buscar(arbol, (n) => n.nombre === 'text' && n.padre?.nombre === 'body') ?? arbol;
   const notas: Nodo[] = [];
   const html: Nodo = { nombre: 'div', attrs: {}, hijos: texto.hijos.map((h) => odfAHtml(h, notas)) };
@@ -294,7 +300,7 @@ export function bloquesDeOdt(bytes: Uint8Array): ResultadoBloques & { metadatos:
   const res = bloquesDeArbol(html);
   const metadatos: MetadatosIncrustados = {};
   if (zip['meta.xml']) {
-    const meta = analizarHtml(strFromU8(zip['meta.xml']));
+    const meta = analizarHtml(strFromU8(zip['meta.xml']), true);
     const t = buscar(meta, (n) => n.nombre === 'title');
     const c = buscar(meta, (n) => n.nombre === 'initial-creator') ?? buscar(meta, (n) => n.nombre === 'creator');
     const f = buscar(meta, (n) => n.nombre === 'creation-date');

@@ -17,7 +17,7 @@ export function metadatosOoxml(bytes: Uint8Array): MetadatosIncrustados {
     const zip = unzipSync(bytes, { filter: (f) => f.name === 'docProps/core.xml' });
     const core = zip['docProps/core.xml'];
     if (!core) return m;
-    const arbol = analizarHtml(strFromU8(core));
+    const arbol = analizarHtml(strFromU8(core), true);
     const campo = (n: string) => { const x = buscar(arbol, (y) => y.nombre === n); return x ? textoPlano(x).trim() : ''; };
     const titulo = campo('title'); if (titulo) m.titulo = titulo;
     const autor = campo('creator'); if (autor) m.autores = partirAutores(autor);
@@ -59,7 +59,7 @@ function esquemaDeBloques(r: ResultadoBloques): EntradaEsquema[] {
 async function docx(bytes: Uint8Array): Promise<{ r: ResultadoBloques; avisos: string[] }> {
   const mammoth = (await import('mammoth')).default ?? (await import('mammoth'));
   const buf = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
-  const res = await mammoth.convertToHtml({ arrayBuffer: buf } as Parameters<typeof mammoth.convertToHtml>[0], {
+  const res = await mammoth.convertToHtml({ arrayBuffer: buf, buffer: bytes } as Parameters<typeof mammoth.convertToHtml>[0], {
     styleMap: ["p[style-name='Title'] => h1:fresh", "p[style-name='Subtitle'] => h2:fresh", "p[style-name='Quote'] => blockquote:fresh", "p[style-name='Intense Quote'] => blockquote:fresh"],
     // Las imágenes no se incrustan (base64 enorme): solo su texto alternativo.
     convertImage: mammoth.images.imgElement((async (img: { altText?: string }) => ({ src: '', alt: img.altText ?? '' })) as never),
