@@ -1,10 +1,11 @@
-import { useEffect, type ReactNode } from 'react';
-import { ClerkProvider, SignIn, useAuth, useClerk, useUser } from '@clerk/react';
+import { useEffect, useState, type ReactNode } from 'react';
+import { ClerkProvider, SignIn, SignUp, useAuth, useClerk, useUser } from '@clerk/react';
 import { esES } from '@clerk/localizations';
 import { Composicion } from '@scholaris/ui';
 import { Logo } from './componentes/marco/logo';
 import { ponerProveedorToken } from './datos/api';
 import { ContextoSesion } from './sesion';
+import { cuponPendiente } from './lib/cupon-pendiente';
 
 /** Clerk vestido de Scholaris: Georgia, tinta de café, sin sombras genéricas. */
 const apariencia = {
@@ -46,7 +47,7 @@ function Puente({ children, espera }: { children: ReactNode; espera: ReactNode }
     <ContextoSesion.Provider
       value={{
         modo: 'clerk',
-        usuario: { nombre: user?.fullName ?? user?.firstName ?? 'Tu cuenta', correo: user?.primaryEmailAddress?.emailAddress ?? '', imagen: user?.imageUrl },
+        usuario: { nombre: user?.fullName ?? user?.firstName ?? 'Tu cuenta', correo: user?.primaryEmailAddress?.emailAddress ?? '', imagen: user?.imageUrl, id: user?.id, creada: user?.createdAt?.getTime() },
         salir: () => void clerk.signOut(),
         abrirPerfil: () => clerk.openUserProfile(),
       }}
@@ -58,6 +59,9 @@ function Puente({ children, espera }: { children: ReactNode; espera: ReactNode }
 
 /** La entrada de siempre: el panel café con el logo y una frase, y el formulario sobre crema. */
 function Entrada() {
+  // Con un cupón esperando (un enlace «?cupon=»), lo primero es crear la cuenta; quien ya la tiene, entra.
+  const [cupon] = useState(cuponPendiente);
+  const [registro, setRegistro] = useState(!!cupon);
   return (
     <main className="grid min-h-dvh lg:grid-cols-2">
       <section className="relative flex flex-col justify-between overflow-hidden bg-barra px-6 py-6 text-sobre-barra lg:px-10 lg:py-8">
@@ -73,8 +77,23 @@ function Entrada() {
         </div>
         <p className="relative hidden text-[0.75rem] text-sobre-barra-2 lg:block">PDF · escaneos · audio · vídeo · cada cita con su página o su minuto</p>
       </section>
-      <section className="fondo-bauhaus flex items-center justify-center px-4 py-10">
-        <SignIn routing="hash" />
+      <section className="fondo-bauhaus flex flex-col items-center justify-center gap-5 px-4 py-10">
+        {cupon ? (
+          <div role="status" className="flex max-w-md items-center gap-4 rounded-xl border border-cream-400 bg-cream-50 px-4 py-3 shadow-[var(--relieve)]">
+            <span aria-hidden className="anim-sello grid shrink-0 -rotate-6 place-items-center rounded-lg border-2 border-double border-rojo px-3 py-1.5 font-mono text-[0.6875rem] font-bold uppercase leading-tight tracking-[0.18em] text-rojo">
+              <span className="text-[0.9375rem] tracking-[0.24em]">Pro</span><span>cupón</span>
+            </span>
+            <p className="text-[0.875rem] text-coffee-700">
+              Tu cupón <span className="font-mono">{cupon}</span> te espera. {registro ? 'Crea tu cuenta' : 'Entra'} y se canjea solo, sin pasar por el pago.
+            </p>
+          </div>
+        ) : null}
+        {registro ? <SignUp routing="hash" /> : <SignIn routing="hash" />}
+        {cupon ? (
+          <button type="button" className="text-[0.8125rem] text-coffee-600 underline underline-offset-2 hover:text-coffee-800" onClick={() => setRegistro(!registro)}>
+            {registro ? '¿Ya tienes cuenta? Entra con ella' : '¿Aún no tienes cuenta? Créala'}
+          </button>
+        ) : null}
       </section>
     </main>
   );

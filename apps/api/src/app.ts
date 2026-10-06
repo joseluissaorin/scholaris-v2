@@ -141,7 +141,7 @@ const planConcedido = (c: Concesion | null | undefined): Plan | null => (c && (!
 /**
  * Olvida lo que este aislamiento y esta ubicación saben de un usuario (tras
  * concederle un plan o canjear un cupón). Otros aislamientos de la ubicación lo
- * notan en ≤ 30 s (vuelven a mirar la caché de la ubicación); las claves de API
+ * notan en ≤ 5 s (vuelven a mirar la caché de la ubicación); las claves de API
  * de otros aislamientos, en ≤ 60 s.
  */
 export async function olvidarUsuario(pl: Pick<Plataforma, 'cacheSesiones'>, id: string): Promise<void> {
@@ -277,9 +277,9 @@ export function crearPuerta(pl: Plataforma) {
     if (id.imagen) u.imagen = id.imagen;
     // D1 solo cuando hace falta: alta, cambio de plan, o cada diez minutos (para «visto» y la concesión).
     let conocido = usuariosVistos.get(u.id);
-    // Lo de la memoria se contrasta con la caché de la ubicación cada 30 s: así un
+    // Lo de la memoria se contrasta con la caché de la ubicación cada 5 s: así un
     // canje o una concesión (que la borran) llegan a todos los aislamientos.
-    if (conocido && pl.cacheSesiones && Date.now() - (conocido.leido ?? 0) > 30_000) {
+    if (conocido && pl.cacheSesiones && Date.now() - (conocido.leido ?? 0) > 5_000) {
       const visto = await pl.cacheSesiones.leer(`visto:${u.id}`).catch(() => null);
       conocido = visto ? { ...(JSON.parse(visto) as Visto), leido: Date.now() } : undefined;
       if (conocido) usuariosVistos.set(u.id, conocido); else usuariosVistos.delete(u.id);

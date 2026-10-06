@@ -8,7 +8,7 @@ import type { ConfigPublica } from '@scholaris/contrato';
 
 export interface Sesion {
   modo: 'local' | 'clerk';
-  usuario?: { nombre: string; correo: string; imagen?: string };
+  usuario?: { nombre: string; correo: string; imagen?: string; id?: string; creada?: number };
   salir?: () => void;
   abrirPerfil?: () => void;
 }

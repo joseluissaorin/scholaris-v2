@@ -79,7 +79,7 @@ function Cuenta() {
         </div>
       </Seccion>
 
-      {yo.via !== 'local' || yo.admin ? (
+      {sesion.modo !== 'clerk' && (yo.via !== 'local' || yo.admin) ? (
         <Seccion icono="marcador" titulo="Canjear un cupón" descripcion="Si te han dado un código SCHO-XXXX-XXXX, escríbelo aquí y el plan pasa a tu cuenta al momento.">
           <CanjearCupon />
         </Seccion>
@@ -96,7 +96,7 @@ function Cuenta() {
 
       {sesion.modo === 'clerk' ? (
         <Seccion icono="marcador" titulo="Planes">
-          <Suspense fallback={<Esqueleto className="h-72" />}><Precios /></Suspense>
+          <Suspense fallback={<Esqueleto className="h-72" />}><Precios conCupon /></Suspense>
         </Seccion>
       ) : null}
 

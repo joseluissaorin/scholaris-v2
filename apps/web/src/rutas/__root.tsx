@@ -9,8 +9,28 @@ import { recuperarTareas } from '../datos/ingesta';
 import { NoEncontrado, ErrorDeRuta } from '../componentes/comunes/errores';
 import { EsperaMarco } from '../componentes/marco/espera';
 import { useHayMini } from '../componentes/reproductor/estado-global';
+import { useSesion } from '../sesion';
+import { cuponPendiente } from '../lib/cupon-pendiente';
+import { claveAltaVista } from '../componentes/cuenta/alta-clave';
 
 const Paleta = lazy(() => import('../componentes/marco/paleta'));
+// El alta (elegir plan o canjear el cupón del enlace): solo justo después de registrarse o con un cupón esperando.
+const Alta = lazy(() => import('../componentes/cuenta/alta'));
+
+/** ¿Hay que enseñar el alta? Cuenta creada hace menos de 15 min y aún sin ver, o un cupón pendiente. */
+function useAlta(): { usuario: string; cupon: string | null; nueva: boolean } | null {
+  const sesion = useSesion();
+  const [alta] = useState(() => {
+    const id = sesion.usuario?.id;
+    if (sesion.modo !== 'clerk' || !id) return null;
+    const cupon = cuponPendiente();
+    let vista = true;
+    try { vista = !!localStorage.getItem(claveAltaVista(id)); } catch { /* sin almacenamiento */ }
+    const nueva = !vista && !!sesion.usuario?.creada && Date.now() - sesion.usuario.creada < 15 * 60_000;
+    return cupon || nueva ? { usuario: id, cupon, nueva } : null;
+  });
+  return alta;
+}
 // El reproductor pequeño: solo si algo suena fuera del lector.
 // Se puede coger y lanzar a cualquier esquina (con inercia): el arrastre viaja en el mismo trozo, fuera del marco.
 const MiniReproductor = lazy(() => Promise.all([import('../componentes/reproductor/mini'), import('../movimiento/arrastre')]).then(([m, a]) => ({
@@ -39,6 +59,7 @@ function Marco() {
   const [paleta, setPaleta] = useState(false);
   const [paletaCargada, setPaletaCargada] = useState(false);
   const hayMini = useHayMini();
+  const alta = useAlta();
 
   useEffect(() => alDisparar('paleta', () => { setPaletaCargada(true); setPaleta(true); }), []);
   useEffect(() => {
@@ -63,6 +84,7 @@ function Marco() {
       <Entrada />
       {paletaCargada ? <Suspense fallback={null}><Paleta abierta={paleta} alCambiar={setPaleta} /></Suspense> : null}
       {hayMini ? <Suspense fallback={null}><MiniReproductor /></Suspense> : null}
+      {alta ? <Suspense fallback={null}><Alta {...alta} /></Suspense> : null}
       <Tostadora />
     </div>
   );

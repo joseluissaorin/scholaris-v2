@@ -9,6 +9,10 @@ import { claveClerk, ProveedorSesion } from './sesion';
 import { EsperaContenido, EsperaMarco, FalloArranque } from './componentes/marco/espera';
 import { instalarTransiciones } from './movimiento/transiciones';
 import './estilos.css';
+import { capturarCuponDeLaUrl } from './lib/cupon-pendiente';
+
+// «/?cupon=SCHO-…»: se guarda antes de que nada mire la URL (y se canjea al tener sesión).
+capturarCuponDeLaUrl();
 
 export const enrutador = createRouter({
   routeTree,
