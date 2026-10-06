@@ -1,13 +1,14 @@
 import { memo } from 'react';
 import { Link } from '@tanstack/react-router';
 import { useQueryClient, type QueryClient } from '@tanstack/react-query';
-import type { Biblioteca, Pagina, ResumenDocumento } from '@scholaris/contrato';
+import { ErrorApi, type Biblioteca, type Pagina, type ResumenDocumento } from '@scholaris/contrato';
 import { avisar, conDeshacer, cx, Icono, MenuContenido, MenuDisparador, MenuElemento, MenuRaiz, MenuRotulo, MenuSeparador, Rotulo } from '@scholaris/ui';
 import { api } from '../../datos/api';
 import { copiarReferencia } from '../../lib/referencia';
 import { alternarSeleccion, useSeleccion } from '../../lib/seleccion';
 import { AccesoReferencia } from '../comunes/boton-referencia';
-import { recuperarTareas } from '../../datos/ingesta';
+import { ingerirParaLote, recuperarTareas } from '../../datos/ingesta';
+import { descargarSpdfServidor } from '../../lib/spdf';
 import { duracion, haceCuanto, ICONO_TIPO, NOMBRE_TIPO, nombreUnidad, esMedio } from '../../lib/formato';
 import { preferencia } from '../../lib/acciones';
 import { Portada } from '../comunes/portada';
@@ -17,9 +18,42 @@ const COLOR_COL: Record<string, string> = { rojo: 'bg-rojo', azul: 'bg-azul', am
 export const puntoColeccion = (c?: string) => COLOR_COL[c ?? 'tinta'] ?? 'bg-tinta';
 
 /** Vuelve a leer un documento que falló o se quedó a medias: retoma donde se quedó. */
-export async function reintentarDocumento(qc: QueryClient, id: string) {
+export async function reintentarDocumento(qc: QueryClient, id: string, biblioteca?: string) {
   try { await api().documentos.reintentar(id); avisar('Vuelve a la imprenta: retoma donde se quedó.'); void qc.invalidateQueries({ queryKey: ['documentos'] }); void qc.invalidateQueries({ queryKey: ['documento', id] }); void recuperarTareas(true); }
-  catch (e) { avisar(e instanceof Error ? e.message : 'No se pudo reintentar.', { tono: 'error' }); }
+  catch (e) {
+    // La subida no llegó a terminar: no hay original que releer, hay que volver a subirlo.
+    if (e instanceof ErrorApi && e.codigo === 'falta_original') {
+      avisar('La subida no llegó a terminar y no hay original que leer. Vuelve a subir el archivo.', { tono: 'error', duracion: 14000, accion: { etiqueta: 'Subir de nuevo', alPulsar: () => void subirDeNuevo(qc, id, biblioteca) } });
+      return;
+    }
+    avisar(e instanceof Error ? e.message : 'No se pudo reintentar.', { tono: 'error' });
+  }
+}
+
+function elegirArchivo(): Promise<File | null> {
+  return new Promise((resolver) => {
+    const entrada = document.createElement('input');
+    entrada.type = 'file';
+    entrada.addEventListener('change', () => resolver(entrada.files?.[0] ?? null), { once: true });
+    entrada.addEventListener('cancel', () => resolver(null), { once: true });
+    entrada.click();
+  });
+}
+
+/**
+ * Vuelve a subir el archivo de un documento que se quedó a medio subir. Si es
+ * el mismo fichero (misma huella), el servidor retoma ese documento; si es otro,
+ * entra como documento nuevo y el que estaba a medias se retira.
+ */
+export async function subirDeNuevo(qc: QueryClient, id: string, biblioteca?: string) {
+  const archivo = await elegirArchivo();
+  if (!archivo) return;
+  const r = await ingerirParaLote(archivo, { biblioteca, alCrear: (nuevo) => {
+    if (nuevo !== id) void api().documentos.borrar(id).catch(() => { /* ya no estaba */ }).finally(() => void qc.invalidateQueries({ queryKey: ['documentos'] }));
+  } });
+  if (r.duplicado && r.duplicado !== id) void api().documentos.borrar(id).catch(() => { /* ya no estaba */ });
+  void qc.invalidateQueries({ queryKey: ['documentos'] });
+  void qc.invalidateQueries({ queryKey: ['documento', id] });
 }
 
 /** Acciones de un documento: las mismas en la rejilla, en la lista y en el lector. */
@@ -55,19 +89,9 @@ export function MenuDocumento({ doc, bibliotecas, children }: { doc: ResumenDocu
     );
   }
 
-  const reintentar = () => reintentarDocumento(qc, doc.id);
+  const reintentar = () => reintentarDocumento(qc, doc.id, doc.bibliotecas[0]);
 
-  async function exportarSpdf() {
-    avisar(`Preparando «${doc.titulo}.spdf»…`);
-    try {
-      const bytes = await api().documentos.spdf(doc.id);
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(new Blob([bytes as BlobPart], { type: 'application/x-spdf' }));
-      a.download = `${doc.titulo.replace(/[\\/:*?"<>|]+/g, ' ').trim().slice(0, 80) || 'documento'}.spdf`;
-      a.click();
-      setTimeout(() => URL.revokeObjectURL(a.href), 4000);
-    } catch (e) { avisar(e instanceof Error ? e.message : 'No se pudo exportar.', { tono: 'error' }); }
-  }
+  const exportarSpdf = () => descargarSpdfServidor(doc.id, doc.titulo);
 
   async function descargar() {
     try { const { url } = await api().documentos.original(doc.id); if (url) window.open(url, '_blank', 'noopener'); else avisar('En la demostración no hay original que descargar.'); }
@@ -82,6 +106,7 @@ export function MenuDocumento({ doc, bibliotecas, children }: { doc: ResumenDocu
         <MenuElemento icono="descargar" alElegir={() => void descargar()}>Descargar el original</MenuElemento>
         <MenuElemento icono="pila" alElegir={() => void exportarSpdf()}>Exportar como .spdf</MenuElemento>
         {doc.estado === 'error' || doc.estado === 'pendiente' ? <MenuElemento icono="rayo" alElegir={() => void reintentar()}>Reintentar</MenuElemento> : null}
+        {doc.estado === 'pendiente' ? <MenuElemento icono="subir" alElegir={() => void subirDeNuevo(qc, doc.id, doc.bibliotecas[0])}>Subir de nuevo</MenuElemento> : null}
         {bibliotecas.length ? (
           <>
             <MenuSeparador />
@@ -140,7 +165,7 @@ export const FichaDocumento = memo(function FichaDocumento({ doc, bibliotecas, i
         <h3 className="mt-3 line-clamp-2 text-[0.875rem] font-semibold leading-snug text-coffee-800 group-hover:text-coffee-900">{doc.titulo}</h3>
       </Link>
       <p className="mt-0.5 truncate text-[0.8125rem] text-coffee-500">{doc.autores || 'Sin autor'}{doc.anio ? `, ${doc.anio}` : ''}</p>
-      {doc.estado === 'error' || doc.estado === 'pendiente' ? <ReintentarFicha id={doc.id} /> : null}
+      {doc.estado === 'error' || doc.estado === 'pendiente' ? <ReintentarFicha id={doc.id} biblioteca={doc.bibliotecas[0]} /> : null}
       <div className="mt-1 flex items-center gap-2">
         <span className="truncate text-[0.6875rem] font-medium uppercase tracking-[0.04em] text-coffee-400">{lineaMeta(doc)}</span>
         <AccesoReferencia documento={doc.id} className="ml-auto h-7 px-1.5 md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100" />
@@ -154,9 +179,9 @@ export const FichaDocumento = memo(function FichaDocumento({ doc, bibliotecas, i
   );
 });
 
-function ReintentarFicha({ id }: { id: string }) {
+function ReintentarFicha({ id, biblioteca }: { id: string; biblioteca?: string }) {
   const qc = useQueryClient();
-  return <button type="button" onClick={() => void reintentarDocumento(qc, id)} className="mt-1.5 flex items-center gap-1.5 self-start text-[0.8125rem] text-rojo underline underline-offset-4"><Icono nombre="rayo" tam={13} />Reintentar</button>;
+  return <button type="button" onClick={() => void reintentarDocumento(qc, id, biblioteca)} className="mt-1.5 flex items-center gap-1.5 self-start text-[0.8125rem] text-rojo underline underline-offset-4"><Icono nombre="rayo" tam={13} />Reintentar</button>;
 }
 
 /** Fila en la vista de lista: densa, alineada en columnas. */

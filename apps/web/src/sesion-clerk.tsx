@@ -33,10 +33,12 @@ function Puente({ children, espera }: { children: ReactNode; espera: ReactNode }
   const { user } = useUser();
   const clerk = useClerk();
 
+  // El token se ofrece cuando hay sesión: antes, las peticiones esperan (no salen sin él).
   useEffect(() => {
+    if (!isLoaded || !isSignedIn) return;
     ponerProveedorToken(() => getToken());
     return () => ponerProveedorToken(null);
-  }, [getToken]);
+  }, [getToken, isLoaded, isSignedIn]);
 
   if (!isLoaded) return <>{espera}</>;
   if (!isSignedIn) return <Entrada />;

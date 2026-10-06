@@ -450,7 +450,11 @@ function manejar(e: EventoTiempoReal) {
     if (i && e.estado === 'listo') hito(i, 'listo');
     void clienteConsultas.invalidateQueries({ queryKey: ['documentos'] });
     // Todo lo del documento se vuelve a pedir: lo que se cacheó mientras se leía estaba vacío.
-    if (e.documento) for (const k of ['documento', 'unidades', 'folios', 'secciones', 'figuras', 'original']) void clienteConsultas.invalidateQueries({ queryKey: [k, e.documento] });
+    // Al conectar, el servidor repite el último «fin» de tareas ya cerradas: si no se estaba siguiendo
+    // esa lectura y lo que hay en caché ya está listo, no hay nada nuevo que pedir.
+    const enCache = e.documento ? clienteConsultas.getQueryData<{ estado?: string }>(['documento', e.documento]) : undefined;
+    const repetido = !i && e.estado === 'listo' && enCache?.estado === 'listo';
+    if (e.documento && !repetido) for (const k of ['documento', 'unidades', 'folios', 'secciones', 'figuras', 'original']) void clienteConsultas.invalidateQueries({ queryKey: [k, e.documento] });
     if (i && e.estado === 'listo') setTimeout(() => retirarIngesta(i.id), 5200);
   } else if (e.tipo === 'fase' && (e.fase === 'metadatos' || e.fase === 'estructura')) {
     // Título, autores e índice llegan antes del final: el lector y la biblioteca los recogen ya.

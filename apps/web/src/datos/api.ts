@@ -13,6 +13,24 @@ let escucharSimulado: ((o: (e: EventoTiempoReal) => void) => () => void) | null 
 /** La sesión (Clerk) registra aquí cómo obtener el token. */
 export function ponerProveedorToken(fn: (() => Promise<string | null>) | null) {
   proveedorToken = fn;
+  if (fn) { sesionLista?.(); sesionLista = null; }
+}
+
+/*
+ * Con Clerk, las peticiones que salen antes de que haya sesión (la precarga del
+ * lector desde un enlace directo) esperan aquí al token en vez de salir sin él:
+ * así se piden en cuanto Clerk responde, sin esperar a que se monte la pantalla.
+ */
+let esperaSesion: Promise<void> | null = null;
+let sesionLista: (() => void) | null = null;
+export function esperarSesion() {
+  if (proveedorToken || esperaSesion) return;
+  esperaSesion = new Promise<void>((r) => { sesionLista = r; });
+}
+
+async function tokenActual(): Promise<string | null> {
+  if (!proveedorToken && esperaSesion) await esperaSesion;
+  return (await proveedorToken?.()) ?? tokenLocal();
 }
 
 export function api(): ClienteScholaris {
@@ -51,7 +69,7 @@ export function arrancar(): Promise<ConfigPublica> {
   arranque ??= (async () => {
     const base = (import.meta.env.VITE_API as string | undefined) ?? '';
     if (!quiereSimulado()) {
-      const real = crearCliente({ base, token: () => proveedorToken?.() ?? tokenLocal() });
+      const real = crearCliente({ base, token: tokenActual });
       try {
         const config = await real.config();
         cliente = real;

@@ -3,8 +3,8 @@ import { createRoot } from 'react-dom/client';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { createRouter, RouterProvider } from '@tanstack/react-router';
 import { routeTree } from './arbol-rutas.gen';
-import { arrancar } from './datos/api';
-import { clienteConsultas } from './datos/consultas';
+import { arrancar, esperarSesion } from './datos/api';
+import { clienteConsultas, precargarLector } from './datos/consultas';
 import { claveClerk, ProveedorSesion } from './sesion';
 import { EsperaContenido, EsperaMarco, FalloArranque } from './componentes/marco/espera';
 import { instalarTransiciones } from './movimiento/transiciones';
@@ -44,6 +44,7 @@ const promesaConfig = arrancar();
 void promesaConfig.then((config) => {
   const clave = claveClerk(config);
   if (clave && config.requiereAutenticacion) {
+    esperarSesion();
     void import('./sesion-clerk');
     try {
       const anfitrion = atob(clave.split('_')[2] ?? '').replace(/\$$/, '');
@@ -53,6 +54,15 @@ void promesaConfig.then((config) => {
         document.head.appendChild(l);
       }
     } catch { /* clave sin anfitrión legible */ }
+  }
+  // Enlace directo al lector: el documento y la URL de su original se piden ya y a la vez (aún no se
+  // sabe si es un medio; pedirla de más cuesta una petición ligera, pedirla después, un viaje entero).
+  // Salen en cuanto Clerk da el token, sin esperar a montar el enrutador ni a que corra el loader.
+  const lector = /^\/lector\/([^/?#]+)/.exec(location.pathname);
+  if (lector) {
+    const busqueda = new URLSearchParams(location.search);
+    const u = Number(busqueda.get('u'));
+    void precargarLector(clienteConsultas, decodeURIComponent(lector[1]!), Number.isFinite(u) && u > 0 ? u : 1, true).catch(() => undefined);
   }
   try {
     const coincidencias = enrutador.matchRoutes(location.pathname, Object.fromEntries(new URLSearchParams(location.search)));

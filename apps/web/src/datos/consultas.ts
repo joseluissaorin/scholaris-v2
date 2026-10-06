@@ -7,6 +7,7 @@ import { QueryClient, queryOptions, keepPreviousData } from '@tanstack/react-que
 import type { Filtros } from '@scholaris/nucleo';
 import type { FiltrosDocumentos, RespuestaBusqueda, TipoEntidad } from '@scholaris/contrato';
 import { api } from './api';
+import { esMedio } from '../lib/formato';
 
 export const clienteConsultas = new QueryClient({
   defaultOptions: {
@@ -87,3 +88,20 @@ export const q = {
   ajustes: () => queryOptions({ queryKey: ['ajustes'], queryFn: () => api().ajustes.obtener() }),
   grabacion: () => queryOptions({ queryKey: ['grabacion'], queryFn: () => api().privacidad.grabacion() }),
 };
+
+/**
+ * Lo que el lector necesita para su primer pintado: el documento, su índice, el
+ * primer bloque y, en audio y vídeo, la URL firmada del medio. La URL del original
+ * se pide a la vez que el documento cuando ya se sabe (o se sospecha, por `?t=`
+ * o por llegar desde un enlace directo) que es un medio; si no, en cuanto llega el documento.
+ */
+export function precargarLector(c: QueryClient, id: string, u = 1, pedirOriginal = false) {
+  void c.prefetchQuery(q.secciones(id));
+  void c.prefetchQuery(q.folios(id));
+  void c.prefetchQuery(q.bloque(id, Math.floor((u - 1) / BLOQUE)));
+  const tipoSabido = c.getQueryData(q.documento(id).queryKey)?.tipo
+    ?? c.getQueriesData<{ elementos?: Array<{ id: string; tipo: string }> }>({ queryKey: ['documentos'] }).flatMap(([, v]) => v?.elementos ?? []).find((x) => x.id === id)?.tipo;
+  const original = pedirOriginal || (tipoSabido && esMedio(tipoSabido as never)) ? c.prefetchQuery(q.original(id)) : null;
+  const documento = c.ensureQueryData(q.documento(id));
+  return documento.then(async (d) => { if (esMedio(d.tipo)) await (original ?? c.prefetchQuery(q.original(id))); return d; });
+}

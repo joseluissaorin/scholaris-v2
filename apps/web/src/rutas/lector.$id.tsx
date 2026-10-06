@@ -6,7 +6,7 @@ import { Dialog } from 'radix-ui';
 import {
   avisar, Boton, cx, Esqueleto, Folio, Icono, MenuContenido, MenuDisparador, MenuElemento, MenuRaiz, MenuRotulo, Rotulo, Consejo,
 } from '@scholaris/ui';
-import { BLOQUE, q } from '../datos/consultas';
+import { BLOQUE, precargarLector, q } from '../datos/consultas';
 import { api } from '../datos/api';
 import { useIngestas } from '../datos/ingesta';
 import { validarBusquedaLector, type BusquedaLector } from '../lib/anclas';
@@ -20,29 +20,18 @@ import { BarraSeleccion, useSeleccion } from '../componentes/lector/seleccion';
 import { MenuDocumento, reintentarDocumento } from '../componentes/biblioteca/documento';
 import { BotonReferencia } from '../componentes/comunes/boton-referencia';
 import { copiarReferencia } from '../lib/referencia';
-import { NotaMargen } from '../bocetos/nota-margen';
 import { PanelFiguras } from '../componentes/inspector/panel-figuras';
 import { hojear } from '../movimiento/hojear';
 import { Portada } from '../componentes/comunes/portada';
+import { NotaMargen } from '../bocetos/nota-margen';
 
 export const Route = createFileRoute('/lector/$id')({
   validateSearch: (s: Record<string, unknown>): BusquedaLector => validarBusquedaLector(s),
   // Solo «u»: si una dependencia cambiara al seguir la URL al reproductor (?t=), el lector se remontaría y el medio se soltaría.
   loaderDeps: ({ search }) => ({ u: search.u }),
   loader: async ({ context, params, deps, location }) => {
-    const c = context.consultas;
-    void c.prefetchQuery(q.secciones(params.id));
-    void c.prefetchQuery(q.folios(params.id));
-    void c.prefetchQuery(q.bloque(params.id, Math.floor(((deps.u ?? 1) - 1) / BLOQUE)));
-    // Audio y vídeo: la URL firmada del archivo antes del primer pintado (el vídeo empieza a cargar al montar).
-    // Si ya se sabe que es un medio (por el enlace o por la biblioteca), se pide a la vez que el documento.
-    const tipoSabido = c.getQueryData(q.documento(params.id).queryKey)?.tipo
-      ?? c.getQueriesData<{ elementos?: Array<{ id: string; tipo: DetalleDocumento['tipo'] }> }>({ queryKey: ['documentos'] }).flatMap(([, v]) => v?.elementos ?? []).find((x) => x.id === params.id)?.tipo;
-    // Un enlace con ?t= es de audio o vídeo.
-    const conT = (location.search as { t?: unknown }).t != null;
-    const original = conT || (tipoSabido && esMedio(tipoSabido)) ? c.prefetchQuery(q.original(params.id)) : null;
-    const d = await c.ensureQueryData(q.documento(params.id));
-    if (esMedio(d.tipo)) await (original ?? c.prefetchQuery(q.original(params.id)));
+    // Un enlace con ?t= es de audio o vídeo. Desde un enlace directo esto ya salió en el arranque (main.tsx).
+    await precargarLector(context.consultas, params.id, deps.u ?? 1, (location.search as { t?: unknown }).t != null);
   },
   pendingComponent: EsperaLector,
   component: Lector,

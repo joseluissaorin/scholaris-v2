@@ -3,6 +3,7 @@
  * del contenido y el volcado completo (con los vectores recortados: son miles
  * de números que no se leen).
  */
+import { descargarSpdfServidor } from '../../lib/spdf';
 import { useState } from 'react';
 import { Dialog } from 'radix-ui';
 import type { ContenidoDocumento, DetalleDocumento } from '@scholaris/contrato';
@@ -68,15 +69,7 @@ export function VerJson({ abierto, alCambiar, doc, contenido }: { abierto: boole
   );
 }
 
-/** Descarga el .spdf del documento (lo arma el servidor). */
-export async function descargarSpdf(doc: Pick<DetalleDocumento, 'id' | 'metadatos'>) {
-  avisar(`Preparando «${doc.metadatos.titulo}.spdf»…`);
-  try {
-    const datos = await api().documentos.spdf(doc.id);
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(new Blob([datos as BlobPart], { type: 'application/x-spdf' }));
-    a.download = `${doc.metadatos.titulo.replace(/[\\/:*?"<>|]+/g, ' ').trim().slice(0, 80) || 'documento'}.spdf`;
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(a.href), 4000);
-  } catch (e) { avisar(e instanceof Error ? e.message : 'No se pudo exportar.', { tono: 'error' }); }
+/** Descarga el .spdf del documento (lo arma el servidor) y avisa si algo se quedó fuera. */
+export function descargarSpdf(doc: Pick<DetalleDocumento, 'id' | 'metadatos'>) {
+  return descargarSpdfServidor(doc.id, doc.metadatos.titulo);
 }
