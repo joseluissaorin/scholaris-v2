@@ -100,7 +100,7 @@ export function TiraFotogramas({ documento, cargar = true }: { documento: string
   // El fotograma actual, sin renders: un atributo en el DOM, y la tira lo sigue si nadie la está tocando.
   useEffect(() => {
     let previo = -1;
-    return motor().escucharTiempo((t) => {
+    const marcar = (t: number) => {
       const i = buscarIndice(inicios, t);
       if (i === previo || !lista.current) return;
       previo = i;
@@ -113,7 +113,11 @@ export function TiraFotogramas({ documento, cargar = true }: { documento: string
         const top = n.offsetTop - c.offsetTop;
         if (top < c.scrollTop || top + n.offsetHeight > c.scrollTop + c.clientHeight) c.scrollTo({ top: top - c.clientHeight / 3, behavior: 'smooth' });
       }
-    });
+    };
+    // Al abrir (aún en pausa) ya se marca el fotograma del instante en que está el vídeo.
+    const h = requestAnimationFrame(() => marcar(motor().tiempo()));
+    const soltar = motor().escucharTiempo(marcar);
+    return () => { cancelAnimationFrame(h); soltar(); };
   }, [inicios]);
 
   if (!todos.length) return null;
