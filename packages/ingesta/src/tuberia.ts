@@ -42,6 +42,7 @@ import { contextoExtractivo, pasoContexto } from './pasos/contexto.js';
 import { pasoFiguras, type FiguraConAncla } from './pasos/figuras.js';
 import { textoVectorizable, vectorizar, type PiezaVector } from './pasos/vectores.js';
 import { atribuirHablantes } from './pasos/hablantes.js';
+import { revisarTranscripcion, type CambioTranscripcion } from './pasos/revision.js';
 import { entradasIndice } from './pasos/indexado.js';
 
 // ---------------------------------------------------------------------------
@@ -61,6 +62,8 @@ export interface OpcionesTuberia {
   bibliotecas?: string[];
   /** Solo la deducción de folios propia (sin `@scholaris/folios` ni juez). */
   foliosPropios?: boolean;
+  /** Audio y vídeo: segunda escucha de las frases que suenan a error de reconocimiento (por defecto, sí). */
+  revisarTranscripcion?: boolean;
   reloj?: () => number;
 }
 
@@ -432,6 +435,8 @@ export interface ResultadoConsolidacion {
   vectores: Record<string, number>;
   /** Cuántos fragmentos provisionales se reaprovecharon tal cual (contexto y vector incluidos). */
   reaprovechados: number;
+  /** Medios: frases corregidas por la segunda escucha (antes y después). */
+  cambiosTranscripcion: CambioTranscripcion[];
   tiempos: Record<string, number>;
 }
 
@@ -473,6 +478,7 @@ export async function consolidar(
   const provisionales = estados.flatMap((e) => e.fragmentos);
   const medio = plan.modo === 'medio';
 
+  let cambiosTranscripcion: CambioTranscripcion[] = [];
   let refinada: Promise<{ metadatos: MetadatosDocumento; procedencia: Procedencia[] } | null> | null = null;
   // Metadatos (si no llegaron antes).
   let tm = reloj();
@@ -506,6 +512,21 @@ export async function consolidar(
     }, { redactor: ia.redactor, ...(p.http ? { http: p.http } : {}), ...(p.correoContacto ? { correo: p.correoContacto } : {}), reloj }, { ...(ctx.opciones.sinVerificacion ? { sinVerificacion: true } : {}) }).catch(() => null);
   }
   marca('metadatos', tm);
+
+  // Segunda escucha de lo que suena a error de reconocimiento (medios).
+  if (medio && ctx.opciones.revisarTranscripcion !== false && palabras.length) {
+    tm = reloj();
+    const r = await revisarTranscripcion(palabras, plan.tramos, puertos.fuente, meta, ia.redactor, { reloj, concurrencia: 8 }).catch(() => null);
+    if (r) {
+      procedencia.push(r.procedencia);
+      if (r.cambios.length) {
+        palabras = r.palabras;
+        unidades = segmentarTranscripcion(palabras, ctx.opciones.tramosMedio).map((u, i) => ({ ...u, orden: i }));
+        cambiosTranscripcion = r.cambios;
+      }
+    }
+    marca('revision', tm);
+  }
 
   // Hablantes con nombre (medios).
   if (medio && ctx.opciones.atribuirHablantes !== false && palabras.length) {
@@ -694,6 +715,7 @@ export async function consolidar(
     avisos,
     vectores,
     reaprovechados,
+    cambiosTranscripcion,
     tiempos,
   };
 }

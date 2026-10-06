@@ -39,6 +39,8 @@ export interface ResultadoIngesta {
   /** Milisegundos: hitos (primera unidad legible, primera buscable, todo buscable) y total. */
   tiempos: Record<string, number>;
   vectores: Record<string, number>;
+  /** Medios: frases corregidas por la segunda escucha. */
+  cambiosTranscripcion?: import('./pasos/revision.js').CambioTranscripcion[];
 }
 
 const PESOS: Partial<Record<FaseIngesta, number>> = { lectura: 0.55, indexado: 0.15, metadatos: 0.03, folios: 0.02, estructura: 0.02, contexto: 0.1, vectores: 0.1, figuras: 0.03 };
@@ -51,6 +53,7 @@ export interface OpcionesOrquestador extends OpcionesIngesta {
   foliosPropios?: boolean;
   describirFiguras?: boolean;
   atribuirHablantes?: boolean;
+  revisarTranscripcion?: boolean;
   tramosMedio?: { minimo?: number; objetivo?: number; maximo?: number };
   troceado?: { minimo?: number; objetivo?: number; maximo?: number };
   bibliotecas?: string[];
@@ -77,6 +80,7 @@ export async function ejecutarIngesta(paquete: PaqueteConversion, puertos: Puert
     ...(opciones.tramosMedio ? { tramosMedio: opciones.tramosMedio } : {}),
     ...(opciones.describirFiguras === false ? { describirFiguras: false } : {}),
     ...(opciones.atribuirHablantes === false ? { atribuirHablantes: false } : {}),
+    ...(opciones.revisarTranscripcion === false ? { revisarTranscripcion: false } : {}),
     ...(opciones.sinVerificacion ? { sinVerificacion: true } : {}),
     ...(opciones.sinContexto ? { sinContexto: true } : {}),
     ...(opciones.metadatosUsuario ? { metadatosUsuario: opciones.metadatosUsuario } : {}),
@@ -203,6 +207,7 @@ export async function ejecutarIngesta(paquete: PaqueteConversion, puertos: Puert
   return {
     documento: r.documento, plan, unidades, secciones: r.secciones, fragmentos: r.fragmentos, figuras: r.figuras,
     procedencia: r.procedencia, avisos: r.avisos, tiempos, vectores: r.vectores,
+    ...(r.cambiosTranscripcion.length ? { cambiosTranscripcion: r.cambiosTranscripcion } : {}),
   };
 }
 
