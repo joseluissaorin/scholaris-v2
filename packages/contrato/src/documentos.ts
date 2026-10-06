@@ -124,6 +124,19 @@ export interface UnidadVista {
   miniaturaUrl?: string;
   lector: string;
   confianza: number;
+  /**
+   * Audio y vídeo: el instante de cada palabra de `texto` (separadas por
+   * espacios, sin las marcas «**Nombre:**»). `cs` alterna inicio y duración en
+   * centésimas desde `t0` (segundos). Solo si la ingesta los tiene.
+   */
+  palabras?: PalabrasTiempo;
+}
+
+/** Instantes por palabra, en forma compacta (igual que en el .spdf). */
+export interface PalabrasTiempo {
+  v: 1;
+  t0: number;
+  cs: number[];
 }
 
 /** Cuerpo de `POST /documentos/:id/folios/rehacer`. */

@@ -69,6 +69,8 @@ function unidadAVista(f: Fila, urls: { imagen?: string; miniatura?: string }): U
   if (notas?.length) v.notas = notas;
   if (urls.imagen) v.imagenUrl = urls.imagen;
   if (urls.miniatura) v.miniaturaUrl = urls.miniatura;
+  const palabras = json<UnidadVista['palabras'] | null>(f.palabras, null);
+  if (palabras?.v === 1 && Array.isArray(palabras.cs)) v.palabras = palabras;
   return v;
 }
 
