@@ -322,7 +322,8 @@ function resolverLimite(v: string, folios: MapaFolios['folios'], medio: boolean)
 // ---------------------------------------------------------------------------
 
 async function* eventosSse(cuerpo: ReadableStream<Uint8Array>): AsyncGenerator<{ evento: string; datos: unknown }> {
-  const lector = cuerpo.pipeThrough(new TextDecoderStream()).getReader();
+  // El cast evita el choque de tipos entre los Streams de Workers y los de Node (apps/local).
+  const lector = cuerpo.pipeThrough(new TextDecoderStream() as unknown as ReadableWritablePair<string, Uint8Array>).getReader();
   let resto = '';
   for (;;) {
     const { value, done } = await lector.read();
