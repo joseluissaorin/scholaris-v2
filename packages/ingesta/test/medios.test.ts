@@ -44,3 +44,13 @@ describe('transcribirTramo', () => {
     expect(r.palabras[0]?.t0).toBe(608);
   });
 });
+
+describe('casarHablantes', () => {
+  it('casa las etiquetas por el solape y renombra las que chocan', async () => {
+    const { casarHablantes } = await import('../src/pasos/medios.js');
+    const t1 = { n: 0, palabras: [{ texto: 'hola', t0: 598, t1: 598.4, hablante: 'A' }, { texto: 'amigo', t0: 599, t1: 599.4, hablante: 'A' }] };
+    const t2 = { n: 1, solape: [{ texto: 'hola', t0: 598.1, t1: 598.5, hablante: 'B' }, { texto: 'amigo', t0: 599.1, t1: 599.5, hablante: 'B' }], palabras: [{ texto: 'sigo', t0: 601, t1: 601.4, hablante: 'B' }, { texto: 'yo', t0: 602, t1: 602.3, hablante: 'A' }] };
+    casarHablantes([t1, t2]);
+    expect(t2.palabras.map((p) => p.hablante)).toEqual(['A', 'A·1']);
+  });
+});

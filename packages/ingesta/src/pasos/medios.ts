@@ -11,6 +11,8 @@ export interface ResultadoTranscripcionTramo {
   n: number;
   idioma?: string;
   palabras: PalabraTranscrita[];
+  /** Palabras del solape con el tramo anterior (sirven para casar las etiquetas de hablante). */
+  solape?: PalabraTranscrita[];
   procedencia: Procedencia;
 }
 
@@ -39,7 +41,8 @@ export async function transcribirTramo(
   const maxT = palabras.reduce((m, p) => Math.max(m, p.t1), 0);
   const minT = palabras.reduce((m, p) => Math.min(m, p.t0), Infinity);
   if (tramo.t0 > 1 && maxT <= dur + 2 && minT < tramo.t0 - 1) palabras = palabras.map((p) => ({ ...p, t0: p.t0 + tramo.t0, t1: p.t1 + tramo.t0 }));
-  // Solo lo propio: el solape lo cuenta el tramo vecino.
+  // Solo lo propio: el solape lo cuenta el tramo vecino (pero se guarda para casar hablantes).
+  const solape = palabras.filter((p) => (p.t0 + p.t1) / 2 < tramo.propioDesde - 0.01);
   palabras = palabras.filter((p) => {
     const centro = (p.t0 + p.t1) / 2;
     return centro >= tramo.propioDesde - 0.01 && centro < tramo.propioHasta + 0.01;
@@ -48,6 +51,7 @@ export async function transcribirTramo(
     n: tramo.n,
     ...(r.idioma ? { idioma: r.idioma } : {}),
     palabras,
+    ...(solape.length ? { solape } : {}),
     procedencia: { fase: 'lectura', proveedor: transcriptor.nombre, ms: reloj() - t, detalle: { tramo: tramo.n, t0: tramo.t0, t1: tramo.t1, palabras: palabras.length } },
   };
 }
@@ -65,11 +69,43 @@ export async function transcribirMedio(
     opciones.alTramo?.(r);
     return r;
   });
+  casarHablantes(res);
   const palabras = res.flatMap((r) => r.palabras).sort((a, b) => a.t0 - b.t0);
   const idiomas = new Map<string, number>();
   for (const r of res) if (r.idioma) idiomas.set(r.idioma, (idiomas.get(r.idioma) ?? 0) + r.palabras.length);
   const idioma = [...idiomas].sort((a, b) => b[1] - a[1])[0]?.[0];
   return { palabras, ...(idioma ? { idioma } : {}), procedencia: res.map((r) => r.procedencia) };
+}
+
+/**
+ * Cada tramo se diariza por separado: su «hablante 1» no tiene por qué ser el del
+ * tramo anterior. Se casan por las palabras del solape (las mismas palabras en
+ * los dos tramos); lo que no se puede casar se renombra para no confundirlo.
+ */
+export function casarHablantes(tramos: Array<Pick<ResultadoTranscripcionTramo, 'n' | 'palabras' | 'solape'>>): void {
+  const orden = [...tramos].sort((a, b) => a.n - b.n);
+  for (let i = 1; i < orden.length; i++) {
+    const previo = orden[i - 1] as (typeof orden)[number], actual = orden[i] as (typeof orden)[number];
+    const votos = new Map<string, Map<string, number>>();
+    for (const w of actual.solape ?? []) {
+      if (!w.hablante) continue;
+      const par = previo.palabras.find((p) => Math.abs(p.t0 - w.t0) < 0.6 && p.texto.toLowerCase().replace(/\W/g, '') === w.texto.toLowerCase().replace(/\W/g, ''));
+      if (!par?.hablante) continue;
+      const m = votos.get(w.hablante) ?? new Map<string, number>();
+      m.set(par.hablante, (m.get(par.hablante) ?? 0) + 1);
+      votos.set(w.hablante, m);
+    }
+    const mapa = new Map<string, string>();
+    for (const [local, m] of votos) mapa.set(local, [...m].sort((a, b) => b[1] - a[1])[0]?.[0] as string);
+    // Las etiquetas sin pareja se quedan como están si no chocan con una ya casada.
+    const usadas = new Set(mapa.values());
+    for (const w of actual.palabras) {
+      if (!w.hablante) continue;
+      if (mapa.has(w.hablante)) w.hablante = mapa.get(w.hablante);
+      else if (usadas.has(w.hablante)) { const nueva = `${w.hablante}·${actual.n}`; mapa.set(w.hablante, nueva); w.hablante = nueva; }
+      else mapa.set(w.hablante, w.hablante);
+    }
+  }
 }
 
 interface Frase { texto: string; t0: number; t1: number; hablante?: string }

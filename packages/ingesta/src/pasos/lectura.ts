@@ -6,7 +6,7 @@
 import { enParalelo, reintentar, type Lector, type PaginaLeida } from '@scholaris/nucleo';
 import type { PaqueteConversion, PaginaPdf } from '@scholaris/imprenta';
 import type { FuentePaquete, Plan, Pliego, Procedencia, ResultadoLectura, UnidadLeida } from '../tipos.js';
-import { leerCapaPagina, cuerpoDominante } from './capa.js';
+import { leerCapaPagina, cuerpoDominante, limpiarUnidad, prefijoBasura } from './capa.js';
 import { Cobertura } from '../cobertura.js';
 export { Cobertura };
 
@@ -208,8 +208,9 @@ export async function leerPaginas(
   if (paquete.contenido.clase === 'pdf') {
     const paginas = paquete.contenido.paginas;
     const base = cuerpoDominante(paginas);
+    const basura = prefijoBasura(paginas);
     const capa: UnidadLeida[] = [];
-    paginas.forEach((p, i) => { if (plan.vias[i] === 'capa') capa.push(leerCapaPagina(p, i, base)); });
+    paginas.forEach((p, i) => { if (plan.vias[i] === 'capa') capa.push(limpiarUnidad(leerCapaPagina(p, i, base), basura)); });
     unidades.push(...capa);
     if (capa.length) {
       opciones.alLeer?.(capa);

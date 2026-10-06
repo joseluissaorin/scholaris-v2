@@ -89,5 +89,37 @@ export function leerCapaPagina(p: PaginaPdf, orden: number, base: number): Unida
 
 export function leerCapa(paginas: PaginaPdf[]): UnidadLeida[] {
   const base = cuerpoDominante(paginas);
-  return paginas.map((p, i) => leerCapaPagina(p, i, base));
+  const basura = prefijoBasura(paginas);
+  return paginas.map((p, i) => limpiarUnidad(leerCapaPagina(p, i, base), basura));
+}
+
+const PALABRAS_CORTAS = new Set(['a', 'an', 'the', 'of', 'in', 'on', 'to', 'it', 'is', 'he', 'we', 'i', 'el', 'la', 'lo', 'los', 'las', 'un', 'una', 'de', 'y', 'e', 'o', 'en', 'se', 'no', 'si', 'yo', 'tu', 'su', 'mi', 'le', 'les', 'et', 'il', 'je', 'du', 'des', 'der', 'die', 'das', 'und', 'al', 'del', 'por', 'con', 'que', 'es']);
+
+/**
+ * Algunos PDF llevan un adorno antes de cada párrafo que pdf.js convierte en
+ * texto («OO −¿Cuándo empiezas?»). Si la misma ficha corta y sin sentido abre
+ * una buena parte de los párrafos del documento, es un adorno.
+ */
+export function prefijoBasura(paginas: PaginaPdf[]): string | null {
+  const cuenta = new Map<string, number>();
+  let total = 0;
+  for (const p of paginas) for (const b of p.bloques.length ? p.bloques.map((x) => x.texto) : p.cuerpo.split(/\n\s*\n/)) {
+    const f = b.trim().split(/\s+/)[0];
+    if (!f) continue;
+    total++;
+    if (f.length <= 3 && !PALABRAS_CORTAS.has(f.toLowerCase()) && !/^\d+[.)]?$/.test(f) && !/^[—–\-−«"“¿¡(]/.test(f)) cuenta.set(f, (cuenta.get(f) ?? 0) + 1);
+  }
+  const [mejor, n] = [...cuenta].sort((a, b) => b[1] - a[1])[0] ?? [null, 0];
+  return mejor && total >= 10 && n / total >= 0.2 ? mejor : null;
+}
+
+/** Quita el adorno y normaliza el guion de diálogo: el signo menos (U+2212) de los PDF hechos con HTML es una raya. */
+export function limpiarUnidad(u: UnidadLeida, basura: string | null): UnidadLeida {
+  let t = u.texto;
+  if (basura) {
+    const re = new RegExp(`(^|\\n)${basura.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s+`, 'g');
+    t = t.replace(re, '$1');
+  }
+  t = t.replace(/(^|[\s(])−(?=[\p{L}¿¡])/gu, '$1—').replace(/(?<=[\p{L}.,;:!?…])−(?=[\s.,;:]|$)/gu, '—');
+  return t === u.texto ? u : { ...u, texto: t };
 }

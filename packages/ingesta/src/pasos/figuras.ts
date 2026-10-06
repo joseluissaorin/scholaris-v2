@@ -35,10 +35,12 @@ export function reunirFiguras(paquete: PaqueteConversion, unidades: UnidadLeida[
       }
       continue;
     }
-    // Página digital: imágenes incrustadas grandes con los pies que haya en el texto.
+    // Página leída con visión: las figuras son las que vio el lector (las imágenes
+    // incrustadas de un escaneado son el propio escaneo, a veces en tiras).
     const pdf = paginasPdf?.get(u.fisica);
-    if (!pdf) continue;
-    const grandes = pdf.imagenes.filter((r) => r.w * r.h >= 0.02 && r.w >= 0.12 && r.h >= 0.06);
+    if (!pdf || u.lector !== 'capa-pdf' || pdf.clase === 'pdf_escaneado') continue;
+    // Página digital: imágenes incrustadas grandes (pero no la página entera) con los pies que haya en el texto.
+    const grandes = pdf.imagenes.filter((r) => r.w * r.h >= 0.02 && r.w * r.h < 0.85 && r.w >= 0.12 && r.h >= 0.06).slice(0, 12);
     const pies = piesEnTexto(u.texto);
     grandes.forEach((r, i) => {
       const pie = pies[i] ?? (grandes.length === 1 ? pies[0] : undefined);

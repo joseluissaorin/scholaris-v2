@@ -65,3 +65,14 @@ describe('capa de OCR ajeno', () => {
     expect(plan.vias).toEqual(['vision']);
   });
 });
+
+describe('limpieza de la capa', () => {
+  it('quita el adorno repetido y pone rayas de diálogo', async () => {
+    const { prefijoBasura, limpiarUnidad } = await import('../src/pasos/capa.js');
+    const ps = Array.from({ length: 4 }, (_, i) => paginaPdf(i + 1, 'OO −¿Cuándo empiezas, Johnny?\n\nOO −No sé. Hoy, creo, ¿eh, Dé?\n\nOO −No, pasado mañana −dijo ella.'));
+    const b = prefijoBasura(ps);
+    expect(b).toBe('OO');
+    const u = limpiarUnidad({ orden: 0, fisica: 1, texto: 'OO −¿Cuándo empiezas, Johnny?\n\nOO −No, pasado mañana −dijo ella.', notas: [], cabecera: '', pie: '', folioVisto: null, titulos: [], figuras: [], vacia: false, lector: 'c', confianza: 1 }, b);
+    expect(u.texto).toBe('—¿Cuándo empiezas, Johnny?\n\n—No, pasado mañana —dijo ella.');
+  });
+});
