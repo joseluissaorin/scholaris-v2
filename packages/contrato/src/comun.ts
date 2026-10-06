@@ -14,6 +14,8 @@ export type CodigoError =
   | 'no_encontrado'
   | 'peticion_invalida'
   | 'conflicto'
+  /** El documento no tiene original ni paquete (una subida que no terminó): hay que volver a subirlo. */
+  | 'falta_original'
   | 'duplicado'
   | 'cuota_superada'
   | 'limite_de_ritmo'

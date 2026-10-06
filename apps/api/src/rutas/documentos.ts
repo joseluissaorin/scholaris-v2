@@ -225,7 +225,9 @@ export function rutasDocumentos(app: Hono<Entorno>): void {
     if (await tareaDeDocumento(p.sql, d.id)) fallo('conflicto', 'El documento ya se está procesando.');
     const prefijo = prefijoDocumento(p.usuario.id, d.id);
     const paquete = (await p.almacen.existe(`${prefijo}paquete.json`)) ? `${prefijo}paquete.json` : undefined;
-    if (!paquete && !d.original && !d.metadatos.url) fallo('conflicto', 'No queda nada del documento en el almacén: hay que volver a subirlo.');
+    // Sin original de verdad en el almacén (la subida no terminó) ni paquete ni URL: no hay nada que reintentar.
+    const hayOriginal = !!d.original && (await p.almacen.existe(claveDe(p.usuario.id, d.id, d.original)));
+    if (!paquete && !hayOriginal && !d.metadatos.url) fallo('falta_original', 'La subida no llegó a terminar: vuelve a subir el archivo');
     const [sub] = await p.sql.ejecutar<{ bibliotecas: string }>('SELECT bibliotecas FROM pl_subidas WHERE documento = ? ORDER BY creada DESC LIMIT 1', d.id);
     const r = await lanzarIngesta(p, {
       documento: d.id, prefijo, original: d.original, paquete, tipo: d.tipo, mime: d.mime, nombre: d.metadatos.titulo,

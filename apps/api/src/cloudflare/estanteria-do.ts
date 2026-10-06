@@ -17,6 +17,8 @@ import type { Env } from './env.js';
 import { reindexar as reindexarMotor } from '../compartido/motor-ingesta.js';
 import { espacioNombresDe } from './indice-vectorize.js';
 import { SqlDO } from './sql.js';
+import { LIMITES } from '../compartido/planes.js';
+import { cuerpoError } from '../compartido/errores.js';
 import { almacenDesdeEnv, configDesdeEnv, cuentasDesdeEnv, emisorDesdeEnv, indiceDesdeEnv, inteligenciaPara, origenDe } from './puertos-cf.js';
 
 const app = crearAppUsuario();
@@ -72,8 +74,24 @@ export class Estanteria extends DurableObject<Env> {
   private indice: ReturnType<typeof indicePerezoso> | null = null;
 
   /** Atiende una petición HTTP ya autenticada por la puerta. */
+  /** Ritmo por usuario, aquí y no en un DO aparte: la petición ya pasa por esta estantería (un salto menos). */
+  private marcas: number[] = [];
+  private usuarioGuardado: string | undefined;
+
   async atender(usuario: UsuarioSesion, peticion: Request): Promise<Response> {
-    await this.ctx.storage.put('usuario', usuario.id);
+    const ahora = Date.now();
+    while (this.marcas.length && (this.marcas[0] as number) < ahora - 60_000) this.marcas.shift();
+    const porMinuto = LIMITES[usuario.plan]?.porMinuto ?? LIMITES.gratis.porMinuto;
+    if (this.marcas.length >= porMinuto) {
+      const reintentar = Math.max(1, Math.ceil(((this.marcas[0] as number) + 60_000 - ahora) / 1000));
+      return Response.json(cuerpoError('limite_de_ritmo', 'Vas demasiado deprisa. Espera unos segundos y vuelve a intentarlo.', { reintentar }), { status: 429, headers: { 'retry-after': String(reintentar) } });
+    }
+    this.marcas.push(ahora);
+    // Cada escritura retiene la respuesta hasta que es durable: solo cuando cambia.
+    if (this.usuarioGuardado !== usuario.id) {
+      if ((await this.ctx.storage.get<string>('usuario')) !== usuario.id) await this.ctx.storage.put('usuario', usuario.id);
+      this.usuarioGuardado = usuario.id;
+    }
     const p = this.puertos(usuario, origenDe(this.env, peticion));
     return app.fetch(peticion, { puertos: p }, { waitUntil: (pr: Promise<unknown>) => this.ctx.waitUntil(pr), passThroughOnException() {}, props: {} } as unknown as ExecutionContext);
   }
@@ -164,6 +182,18 @@ export class Estanteria extends DurableObject<Env> {
     const hace24 = new Date(Date.now() - 86400_000).toISOString();
     for (const d of this.base.ejecutarSync<{ id: string }>("SELECT id FROM documentos WHERE estado = 'pendiente' AND creado < ? AND id NOT IN (SELECT documento FROM pl_tareas WHERE estado IN ('en_cola','procesando') AND documento IS NOT NULL)", [hace24])) {
       await almacen.borrarPrefijo(`u/${usuario.id}/d/${d.id}/`).catch(() => undefined);
+      this.base.ejecutarSync('DELETE FROM pl_subidas WHERE documento = ?', [d.id]);
+      this.base.ejecutarSync('DELETE FROM unidades WHERE documento = ?', [d.id]);
+      this.base.ejecutarSync('DELETE FROM documentos WHERE id = ?', [d.id]);
+    }
+    // Huérfanos: en error desde hace más de un día y sin original ni paquete en el almacén (no hay nada que reintentar).
+    for (const d of this.base.ejecutarSync<{ id: string; original: string; datos: string }>("SELECT id, original, metadatos AS datos FROM documentos WHERE estado = 'error' AND actualizado < ? AND id NOT IN (SELECT documento FROM pl_tareas WHERE estado IN ('en_cola','procesando') AND documento IS NOT NULL)", [hace24])) {
+      const prefijo = `u/${usuario.id}/d/${d.id}/`;
+      const url = (() => { try { return (JSON.parse(d.datos) as { url?: string }).url; } catch { return undefined; } })();
+      if (url) continue;
+      const original = d.original ? (d.original.startsWith('u/') ? d.original : `${prefijo}${d.original}`) : '';
+      if ((original && (await almacen.existe(original))) || (await almacen.existe(`${prefijo}paquete.json`))) continue;
+      await almacen.borrarPrefijo(prefijo).catch(() => undefined);
       this.base.ejecutarSync('DELETE FROM pl_subidas WHERE documento = ?', [d.id]);
       this.base.ejecutarSync('DELETE FROM unidades WHERE documento = ?', [d.id]);
       this.base.ejecutarSync('DELETE FROM documentos WHERE id = ?', [d.id]);

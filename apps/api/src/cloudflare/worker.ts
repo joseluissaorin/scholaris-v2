@@ -54,7 +54,7 @@ function plataforma(env: Env, peticion: Request): Plataforma {
     ...(clerk ? { clerk } : {}),
     ...(env.ADMIN_TOKEN ? { tokenAdmin: env.ADMIN_TOKEN } : {}),
     ...(env.ORIGENES_CORS ? { origenes: env.ORIGENES_CORS.split(',').map((s) => s.trim()) } : {}),
-    admitir: (clave, porMinuto) => env.LIMITADOR.getByName(clave).admitir(porMinuto),
+    // El ritmo por usuario lo lleva la propia Estantería (atender): sin un salto más a otro DO.
     atender: (usuario: UsuarioSesion, p: Request) => env.ESTANTERIA.getByName(usuario.id).atender(usuario, p),
     tiempoReal: async (p, canal) => {
       const nombre = canal.tarea ? `tarea:${canal.usuario}:${canal.tarea}` : `usuario:${canal.usuario}`;

@@ -9,6 +9,7 @@ const ESTADOS: Record<CodigoError, ContentfulStatusCode> = {
   no_encontrado: 404,
   peticion_invalida: 400,
   conflicto: 409,
+  falta_original: 409,
   duplicado: 409,
   cuota_superada: 402,
   limite_de_ritmo: 429,
