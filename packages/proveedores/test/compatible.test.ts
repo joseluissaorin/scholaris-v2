@@ -126,6 +126,10 @@ describe('servidor compatible con OpenAI', () => {
     // whisper.cpp / InferBox: palabras dentro de los segmentos.
     const s = interpretarWhisperOpenAI({ segments: [{ start: 1, end: 2, text: 'hola mundo' }] }, 0);
     expect(s.palabras.map((p) => p.texto)).toEqual(['hola', 'mundo']);
+    // whisper.cpp: piezas de palabra que se unen.
+    const w = interpretarWhisperOpenAI({ language: 'es', segments: [{ start: 0, end: 2, text: ' de las ánimas', words: [{ word: ' de', start: 0, end: 0.2 }, { word: ' las', start: 0.2, end: 0.4 }, { word: ' á', start: 0.4, end: 0.6 }, { word: 'nimas,', start: 0.6, end: 1 }] }] }, 5);
+    expect(w.palabras.map((p) => p.texto)).toEqual(['de', 'las', 'ánimas,']);
+    expect(w.palabras[2]).toMatchObject({ t0: 5.4, t1: 6 });
   });
 
   it('juez: probabilidades de los logprobs de la letra; sin logprobs, la elección restringida', async () => {

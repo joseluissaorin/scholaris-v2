@@ -3,6 +3,11 @@
  *
  * Convierte con la imprenta (Node), ingiere con APIs reales y escribe el SPDF 4.0
  * en bench/datos/salida/ con un informe JSON de tiempos, coste y recuentos.
+ *
+ * Con SCHOLARIS_SIN_CONEXION=1 (e INFERENCIA_URL, INFERENCIA_EMBEBEDOR_URL…):
+ * todo en el servidor propio, sin verificación de metadatos en catálogos y con
+ * un fetch que bloquea y cuenta cualquier petición que no sea local
+ * (`peticionesInternet` en el informe).
  */
 
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
@@ -10,7 +15,7 @@ import { basename, join, resolve } from 'node:path';
 import { gzipSync } from 'node:zlib';
 import { createCanvas, loadImage } from '@napi-rs/canvas';
 import { convertirEnMemoria, abrirCortador, type PaqueteEnMemoria, type OpcionesConversion } from '@scholaris/imprenta/node';
-import { crearInteligencia, type UsoProveedor } from '@scholaris/proveedores';
+import { crearInteligencia, esAnfitrionLocal, modoSinConexion, type UsoProveedor } from '@scholaris/proveedores';
 import { crearSpdf } from '@scholaris/spdf';
 import { ejecutarIngesta, type FuentePaquete, type OpcionesOrquestador, type PuertosIngesta } from '@scholaris/ingesta';
 import { sha256, type Progreso, type Transcripcion, type Transcriptor } from '@scholaris/nucleo';
@@ -89,6 +94,16 @@ export function fuenteEnMemoria(m: PaqueteEnMemoria, original: Uint8Array | null
 }
 
 export async function ingerir(ruta: string, o: OpcionesBanco = {}) {
+  const sinConexion = modoSinConexion(process.env);
+  const internet: string[] = [];
+  const fetchOriginal = globalThis.fetch;
+  if (sinConexion) {
+    globalThis.fetch = (async (entrada: string | URL | Request, init?: RequestInit) => {
+      const url = typeof entrada === 'string' ? entrada : entrada instanceof URL ? entrada.href : entrada.url;
+      if (!esAnfitrionLocal(new URL(url).hostname)) { internet.push(url); throw new Error(`sin conexión: bloqueado ${new URL(url).hostname}`); }
+      return fetchOriginal(entrada, init);
+    }) as typeof fetch;
+  }
   const nombre = basename(ruta).replace(/\.[^.]+$/, '');
   const etiqueta = o.etiqueta ?? nombre;
   await mkdir(SALIDA, { recursive: true });
@@ -109,13 +124,14 @@ export async function ingerir(ruta: string, o: OpcionesBanco = {}) {
   const calidadLector = o.lector ?? (paquete.tipo === 'pdf_escaneado' || paquete.tipo === 'fotos' || paquete.tipo === 'imagen' ? 'alta' : 'rapida');
   const pasos: Record<string, number> = {};
   const muestras: string[] = [];
-  const ia = crearInteligencia(cargarEntorno(), {
+  const ia = crearInteligencia(sinConexion ? { ...process.env } : cargarEntorno(), {
     onUso: (u) => usos.push(u), concurrencia: 48, calidadLector, ...(o.modo === 'economico' ? { lotes: true } : {}),
     alPasarLector: (i) => { const k = `${i.lector.split(':').pop()} → ${i.motivo.slice(0, 80)}`; pasos[k] = (pasos[k] ?? 0) + i.paginas.length; if (muestras.length < 5 && /red/.test(i.motivo)) muestras.push(i.motivo.slice(0, 400)); },
   });
   if (o.cacheTranscripciones !== false) ia.transcriptor = transcriptorConCache(ia.transcriptor);
   const archivo = await crearSpdf({ generador: 'scholaris-nube/bench' });
-  const fuente = fuenteEnMemoria(enMemoria, original);
+  // Sin conexión, el lector de visión lee las imágenes de página de la imprenta (no sub-PDF).
+  const fuente = fuenteEnMemoria(enMemoria, sinConexion ? null : original);
 
   let ultimo = 0;
   const progreso: Progreso[] = [];
@@ -131,6 +147,7 @@ export async function ingerir(ruta: string, o: OpcionesBanco = {}) {
     ...(o.sinVista ? { vectorPorPagina: false } : {}),
     ...(o.vista ? { vistaPaginas: o.vista } : {}),
     ...(o.modo ? { modo: o.modo } : {}),
+    ...(sinConexion ? { sinVerificacion: true } : {}),
     // Primera búsqueda útil: en cuanto hay unidades buscables, se pregunta al índice léxico.
     alUnidades: (_d: number, _h: number, buscables: boolean) => {
       if (!buscables || busqueda) return;
@@ -202,7 +219,9 @@ export async function ingerir(ruta: string, o: OpcionesBanco = {}) {
     primeraUnidadMs: progreso.find((p) => (p.unidadesListas ?? 0) > 0)?.transcurrido ?? null,
     hitos: { primeraLegible: r.tiempos.primeraLegible, primeraBuscable: r.tiempos.primeraBuscable, todoBuscable: r.tiempos.todoBuscable, lecturaCompleta: r.tiempos.lecturaCompleta, consolidacion: r.tiempos.consolidacion, listo: r.tiempos.total },
     primeraBusqueda: busqueda ? await busqueda : null,
+    ...(sinConexion ? { sinConexion: true, peticionesInternet: internet.length, internet: [...new Set(internet.map((u) => new URL(u).hostname))] } : {}),
   };
+  if (sinConexion) globalThis.fetch = fetchOriginal;
   await writeFile(join(SALIDA, `${etiqueta}.informe.json`), JSON.stringify(informe, null, 2));
   if (r.cambiosTranscripcion?.length) await writeFile(join(SALIDA, `${etiqueta}.cambios.json`), JSON.stringify(r.cambiosTranscripcion, null, 1));
   await mkdir(join(SALIDA, 'historial'), { recursive: true });

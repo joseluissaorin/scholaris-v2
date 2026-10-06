@@ -29,6 +29,25 @@ import type {
 import { enParalelo, normalizarVector } from '@scholaris/nucleo';
 import { aBase64, ahora, apuntador, ErrorProveedor, extraerJSON, limitador, pedir, type ContadorUso, type OpcionesComunes, type UsoProveedor } from './comun.js';
 import { ESQUEMA_PAGINAS, instruccionesLector, normalizarPaginas, type OpcionesTranscripcion } from './lectura.js';
+
+/**
+ * Los mismos campos que `ESQUEMA_PAGINAS`, para UNA página y en otro orden: el
+ * cuerpo primero. Con la salida restringida, un modelo de 7-8B rellena los
+ * campos en el orden del esquema, y con «titulos» delante del texto volcaba la
+ * página entera en los títulos y dejaba «texto» vacío (Qwen2.5-VL, 6-10-2026).
+ */
+const PROPIEDADES_PAGINA = ESQUEMA_PAGINAS.properties.paginas.items.properties;
+export const ESQUEMA_PAGINA_LOCAL = {
+  type: 'object',
+  properties: {
+    fisica: PROPIEDADES_PAGINA.fisica, texto: PROPIEDADES_PAGINA.texto, notas: PROPIEDADES_PAGINA.notas,
+    cabecera: PROPIEDADES_PAGINA.cabecera, pie: PROPIEDADES_PAGINA.pie, folio: PROPIEDADES_PAGINA.folio,
+    titulos: PROPIEDADES_PAGINA.titulos, figuras: PROPIEDADES_PAGINA.figuras, vacia: PROPIEDADES_PAGINA.vacia,
+    idioma: PROPIEDADES_PAGINA.idioma, confianza: PROPIEDADES_PAGINA.confianza,
+  },
+  required: ['fisica', 'texto', 'notas', 'cabecera', 'pie', 'folio', 'titulos', 'figuras', 'vacia', 'idioma', 'confianza'],
+  additionalProperties: false,
+} as const;
 import { ErrorPliego, paginasDe, type EntradaPliego } from './pliego.js';
 import { normalizarMime } from './gemini.js';
 import { crearInferBox, interpretarTranscripcionIB } from './inferbox.js';
@@ -243,21 +262,22 @@ export function crearOpenAICompatible(config: ConfigCompatible): ClienteCompatib
     const porPagina = limitador(o.concurrencia ?? config.concurrencia ?? 4);
     const leerUna = async (img: { bytes: Uint8Array; mime: string }, fisica: number, pista: string | undefined): Promise<PaginaLeida> => {
       const instrucciones = instruccionesLector(1, fisica, pista, o, 'imagenes')
-        + '\nResponde SOLO con el objeto JSON, sin texto alrededor.';
+        + '\nDevuelve UN objeto JSON de página (sin la lista «paginas»), con «texto» = todo el cuerpo de la página. «titulos» solo repite los títulos de sección, nunca los versos ni los parlamentos. Responde SOLO con el JSON.';
       const r = await porPagina(() => chat({
         modelo, operacion: 'leer', extraUso: { paginas: 1, imagenes: 1 }, maxTokens: 6_000, temperatura: 0,
-        esquema: ESQUEMA_PAGINAS as unknown as Record<string, unknown>,
+        esquema: ESQUEMA_PAGINA_LOCAL as unknown as Record<string, unknown>,
         mensajes: [{ role: 'user', content: [
           { type: 'image_url', image_url: { url: `data:${normalizarMime(img.mime)};base64,${aBase64(img.bytes)}` } },
           { type: 'text', text: instrucciones },
         ] }],
       }));
-      if (r.fin === 'length') throw new ErrorPliego(prov, `salida cortada en la página ${fisica}`);
+      if (r.fin === 'length') throw new ErrorPliego(prov, `salida cortada en la página ${fisica}${r.texto ? '' : ' sin contenido: el modelo se fue en razonar (usa la variante «-instruct», p. ej. qwen3-vl:8b-instruct)'}`);
       let json: unknown;
       try { json = extraerJSON(r.texto); } catch (e) { throw new ErrorPliego(prov, `JSON ilegible en la página ${fisica}: ${r.texto.slice(0, 120)}`, e); }
       // Un objeto de página suelto (sin «paginas») también vale.
       const lista = json && typeof json === 'object' && !Array.isArray(json) && !('paginas' in json) ? { paginas: [json] } : json;
-      return normalizarPaginas(lista, 1, fisica, o)[0] as PaginaLeida;
+      const p = normalizarPaginas(lista, 1, fisica, o)[0] as PaginaLeida;
+      return corregirPaginaLocal(p);
     };
     return {
       nombre: `${prov}:${modelo}`,
@@ -521,6 +541,20 @@ export function crearOpenAICompatible(config: ConfigCompatible): ClienteCompatib
 // Utilidades (exportadas para las pruebas)
 // ---------------------------------------------------------------------------
 
+/**
+ * Fallos típicos de los modelos de visión pequeños: el cuerpo volcado en los
+ * títulos (se devuelve al texto) y una página «no vacía» sin texto con
+ * confianza alta (se baja la confianza para que la ingesta no la dé por buena).
+ */
+export function corregirPaginaLocal(p: PaginaLeida): PaginaLeida {
+  if (!p.texto.trim() && p.titulos.length) {
+    const largos = p.titulos.filter((t) => t.texto.length > 80 || p.titulos.length > 6);
+    if (largos.length) return { ...p, texto: p.titulos.map((t) => t.texto).join('\n'), titulos: [], confianza: Math.min(p.confianza, 0.5) };
+  }
+  if (!p.vacia && !p.texto.trim() && !p.notas.length && !p.figuras.length) return { ...p, confianza: Math.min(p.confianza, 0.1) };
+  return p;
+}
+
 export function dimensionesDe(modelo: string): number | undefined {
   const m = modelo.toLowerCase().replace(/^.*\//, '');
   if (DIMENSIONES_CONOCIDAS[m]) return DIMENSIONES_CONOCIDAS[m];
@@ -602,6 +636,23 @@ interface RespuestaWhisperOpenAI {
 export function interpretarWhisperOpenAI(r: RespuestaWhisperOpenAI, desplazamiento: number): Transcripcion {
   if (r.words?.length) {
     const palabras = r.words.map((w) => ({ texto: (w.word ?? '').trim(), t0: desplazamiento + (w.start ?? 0), t1: desplazamiento + (w.end ?? 0) })).filter((w) => w.texto);
+    return { ...(r.language ? { idioma: codigoIdioma(r.language) } : {}), palabras, texto: (r.text ?? palabras.map((p) => p.texto).join(' ')).trim() };
+  }
+  // whisper.cpp da piezas de palabra («␣á», «nimas»): sin espacio delante, la pieza se une a la anterior.
+  if (r.segments?.some((s) => s.words?.length)) {
+    const palabras: Transcripcion['palabras'] = [];
+    for (const s of r.segments) {
+      for (const w of s.words ?? []) {
+        const crudo = w.word ?? w.text ?? '';
+        const texto = crudo.trim();
+        if (!texto) continue;
+        const previa = palabras[palabras.length - 1];
+        if (previa && !/^\s/.test(crudo) && !/^[¿¡("«]/.test(texto) && palabras.length) {
+          previa.texto += texto;
+          previa.t1 = desplazamiento + (w.end ?? 0);
+        } else palabras.push({ texto, t0: desplazamiento + (w.start ?? 0), t1: desplazamiento + (w.end ?? 0) });
+      }
+    }
     return { ...(r.language ? { idioma: codigoIdioma(r.language) } : {}), palabras, texto: (r.text ?? palabras.map((p) => p.texto).join(' ')).trim() };
   }
   const t = interpretarTranscripcionIB(r, desplazamiento);
