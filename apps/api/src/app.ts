@@ -34,6 +34,7 @@ import { rutasCuenta } from './rutas/cuenta.js';
 import { rutasBusqueda } from './rutas/busqueda.js';
 import { rutasCitas } from './rutas/citas.js';
 import { rutasSpdf } from './rutas/spdf.js';
+import { rutasMedios } from './rutas/medios.js';
 import { montarFunciones } from './rutas/funciones.js';
 import { rutasMcp } from './rutas/mcp.js';
 import { restringirAmbito } from './rutas/ambito.js';
@@ -64,6 +65,7 @@ export function crearAppUsuario() {
   rutasSubidas(sub);
   rutasDocumentos(sub);
   rutasSpdf(sub);
+  rutasMedios(sub);
   rutasBibliotecas(sub);
   rutasTareas(sub);
   rutasBusqueda(sub);

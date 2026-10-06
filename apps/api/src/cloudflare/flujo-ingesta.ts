@@ -17,6 +17,7 @@ import { SqlRemoto } from './sql.js';
 import { almacenDesdeEnv, cuentasDesdeEnv, emisorDesdeEnv, geminiPara, indiceDesdeEnv, inteligenciaPara, origenDe } from './puertos-cf.js';
 import { espacioNombresDe } from './indice-vectorize.js';
 import { conversorCF } from './conversor.js';
+import { adelantarMoov, esMp4 } from '../compartido/medio-rapido.js';
 
 const REINTENTOS = { limit: 5, delay: '10 seconds', backoff: 'exponential' } as const;
 /** Tandas a la vez (cada una en su trabajador, con su propio cupo de conexiones). */
@@ -142,6 +143,16 @@ export class FlujoIngesta extends WorkflowEntrypoint<Env, ParamsIngesta> {
         if (!cab) throw new Error('El original aún no ha terminado de subir');
         return cab.bytes;
       }) : undefined;
+
+      // MP4 con el índice al final: se pone delante para que suene al instante (lo que hace «ffmpeg -movflags +faststart»).
+      const claveOriginal = info.original ?? p.original;
+      const mimeOriginal = info.mime ?? p.mime;
+      if (bytesOriginal && claveOriginal && esMp4(mimeOriginal, claveOriginal)) {
+        await step.do('medio-rapido', { retries: { limit: 2, delay: '10 seconds' }, timeout: '15 minutes' }, async () => {
+          try { return (await adelantarMoov(almacenDesdeEnv(this.env, origenDe(this.env)), claveOriginal, mimeOriginal)).estado; }
+          catch (e) { return `fallo: ${e instanceof Error ? e.message : String(e)}`.slice(0, 200); }
+        });
+      }
 
       await step.do('cerrar', { retries: REINTENTOS }, async () => {
         await estanteria.cerrar({ id: p.usuario, plan: p.plan }, {

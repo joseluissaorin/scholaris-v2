@@ -11,6 +11,7 @@ import {
   componer, ErrorReserva, leerPrimeraPagina, leerUnPliego, limpiarTrabajo, preparar, revectorizar, soloVectores, transcribirUnTramo, type ContextoMotor,
 } from '@scholaris/api/compartido/motor-ingesta';
 import { cerrarIngesta } from '@scholaris/api/compartido/cierre';
+import { adelantarMoov, esMp4 } from '@scholaris/api/compartido/medio-rapido';
 import { apuntarProgreso, leerTarea } from '@scholaris/api/compartido/estanteria';
 import { LIMITES } from '@scholaris/api/compartido/planes';
 
@@ -150,6 +151,10 @@ export class ColaLocal implements Orquestador {
           const cab = await puertos.almacen.cabecera(claveOriginal);
           if (cab) { bytesOriginal = cab.bytes; break; }
           await new Promise((res) => setTimeout(res, 30_000));
+        }
+        // MP4 con el índice al final: se pone delante para que suene al instante.
+        if (claveOriginal && bytesOriginal && esMp4(info.mime ?? p.mime, claveOriginal)) {
+          await adelantarMoov(puertos.almacen, claveOriginal, info.mime ?? p.mime).catch((e) => console.error(`[medio ${p.documento}]`, e));
         }
         await cerrarIngesta(puertos, {
           tarea: p.tarea, documento: p.documento, ok: true, original: info.original ?? p.original, bibliotecas: p.bibliotecas ?? [], unidades: r.unidades,

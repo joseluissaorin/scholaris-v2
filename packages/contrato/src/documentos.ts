@@ -19,6 +19,8 @@
  *   GET    /documentos/:id/figuras                 → FiguraVista[]
  *   GET    /documentos/:id/medio                   → el original (audio/vídeo/PDF) con Range
  *   GET    /documentos/:id/original                → { url }       (URL firmada de descarga)
+ *   GET    /documentos/:id/medio/diagnostico       → DiagnosticoMedio (¿índice delante? ¿qué códecs?)
+ *   POST   /documentos/:id/medio/preparar          → MedioPreparado   (pone el índice del MP4 delante: suena al instante)
  *
  *   GET    /documentos/:id/volcado                 → VolcadoDocumento  (para armar el .spdf en el navegador)
  *   GET    /documentos/:id/spdf                    → application/x-spdf (reserva: lo arma el servidor)
@@ -237,4 +239,23 @@ export interface ImportacionSpdf {
   /** Si faltaban vectores del espacio base, se lanza una tarea para calcularlos. */
   tarea?: string;
   avisos: string[];
+}
+
+/** Cómo está un audio o vídeo para reproducirse en el navegador. */
+export interface DiagnosticoMedio {
+  /** Es un MP4/MOV (los demás formatos no tienen índice que mover). */
+  mp4: boolean;
+  /** El índice («moov») va delante de los datos: empieza a sonar sin descargar el final. */
+  rapido: boolean;
+  /** Formatos de las pistas: avc1, hvc1, av01, vp09, mp4a, Opus… */
+  codecs: string[];
+  /** Los que algún navegador común no reproduce (AV1, VP9 o HEVC dentro de MP4). */
+  dudosos: string[];
+}
+
+export interface MedioPreparado {
+  /** «ya»: no hacía falta; «hecho»: índice movido; «no_mp4»; «no_se_puede» (índice enorme o desplazamientos de 64 bits). */
+  estado: 'ya' | 'hecho' | 'no_mp4' | 'no_se_puede';
+  diagnostico?: DiagnosticoMedio;
+  ms?: number;
 }
