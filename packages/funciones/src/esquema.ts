@@ -9,7 +9,7 @@
 
 import type { SQL } from '@scholaris/nucleo';
 
-export const VERSION_ESQUEMA_FUNCIONES = 1;
+export const VERSION_ESQUEMA_FUNCIONES = 2;
 
 export const SENTENCIAS_FUNCIONES: readonly string[] = [
   // --- Ajustes (grabación, versión del esquema, preferencias) -------------
@@ -311,6 +311,88 @@ export const SENTENCIAS_FUNCIONES: readonly string[] = [
   )`,
   `CREATE INDEX IF NOT EXISTS grafo_aristas_destino ON grafo_aristas(destino)`,
 
+  // --- Entidades (grafo de conocimiento de la biblioteca) ----------------
+  // Una entidad por (tipo, clave normalizada). Al fusionar dos, la que pierde
+  // queda con `fusionada_en` para que sus enlaces y su clave sigan resolviendo.
+  `CREATE TABLE IF NOT EXISTS entidades (
+    id           TEXT PRIMARY KEY,
+    tipo         TEXT NOT NULL,       -- persona | obra | lugar | organizacion | concepto | evento | fecha
+    clave        TEXT NOT NULL,       -- nombre normalizado (minúsculas, sin diacríticos)
+    nombre       TEXT NOT NULL,
+    alias        TEXT NOT NULL DEFAULT '[]', -- JSON string[]
+    busqueda     TEXT NOT NULL DEFAULT '', -- «|clave|alias1|alias2|» normalizados, para buscar por cualquier forma
+    wikidata     TEXT,
+    descripcion  TEXT,
+    wikidata_visto INTEGER NOT NULL DEFAULT 0,
+    fusionada_en TEXT,
+    n_menciones  INTEGER NOT NULL DEFAULT 0,
+    n_documentos INTEGER NOT NULL DEFAULT 0,
+    creada       TEXT NOT NULL,
+    actualizada  TEXT NOT NULL,
+    UNIQUE (tipo, clave)
+  )`,
+  `CREATE INDEX IF NOT EXISTS entidades_activas ON entidades(fusionada_en, n_menciones)`,
+  `CREATE INDEX IF NOT EXISTS entidades_qid ON entidades(wikidata) WHERE wikidata IS NOT NULL`,
+  `CREATE TABLE IF NOT EXISTS menciones (
+    id         TEXT PRIMARY KEY,
+    entidad    TEXT NOT NULL,
+    documento  TEXT NOT NULL,
+    fragmento  TEXT NOT NULL,
+    orden      INTEGER NOT NULL,      -- orden del fragmento en el documento
+    texto      TEXT NOT NULL,         -- la forma tal como aparece
+    normalizado TEXT NOT NULL,        -- el nombre canónico que dio el redactor
+    tipo       TEXT NOT NULL,
+    ini        INTEGER NOT NULL,      -- desplazamiento en el texto del fragmento
+    fin        INTEGER NOT NULL,
+    ancla      TEXT NOT NULL          -- JSON Ancla (la del fragmento)
+  )`,
+  `CREATE INDEX IF NOT EXISTS menciones_entidad ON menciones(entidad, documento, orden)`,
+  `CREATE INDEX IF NOT EXISTS menciones_documento ON menciones(documento, orden)`,
+  `CREATE INDEX IF NOT EXISTS menciones_fragmento ON menciones(fragmento)`,
+  // Coapariciones por documento (a < b); el peso global es la suma.
+  `CREATE TABLE IF NOT EXISTS aristas_entidades (
+    a            TEXT NOT NULL,
+    b            TEXT NOT NULL,
+    documento    TEXT NOT NULL,
+    peso         REAL NOT NULL,
+    coapariciones INTEGER NOT NULL,
+    fragmento    TEXT,                -- el pasaje donde están más cerca
+    PRIMARY KEY (a, b, documento)
+  )`,
+  `CREATE INDEX IF NOT EXISTS aristas_entidades_b ON aristas_entidades(b)`,
+  `CREATE INDEX IF NOT EXISTS aristas_entidades_documento ON aristas_entidades(documento)`,
+  `CREATE TABLE IF NOT EXISTS entidades_relaciones (
+    a          TEXT NOT NULL,
+    b          TEXT NOT NULL,
+    etiqueta   TEXT,                  -- null: se preguntó y no hay relación nombrable
+    documento  TEXT,
+    fragmento  TEXT,
+    creada     TEXT NOT NULL,
+    PRIMARY KEY (a, b)
+  )`,
+  // Trabajo de extracción por documento: idempotente y reanudable por lotes.
+  `CREATE TABLE IF NOT EXISTS entidades_trabajos (
+    documento    TEXT PRIMARY KEY,
+    estado       TEXT NOT NULL,       -- pendiente | en_marcha | hecho | error | sin_redactor
+    huella       TEXT,                -- huella de los fragmentos procesados
+    lotes        INTEGER NOT NULL DEFAULT 0,
+    hechos       TEXT NOT NULL DEFAULT '[]', -- JSON number[] (lotes terminados)
+    tokens_entrada INTEGER NOT NULL DEFAULT 0,
+    tokens_salida  INTEGER NOT NULL DEFAULT 0,
+    llamadas     INTEGER NOT NULL DEFAULT 0,
+    usd          REAL NOT NULL DEFAULT 0,
+    error        TEXT,
+    iniciado     TEXT NOT NULL,
+    actualizado  TEXT NOT NULL
+  )`,
+  `CREATE TABLE IF NOT EXISTS entidades_wikidata (
+    consulta  TEXT NOT NULL,
+    idioma    TEXT NOT NULL,
+    respuesta TEXT NOT NULL,          -- JSON de wbsearchentities (recortado)
+    creada    TEXT NOT NULL,
+    PRIMARY KEY (consulta, idioma)
+  )`,
+
   // --- Corpus -------------------------------------------------------------
   `CREATE TABLE IF NOT EXISTS corpus_instantanea (
     id         INTEGER PRIMARY KEY CHECK (id = 1),
@@ -356,6 +438,7 @@ export const TABLAS_FUNCIONES = [
   'conceptos_etiquetas', 'conceptos_spans', 'conceptos_informes', 'conceptos_lexicos', 'conceptos',
   'mapa_puntos', 'mapa_grupos', 'mapa_meta',
   'grafo_aristas', 'grafo_referencias',
+  'menciones', 'aristas_entidades', 'entidades_relaciones', 'entidades_trabajos', 'entidades_wikidata', 'entidades',
   'corpus_instantanea',
   'insights_aperturas', 'insights_descartes',
   'funciones_ajustes',

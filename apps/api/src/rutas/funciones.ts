@@ -11,7 +11,7 @@ import { idsIndiceDeDocumento } from '../compartido/estanteria.js';
 
 type Montador = (app: Hono<{ Variables: { funciones: funciones.PuertosFunciones } }>) => void;
 
-const GRUPOS = ['historial', 'cuadernos', 'vigilantes', 'alertas', 'conceptos', 'mapa', 'grafo', 'perspectivas', 'corpus', 'privacidad'];
+const GRUPOS = ['historial', 'cuadernos', 'vigilantes', 'alertas', 'conceptos', 'mapa', 'grafo', 'entidades', 'perspectivas', 'corpus', 'privacidad'];
 
 export function montarFunciones(app: Hono<Entorno>): void {
   // Los puertos de funciones solo se arman para sus rutas (cuestan una inteligencia).

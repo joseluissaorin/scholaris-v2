@@ -13,6 +13,7 @@ import type { Alerta, ModoVigilante, NuevoVigilante, Vigilante } from '@scholari
 import { buscadorDe } from './buscador-local.js';
 import type { ConfianzaRespuesta, PuertosFunciones } from './puertos.js';
 import { aJSON, ahora, bool, deJSON, ErrorFunciones, limitar, noEncontrado, num, texto, una } from './util.js';
+import { reanudarEntidades } from './entidades/trabajo.js';
 
 const MODOS: readonly ModoVigilante[] = ['manual', 'al_ingerir', 'diario', 'semanal'];
 
@@ -285,5 +286,7 @@ export async function ejecutarVigilantesProgramados(p: PuertosFunciones, cadenci
       // Igual que arriba.
     }
   }
+  // Barrido de seguridad: termina las extracciones de entidades que se quedaron a medias.
+  if (cadencia === 'diario') await reanudarEntidades(p).catch(() => undefined);
   return salida;
 }

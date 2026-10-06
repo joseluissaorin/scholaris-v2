@@ -76,9 +76,23 @@
  *   GET    /corpus/kpis                      → KpisCorpus
  *   GET    /corpus/instantanea               → InstantaneaCorpus
  *   POST   /corpus/instantanea/refrescar     → InstantaneaCorpus
+ *
+ * Entidades (personas, obras, lugares, organizaciones, conceptos, eventos y
+ * fechas que aparecen en toda la biblioteca, cada mención con su ancla)
+ *   GET    /entidades?q=&tipo=&documento=&limite=&cursor= → Pagina<Entidad>
+ *   GET    /entidades/estado                 → EstadoEntidades   (y reanuda lo que se quedó a medias)
+ *   POST   /entidades/reanudar  { todos? }   → { reanudados: string[] }
+ *   GET    /entidades/camino?desde=&hasta=   → CaminoEntidades
+ *   GET    /entidades/documentos/:documento  → EntidadesDocumento
+ *   GET    /entidades/documentos/:documento/lector → EntidadesLector  (formas por unidad, para resaltar)
+ *   POST   /entidades/documentos/:documento/extraer { forzar? } → ExtraccionEntidades (202)
+ *   GET    /entidades/:id                    → FichaEntidad      (sigue las fusiones)
+ *   GET    /entidades/:id/menciones?documento=&limite=&cursor= → Pagina<MencionEntidad>
+ *   GET    /entidades/:id/vecinos?limite=&saltos=1|2 → VecindarioEntidad
+ *   GET    /entidades/:id/linea              → LineaTemporalEntidad
  */
 
-import type { Filtros, TipoEntrada } from '@scholaris/nucleo';
+import type { Ancla, Filtros, TipoEntrada } from '@scholaris/nucleo';
 import type { ParamsPagina } from './comun.js';
 import type { IntencionConsulta } from './busqueda.js';
 
@@ -414,4 +428,143 @@ export interface InstantaneaCorpus extends KpisCorpus {
   porAnio: Record<string, number>;
   porDecada: Record<string, number>;
   ms?: number;
+}
+
+// ---------------------------------------------------------------------------
+// Entidades (grafo de conocimiento de la biblioteca)
+// ---------------------------------------------------------------------------
+
+export type TipoEntidad = 'persona' | 'obra' | 'lugar' | 'organizacion' | 'concepto' | 'evento' | 'fecha';
+
+export interface Entidad {
+  id: string;
+  nombre: string;
+  tipo: TipoEntidad;
+  /** Otras formas con que aparece («Cortázar», «Julio»). */
+  alias: string[];
+  /** Identificador de Wikidata («Q103983»), si se pudo enlazar. */
+  wikidata?: string;
+  descripcion?: string;
+  menciones: number;
+  documentos: number;
+}
+
+export interface MencionEntidad {
+  id: string;
+  documento: string;
+  fragmento: string;
+  /** Orden de la unidad (página física, tramo), contando desde 0 como el resto de la API. */
+  unidad: number;
+  ancla: Ancla;
+  /** «p. 23», «12:04». */
+  etiqueta: string;
+  /** La forma tal como aparece en el texto. */
+  texto: string;
+  /** Un trozo del pasaje alrededor de la mención, con la mención entre «⟦» y «⟧». */
+  contexto: string;
+}
+
+export interface DocumentoConMenciones {
+  documento: string;
+  titulo: string;
+  autores: string;
+  anio?: number;
+  tipo: TipoEntrada;
+  total: number;
+  menciones: MencionEntidad[];
+}
+
+export interface VecinoEntidad {
+  entidad: Entidad;
+  /** Fuerza de la coaparición (más alta cuanto más cerca y más veces). */
+  peso: number;
+  documentos: number;
+  /** Relación nombrada («admira a», «personaje inspirado en»), si la hay. */
+  relacion?: string;
+}
+
+export interface FichaEntidad extends Entidad {
+  /** Si se pidió un id fusionado, el id por el que se pidió. */
+  fusionadaDesde?: string;
+  porDocumento: DocumentoConMenciones[];
+  vecinos: VecinoEntidad[];
+}
+
+export interface VecindarioEntidad {
+  centro: string;
+  nodos: Entidad[];
+  aristas: Array<{ desde: string; hacia: string; peso: number; relacion?: string }>;
+}
+
+export interface PasoCamino {
+  entidad: Entidad;
+  /** Cómo se llega a esta entidad desde la anterior (falta en la primera). */
+  via?: {
+    peso: number;
+    relacion?: string;
+    documento: string;
+    titulo: string;
+    fragmento: string;
+    ancla: Ancla;
+    etiqueta: string;
+    contexto: string;
+  };
+}
+
+export interface CaminoEntidades {
+  /** Vacío si no hay camino en el número de saltos permitido. */
+  pasos: PasoCamino[];
+}
+
+export interface ElementoLineaTemporal {
+  /** Año del documento (o de la fecha mencionada junto a la entidad). */
+  anio?: number;
+  /** Fecha que aparece en el mismo pasaje («1951», «1959-03»). */
+  fecha?: string;
+  documento: string;
+  titulo: string;
+  fragmento: string;
+  ancla: Ancla;
+  etiqueta: string;
+  contexto: string;
+}
+
+export interface LineaTemporalEntidad {
+  entidad: Entidad;
+  elementos: ElementoLineaTemporal[];
+}
+
+export type EstadoExtraccion = 'pendiente' | 'en_marcha' | 'hecho' | 'error' | 'sin_redactor';
+
+export interface ExtraccionEntidades {
+  documento: string;
+  estado: EstadoExtraccion;
+  lotes: number;
+  lotesHechos: number;
+  menciones: number;
+  entidades: number;
+  /** Coste estimado en dólares (tokens aproximados × precio del redactor rápido). */
+  usdEstimado: number;
+  actualizado: string;
+  error?: string;
+}
+
+export interface EstadoEntidades {
+  documentos: ExtraccionEntidades[];
+  entidades: number;
+  menciones: number;
+  aristas: number;
+}
+
+export interface EntidadesDocumento {
+  documento: string;
+  extraccion?: ExtraccionEntidades;
+  entidades: Array<Entidad & { aqui: number }>;
+}
+
+export interface EntidadesLector {
+  documento: string;
+  entidades: Record<string, Pick<Entidad, 'nombre' | 'tipo' | 'documentos' | 'menciones' | 'descripcion'>>;
+  /** Formas reconocidas y las unidades (orden desde 0) donde aparecen. */
+  formas: Array<{ texto: string; entidad: string; unidades: number[] }>;
 }

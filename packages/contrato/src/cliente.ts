@@ -32,6 +32,8 @@ import type {
   EventoBusqueda, EventoConstruccionMapa, FiltrosHistorial, GrafoCitas, Hueco, InformeConcepto, InstantaneaCorpus, KpisCorpus,
   MapaConceptos, MetaMapa, MiembrosGrupo, NodoGrafoDetalle, NuevaTarjeta, NuevoConcepto, NuevoCuaderno, NuevoVigilante,
   Recomendacion, ReferenciaHuerfana, Sintesis, Tarjeta, TramoConcepto, Vigilante,
+  CaminoEntidades, Entidad, EntidadesDocumento, EntidadesLector, EstadoEntidades, ExtraccionEntidades, FichaEntidad,
+  LineaTemporalEntidad, MencionEntidad, TipoEntidad, VecindarioEntidad,
 } from './funciones.js';
 import type { Billete, EventoTiempoReal, MensajeCliente, Tarea } from './tiempo-real.js';
 
@@ -294,6 +296,20 @@ export function crearCliente(opciones: OpcionesCliente) {
       nodo: (documento: string) => get<NodoGrafoDetalle>(`/grafo/nodos/${e(documento)}`),
       huerfanas: () => get<ReferenciaHuerfana[]>('/grafo/huerfanas'),
       reconstruir: () => post<{ nodos: number; aristas: number; ms: number }>('/grafo/reconstruir'),
+    },
+
+    entidades: {
+      buscar: (p: { q?: string; tipo?: TipoEntidad; documento?: string } & ParamsPagina = {}) => get<Pagina<Entidad>>('/entidades', p),
+      estado: () => get<EstadoEntidades>('/entidades/estado'),
+      reanudar: (todos = false) => post<{ reanudados: string[] }>('/entidades/reanudar', { todos }),
+      obtener: (id: string) => get<FichaEntidad>(`/entidades/${e(id)}`),
+      menciones: (id: string, p: { documento?: string } & ParamsPagina = {}) => get<Pagina<MencionEntidad>>(`/entidades/${e(id)}/menciones`, p),
+      vecinos: (id: string, p: { limite?: number; saltos?: 1 | 2 } = {}) => get<VecindarioEntidad>(`/entidades/${e(id)}/vecinos`, p),
+      linea: (id: string) => get<LineaTemporalEntidad>(`/entidades/${e(id)}/linea`),
+      camino: (desde: string, hasta: string) => get<CaminoEntidades>('/entidades/camino', { desde, hasta }),
+      documento: (documento: string) => get<EntidadesDocumento>(`/entidades/documentos/${e(documento)}`),
+      lector: (documento: string) => get<EntidadesLector>(`/entidades/documentos/${e(documento)}/lector`),
+      extraer: (documento: string, forzar = false) => post<ExtraccionEntidades>(`/entidades/documentos/${e(documento)}/extraer`, { forzar }),
     },
 
     perspectivas: {
