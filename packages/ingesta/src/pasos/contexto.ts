@@ -96,7 +96,7 @@ export async function pasoContexto(
   fragmentos: FragmentoPlano[],
   metadatos: MetadatosDocumento,
   redactor: Redactor,
-  opciones: { concurrencia?: number; reloj?: () => number; alGrupo?: (hechos: number, total: number) => void } = {},
+  opciones: { concurrencia?: number; reloj?: () => number; alGrupo?: (hechos: number, total: number) => void; limiteMs?: number } = {},
 ): Promise<{ contextos: Record<string, string>; procedencia: Procedencia }> {
   const reloj = opciones.reloj ?? Date.now;
   const t = reloj();
@@ -104,7 +104,15 @@ export async function pasoContexto(
   let hechos = 0, fallidos = 0;
   const cobertura = new Cobertura(15_000, 2, reloj);
   const partes = await enParalelo(grupos, opciones.concurrencia ?? 16, async (g) => {
-    try { return await contextualizarGrupo(g, metadatos, redactor, cobertura); }
+    try {
+      const llamada = contextualizarGrupo(g, metadatos, redactor, cobertura);
+      if (!opciones.limiteMs) return await llamada;
+      // Con límite: un grupo que se atasca (el redactor cae a una reserva lenta) se deja sin
+      // contexto; la consolidación lo completa después.
+      let temporizador: ReturnType<typeof setTimeout> | undefined;
+      const tope = new Promise<Record<string, string>>((_, mal) => { temporizador = setTimeout(() => mal(new Error('tope')), opciones.limiteMs); });
+      try { return await Promise.race([llamada, tope]); } finally { clearTimeout(temporizador); }
+    }
     catch { fallidos++; return {}; }
     finally { opciones.alGrupo?.(++hechos, grupos.length); }
   });

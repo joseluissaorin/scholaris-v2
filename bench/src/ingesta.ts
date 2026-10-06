@@ -135,7 +135,7 @@ export async function ingerir(ruta: string, o: OpcionesBanco = {}) {
     alUnidades: (_d: number, _h: number, buscables: boolean) => {
       if (!buscables || busqueda) return;
       busqueda = (async () => {
-        const filas = await archivo.sql.ejecutar<{ texto: string }>('SELECT texto FROM fragmentos LIMIT 1');
+        const filas = await archivo.sql.ejecutar<{ texto: string }>('SELECT texto FROM fragmentos ORDER BY length(texto) DESC LIMIT 1');
         const palabra = (filas[0]?.texto ?? '').match(/\p{L}{7,}/gu)?.[0];
         if (!palabra) return null;
         const t = Date.now() - tIngesta;

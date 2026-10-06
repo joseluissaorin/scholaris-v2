@@ -350,7 +350,7 @@ export async function indexarTanda(
   const meta = medio ? null : await Promise.resolve(extras.metadatos ?? null).catch(() => null);
   if (!medio) {
     if (meta && !ctx.opciones.sinContexto && fragmentos.length) {
-      const r = await pasoContexto(fragmentos, meta, puertos.inteligencia.redactor, { reloj });
+      const r = await pasoContexto(fragmentos, meta, puertos.inteligencia.redactor, { reloj, limiteMs: 12_000 });
       for (const f of fragmentos) if (r.contextos[f.id]) { f.contexto = r.contextos[f.id] as string; conContexto.add(f.id); }
       procedencia.push(r.procedencia);
       await escribir(sql, (tx) => spdf.escribirFragmentos(tx, fragmentos.map((f) => aFilaFragmento(documento, f, idU))));
