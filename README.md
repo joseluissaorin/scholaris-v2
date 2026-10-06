@@ -35,8 +35,8 @@ Scholaris quiere ser esa mano. Lee tus libros, tus artículos, tus apuntes y tus
 </p>
 
 <p align="center">
-  <img src=".github/assets/preguntar.webp" alt="Una pregunta sobre Lope de Vega respondida con citas numeradas, cada una con su página, y las fuentes al lado" width="49%">
-  <img src=".github/assets/referencia.webp" alt="Copiar referencia: la ficha del documento en APA 7, lista para pegar" width="49%">
+  <img src=".github/assets/preguntar.webp" alt="Una pregunta sobre Lope de Vega respondida con citas numeradas, cada una con su página, y las fuentes al lado" width="50%">
+  <img src=".github/assets/referencia.webp" alt="Copiar referencia: la ficha del documento en APA 7, lista para pegar" width="48%">
   <br><sub>Preguntar, con cada cita comprobada y su página · la referencia en tu estilo, a un clic.</sub>
 </p>
 

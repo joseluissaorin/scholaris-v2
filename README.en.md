@@ -35,8 +35,8 @@ Scholaris wants to be that hand. It reads your books, your papers, your notes an
 </p>
 
 <p align="center">
-  <img src=".github/assets/preguntar.webp" alt="A question about Lope de Vega answered with numbered citations, each with its page, and the sources alongside" width="49%">
-  <img src=".github/assets/referencia.webp" alt="Copy reference: the document's reference in APA 7, ready to paste" width="49%">
+  <img src=".github/assets/preguntar.webp" alt="A question about Lope de Vega answered with numbered citations, each with its page, and the sources alongside" width="50%">
+  <img src=".github/assets/referencia.webp" alt="Copy reference: the document's reference in APA 7, ready to paste" width="48%">
   <br><sub>Ask, with every citation checked and its page · the reference in your style, one click away.</sub>
 </p>
 
