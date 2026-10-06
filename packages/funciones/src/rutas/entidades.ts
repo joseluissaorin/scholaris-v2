@@ -11,7 +11,10 @@ import { cuerpo, manejar, qBool, qNumero, qTexto, type AppFunciones } from './co
 
 export function rutasEntidades<E extends EntornoFunciones>(app: AppFunciones<E>): void {
   // Las rutas fijas van antes que «/entidades/:id».
-  app.get('/entidades', manejar(async (c, { sql }) => {
+  app.get('/entidades', manejar(async (c, p) => {
+    const { sql } = p;
+    // Abrir «Personas y obras» basta para que una biblioteca antigua se ponga al día.
+    if (p.enSegundoPlano && !(await enlacesAlDia(sql))) p.enSegundoPlano(ponerAlDiaEnlaces(sql, p.inteligencia?.redactor).catch((e) => console.error('enlaces', e)));
     const q = qTexto(c, 'q'), tipo = qTexto(c, 'tipo'), documento = qTexto(c, 'documento'), limite = qNumero(c, 'limite'), cursor = qTexto(c, 'cursor');
     return c.json(await buscarEntidades(sql, { ...(q ? { q } : {}), ...(tipo ? { tipo } : {}), ...(documento ? { documento } : {}), ...(limite ? { limite } : {}), ...(cursor ? { cursor } : {}) }));
   }));
