@@ -439,12 +439,23 @@ export async function pasoMetadatos(
         if (!provisional.anioOriginal && datos.anio < provisional.anio) datos.anioOriginal = datos.anio;
         delete datos.anio;
       }
+      // El título tal como figura en el documento manda sobre la forma del catálogo
+      // («The discarded image : an introduction…» en minúsculas de biblioteca).
+      if (datos.titulo && provisional.titulo && procedenciaLectura(provisional, 'titulo')) {
+        const [principal, resto] = datos.titulo.split(/\s*:\s+/, 2);
+        if (similitud(principal ?? '', provisional.titulo) >= 0.85 || normalizar(datos.titulo).startsWith(normalizar(provisional.titulo))) {
+          delete datos.titulo;
+          if (provisional.subtitulo || !resto) delete datos.subtitulo; else datos.subtitulo ??= resto;
+        }
+      }
       candidatos.push({ fuente, confianza: 0.85 + 0.1 * Math.min(1, puntuacion ?? 0), datos });
     }
   }
   if (entrada.usuario) candidatos.push({ fuente: 'usuario', confianza: 1, datos: entrada.usuario });
   return { metadatos: fusionarMetadatos(candidatos, entrada.nombreArchivo), procedencia, ...(hablantes && Object.keys(hablantes).length ? { hablantes } : {}) };
 }
+
+const procedenciaLectura = (m: MetadatosDocumento, campo: string) => m.procedencia?.[campo]?.fuente === 'lectura';
 
 /** Repara la salida del Redactor: autores sin partir, años como texto, DOI con prefijo. */
 export function normalizarLectura(l: Partial<MetadatosDocumento>): Partial<MetadatosDocumento> {

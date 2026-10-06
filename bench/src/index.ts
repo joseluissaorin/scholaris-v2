@@ -30,6 +30,7 @@ function opciones(args: string[]): { posicionales: string[]; o: OpcionesBanco } 
     else if (a === '--sin-contexto') o.sinContexto = true;
     else if (a === '--sin-figuras') o.sinFiguras = true;
     else if (a === '--original') o.original = true;
+    else if (a === '--lector') o.lector = sig() as OpcionesBanco['lector'];
     else posicionales.push(a);
   }
   return { posicionales, o };

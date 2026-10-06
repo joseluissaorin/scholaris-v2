@@ -30,6 +30,8 @@ export interface OpcionesBanco {
   sinFiguras?: boolean;
   /** Incrustar el original en el SPDF (blobs). */
   original?: boolean;
+  /** Lector: 'alta' (3.8 Flash primero) o 'rapida' (Flash-Lite primero). Por defecto, alta solo para escaneados y fotos. */
+  lector?: 'alta' | 'rapida';
 }
 
 export function fuenteEnMemoria(m: PaqueteEnMemoria, original: Uint8Array | null): FuentePaquete {
@@ -80,7 +82,14 @@ export async function ingerir(ruta: string, o: OpcionesBanco = {}) {
 
   // 2. Inteligencia con contador de uso.
   const usos: UsoProveedor[] = [];
-  const ia = crearInteligencia(cargarEntorno(), { onUso: (u) => usos.push(u), concurrencia: 32 });
+  // Escaneados y fotos (CER 0,007 con 3.8 Flash frente a 0,021 con Flash-Lite en el Casamiento):
+  // calidad alta. Digitales y capas de OCR que se releen: Flash-Lite, igual de bueno y 3 veces más rápido.
+  const calidadLector = o.lector ?? (paquete.tipo === 'pdf_escaneado' || paquete.tipo === 'fotos' || paquete.tipo === 'imagen' ? 'alta' : 'rapida');
+  const pasos: Record<string, number> = {};
+  const ia = crearInteligencia(cargarEntorno(), {
+    onUso: (u) => usos.push(u), concurrencia: 48, calidadLector,
+    alPasarLector: (i) => { const k = `${i.lector.split(':').pop()} → ${i.motivo.slice(0, 80)}`; pasos[k] = (pasos[k] ?? 0) + i.paginas.length; },
+  });
   const archivo = await crearSpdf({ generador: 'scholaris-nube/bench' });
   const fuente = fuenteEnMemoria(enMemoria, original);
 
@@ -126,7 +135,7 @@ export async function ingerir(ruta: string, o: OpcionesBanco = {}) {
   const informe = {
     archivo: basename(ruta),
     etiqueta,
-    opciones: o,
+    opciones: { ...o, lector: calidadLector },
     tipo: paquete.tipo,
     unidades: r.unidades.length,
     duracion: paquete.duracion ?? null,
@@ -141,6 +150,7 @@ export async function ingerir(ruta: string, o: OpcionesBanco = {}) {
     figuras: r.figuras.length,
     vectores: r.vectores,
     avisos: r.avisos.slice(0, 50),
+    cascada: pasos,
     folios: r.unidades.reduce<Record<string, number>>((m, u) => { const a = u.ancla; const k = a?.tipo === 'pagina' ? a.origen : a?.tipo ?? 'sin'; m[k] = (m[k] ?? 0) + 1; return m; }, {}),
     bytesSpdf: bytes.length,
     primeraUnidadMs: progreso.find((p) => (p.unidadesListas ?? 0) > 0)?.transcurrido ?? null,

@@ -7,15 +7,26 @@ import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { gunzipSync } from 'node:zlib';
 import Database from 'better-sqlite3';
-import { contarTokens, normalizar, similitud } from '@scholaris/ingesta';
+import { contarTokens, normalizar } from '@scholaris/ingesta';
 import { RAIZ, SALIDA } from './ingesta.js';
 
 const V3 = join(RAIZ, 'datos', 'spdf-v3');
 
 type Fila = Record<string, unknown>;
 
-function abrirV3(etiqueta: string): Database.Database | null {
-  const f = readdirSync(V3).find((x) => x.startsWith(etiqueta.slice(0, 20)) && x.endsWith('.spdf'));
+/** F1 de palabras (bolsa de palabras normalizadas): robusto a cortes y a cabeceras desplazadas. */
+export function f1Palabras(a: string, b: string): number {
+  const bolsa = (s: string) => { const m = new Map<string, number>(); for (const w of normalizar(s).split(' ').filter(Boolean)) m.set(w, (m.get(w) ?? 0) + 1); return m; };
+  const x = bolsa(a), y = bolsa(b);
+  let comun = 0, nx = 0, ny = 0;
+  for (const [w, n] of x) { nx += n; comun += Math.min(n, y.get(w) ?? 0); }
+  for (const n of y.values()) ny += n;
+  return nx && ny ? (2 * comun) / (nx + ny) : 0;
+}
+
+function abrirV3(etiqueta: string, archivo?: string): Database.Database | null {
+  const prefijos = [etiqueta.slice(0, 20), ...(archivo ? [archivo.replace(/\.[^.]+$/, '').slice(0, 20)] : [])];
+  const f = readdirSync(V3).find((x) => prefijos.some((p) => x.startsWith(p)) && x.endsWith('.spdf'));
   if (!f) return null;
   const tmp = join('/tmp', `v3-${etiqueta}.db`);
   if (!existsSync(tmp)) writeFileSync(tmp, gunzipSync(readFileSync(join(V3, f))));
@@ -37,7 +48,7 @@ export function comparar(etiqueta: string): Comparacion | null {
   if (!existsSync(rutaNueva)) return null;
   const n = new Database(rutaNueva, { readonly: true });
   const informe = JSON.parse(readFileSync(join(SALIDA, `${etiqueta}.informe.json`), 'utf8')) as Record<string, unknown>;
-  const v = abrirV3(etiqueta);
+  const v = abrirV3(etiqueta, String(informe.archivo ?? ''));
 
   const doc = n.prepare('SELECT metadatos FROM documentos').get() as { metadatos: string };
   const meta = JSON.parse(doc.metadatos) as { titulo: string; autores: Array<{ nombre: string; apellidos: string }>; anio?: number; idioma?: string; doi?: string; procedencia?: Record<string, { fuente: string }> };
@@ -64,6 +75,9 @@ export function comparar(etiqueta: string): Comparacion | null {
     figuras: (n.prepare('SELECT count(*) c FROM figuras').get() as { c: number }).c,
     vectores: (n.prepare('SELECT count(*) c FROM vectores').get() as { c: number }).c,
     ms: informe.ms, usd: informe.usd,
+    caracteres: unidades.reduce((n, u) => n + String(u.texto).length, 0),
+    paginasVacias: unidades.filter((u) => String(u.texto).trim().length < 100).length,
+    folioIgualFisica: unidades.filter((u) => u.impresa !== null && String(u.impresa) === String(JSON.parse(String(u.ancla)).fisica)).length,
   };
   let viejo: Record<string, unknown> = {};
   let textoSimilitud: Comparacion['textoSimilitud'];
@@ -72,6 +86,7 @@ export function comparar(etiqueta: string): Comparacion | null {
     const paginas = v.prepare('SELECT pdf_page, book_page, text FROM pages ORDER BY pdf_page').all() as Array<{ pdf_page: number; book_page: number; text: string }>;
     const chunks = v.prepare('SELECT text FROM chunks').all() as Array<{ text: string }>;
     const tv = chunks.map((c) => contarTokens(c.text));
+    const caracteresViejo = paginas.reduce((n, p) => n + p.text.length, 0);
     let secciones = 0;
     try { secciones = (v.prepare('SELECT count(*) c FROM sections').get() as { c: number }).c; } catch { /* sin tabla */ }
     viejo = {
@@ -79,6 +94,9 @@ export function comparar(etiqueta: string): Comparacion | null {
       unidades: paginas.length, fragmentos: chunks.length, tokensMediana: mediana(tv), tokensMin: Math.min(...tv), tokensMax: Math.max(...tv),
       enRango: pct(tv.filter((t) => t >= 150 && t <= 500).length / Math.max(1, tv.length)), secciones,
       contextual: m.contextual_chunks ?? 'no',
+      caracteres: caracteresViejo,
+      paginasVacias: paginas.filter((p) => p.text.trim().length < 100).length,
+      folioIgualFisica: paginas.filter((p) => p.book_page === p.pdf_page).length,
     };
     // Fidelidad: similitud por página entre el texto viejo y el nuevo (solo documentos de páginas).
     const porFisica = new Map(unidades.map((u) => [JSON.parse(String(u.ancla)).fisica as number, String(u.texto)]));
@@ -86,8 +104,7 @@ export function comparar(etiqueta: string): Comparacion | null {
     for (const p of paginas) {
       const nuevoTexto = porFisica.get(p.pdf_page);
       if (nuevoTexto === undefined || (!p.text.trim() && !nuevoTexto.trim())) continue;
-      const a = normalizar(p.text).slice(0, 4000), b = normalizar(nuevoTexto.replace(/^#+\s/gm, '')).slice(0, 4000);
-      sims.push({ fisica: p.pdf_page, sim: a && b ? similitud(a, b) : 0 });
+      sims.push({ fisica: p.pdf_page, sim: f1Palabras(p.text, nuevoTexto.replace(/^#+\s/gm, '')) });
     }
     if (sims.length) textoSimilitud = { media: sims.reduce((s, x) => s + x.sim, 0) / sims.length, peores: [...sims].sort((a, b) => a.sim - b.sim).slice(0, 5) };
   }
