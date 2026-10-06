@@ -24,6 +24,14 @@ export async function obtenerBuscador(p: PuertosUsuario): Promise<Buscador> {
     redactor: ia.redactor,
     reordenador: ia.reordenador,
     juez: ia.juez,
+  }, {
+    // La pertenencia vive en `documentos.bibliotecas` (JSON): se resuelve en SQL.
+    documentosDeBibliotecas: async (bibliotecas) => {
+      if (!bibliotecas.length) return [];
+      const filas = await p.sql.ejecutar<{ id: string }>(
+        `SELECT DISTINCT d.id FROM documentos d, json_each(d.bibliotecas) je WHERE je.value IN (${bibliotecas.map(() => '?').join(',')})`, ...bibliotecas);
+      return filas.map((f) => f.id);
+    },
   });
   buscadores.set(p.sql, { buscador, creado: Date.now() });
   return buscador;

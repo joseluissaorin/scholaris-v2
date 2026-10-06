@@ -1,0 +1,28 @@
+// Configuración de las pruebas: el mismo Worker sin Vectorize ni Workers AI
+// (no existen en local); la búsqueda densa va contra la estantería.
+{
+  "name": "scholaris-prueba",
+  "main": "./worker-prueba.ts",
+  "compatibility_date": "2026-08-15",
+  "compatibility_flags": ["nodejs_compat"],
+  "durable_objects": {
+    "bindings": [
+      { "name": "ESTANTERIA", "class_name": "Estanteria" },
+      { "name": "TAREA", "class_name": "Tarea" },
+      { "name": "LIMITADOR", "class_name": "Limitador" }
+    ]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Estanteria", "Tarea", "Limitador"] }],
+  "workflows": [{ "binding": "INGESTA", "name": "scholaris-ingesta-prueba", "class_name": "FlujoIngesta" }],
+  "d1_databases": [{ "binding": "DB", "database_name": "scholaris-prueba", "database_id": "00000000-0000-0000-0000-000000000000" }],
+  "r2_buckets": [{ "binding": "BUCKET", "bucket_name": "scholaris-prueba" }],
+  "queues": { "producers": [{ "binding": "COLA", "queue": "scholaris-fondo-prueba" }] },
+  "vars": {
+    "ORIGEN_PUBLICO": "https://scholaris.prueba",
+    "CLERK_PUBLISHABLE_KEY": "pk_test_Y2xlcmsucHJ1ZWJhJA",
+    "CLERK_EMISOR": "https://clerk.prueba",
+    "SECRETO": "secreto-de-pruebas-0123456789",
+    "CLAVE_MAESTRA": "clave-maestra-de-pruebas",
+    "SIN_VERIFICACION": "1"
+  }
+}

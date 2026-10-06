@@ -18,7 +18,7 @@
     "@cloudflare/vitest-pool-workers": "^0.22.0",
     "@cloudflare/workers-types": "^5.20261006.1",
     "typescript": "^5.9.3",
-    "vitest": "^3.2.7",
+    "vitest": "^4.1.11",
     "wrangler": "^4.147.0"
   },
   "dependencies": {
@@ -32,6 +32,7 @@
     "@scholaris/nucleo": "workspace:^",
     "@scholaris/proveedores": "workspace:^",
     "@scholaris/spdf": "workspace:^",
+    "@sqlite.org/sqlite-wasm": "3.53.4-build2",
     "aws4fetch": "^1.0.20",
     "fflate": "^0.8.3",
     "hono": "^4.9.0",

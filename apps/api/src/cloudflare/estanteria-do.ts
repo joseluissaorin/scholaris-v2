@@ -63,7 +63,7 @@ export class Estanteria extends DurableObject<Env> {
       },
     };
     // El índice depende del espacio del embebedor: se resuelve al primer uso.
-    Object.defineProperty(p, 'indice', { get: () => (this.indice ??= env.VECTORES ? indicePerezoso(env, inteligencia) : null), enumerable: true });
+    Object.defineProperty(p, 'indice', { get: () => (this.indice ??= indicePerezoso(env, inteligencia, this.base)), enumerable: true });
     return p;
   }
 
@@ -114,9 +114,9 @@ export class Estanteria extends DurableObject<Env> {
 }
 
 /** Índice que espera a la inteligencia para saber su espacio (la primera vez). */
-function indicePerezoso(env: Env, inteligencia: () => Promise<Awaited<ReturnType<typeof inteligenciaPara>>>) {
+function indicePerezoso(env: Env, inteligencia: () => Promise<Awaited<ReturnType<typeof inteligenciaPara>>>, sql: SqlDO) {
   let real: ReturnType<typeof indiceDesdeEnv> | undefined;
-  const obtener = async () => (real ??= indiceDesdeEnv(env, await inteligencia()));
+  const obtener = async () => (real ??= indiceDesdeEnv(env, await inteligencia(), sql));
   return {
     get espacio() {
       if (!real) throw new Error('Índice aún no inicializado');

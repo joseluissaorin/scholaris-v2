@@ -17,10 +17,10 @@ export interface Env {
   INGESTA: Workflow<ParamsIngesta>;
   DB: D1Database;
   BUCKET: R2Bucket;
-  VECTORES: VectorizeIndex;
+  VECTORES?: VectorizeIndex;
   COLA: Queue<MensajeCola>;
-  AI: Ai;
-  ASSETS: Fetcher;
+  AI?: Ai;
+  ASSETS?: Fetcher;
 
   // Variables
   ORIGEN_PUBLICO?: string;
@@ -31,6 +31,9 @@ export interface Env {
   CLERK_PUBLISHABLE_KEY?: string;
   CLERK_EMISOR?: string;
   CLERK_ORIGENES?: string;
+  CLERK_JWKS?: string;
+  /** Pruebas: sin consultas a Crossref/OpenAlex. */
+  SIN_VERIFICACION?: string;
   ORIGENES_CORS?: string;
   R2_BUCKET_NAME?: string;
 

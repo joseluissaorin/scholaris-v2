@@ -2,7 +2,8 @@
  * Montaje de los puertos de Cloudflare a partir de los bindings. Lo usan el
  * Worker (la puerta), el Durable Object de cada usuario y el Workflow.
  */
-import type { Emisor, IndiceVectorial, Inteligencia } from '@scholaris/nucleo';
+import type { Emisor, IndiceVectorial, Inteligencia, SQL } from '@scholaris/nucleo';
+import { IndiceVectorialSQL } from '@scholaris/busqueda';
 import type { EventoTiempoReal } from '@scholaris/contrato';
 import { crearInteligencia, type EntornoInteligencia } from '@scholaris/proveedores';
 import type { AlmacenAmpliado, ConfigInstancia } from '../puertos.js';
@@ -65,19 +66,29 @@ export function entornoInteligencia(env: Env, propias: Partial<Record<string, st
 
 const cacheIA = new Map<string, { ia: Inteligencia; hasta: number }>();
 
+type FabricaIA = (env: Env, propias: Partial<Record<string, string>>) => Inteligencia;
+let fabrica: FabricaIA = (env, propias) => crearInteligencia(entornoInteligencia(env, propias), { concurrencia: 16 });
+
+/** Sustituye cómo se crea la inteligencia (pruebas con puertos falsos). */
+export function establecerFabricaInteligencia(f: FabricaIA): void {
+  fabrica = f;
+  cacheIA.clear();
+}
+
 /** Inteligencia del usuario, cacheada 10 minutos por aislamiento. */
 export async function inteligenciaPara(env: Env, cuentas: Cuentas, usuario: string): Promise<Inteligencia> {
   const hay = cacheIA.get(usuario);
   if (hay && hay.hasta > Date.now()) return hay.ia;
   const propias = await cuentas.clavesPropias(usuario).catch(() => ({}));
-  const ia = crearInteligencia(entornoInteligencia(env, propias), { concurrencia: 16 });
+  const ia = fabrica(env, propias);
   cacheIA.set(usuario, { ia, hasta: Date.now() + 600_000 });
   if (cacheIA.size > 200) cacheIA.delete(cacheIA.keys().next().value as string);
   return ia;
 }
 
-export function indiceDesdeEnv(env: Env, ia: Inteligencia): IndiceVectorial | null {
-  if (!env.VECTORES) return null;
+export function indiceDesdeEnv(env: Env, ia: Inteligencia, sql?: SQL): IndiceVectorial | null {
+  // Sin Vectorize (pruebas, cuentas sin el producto): búsqueda densa sobre la propia estantería.
+  if (!env.VECTORES) return sql ? new IndiceVectorialSQL(sql, ia.embebedor.espacio) : null;
   const e = ia.embebedor.espacio;
   // Vectorize tiene un índice de dimensiones fijas: solo el espacio base va allí.
   return crearIndiceVectorize(env.VECTORES, e);

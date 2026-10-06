@@ -33,6 +33,8 @@ export interface ContextoMotor {
   indice: IndiceVectorial | null;
   espacioNombres: string;
   correoContacto?: string;
+  /** Sin Crossref/OpenAlex (pruebas, sin red). */
+  sinVerificacion?: boolean;
   alProgreso?(p: Progreso): Promise<void> | void;
   fetch?: typeof fetch;
 }
@@ -233,6 +235,7 @@ export async function componer(ctx: ContextoMotor, params: ParamsIngesta, info: 
   }, {
     documentoId: params.documento,
     tarea: params.tarea,
+    ...(ctx.sinVerificacion ? { sinVerificacion: true } : {}),
     ...(params.pista ? { pista: params.pista } : {}),
     ...(params.bibliotecas?.length ? { bibliotecas: params.bibliotecas } : {}),
     ...(metadatosUsuario ? { metadatosUsuario: metadatosUsuario as never } : {}),

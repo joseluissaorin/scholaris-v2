@@ -36,6 +36,7 @@ export class FlujoIngesta extends WorkflowEntrypoint<Env, ParamsIngesta> {
       indice: indiceDesdeEnv(env, ia),
       espacioNombres: espacioNombresDe(p.usuario),
       ...(env.CORREO_CONTACTO ? { correoContacto: env.CORREO_CONTACTO } : {}),
+      ...(env.SIN_VERIFICACION === '1' ? { sinVerificacion: true } : {}),
       alProgreso: emitir,
       emitir,
     };

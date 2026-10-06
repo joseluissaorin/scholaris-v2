@@ -37,6 +37,7 @@ function plataforma(env: Env, peticion: Request): Plataforma {
       clerk = crearVerificadorClerk({
         publishableKey: env.CLERK_PUBLISHABLE_KEY,
         ...(env.CLERK_EMISOR ? { emisor: env.CLERK_EMISOR } : {}),
+        ...(env.CLERK_JWKS ? { jwks: env.CLERK_JWKS } : {}),
         ...(env.CLERK_ORIGENES ? { origenes: env.CLERK_ORIGENES.split(',').map((s) => s.trim()).filter(Boolean) } : {}),
       });
       verificadores.set(clave, clerk);

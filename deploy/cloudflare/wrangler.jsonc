@@ -8,7 +8,7 @@
   "$schema": "../../apps/api/node_modules/wrangler/config-schema.json",
   "name": "scholaris-v2",
   "main": "../../apps/api/src/cloudflare/worker.ts",
-  "compatibility_date": "2026-09-15",
+  "compatibility_date": "2026-08-15",
   "compatibility_flags": ["nodejs_compat"],
   "workers_dev": true,
   "preview_urls": false,

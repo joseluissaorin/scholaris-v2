@@ -5,7 +5,7 @@
  * organización) es el plan Pro, igual que en el backend de Python
  * (`auth_service.py`).
  */
-import { createRemoteJWKSet, jwtVerify, type JWTPayload } from 'jose';
+import { createLocalJWKSet, createRemoteJWKSet, jwtVerify, type JSONWebKeySet, type JWTPayload } from 'jose';
 import type { Plan } from '@scholaris/contrato';
 
 export interface ConfigClerk {
@@ -14,6 +14,8 @@ export interface ConfigClerk {
   emisor?: string;
   /** Orígenes admitidos en `azp`. Vacío = no se comprueba. */
   origenes?: string[];
+  /** JWKS en JSON para verificar sin red (pruebas, o para no depender de Clerk en cada arranque). */
+  jwks?: string;
 }
 
 export interface IdentidadClerk {
@@ -72,7 +74,9 @@ export function planDesdeFunciones(funciones: string[]): Plan {
 
 export function crearVerificadorClerk(cfg: ConfigClerk) {
   const emisor = (cfg.emisor ?? emisorDesdeClave(cfg.publishableKey)).replace(/\/$/, '');
-  const jwks = createRemoteJWKSet(new URL(`${emisor}/.well-known/jwks.json`), { cacheMaxAge: 3600_000, cooldownDuration: 30_000 });
+  const jwks = cfg.jwks
+    ? createLocalJWKSet(JSON.parse(cfg.jwks) as JSONWebKeySet)
+    : createRemoteJWKSet(new URL(`${emisor}/.well-known/jwks.json`), { cacheMaxAge: 3600_000, cooldownDuration: 30_000 });
   return async function verificar(token: string): Promise<IdentidadClerk | null> {
     let payload: JWTPayload;
     try {

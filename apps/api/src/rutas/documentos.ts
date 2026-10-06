@@ -14,6 +14,8 @@ import type { Entorno } from '../entorno.js';
 import { cuerpoJson, exigir, fallo, noEncontrado } from '../compartido/errores.js';
 import { clavesDeDocumento, idsIndiceDeDocumento, tareaDeDocumento, totalesEstanteria, ultimoError, ahora } from '../compartido/estanteria.js';
 import { aBase64Url } from '../compartido/firmas.js';
+import { invalidarBuscador, puertosFunciones } from '../compartido/servicios.js';
+import { alBorrarDocumento } from '@scholaris/funciones';
 import type { PuertosUsuario } from '../puertos.js';
 import { lanzarIngesta, prefijoDocumento } from './subidas.js';
 import { cursorADesplazamiento, desplazamientoACursor, entero, etiquetaAncla, exigirEscritura, json, prm, puertos, type Ctx } from './util.js';
@@ -45,7 +47,9 @@ export async function borrarDocumentoCompleto(p: PuertosUsuario, id: string): Pr
   if (tarea) await p.orquestador.cancelar(tarea).catch(() => undefined);
   await borrarDocumento(p.sql, id);
   await p.sql.ejecutar('DELETE FROM pl_subidas WHERE documento = ?', id);
+  invalidarBuscador(p.sql);
   p.segundoPlano((async () => {
+    await alBorrarDocumento(await puertosFunciones(p), id).catch((e: unknown) => console.error('alBorrarDocumento', e));
     if (p.indice && ids.length) for (let i = 0; i < ids.length; i += 500) await p.indice.borrar(p.config.espacioNombres(p.usuario.id), ids.slice(i, i + 500));
     await p.almacen.borrarPrefijo(prefijoDocumento(p.usuario.id, id));
     for (const k of claves) if (!k.startsWith(prefijoDocumento(p.usuario.id, id))) await p.almacen.borrar(k).catch(() => undefined);
