@@ -1,9 +1,10 @@
 /**
- * Paso de indexado: escribe el documento en una base con el esquema SPDF 4.0
+ * Paso de indexado: escribe el documento en una base con el esquema SPDF 4.1
  * (el .spdf o la estantería) y prepara las entradas del índice vectorial.
  */
 
 import * as spdf from '@scholaris/spdf';
+import { epocaDeDocumento, textoBusqueda } from '@scholaris/normalizacion';
 import { type Documento, type EntradaIndice, type EspacioVectorial, type SQL, type Vector } from '@scholaris/nucleo';
 import type { FragmentoPlano, Procedencia, Seccion, UnidadLeida } from '../tipos.js';
 import type { FiguraConAncla } from './figuras.js';
@@ -38,6 +39,17 @@ export function entradasIndice(doc: Documento, vectores: Vector[], tiempos?: Map
   return vectores.map((v) => ({ id: v.id, valores: v.valores, metadatos: metadatosIndice(doc, v.objetivo, tiempos?.get(v.id)) }));
 }
 
+/**
+ * Capa de ortografía modernizada de cada fragmento (SPDF 4.1), solo para
+ * buscar: la época se decide una vez por documento (año de la obra o señales del
+ * texto) y la normalización va a > 5 MB/s, así que no pesa en la ingesta.
+ */
+export function capaDeBusqueda(doc: Documento, fragmentos: ReadonlyArray<{ texto: string }>): string[] {
+  const { idioma, anio, anioOriginal } = doc.metadatos;
+  const epoca = epocaDeDocumento(fragmentos.map((f) => f.texto), idioma, anioOriginal ?? anio);
+  return fragmentos.map((f) => textoBusqueda(f.texto, idioma, epoca));
+}
+
 export async function escribirDocumento(sql: SQL, d: DocumentoIndexable, opciones: { generador?: string } = {}): Promise<void> {
   const { documento: doc } = d;
   const porOrden = new Map(d.unidades.map((u) => [u.orden, u.id]));
@@ -56,9 +68,10 @@ export async function escribirDocumento(sql: SQL, d: DocumentoIndexable, opcione
       ...(u.imagen ? { imagen: u.imagen } : {}), ...(u.miniatura ? { miniatura: u.miniatura } : {}),
     })));
     await spdf.escribirSecciones(tx, d.secciones.map((s) => ({ id: s.id, documento: doc.id, padre: s.padre, nivel: s.nivel, titulo: s.titulo, unidadDesde: idUnidad(s.desde.unidad), unidadHasta: idUnidad(s.hasta) })));
-    await spdf.escribirFragmentos(tx, d.fragmentos.map((f) => ({
+    const capa = capaDeBusqueda(doc, d.fragmentos);
+    await spdf.escribirFragmentos(tx, d.fragmentos.map((f, i) => ({
       id: f.id, documento: doc.id, unidad: idUnidad(f.unidad), orden: f.orden, texto: f.texto, contexto: f.contexto, seccion: f.seccion, ancla: f.ancla,
-      ...(f.anclaFin ? { anclaFin: f.anclaFin } : {}),
+      ...(f.anclaFin ? { anclaFin: f.anclaFin } : {}), textoBusqueda: capa[i] ?? '',
     })));
     await spdf.escribirFiguras(tx, d.figuras.map((g) => ({
       id: g.id, documento: doc.id, unidad: idUnidad(g.unidad), imagen: g.imagen ?? g.parte ?? '',
