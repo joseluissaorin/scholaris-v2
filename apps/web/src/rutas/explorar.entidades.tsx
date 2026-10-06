@@ -15,7 +15,7 @@ import { Lienzo } from '../componentes/comunes/cabecera';
 import { anclaABusqueda } from '../lib/anclas';
 import { etiquetaCorta } from '../lib/formato';
 import { GrafoEntidades, FormaEntidad } from '../componentes/entidades/grafo-entidades';
-import { documentos, menciones, NOMBRE_TIPO_ENTIDAD, Pasaje, PLURAL_TIPO_ENTIDAD } from '../componentes/entidades/comun';
+import { documentos, menciones, NOMBRE_TIPO_ENTIDAD, Pasaje, PLURAL_TIPO_ENTIDAD, PUNTO_TIPO_ENTIDAD } from '../componentes/entidades/comun';
 
 interface BusquedaEntidades { q?: string; tipo?: TipoEntidad; e?: string }
 
@@ -56,7 +56,7 @@ function Entidades() {
           <Campo icono="buscar" placeholder="Buscar: Cortázar, Parker, París…" value={texto} onChange={(e) => setTexto(e.target.value)} aria-label="Buscar entidades" />
           <div className="flex flex-wrap gap-1.5" role="group" aria-label="Filtrar por tipo">
             {TIPOS.map((t) => (
-              <Chip key={t} activo={busqueda.tipo === t} aria-pressed={busqueda.tipo === t}
+              <Chip key={t} punto={PUNTO_TIPO_ENTIDAD[t]} activo={busqueda.tipo === t} aria-pressed={busqueda.tipo === t}
                 onClick={() => void navegar({ search: (s) => ({ ...s, tipo: s.tipo === t ? undefined : t }), replace: true })}>{PLURAL_TIPO_ENTIDAD[t]}</Chip>
             ))}
           </div>

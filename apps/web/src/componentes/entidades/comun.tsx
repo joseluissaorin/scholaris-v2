@@ -10,6 +10,11 @@ export const PLURAL_TIPO_ENTIDAD: Record<TipoEntidad, string> = {
   persona: 'Personas', obra: 'Obras', lugar: 'Lugares', organizacion: 'Organizaciones', concepto: 'Conceptos', evento: 'Acontecimientos', fecha: 'Fechas',
 };
 
+/** Color de cada tipo, con la correspondencia de Kandinsky que usa el grafo. */
+export const PUNTO_TIPO_ENTIDAD: Partial<Record<TipoEntidad, 'azul' | 'rojo' | 'amarillo' | 'tinta'>> = {
+  persona: 'azul', obra: 'rojo', lugar: 'amarillo', organizacion: 'tinta',
+};
+
 /** «… leí la biografía de ⟦Charlie Parker⟧, a quien…» con la mención resaltada. */
 export function Pasaje({ texto, className }: { texto: string; className?: string }) {
   const partes = texto.split(/⟦|⟧/);

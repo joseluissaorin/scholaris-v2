@@ -128,11 +128,11 @@ function PaginaBiblioteca() {
               <span className="ml-auto text-coffee-300">{bytes(ocupado)}</span>
             </div>
             <div className="flex flex-wrap items-center gap-2 border-b border-cream-300 pb-4">
-              <div className="sin-barra -mx-4 flex flex-1 gap-2 overflow-x-auto px-4 sm:mx-0 sm:flex-wrap sm:px-0">
+              <div className="sin-barra -mx-4 flex min-w-0 basis-full gap-2 overflow-x-auto px-4 sm:mx-0 sm:flex-1 sm:basis-0 sm:flex-wrap sm:px-0">
                 <Chip activo={!busqueda.grupo} onClick={() => fijar({ grupo: undefined })}>Todo</Chip>
                 {GRUPOS.map((g) => { const n = recuento(g); return n ? <Chip key={g.id} punto={g.punto} activo={busqueda.grupo === g.id} recuento={n} onClick={() => fijar({ grupo: busqueda.grupo === g.id ? undefined : g.id })}>{g.nombre}</Chip> : null; })}
               </div>
-              <div className="flex items-center gap-1">
+              <div className="ml-auto flex items-center gap-1">
                 <MenuRaiz>
                   <MenuDisparador asChild>
                     <Boton variante="fantasma" tam="p" icono="ordenar">{ORDENES[orden]}</Boton>
