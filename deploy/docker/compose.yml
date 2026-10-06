@@ -1,9 +1,12 @@
 # Scholaris en casa: docker compose -f deploy/docker/compose.yml up -d
 # Abre http://localhost:8790. Las claves van en deploy/docker/.env (no se sube a git):
-#   GEMINI_API_KEY=…      (lectura, vectores, redacción)
+#   GEMINI_API_KEY=…      (lectura, vectores, redacción; sin ella, o sin OPENROUTER_API_KEY
+#                          más InferBox, no se puede procesar ni buscar nada)
 #   TYPESAFE_API_KEY=…    (juez y reordenador; opcional)
 #   OPENROUTER_API_KEY=…  (lector de reserva; opcional)
 #   SCHOLARIS_TOKEN=…     (opcional: protege la instancia con un token fijo)
+#   SCHOLARIS_USUARIOS=…  (opcional: varias personas, «token:id:correo:Nombre;…»)
+# Detrás de un dominio, pon PUBLIC_URL=https://tu-dominio (las subidas firmadas apuntan ahí).
 services:
   scholaris:
     build:

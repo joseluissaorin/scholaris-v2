@@ -12,7 +12,6 @@
   "scripts": {
     "dev": "tsx watch src/principal.ts",
     "start": "tsx src/principal.ts",
-    "build": "node build.mjs",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },

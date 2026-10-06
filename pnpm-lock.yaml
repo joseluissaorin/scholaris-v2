@@ -386,6 +386,9 @@ importers:
 
   packages/imprenta:
     dependencies:
+      '@napi-rs/canvas':
+        specifier: ^1.0.10
+        version: 1.0.10
       '@scholaris/nucleo':
         specifier: workspace:*
         version: link:../nucleo
@@ -404,13 +407,12 @@ importers:
       pdfjs-dist:
         specifier: ^6.4.299
         version: 6.4.299
+      tsx:
+        specifier: ^4.23.15
+        version: 4.23.15
       xlsx:
         specifier: ^0.18.5
         version: 0.18.5
-    devDependencies:
-      '@napi-rs/canvas':
-        specifier: ^1.0.10
-        version: 1.0.10
 
   packages/ingesta:
     dependencies:

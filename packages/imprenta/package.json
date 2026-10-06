@@ -17,15 +17,14 @@
     "bench": "tsx bench/medir.ts"
   },
   "dependencies": {
+    "@napi-rs/canvas": "^1.0.10",
     "@scholaris/nucleo": "workspace:*",
     "fflate": "^0.8.3",
     "mammoth": "^1.13.0",
     "mp4box": "^2.4.1",
     "pdf-lib": "^1.17.1",
     "pdfjs-dist": "^6.4.299",
+    "tsx": "^4.23.15",
     "xlsx": "^0.18.5"
-  },
-  "devDependencies": {
-    "@napi-rs/canvas": "^1.0.10"
   }
 }

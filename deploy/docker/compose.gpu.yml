@@ -1,15 +1,27 @@
-# Sin conexión: Scholaris + InferBox en la misma máquina con GPU NVIDIA.
-#   docker compose -f deploy/docker/compose.yml -f deploy/docker/compose.gpu.yml up -d
-# InferBox añade su espacio vectorial (Qwen3-VL) a cada SPDF y sirve de lector,
-# transcriptor y reordenador de reserva cuando no hay red.
+# Scholaris + InferBox (servidor de inferencia propio) en la misma máquina con GPU NVIDIA.
+#   docker compose -f deploy/docker/compose.yml -f deploy/docker/compose.gpu.yml up -d --build
+#
+# Requisitos: NVIDIA Container Toolkit e INFERBOX_API_KEY en deploy/docker/.env
+# (Scholaris solo usa InferBox si tiene la URL y la clave).
+#
+# InferBox no sustituye a la lectura: sigue haciendo falta GEMINI_API_KEY (u
+# OPENROUTER_API_KEY con el lector de Mistral OCR). Lo que añade es un segundo
+# espacio vectorial (Qwen3-VL) en cada SPDF y un transcriptor, un reordenador y
+# un redactor de reserva.
+#
+# La imagen se construye desde el repositorio público de InferBox
+# (https://github.com/joseluissaorin/InferBox; varios GB por CUDA y PyTorch).
+# Si ya tienes una construida, indícala con INFERBOX_IMAGEN.
 services:
   inferbox:
-    image: ${INFERBOX_IMAGEN:-ghcr.io/joseluissaorin/inferbox:latest}
+    image: ${INFERBOX_IMAGEN:-inferbox:local}
+    build: https://github.com/joseluissaorin/InferBox.git#main
     restart: unless-stopped
     environment:
-      INFERBOX_API_KEY: ${INFERBOX_API_KEY:-}
+      INFERBOX_API_KEY: ${INFERBOX_API_KEY:?Falta INFERBOX_API_KEY en deploy/docker/.env}
     volumes:
-      - inferbox-modelos:/modelos
+      # Los modelos que descarga de Hugging Face (sobreviven a los reinicios).
+      - inferbox-modelos:/root/.cache/huggingface
     deploy:
       resources:
         reservations:
