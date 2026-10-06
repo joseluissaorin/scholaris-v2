@@ -41,6 +41,16 @@ El mejor episodio tiene que sacarle al segundo al menos el triple; si no, no se 
 
 Para rehacer solo la ficha de un documento ya leído, sin volver a leerlo: `POST /documentos/:id/metadatos/rehacer` (en el cliente, `documentos.rehacerMetadatos(id)`). Usa `rehacerFicha` y conserva lo que editó el usuario.
 
+## Rehacer nunca empeora
+
+`rehacerFicha` mezcla la ficha nueva con la que ya había, campo a campo (`noEmpeorar`):
+- un valor nuevo sustituye al existente solo si trae más confianza, con un margen de 0,05;
+- un campo sin procedencia (las fichas migradas de la v1) cuenta como 0,85, así que la lectura (0,8) nunca lo pisa, y un catálogo con pruebas (RTVE 0,92-0,95, Wikidata con autor 0,88 o más) sí;
+- un campo vacío nunca borra uno lleno, y lo del usuario no se toca;
+- un tipo genérico («document») sí se puede mejorar.
+
+Además, ni una clave del almacén («original», «paquete») ni un título genérico («Entrevista», «Vídeo») valen como título. La ruta ya no pasa la clave del original como nombre de archivo. Esto salió de regresiones reales en producción (Iconologia titulada «original», Cela como «Entrevista», años y autores perdidos), que están reconstruidas en `test/rehacer.test.ts`. El banco mide también «rehecho sobre antes»: 51/52, y ningún campo empeora.
+
 ## Resultados (banco, 6 de octubre de 2026)
 
 ```

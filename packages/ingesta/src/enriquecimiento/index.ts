@@ -305,7 +305,7 @@ export async function fichaDeEmision(base: Partial<MetadatosDocumento>, red: Con
   if (rt) anula.push('subtitulo');
   if (wp) hallazgos.push(wp);
   if (rt) hallazgos.push({ ...rt, anula });
-  if (Object.keys(reparto).length || anula.length) hallazgos.push({ fuente: rt ? 'rtve' : 'wikidata', confianza: 0.86, porCampo, datos: { ...reparto, ...(wp || rt ? {} : { contenedor: programa }) }, ...(anula.length ? { anula } : {}) });
+  if (Object.keys(reparto).length || anula.length) hallazgos.push({ fuente: rt ? 'rtve' : wp ? 'wikidata' : 'lectura', confianza: 0.86, porCampo, datos: { ...reparto, ...(wp || rt ? {} : { contenedor: programa }) }, ...(anula.length ? { anula } : {}) });
   return { hallazgos, avisos };
 }
 

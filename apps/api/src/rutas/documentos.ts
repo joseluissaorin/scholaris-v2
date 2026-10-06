@@ -177,7 +177,8 @@ export function rutasDocumentos(app: Hono<Entorno>): void {
     const [sub] = await p.sql.ejecutar<{ nombre: string }>('SELECT nombre FROM pl_subidas WHERE documento = ? ORDER BY creada DESC LIMIT 1', d.id).catch(() => []);
     const ia = await p.inteligencia();
     const r = await rehacerFicha(d.metadatos, {
-      tipo: d.tipo, nombreArchivo: sub?.nombre ?? d.original?.split('/').pop() ?? d.metadatos.titulo,
+      // Nunca la clave del almacén («…/original»): no es un nombre de archivo.
+      tipo: d.tipo, nombreArchivo: sub?.nombre ?? '',
       ...(d.duracion ? { duracion: d.duracion } : {}), unidades: filas.map((f) => unidadDeFila(f)),
     }, {
       redactor: ia.redactor, correo: 'jl@joseluissaorin.com', cache: cacheEnAlmacen(p.almacen),

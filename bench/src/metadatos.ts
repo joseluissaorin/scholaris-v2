@@ -17,7 +17,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Agent, setGlobalDispatcher } from 'undici';
 import type { Ancla, MetadatosDocumento } from '@scholaris/nucleo';
-import { pasoMetadatos, refinarMetadatos, type CacheConsultas, type UnidadLeida } from '@scholaris/ingesta';
+import { pasoMetadatos, refinarMetadatos, rehacerFicha, type CacheConsultas, type UnidadLeida } from '@scholaris/ingesta';
 import { crearInteligencia } from '@scholaris/proveedores';
 import { cargarEntorno } from './entorno.js';
 
@@ -174,7 +174,8 @@ async function main() {
   const informe: Record<string, unknown> = {};
   // «Antes»: la ficha congelada del paso anterior (los .sqlite se reescriben al reingerir).
   const congeladas = existsSync(join(RESULTADOS, 'antes.json')) ? (JSON.parse(readFileSync(join(RESULTADOS, 'antes.json'), 'utf8')) as Record<string, MetadatosDocumento>) : {};
-  const tabla: Array<{ etiqueta: string; campo: string; antes: boolean; despues: boolean }> = [];
+  const tabla: Array<{ etiqueta: string; campo: string; antes: boolean; despues: boolean; rehecho: boolean }> = [];
+  const empeoran: string[] = [];
 
   for (const etiqueta of casos) {
     const oro = ORO[etiqueta];
@@ -195,27 +196,33 @@ async function main() {
     // …y, con el libro entero ya leído, el refinado con créditos y colofón.
     if (!medio) r = await refinarMetadatos(r, { ...entrada, todas: unidades }, puertos, opciones);
     const ms = Date.now() - t0;
-    const pa = puntuar(antes, oro), pd = puntuar(r.metadatos, oro);
-    for (const campo of Object.keys(pd)) tabla.push({ etiqueta, campo, antes: Boolean(pa[campo]), despues: Boolean(pd[campo]) });
-    informe[etiqueta] = { ms, antes, despues: r.metadatos, puntuacion: { antes: pa, despues: pd }, procedencia: r.procedencia.filter((p) => p.proveedor === 'enriquecimiento') };
+    // «Rehacer» sobre la ficha anterior (sin procedencia, como las migradas de la v1): nunca puede empeorarla.
+    const rh = await rehacerFicha(antes, { tipo: oro.tipo, nombreArchivo: oro.archivo, ...(oro.duracion ? { duracion: oro.duracion } : {}), unidades }, puertos, opciones);
+    const pa = puntuar(antes, oro), pd = puntuar(r.metadatos, oro), pr = puntuar(rh.metadatos, oro);
+    for (const campo of Object.keys(pd)) {
+      tabla.push({ etiqueta, campo, antes: Boolean(pa[campo]), despues: Boolean(pd[campo]), rehecho: Boolean(pr[campo]) });
+      if (pa[campo] && !pr[campo]) empeoran.push(`${etiqueta}.${campo}`);
+    }
+    informe[etiqueta] = { ms, antes, despues: r.metadatos, rehecho: rh.metadatos, puntuacion: { antes: pa, despues: pd, rehecho: pr }, procedencia: r.procedencia.filter((p) => p.proveedor === 'enriquecimiento') };
     const ok = (p: Record<string, boolean>) => `${Object.values(p).filter(Boolean).length}/${Object.keys(p).length}`;
-    console.error(`[${etiqueta}] ${(ms / 1000).toFixed(1)} s  antes ${ok(pa)}  después ${ok(pd)}  ${Object.entries(pd).filter(([, v]) => !v).map(([k]) => `✗${k}`).join(' ')}`);
+    console.error(`[${etiqueta}] ${(ms / 1000).toFixed(1)} s  antes ${ok(pa)}  después ${ok(pd)}  rehecho ${ok(pr)}  ${Object.entries(pd).filter(([, v]) => !v).map(([k]) => `✗${k}`).join(' ')}`);
     cache.volcar();
   }
 
   mkdirSync(RESULTADOS, { recursive: true });
   writeFileSync(join(RESULTADOS, 'informe.json'), JSON.stringify(informe, null, 2));
   // Precisión por campo (sobre los documentos donde el campo se comprueba).
-  const porCampo = new Map<string, { n: number; antes: number; despues: number }>();
+  const porCampo = new Map<string, { n: number; antes: number; despues: number; rehecho: number }>();
   for (const f of tabla) {
-    const c = porCampo.get(f.campo) ?? { n: 0, antes: 0, despues: 0 };
-    c.n++; c.antes += Number(f.antes); c.despues += Number(f.despues);
+    const c = porCampo.get(f.campo) ?? { n: 0, antes: 0, despues: 0, rehecho: 0 };
+    c.n++; c.antes += Number(f.antes); c.despues += Number(f.despues); c.rehecho += Number(f.rehecho);
     porCampo.set(f.campo, c);
   }
-  const lineas = ['| Campo | Documentos | Antes | Después |', '|---|---|---|---|'];
-  for (const [campo, c] of porCampo) lineas.push(`| ${campo} | ${c.n} | ${c.antes}/${c.n} | ${c.despues}/${c.n} |`);
-  const total = tabla.reduce((a, f) => ({ antes: a.antes + Number(f.antes), despues: a.despues + Number(f.despues) }), { antes: 0, despues: 0 });
-  lineas.push(`| **Total** | ${tabla.length} comprobaciones | **${total.antes}/${tabla.length}** | **${total.despues}/${tabla.length}** |`);
+  const lineas = ['| Campo | Documentos | Antes | Después | Rehecho sobre «antes» |', '|---|---|---|---|---|'];
+  for (const [campo, c] of porCampo) lineas.push(`| ${campo} | ${c.n} | ${c.antes}/${c.n} | ${c.despues}/${c.n} | ${c.rehecho}/${c.n} |`);
+  const total = tabla.reduce((a, f) => ({ antes: a.antes + Number(f.antes), despues: a.despues + Number(f.despues), rehecho: a.rehecho + Number(f.rehecho) }), { antes: 0, despues: 0, rehecho: 0 });
+  lineas.push(`| **Total** | ${tabla.length} comprobaciones | **${total.antes}/${tabla.length}** | **${total.despues}/${tabla.length}** | **${total.rehecho}/${tabla.length}** |`);
+  lineas.push('', `Campos que «rehacer» empeora respecto de «antes»: ${empeoran.length ? empeoran.join(', ') : 'ninguno'}.`);
   console.log(lineas.join('\n'));
   writeFileSync(join(RESULTADOS, 'tabla.md'), `${lineas.join('\n')}\n`);
 }

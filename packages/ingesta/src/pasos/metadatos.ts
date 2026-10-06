@@ -54,6 +54,8 @@ export function esTituloBasura(t: string | undefined | null): boolean {
   if (/^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(s) || /^[0-9a-f]{16,}$/i.test(s)) return true;
   if (/^(microsoft word|untitled|sin título|document|documento|presentation|layout|copia de|scan|escaneo|img|dsc)[\s\d_-]*/i.test(s) && s.split(/\s+/).length <= 4) return true;
   if (/^microsoft word - /i.test(s)) return true;
+  // Claves del almacén y títulos genéricos: «original», «paquete», «Entrevista», «Conferencia», «Vídeo».
+  if (/^(original|paquete|archivo|fichero|file|blob|upload|subida|entrevista|interview|conferencia|charla|lecture|programa|episodio|episode|v[íi]deo|video|audio|grabaci[óo]n|recording|transcripci[óo]n|libro|book|art[íi]culo|article|texto|text|pdf)(\.\w{2,4})?$/i.test(s)) return true;
   if ((s.match(/_/g)?.length ?? 0) >= 2 && !s.includes(' ')) return true;
   if (/^[\d\s._-]+$/.test(s)) return true;
   return false;
@@ -662,15 +664,58 @@ export async function rehacerFicha(
 ): Promise<ResultadoMetadatos> {
   const medio = documento.tipo === 'audio' || documento.tipo === 'video';
   const usuario = camposDeUsuario(previa);
+  // Un nombre de clave del almacén («original», «paquete.json») no es un nombre de archivo.
+  const nombreArchivo = esTituloBasura(documento.nombreArchivo.replace(/\.[a-z0-9]{2,5}$/i, '')) ? '' : documento.nombreArchivo;
   const entrada: EntradaMetadatos = {
-    ficha: {}, nombreArchivo: documento.nombreArchivo, tipo: documento.tipo, epub: documento.tipo === 'epub',
+    ficha: {}, nombreArchivo, tipo: documento.tipo, epub: documento.tipo === 'epub',
     ...(documento.duracion ? { duracion: documento.duracion } : {}),
     unidades: medio ? documento.unidades : documento.unidades.slice(0, 5),
     ...(Object.keys(usuario).length ? { usuario } : {}),
   };
-  const r = await pasoMetadatos(entrada, puertos, opciones);
-  if (medio) return r;
-  return refinarMetadatos(r, { ...entrada, todas: documento.unidades }, puertos, opciones);
+  let r = await pasoMetadatos(entrada, puertos, opciones);
+  if (!medio) r = await refinarMetadatos(r, { ...entrada, todas: documento.unidades }, puertos, opciones);
+  return { ...r, metadatos: noEmpeorar(previa, r.metadatos) };
+}
+
+/** Confianza que se le supone a un campo existente sin procedencia (fichas de la v1, importadas o editadas fuera). */
+const CONFIANZA_PREVIA = 0.85;
+/** Lo que tiene que ganar una fuente nueva para sustituir un valor existente. */
+const MARGEN = 0.05;
+
+/**
+ * Rehacer nunca deja un campo peor de lo que estaba: un valor nuevo sustituye
+ * al existente solo si trae más confianza (más el margen); un campo vacío
+ * nunca borra uno lleno; un título basura nunca sustituye a nada; lo del
+ * usuario no se toca. Los campos que se conservan guardan su procedencia.
+ */
+export function noEmpeorar(previa: MetadatosDocumento, nueva: MetadatosDocumento): MetadatosDocumento {
+  const salida: MetadatosDocumento = { ...nueva, autores: nueva.autores ?? [] };
+  const procedencia: NonNullable<MetadatosDocumento['procedencia']> = { ...(nueva.procedencia ?? {}) };
+  const sustituidos = new Set<Campo>();
+  for (const campo of CAMPOS) {
+    const viejo = previa[campo];
+    if (vacio(viejo)) continue;
+    const pv = previa.procedencia?.[campo];
+    // Un tipo genérico («document») no es un dato: cualquier tipo concreto con pruebas lo mejora.
+    const generico = campo === 'tipoCSL' && viejo === 'document';
+    const cv = pv?.fuente === 'usuario' ? Infinity : generico ? 0.5 : pv?.confianza ?? CONFIANZA_PREVIA;
+    const nuevo = nueva[campo];
+    const pn = nueva.procedencia?.[campo];
+    const basura = campo === 'titulo' && (esTituloBasura(nuevo as string) || (pn?.confianza ?? 0) <= 0.2);
+    const gana = !vacio(nuevo) && !basura && (pn?.confianza ?? 0) >= cv + MARGEN;
+    if (gana) { if (JSON.stringify(nuevo) !== JSON.stringify(viejo)) sustituidos.add(campo); continue; }
+    (salida as unknown as Record<string, unknown>)[campo] = viejo;
+    if (pv) procedencia[campo] = pv; else delete procedencia[campo];
+  }
+  // El subtítulo va con su título: si el título cambió por uno más fiable y no trae subtítulo, el viejo sobra.
+  if (sustituidos.has('titulo') && vacio(nueva.subtitulo) && previa.procedencia?.subtitulo?.fuente !== 'usuario') { delete salida.subtitulo; delete procedencia.subtitulo; }
+  // Coherencia tras mezclar: con año, sobra la horquilla de «s. f.»; la obra no puede ser posterior a la edición.
+  if (salida.anio !== undefined && salida.sinFecha && procedencia.sinFecha?.fuente !== 'usuario') { delete salida.sinFecha; delete procedencia.sinFecha; }
+  if (salida.anioOriginal !== undefined && salida.anio !== undefined && salida.anioOriginal > salida.anio) {
+    const co = procedencia.anioOriginal?.confianza ?? CONFIANZA_PREVIA, ca = procedencia.anio?.confianza ?? CONFIANZA_PREVIA;
+    if (procedencia.anioOriginal?.fuente !== 'usuario' && (procedencia.anio?.fuente === 'usuario' || co <= ca)) { delete salida.anioOriginal; delete procedencia.anioOriginal; } else { delete salida.anio; delete procedencia.anio; }
+  }
+  return { ...salida, procedencia };
 }
 
 const procedenciaLectura = (m: MetadatosDocumento, campo: string) => m.procedencia?.[campo]?.fuente === 'lectura';
