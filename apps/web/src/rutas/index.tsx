@@ -22,6 +22,7 @@ import { copiarBibliografia, descargarBibliografia } from '../lib/referencia';
 import { bytes } from '../lib/formato';
 import { Boceto } from '../bocetos/boceto';
 import { NotaMargen } from '../bocetos/nota-margen';
+import { Cifra } from '../movimiento/cifra';
 
 const Compartir = lazy(() => import('../componentes/biblioteca/compartir'));
 
@@ -128,9 +129,9 @@ function PaginaBiblioteca() {
             />
             {/* La banda de cifras de siempre */}
             <div className="flex flex-wrap items-baseline gap-x-5 gap-y-1 pt-1 text-[0.8125rem] text-coffee-400">
-              <span><strong className="tnum text-[0.9375rem] font-semibold text-coffee-800">{numero(todos.length)}</strong> documentos</span>
-              <span><strong className="tnum text-[0.9375rem] font-semibold text-coffee-800">{numero(bibliotecas.length)}</strong> colecciones</span>
-              <span><strong className="tnum text-[0.9375rem] font-semibold text-coffee-800">{numero(paginas)}</strong> páginas</span>
+              <span><strong className="text-[0.9375rem] font-semibold text-coffee-800"><Cifra valor={todos.length} formato={(n) => numero(n)} /></strong> documentos</span>
+              <span><strong className="text-[0.9375rem] font-semibold text-coffee-800"><Cifra valor={bibliotecas.length} formato={(n) => numero(n)} /></strong> colecciones</span>
+              <span><strong className="text-[0.9375rem] font-semibold text-coffee-800"><Cifra valor={paginas} formato={(n) => numero(n)} /></strong> páginas</span>
               {horas >= 0.1 ? <span><strong className="tnum text-[0.9375rem] font-semibold text-coffee-800">{numero(horas, { maximumFractionDigits: 1 })}</strong> {numero(horas, { maximumFractionDigits: 1 }) === "1" ? "hora" : "horas"} de audio y vídeo</span> : null}
               <span className="ml-auto text-coffee-400">{bytes(ocupado)}</span>
             </div>

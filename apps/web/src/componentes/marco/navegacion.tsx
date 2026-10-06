@@ -221,7 +221,7 @@ export function BarraMovil() {
       {abierta ? (
         <>
           <div className="fixed inset-0 z-40 bg-[rgb(26_15_10/0.6)] backdrop-blur-sm lg:hidden anim-aparece" onClick={() => setAbierta(false)} />
-          <aside className="fixed inset-y-0 left-0 z-50 flex w-72 flex-col bg-barra shadow-[var(--shadow-lifted)] lg:hidden anim-entra">
+          <aside className="fixed inset-y-0 left-0 z-50 flex w-72 flex-col bg-barra shadow-[var(--shadow-lifted)] lg:hidden anim-cajon">
             <ContenidoBarra alNavegar={() => setAbierta(false)} />
           </aside>
         </>
@@ -235,7 +235,7 @@ export function PieMovil() {
   return (
     <div className="fixed bottom-[calc(1.25rem+env(safe-area-inset-bottom))] right-5 z-30 lg:hidden">
       <MenuAnadir alinear="end" lado="top">
-        <button type="button" aria-label="Añadir a la biblioteca" className="grid h-14 w-14 place-items-center rounded-full border border-[#9a3128] bg-[linear-gradient(180deg,#cc5246_0%,#b83e33_100%)] text-[#fdf8f1] shadow-[inset_0_1px_0_rgb(255_255_255/0.25),0_6px_18px_rgb(120_30_20/0.35),0_2px_4px_rgb(44_24_16/0.2)] active:translate-y-px active:shadow-[inset_0_2px_6px_rgb(0_0_0/0.3)]">
+        <button type="button" aria-label="Añadir a la biblioteca" className="tactil anim-sello grid h-14 w-14 place-items-center rounded-full active:scale-[0.92] border border-[#9a3128] bg-[linear-gradient(180deg,#cc5246_0%,#b83e33_100%)] text-[#fdf8f1] shadow-[inset_0_1px_0_rgb(255_255_255/0.25),0_6px_18px_rgb(120_30_20/0.35),0_2px_4px_rgb(44_24_16/0.2)] active:translate-y-px active:shadow-[inset_0_2px_6px_rgb(0_0_0/0.3)]">
           <Icono nombre="mas" tam={24} grosor={2.2} />
         </button>
       </MenuAnadir>

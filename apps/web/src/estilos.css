@@ -235,3 +235,13 @@ html[data-transicion] .backdrop-blur, html[data-transicion] .backdrop-blur-sm { 
   .arrastrable { cursor: grab; touch-action: none; transition: scale var(--dur-levantar) var(--muelle-soltar); }
   .arrastrable[data-arrastrando] { cursor: grabbing; scale: 1.03; }
 }
+
+/* El cajón del móvil: la barra café entra desde el borde con muelle. */
+@keyframes s-cajon { from { transform: translateX(-100%); } to { transform: none; } }
+.anim-cajon { animation: s-cajon var(--dur-levantar) var(--muelle-levantar) both; }
+
+/* Reproductor (sin tocar sus componentes): los mandos se hunden al pulsar y suben con muelle; las escenas se levantan al pasar. */
+.controles button { transition: translate var(--dur-soltar) var(--muelle-soltar), scale var(--dur-soltar) var(--muelle-soltar), background-color var(--dur-breve) ease-out; }
+.controles button:active { scale: 0.92; transition-duration: var(--dur-instante); }
+.escena { transition: translate var(--dur-levantar) var(--muelle-levantar), box-shadow var(--dur-breve) ease-out; }
+@media (hover: hover) { .escena:hover { translate: 0 -2px; } }
