@@ -1,3 +1,4 @@
+/// <reference path="./citeproc.d.ts" />
 /**
  * Motor CSL sobre citeproc-js con los estilos y configuraciones regionales
  * oficiales vendorizados (src/csl/vendor, generados con scripts/vendorizar-csl.mjs).
