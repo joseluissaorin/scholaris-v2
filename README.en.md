@@ -19,10 +19,47 @@ In the margins of old books a small hand with a pointing finger turns up again a
 Scholaris wants to be that hand. It reads your books, your papers, your notes and your interviews, and when you ask it something it doesn't hand you an opinion. It points to the passage, the book and the printed page (the real one, the one you would put in a footnote) or the exact minute of the recording in which someone said it. If it can't find it, it says so. **It never invents a citation**: each one is checked against the text you gave it before you see it, and every piece of data shows where it came from. The thinking, the judging and the writing stay yours.
 
 <p align="center">
-  <img src=".github/assets/biblioteca.jpg" alt="The library" width="49%">
-  <img src=".github/assets/lector.jpg" alt="The reader, page and text side by side" width="49%">
-  <img src=".github/assets/preguntar.jpg" alt="A question with its sources and pages" width="49%">
-  <img src=".github/assets/explorar.jpg" alt="The concept map of the library" width="49%">
+  <img src=".github/assets/biblioteca.webp" alt="The library with Bécquer's Rimas going through the press, page by page" width="100%">
+  <br><sub>The library, with a book on the press: its pages can be read and searched as soon as they appear.</sub>
+</p>
+
+<p align="center">
+  <img src=".github/assets/lector.webp" alt="The reader with a scanned page of Lope de Vega's El casamiento en la muerte and its text alongside, cited by the printed folio (p. 4, physical page 10)" width="44%">
+  <img src=".github/assets/video.webp" alt="A video interview: who speaks and how much, the transcript with each turn at its minute, and frames of what is on screen" width="54%">
+  <br><sub>The real printed page (p. 4, even if it is the tenth of the scan) · in video, who speaks, at which minute, and what is on screen.</sub>
+</p>
+
+<p align="center">
+  <img src=".github/assets/buscar.webp" alt="A two-stage search: on the left, the preliminary result while the ranking is refined; on the right, the final ranking with each passage and its page" width="100%">
+  <br><sub>Search: a first result right away and, a moment later, the final ranking.</sub>
+</p>
+
+<p align="center">
+  <img src=".github/assets/preguntar.webp" alt="A question about Lope de Vega answered with numbered citations, each with its page, and the sources alongside" width="49%">
+  <img src=".github/assets/referencia.webp" alt="Copy reference: the document's reference in APA 7, ready to paste" width="49%">
+  <br><sub>Ask, with every citation checked and its page · the reference in your style, one click away.</sub>
+</p>
+
+<p align="center">
+  <img src=".github/assets/personas-y-obras.webp" alt="Explore, People and works: Charlemagne and the graph of characters and places he appears with across two books" width="49%">
+  <img src=".github/assets/inspector.webp" alt="The whole SPDF: a document's inspector, with each metadata field, its source and its confidence" width="49%">
+  <br><sub>People and works across the whole library · "The whole SPDF", everything Scholaris kept from each document and where it came from.</sub>
+</p>
+
+<p align="center">
+  <img src=".github/assets/biblioteca-oscuro.webp" alt="The library in dark mode" width="49%">
+  <img src=".github/assets/lector-oscuro.webp" alt="The reader in dark mode" width="49%">
+  <br><sub>Dark mode too.</sub>
+</p>
+
+<p align="center">
+  <img src=".github/assets/acerca.webp" alt="Scholaris's public landing page: “A hand that points to the page and then steps aside”" width="76%">
+  <img src=".github/assets/movil.webp" alt="The library on a phone" width="22%">
+  <br><sub>The landing page, and the library on a phone.</sub>
+</p>
+
+<p align="center">
+  <img src=".github/assets/imprenta.gif" alt="The press at work: upload, convert, read the pages, sort the index, ready to search and cite" width="588">
 </p>
 
 The interface is in Spanish and English; the screenshots show the Spanish demo library.

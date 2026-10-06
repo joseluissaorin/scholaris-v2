@@ -19,10 +19,47 @@ En los márgenes de los libros antiguos aparece una y otra vez una manita con el
 Scholaris quiere ser esa mano. Lee tus libros, tus artículos, tus apuntes y tus entrevistas, y cuando le preguntas algo no te devuelve una opinión: te señala el pasaje, el libro y la página impresa (la de verdad, la que pondrías en una nota al pie) o el minuto exacto de la grabación en que alguien lo dijo. Si no lo encuentra, lo dice. **No inventa citas**: cada una se comprueba contra el texto que tú le diste antes de enseñártela, y cada dato lleva su procedencia a la vista. Pensar, juzgar y escribir siguen siendo cosa tuya.
 
 <p align="center">
-  <img src=".github/assets/biblioteca.jpg" alt="La biblioteca" width="49%">
-  <img src=".github/assets/lector.jpg" alt="El lector, con la página y el texto" width="49%">
-  <img src=".github/assets/preguntar.jpg" alt="Una pregunta con sus fuentes y sus páginas" width="49%">
-  <img src=".github/assets/explorar.jpg" alt="El mapa de conceptos de la biblioteca" width="49%">
+  <img src=".github/assets/biblioteca.webp" alt="La biblioteca con las Rimas de Bécquer en la imprenta, leyéndose página a página" width="100%">
+  <br><sub>La biblioteca, con un libro en la imprenta: sus páginas se pueden leer y buscar en cuanto aparecen.</sub>
+</p>
+
+<p align="center">
+  <img src=".github/assets/lector.webp" alt="El lector con una página escaneada de El casamiento en la muerte, de Lope de Vega, y su texto al lado, citado por el folio impreso (p. 4, página física 10)" width="44%">
+  <img src=".github/assets/video.webp" alt="Una entrevista en vídeo: quién habla y en qué proporción, la transcripción con cada intervención en su minuto y los fotogramas de lo que se ve" width="54%">
+  <br><sub>La página impresa de verdad (p. 4, aunque sea la décima del escaneo) · en vídeo, quién habla, en qué minuto y lo que se ve.</sub>
+</p>
+
+<p align="center">
+  <img src=".github/assets/buscar.webp" alt="Una búsqueda en dos tiempos: a la izquierda, el resultado preliminar mientras se afina el orden; a la derecha, el orden definitivo con cada pasaje y su página" width="100%">
+  <br><sub>Buscar: un primer resultado al instante y, un momento después, el orden definitivo.</sub>
+</p>
+
+<p align="center">
+  <img src=".github/assets/preguntar.webp" alt="Una pregunta sobre Lope de Vega respondida con citas numeradas, cada una con su página, y las fuentes al lado" width="49%">
+  <img src=".github/assets/referencia.webp" alt="Copiar referencia: la ficha del documento en APA 7, lista para pegar" width="49%">
+  <br><sub>Preguntar, con cada cita comprobada y su página · la referencia en tu estilo, a un clic.</sub>
+</p>
+
+<p align="center">
+  <img src=".github/assets/personas-y-obras.webp" alt="Explorar, Personas y obras: Carlomagno y el grafo de personajes y lugares con los que aparece en dos libros" width="49%">
+  <img src=".github/assets/inspector.webp" alt="Todo el SPDF: el inspector de un documento, con la ficha campo por campo, su fuente y su confianza" width="49%">
+  <br><sub>Personas y obras de toda la biblioteca · «Todo el SPDF», lo que Scholaris guardó de cada documento y de dónde salió.</sub>
+</p>
+
+<p align="center">
+  <img src=".github/assets/biblioteca-oscuro.webp" alt="La biblioteca en modo oscuro" width="49%">
+  <img src=".github/assets/lector-oscuro.webp" alt="El lector en modo oscuro" width="49%">
+  <br><sub>También en modo oscuro.</sub>
+</p>
+
+<p align="center">
+  <img src=".github/assets/acerca.webp" alt="La portada pública de Scholaris: «Una mano que señala la página y luego se aparta»" width="76%">
+  <img src=".github/assets/movil.webp" alt="La biblioteca en un teléfono" width="22%">
+  <br><sub>La portada y la biblioteca en el móvil.</sub>
+</p>
+
+<p align="center">
+  <img src=".github/assets/imprenta.gif" alt="La imprenta en marcha: subir, convertir, leer las páginas, ordenar el índice y listo para buscar y citar" width="588">
 </p>
 
 ## Qué hace
