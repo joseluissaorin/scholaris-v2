@@ -47,7 +47,11 @@ export function planificar(paquete: PaqueteConversion, opciones: OpcionesPlan = 
 
   if (c.clase !== 'pdf') {
     const n = c.clase === 'presentacion' ? c.diapositivas.length : c.clase === 'hoja' ? c.hojas.length : c.bloques.length;
-    return { ...base, modo: 'bloques', unidades: n };
+    // Diapositivas con imagen (la pone el conversor del servidor): vía visual como las páginas.
+    const paginasImagen = c.clase === 'presentacion' && opciones.vectorPorPagina !== false
+      ? c.diapositivas.filter((d) => d.imagen).map((d, i) => ({ fisica: i + 1, parte: d.imagen as string }))
+      : [];
+    return { ...base, modo: 'bloques', unidades: n, paginasImagen };
   }
 
   const paginas = c.paginas;

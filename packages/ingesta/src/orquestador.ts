@@ -318,11 +318,14 @@ export async function ejecutarIngesta(paquete: PaqueteConversion, puertos: Puert
   const tIdx = reloj();
   const paginasPdf = paquete.contenido.clase === 'pdf' ? new Map(paquete.contenido.paginas.map((p) => [p.fisica, p])) : null;
   const paginasImg = paquete.contenido.clase === 'imagenes' ? new Map(paquete.contenido.paginas.map((p) => [p.fisica, p])) : null;
+  const diapositivas = paquete.contenido.clase === 'presentacion' ? paquete.contenido.diapositivas : null;
+  const miniaturas = new Map(paquete.partes.filter((p) => p.clase === 'miniatura' && p.unidad !== undefined).map((p) => [p.unidad as number, p.id]));
   const unidadesFinales = unidades.map((u) => {
-    const pdf = paginasPdf?.get(u.fisica), img = paginasImg?.get(u.fisica);
-    const imagen = pdf?.imagen ?? img?.imagen;
-    const miniatura = pdf?.miniatura ?? img?.miniatura;
-    return { ...u, id: plan.modo === 'paginas' ? idUnidad(u.fisica) : nuevoId('un'), ...(imagen ? { imagen } : {}), ...(miniatura ? { miniatura } : {}) };
+    const pdf = paginasPdf?.get(u.fisica), img = paginasImg?.get(u.fisica), diapo = diapositivas?.[u.orden];
+    const imagen = pdf?.imagen ?? img?.imagen ?? diapo?.imagen;
+    const miniatura = pdf?.miniatura ?? img?.miniatura ?? (diapo ? miniaturas.get(diapo.n) : undefined);
+    const conVista = plan.modo === 'paginas' || Boolean(diapo?.imagen);
+    return { ...u, id: conVista ? idUnidad(u.fisica) : nuevoId('un'), ...(imagen ? { imagen } : {}), ...(miniatura ? { miniatura } : {}) };
   });
   const tiempoTotal = reloj() - inicio;
   procedencia.push({ fase: 'indexado', proveedor: 'ingesta', ms: tiempoTotal, detalle: { tiempos, vectores: cuentaVectores } });

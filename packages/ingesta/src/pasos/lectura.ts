@@ -129,7 +129,7 @@ export async function leerPliego(
       const entrada = await entradaPara(desde, hasta, pliego.envio);
       paginas = await reintentar(
         () => {
-          const llamada = () => conLimite(lector.leerPliego({ ...entrada, ...(opciones.pista ? { pista: opciones.pista } : {}) }), opciones.limiteMs ?? 240_000, lector.nombre);
+          const llamada = () => conLimite(lector.leerPliego({ ...entrada, ...(opciones.pista ? { pista: opciones.pista } : {}) }), opciones.limiteMs ?? Math.max(60_000, (hasta - desde + 1) * 20_000), lector.nombre);
           return opciones.cobertura && nivel === 0 ? opciones.cobertura.llamar(llamada) : llamada();
         },
         { intentos: 2, base: 1500 },
@@ -217,7 +217,7 @@ export async function leerPaginas(
       procedencia.push({ fase: 'lectura', proveedor: 'capa-pdf', ms: reloj() - t0, detalle: { paginas: capa.length } });
     }
   }
-  const cobertura = opciones.cobertura ?? new Cobertura(12_000, 2.2, reloj);
+  const cobertura = opciones.cobertura ?? new Cobertura(15_000, 2.2, reloj);
   const resultados = await enParalelo(plan.pliegos, plan.concurrencia, async (pl) => {
     const r = await leerPliego(pl, paquete, fuente, lectores, { ...opciones, cobertura });
     opciones.alLeer?.(r.paginas);

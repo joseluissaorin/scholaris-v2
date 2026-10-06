@@ -86,9 +86,10 @@ export async function ingerir(ruta: string, o: OpcionesBanco = {}) {
   // calidad alta. Digitales y capas de OCR que se releen: Flash-Lite, igual de bueno y 3 veces más rápido.
   const calidadLector = o.lector ?? (paquete.tipo === 'pdf_escaneado' || paquete.tipo === 'fotos' || paquete.tipo === 'imagen' ? 'alta' : 'rapida');
   const pasos: Record<string, number> = {};
+  const muestras: string[] = [];
   const ia = crearInteligencia(cargarEntorno(), {
     onUso: (u) => usos.push(u), concurrencia: 48, calidadLector,
-    alPasarLector: (i) => { const k = `${i.lector.split(':').pop()} → ${i.motivo.slice(0, 80)}`; pasos[k] = (pasos[k] ?? 0) + i.paginas.length; },
+    alPasarLector: (i) => { const k = `${i.lector.split(':').pop()} → ${i.motivo.slice(0, 80)}`; pasos[k] = (pasos[k] ?? 0) + i.paginas.length; if (muestras.length < 5 && /red/.test(i.motivo)) muestras.push(i.motivo.slice(0, 400)); },
   });
   const archivo = await crearSpdf({ generador: 'scholaris-nube/bench' });
   const fuente = fuenteEnMemoria(enMemoria, original);
@@ -151,11 +152,14 @@ export async function ingerir(ruta: string, o: OpcionesBanco = {}) {
     vectores: r.vectores,
     avisos: r.avisos.slice(0, 50),
     cascada: pasos,
+    erroresRed: muestras,
     folios: r.unidades.reduce<Record<string, number>>((m, u) => { const a = u.ancla; const k = a?.tipo === 'pagina' ? a.origen : a?.tipo ?? 'sin'; m[k] = (m[k] ?? 0) + 1; return m; }, {}),
     bytesSpdf: bytes.length,
     primeraUnidadMs: progreso.find((p) => (p.unidadesListas ?? 0) > 0)?.transcurrido ?? null,
   };
   await writeFile(join(SALIDA, `${etiqueta}.informe.json`), JSON.stringify(informe, null, 2));
+  await mkdir(join(SALIDA, 'historial'), { recursive: true });
+  await writeFile(join(SALIDA, 'historial', `${etiqueta}.${new Date().toISOString().replace(/[:.]/g, '-')}.json`), JSON.stringify({ ...informe, procedencia: r.procedencia.filter((p) => p.ms > 5000 || p.fase !== 'lectura') }, null, 2));
   archivo.cerrar();
   console.error(`[${etiqueta}] LISTO en ${((msImprenta + msIngesta) / 1000).toFixed(1)} s (ingesta ${(msIngesta / 1000).toFixed(1)} s), ${total.llamadas} llamadas, ${total.usd.toFixed(4)} $ → ${rutaSpdf}`);
   void gzipSync;

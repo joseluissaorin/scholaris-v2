@@ -76,3 +76,21 @@ describe('limpieza de la capa', () => {
     expect(u.texto).toBe('—¿Cuándo empiezas, Johnny?\n\n—No, pasado mañana —dijo ella.');
   });
 });
+
+describe('presentaciones', () => {
+  it('las diapositivas con imagen se vectorizan y la unidad lleva su imagen', async () => {
+    const { ejecutarIngesta } = await import('../src/orquestador.js');
+    const { inteligenciaFalsa, fuenteFalsa, SqlFalso } = await import('./fakes.js');
+    const paquete = paquetePdf([], {
+      tipo: 'presentacion',
+      contenido: { clase: 'presentacion', diapositivas: [{ n: 1, titulo: 'Uno', texto: 'Texto de la primera diapositiva con bastante contenido.', notas: '', imagen: 'diapositivas/0001.jpg' }, { n: 2, titulo: 'Dos', texto: 'Segunda.', notas: '' }] },
+      partes: [{ id: 'miniaturas/0001.jpg', clase: 'miniatura', mime: 'image/jpeg', bytes: 1, unidad: 1 }],
+    });
+    const sql = new SqlFalso();
+    const r = await ejecutarIngesta(paquete, { inteligencia: inteligenciaFalsa(), fuente: fuenteFalsa, sql }, { sinVerificacion: true });
+    expect(r.unidades[0]?.imagen).toBe('diapositivas/0001.jpg');
+    expect(r.unidades[0]?.miniatura).toBe('miniaturas/0001.jpg');
+    const vistas = sql.filas.vectores?.filter((v) => v[0] === 'unidad') ?? [];
+    expect(vistas.map((v) => v[1])).toEqual([r.unidades[0]?.id]);
+  });
+});
