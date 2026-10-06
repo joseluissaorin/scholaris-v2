@@ -1,3 +1,4 @@
+/// <reference path="../modulos.d.ts" />
 /**
  * La imprenta en Node: pdf.js (build legacy) + @napi-rs/canvas, ffmpeg para el
  * audio y los fotogramas, y worker_threads para rasterizar en paralelo.

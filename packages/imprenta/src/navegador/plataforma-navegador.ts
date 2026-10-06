@@ -1,3 +1,4 @@
+/// <reference path="../modulos.d.ts" />
 /**
  * La imprenta en el navegador: corre dentro de un Web Worker dedicado.
  * OffscreenCanvas para rasterizar y codificar JPEG, WebCodecs para el audio y
