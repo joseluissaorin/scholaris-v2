@@ -122,3 +122,14 @@ export async function pasoContexto(
     procedencia: { fase: 'contexto', proveedor: redactor.nombre, ms: reloj() - t, detalle: { grupos: grupos.length, fallidos, cubiertas: cobertura.cubiertas, cubiertos: Object.keys(contextos).length, fragmentos: fragmentos.length } },
   };
 }
+
+/**
+ * Línea de contexto sin modelo, para los fragmentos que el Redactor no quiso o
+ * no pudo situar (filtros de seguridad con textos literarios sobre drogas o
+ * violencia, reservas que tardan demasiado): la ficha, la sección y el lugar.
+ */
+export function contextoExtractivo(f: FragmentoPlano, m: MetadatosDocumento): string {
+  const lugar = describirAncla(f);
+  const autores = m.autores.map(nombreCompleto).join(', ');
+  return [`«${m.titulo}»`, autores, m.anio ? String(m.anio) : '', f.seccion.length ? f.seccion.join(' › ') : '', lugar].filter(Boolean).join(', ') + '.';
+}

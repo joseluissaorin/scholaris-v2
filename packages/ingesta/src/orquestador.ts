@@ -11,6 +11,8 @@
  *
  * Señales para la interfaz: `unidadesListas` (legibles) y `unidadesBuscables`
  * (ya en el índice léxico) en cada `Progreso`, y `alUnidades(desde, hasta, buscables)`.
+ * En audio y vídeo, el orden de una unidad provisional es su segundo de inicio; al
+ * consolidar se sustituyen por las definitivas (orden 0…n) y se avisa de todas.
  */
 
 import { enParalelo, nuevoId, type Documento, type FaseIngesta, type MetadatosDocumento, type Progreso } from '@scholaris/nucleo';
@@ -146,7 +148,7 @@ export async function ejecutarIngesta(paquete: PaqueteConversion, puertos: Puert
     hito('primeraLegible');
     for (const u of lectura.unidades) if (u.fisica <= nPrimeras) primeras.set(u.fisica, u);
     if (plan.modo !== 'paginas' || primeras.size >= nPrimeras) resolver(plan.modo === 'paginas' ? [...primeras.values()].sort((a, b) => a.fisica - b.fisica) : lectura.unidades.slice(0, nPrimeras));
-    if (lectura.unidades.length && plan.modo === 'paginas') {
+    if (lectura.unidades.length) {
       const ordenes = lectura.unidades.map((u) => u.orden);
       opciones.alUnidades?.(Math.min(...ordenes), Math.max(...ordenes), false);
     }
@@ -159,7 +161,7 @@ export async function ejecutarIngesta(paquete: PaqueteConversion, puertos: Puert
         marcarBuscable();
         buscables += r.buscables;
         hito('primeraBuscable');
-        if (r.legibles && plan.modo === 'paginas') opciones.alUnidades?.(r.legibles[0], r.legibles[1], true);
+        if (r.legibles) opciones.alUnidades?.(r.legibles[0], r.legibles[1], true);
         emitir('indexado', buscables / Math.max(1, plan.unidades));
       },
     }).then((r) => { vectorizadas += r.vectores; return r; });

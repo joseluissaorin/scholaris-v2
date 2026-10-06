@@ -38,7 +38,7 @@ import { etiquetasInformativas, interpretarFolio, pasoFolios } from './pasos/fol
 import { anclarIndice, construirSecciones, pasoEstructura, quitarTitulillos, type EntradaIndice } from './pasos/estructura.js';
 import { trocear, fragmentosDeMedio, type OpcionesTroceado } from './pasos/fragmentos.js';
 import { pasoMetadatos, refinarConLibroEntero } from './pasos/metadatos.js';
-import { pasoContexto } from './pasos/contexto.js';
+import { contextoExtractivo, pasoContexto } from './pasos/contexto.js';
 import { pasoFiguras, type FiguraConAncla } from './pasos/figuras.js';
 import { textoVectorizable, vectorizar, type PiezaVector } from './pasos/vectores.js';
 import { atribuirHablantes } from './pasos/hablantes.js';
@@ -214,7 +214,8 @@ export async function leerTanda(t: Tanda, ctx: ContextoTuberia, o: OpcionesLectu
     if (!tramo) throw new Error(`No existe el tramo ${t.tramo}`);
     const r = await transcribirTramo(tramo, puertos.fuente, ia.transcriptor, { reloj, ...(ctx.opciones.pista ? { pista: ctx.opciones.pista } : {}), ...(o.cobertura ? { cobertura: o.cobertura } : {}) });
     // Unidades provisionales del tramo (se rehacen al consolidar, con los hablantes con nombre).
-    const unidades = segmentarTranscripcion(r.palabras, ctx.opciones.tramosMedio).map((u, i) => ({ ...u, orden: tramo.n * 100_000 + i, fisica: tramo.n * 100_000 + i + 1 }));
+    // Orden provisional = segundo de inicio: crece de un tramo a otro y no choca (cada unidad dura 30-60 s).
+    const unidades = segmentarTranscripcion(r.palabras, ctx.opciones.tramosMedio).map((u) => ({ ...u, orden: Math.floor(u.t0 ?? 0), fisica: Math.floor(u.t0 ?? 0) + 1 }));
     return { unidades, palabras: [...(r.solape ?? []).map((w) => ({ ...w, solape: true })), ...r.palabras] as PalabraTranscrita[], ...(r.idioma ? { idioma: r.idioma } : {}), procedencia: [r.procedencia], avisos: [] };
   }
   // Bloques: el texto ya está en el paquete.
@@ -577,9 +578,14 @@ export async function consolidar(
   // Contexto solo de lo nuevo.
   tm = reloj();
   if (!ctx.opciones.sinContexto && pendientesContexto.length) {
-    const r = await pasoContexto(pendientesContexto, meta, ia.redactor, { concurrencia: plan.concurrencia, reloj });
-    for (const f of pendientesContexto) f.contexto = r.contextos[f.id] ?? '';
-    procedencia.push(r.procedencia);
+    const r = await pasoContexto(pendientesContexto, meta, ia.redactor, { concurrencia: plan.concurrencia, reloj, limiteMs: 20_000 });
+    let extractivos = 0;
+    for (const f of pendientesContexto) {
+      f.contexto = r.contextos[f.id] ?? '';
+      // Lo que el modelo no sitúa (filtro de seguridad, reserva lenta) se sitúa con la ficha.
+      if (!f.contexto) { f.contexto = contextoExtractivo(f, meta); extractivos++; }
+    }
+    procedencia.push({ ...r.procedencia, detalle: { ...r.procedencia.detalle, extractivos } });
   }
   marca('contexto', tm);
 
