@@ -119,6 +119,8 @@ petición al servidor solo sale si nadie deshace.
 - TanStack Query con `staleTime` de 30 s, `keepPreviousData` en búsquedas y
   listados, actualizaciones optimistas (metadatos, colecciones, decisiones de
   autocita, vigilantes, historial, notas) y reversión si el servidor falla.
+- La API numera las unidades desde 0 y la web desde 1 (la página física 1 es la
+  unidad 1): la traducción se hace en un único sitio, `src/datos/consultas.ts`.
 - Las opciones de cada consulta viven en `src/datos/consultas.ts`; los
   `loader` de las rutas las precargan y el enrutador precarga al pasar el
   ratón o enfocar un enlace (`defaultPreload: 'intent'`).
@@ -147,6 +149,38 @@ petición al servidor solo sale si nadie deshace.
 La mesa de entrada se conoce antes del primer pintado (el `loader` de la
 Biblioteca espera a `recuperarTareas()`), así nada empuja la rejilla después.
 
+**Vista previa local** (`src/datos/previa.ts`). Las páginas que imprime el
+navegador (imagen y capa de texto) se guardan en memoria ligadas al documento, y
+el lector las enseña mientras el servidor todavía lee, marcadas «Vista previa».
+Después las sustituyen las unidades provisionales del servidor (evento
+`unidades`) y, al final, las definitivas.
+
+Otras decisiones de la ingesta:
+
+- La huella SHA-256 se calcula antes de subir: un fichero repetido no se vuelve a
+  subir ni a leer («Ya estaba en tu biblioteca»).
+- Con paquete, `ingestar` se llama en cuanto termina la imprenta; el original
+  sigue subiendo en paralelo.
+- «Buscar ya» aparece en la tarjeta en cuanto hay unidades buscables y abre
+  Buscar filtrado a ese documento (`/buscar?doc=`).
+- Modo de lectura rápido o económico, en el menú «Añadir» y en Ajustes.
+
+**Tiempos percibidos medidos** (tres hitos que la web anota en
+`window.__hitos` y en `performance.mark`: se ve la página 1, se lee su texto,
+se puede buscar):
+
+| Entrada | Dónde | Se ve | Se lee | Se busca |
+|---|---|---|---|---|
+| PDF digital, 15 pp | local | 0,5 s | 0,5 s | 24,6 s |
+| PDF digital, 37 pp | Cloudflare | 2,1 s | 2,1 s | 36,6 s |
+| Escaneado, 43 pp | local | 0,7 s | 6,6 s | 47,5 s |
+| Escaneado, 43 pp | Cloudflare | 1,8 s | 39,6 s | 5 min 11 s |
+| MP3, 1 min | local | — | — | 5,8 s |
+| Vídeo, 54 min (74 MB) | local | — | — | 51 s |
+
+Antes de esta tanda, «se lee» era igual a «se busca» (había que esperar a toda
+la ingesta). Los tiempos de la nube dependen del servidor.
+
 ## 7. El lector
 
 - Página e imagen en la **misma fila virtualizada**: el desplazamiento va
@@ -173,7 +207,7 @@ Medido con `vite build` y Lighthouse (build de producción con la demostración)
 
 | Medida | Valor |
 |---|---|
-| JS inicial del marco (gzip) | **127 KB** (presupuesto: 150) |
+| JS inicial del marco (gzip) | **130 KB** (presupuesto: 150) |
 | CSS (gzip) | 11 KB |
 | Rutas | un trozo por ruta (2-12 KB gzip cada una) |
 | Clerk | solo si la instancia lo pide, en su trozo (18 KB + clerk-js) |
@@ -193,14 +227,29 @@ paleta como `combobox` con `aria-activedescendant`, chips con `aria-pressed`,
 avisos en región `aria-live`, controles táctiles de 44 px en el móvil y
 atajos que no interfieren con los campos de texto.
 
-## 9. Sesión
+## 9. Texto y números
+
+- Los pasajes se enseñan limpios (`lib/texto.ts`): sin marcas de Markdown, con el
+  LaTeX de los artículos convertido en algo legible y con puntos suspensivos de
+  imprenta. El resaltado de la API se escapa y solo pasan las `<mark>`.
+- El verso y el teatro conservan sus saltos de línea. En las transcripciones, los
+  turnos «**Nombre:**» se convierten en cambios de hablante.
+- Los números siguen a la RAE (`lib/numero.ts`): coma decimal y, desde cinco
+  cifras, millares con espacio fino que no se parte (10 000; 1284 sin separar).
+- Las citas de las respuestas aceptan `[n]` y `[^n]`. Las viñetas pasan a raya de
+  enumeración.
+- La ficha muestra el año de la obra frente al de la edición, el título original,
+  la traducción, el contenedor («A fondo (RTVE)»), la edición, la colección y
+  «s. f. (h. 1650-1670, según el impresor)», cada campo con su fuente.
+
+## 10. Sesión
 
 `/config` decide: con clave publicable de Clerk y `requiereAutenticacion`, la
 web carga Clerk (vestido con los tokens, en español) y pasa `getToken` al
 cliente; sin ella (versión local) es un solo usuario sin cuenta. En la nube,
 Ajustes muestra la `PricingTable` de Clerk Billing.
 
-## 10. Cómo trabajar
+## 11. Cómo trabajar
 
 ```
 pnpm --filter @scholaris/web dev            # http://localhost:5180 (proxy /api → :8787)
