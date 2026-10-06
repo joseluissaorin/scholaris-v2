@@ -9,7 +9,7 @@
 import type { SQL } from '@scholaris/nucleo';
 import type { TipoEntidad } from '@scholaris/contrato';
 import { ahora, deJSON, normalizarClave, num } from '../util.js';
-import { palabrasSignificativas } from './normalizar.js';
+import { claveEntidad, palabrasSignificativas } from './normalizar.js';
 
 export const AGENTE_WIKIDATA = 'Scholaris/2.0 (https://scholaris.app; jl@joseluissaorin.com)';
 const API = 'https://www.wikidata.org/w/api.php';
@@ -24,7 +24,7 @@ export interface CandidatoWikidata {
 
 /** Descripciones que delatan otro tipo de cosa. */
 const NO_ES: Partial<Record<TipoEntidad, RegExp>> = {
-  persona: /\b(apellido|nombre de pila|nombre propio|family name|surname|given name|male given|female given|película|film|álbum|album|canción|song|novela|novel|libro|book|ciudad|city|municipio|town|pueblo|village|país|country|río|river|banda|band|empresa|company|asteroide|asteroid|cráter|crater|género|genus|especie|species|barco|ship)\b/i,
+  persona: /\b(obra|edición|edition|written work|work by|escuela|school|biblioteca|library|museo|museum|calle|street|avenida|premio|award|fundación|foundation|apellido|nombre de pila|nombre propio|family name|surname|given name|male given|female given|película|film|álbum|album|canción|song|novela|novel|libro|book|ciudad|city|municipio|town|pueblo|village|país|country|río|river|banda|band|empresa|company|asteroide|asteroid|cráter|crater|género|genus|especie|species|barco|ship)\b/i,
   obra: /\b(apellido|family name|surname|given name|nombre de pila|ciudad|city|municipio|town|village|asteroide|asteroid|género|genus|especie|species)\b/i,
   lugar: /\b(apellido|family name|surname|given name|nombre de pila|película|film|álbum|album|canción|song|novela|novel|banda|band)\b/i,
   organizacion: /\b(apellido|family name|surname|given name|nombre de pila|canción|song|asteroide|asteroid)\b/i,
@@ -66,7 +66,9 @@ const contiene = (d: string, palabra: string) => palabra.length >= 3 && new RegE
  */
 export function elegirCandidato(nombre: string, tipo: TipoEntidad, cs: readonly CandidatoWikidata[], ficticia: boolean | null = false, pistas?: PistasEntidad): CandidatoWikidata | null {
   const clave = normalizarClave(nombre);
-  const apellidos = (pistas?.apellidos ?? []).map((a) => normalizarClave(a)).filter((a) => a.length >= 3);
+  // Las palabras del propio nombre no son pista («obra de Julio Cortázar» no prueba que sea Julio Cortázar).
+  const propias = new Set(clave.split(' '));
+  const apellidos = (pistas?.apellidos ?? []).map((a) => normalizarClave(a)).filter((a) => a.length >= 3 && (tipo !== 'persona' || !propias.has(a)));
   const obras = (pistas?.obras ?? []).map((a) => normalizarClave(a)).filter((a) => a.length >= 3);
   const validos: Array<{ c: CandidatoWikidata; puntos: number }> = [];
   for (const c of cs) {
@@ -157,6 +159,17 @@ export async function pistasDe(sql: SQL, id: string): Promise<PistasEntidad> {
     const anio = num(d.anio ?? m.anio, 0);
     if (anio) anios.add(anio);
     if (d.titulo ?? m.titulo) obras.add(String(d.titulo ?? m.titulo));
+  }
+  // Si es una obra que está en la biblioteca (un documento con su título), su autor y su año son la mejor pista.
+  const [ent] = await sql.ejecutar<{ tipo: string; clave: string }>('SELECT tipo, clave FROM entidades WHERE id = ?', id);
+  if (ent?.tipo === 'obra') {
+    for (const d of await sql.ejecutar<{ titulo: string | null; autores: string | null; anio: number | null; metadatos: string }>('SELECT titulo, autores, anio, metadatos FROM documentos')) {
+      if (!d.titulo || claveEntidad(d.titulo, 'obra') !== ent.clave) continue;
+      const m = deJSON<{ autores?: Array<{ apellidos?: string }>; anio?: number; anioOriginal?: number }>(d.metadatos, {});
+      for (const a of m.autores ?? []) if (a.apellidos) apellidos.add(a.apellidos.split(/\s+/)[0]!);
+      const anio = num(m.anioOriginal ?? d.anio ?? m.anio, 0);
+      if (anio) anios.add(anio);
+    }
   }
   // Las personas reales y las obras que más la rodean.
   const vecinos = await sql.ejecutar<{ nombre: string; tipo: string; ficticia: number | null }>(

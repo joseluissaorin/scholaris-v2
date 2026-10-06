@@ -64,7 +64,9 @@ export async function buscarEntidades(sql: SQL, f: FiltrosEntidades = {}): Promi
   const donde: string[] = ['fusionada_en IS NULL', 'n_menciones > 0'];
   const p: ValorSQL[] = [];
   const q = normalizarClave(f.q);
-  if (q) { donde.push('busqueda LIKE ?'); p.push(`%${q.replace(/[%_]/g, '')}%`); }
+  // «el perseguidor» también encuentra la obra guardada sin artículo.
+  const sinArticulo = q.replace(/^(el|la|los|las|the|le|les|il|lo) /, '');
+  if (q) { donde.push('(busqueda LIKE ? OR busqueda LIKE ?)'); p.push(`%${q.replace(/[%_]/g, '')}%`, `%${sinArticulo.replace(/[%_]/g, '')}%`); }
   if (f.tipo) {
     const tipos = f.tipo.split(',').map((t) => t.trim()).filter(esTipoEntidad);
     if (tipos.length) { const l = enLista(tipos); donde.push(`tipo IN ${l.sql}`); p.push(l.param); }

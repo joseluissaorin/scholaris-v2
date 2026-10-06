@@ -9,7 +9,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import type { SQL } from '@scholaris/nucleo';
-import { caminoEntidades, elegirCandidato, extraerEntidadesDocumento, fichaEntidad, formaCompatible, rehacerEnlacesEntidades } from '../src/index.js';
+import { buscarEntidades, caminoEntidades, elegirCandidato, extraerEntidadesDocumento, fichaEntidad, formaCompatible, rehacerEnlacesEntidades } from '../src/index.js';
 import { estanteria, puertos, redactorFalso, sembrar } from './ayudas.js';
 
 const FICTICIOS = new Set(['Johnny Carter', 'Dédée', 'Johnny']);
@@ -98,6 +98,12 @@ describe('enlaces honestos', () => {
     expect(elegirCandidato('Johnny Carter', 'persona', [cantante], true, pistas)).toBeNull();
     expect(elegirCandidato('Johnny Carter', 'persona', [cantante], null, pistas)).toBeNull();
     expect(elegirCandidato('Johnny Carter', 'persona', [personaje], false, pistas)).toBeNull();
+    // Una persona real no es una obra ni una edición que lleva su nombre.
+    const cortazar = [
+      { id: 'Q174210', etiqueta: 'Julio Cortázar', descripcion: 'escritor y traductor argentino' },
+      { id: 'Q129721892', etiqueta: 'Julio Cortázar', descripcion: 'obra escrita por Julio Cortázar' },
+    ];
+    expect(elegirCandidato('Julio Cortázar', 'persona', cortazar, false, { apellidos: ['Cortázar'], anios: [1959] })?.id).toBe('Q174210');
   });
 
   it('extracción: personaje sin homónimo real, obra por autor y año, alias de la misma entidad', async () => {
@@ -119,6 +125,7 @@ describe('enlaces honestos', () => {
 
     const obra = await entidad(sql, 'El perseguidor');
     expect(obra.wikidata).toBe('Q5999002');
+    expect((await buscarEntidades(sql, { q: 'el perseguidor' })).elementos.map((e) => e.id)).toContain(obra.id);
 
     // Camino honesto: Charlie Parker → Johnny Carter (la entrevista) → El perseguidor.
     const camino = await caminoEntidades(sql, parker.id, obra.id);
