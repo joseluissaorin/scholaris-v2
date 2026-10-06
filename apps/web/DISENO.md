@@ -322,3 +322,41 @@ En `capturas/restauracion/`:
 - `lado-a-lado/` pone las mismas pantallas, a la misma anchura, una junto a
   la otra (Biblioteca, Buscar, Escribir, Cuadernos, Mapa, Corpus, Vigilantes y
   Ajustes, más tres en móvil).
+
+## 14. Movimiento y bocetos a mano
+
+Todo se mueve, y siempre con el mismo lenguaje que el relieve: lo que se pulsa
+se hunde en un instante y, al soltarlo, sube con un muelle que se pasa un pelo;
+las tarjetas se despegan del papel; lo que entra se asienta; las citas se
+estampan.
+
+- **Muelles** (`src/movimiento/muelle.ts`): `soltar`, `levantar`, `asentar` y
+  `sello`, con rigidez y amortiguación. Los mismos valores, convertidos en
+  curvas `linear()`, son los tokens `--muelle-*` y `--dur-*` de `tema.css` (con
+  `cubic-bezier` de reserva). Utilidades: `.tactil` (pulsar y soltar), `.levanta`
+  (la sombra grande ya pintada en `::after`, solo cambia su opacidad),
+  `.cascada` con `--i`, `anim-sube`, `anim-sello`, `anim-dobla`, `anim-vuela`,
+  `anim-florece`, `anim-menu` (desde el ancla de Radix, y con salida).
+- **Entre pantallas** (`transiciones.ts`): View Transitions sobre el contenido
+  (la barra lateral no se mueve); la portada de la Biblioteca viaja a la barra
+  del lector y vuelve; un resultado de Buscar crece hasta la columna de lectura.
+  Sin la API, el contenido sube con la Web Animations API. Los cambios de
+  `?u=`/`?t=` no animan nada.
+- **Ayudas**: `useFlip` (uno solo, también en la paleta), `Cifra` (cuentas que
+  corren, accesibles), `hojear` (la hoja que se pasa al saltar de página),
+  `Arrastrable` (el reproductor pequeño, con inercia, a cualquier esquina).
+- **Bocetos** (`src/bocetos/`): dibujos escritos a mano, coordenada a
+  coordenada, con el motor de la portada (`src/dibujo/`, compartido). Cada uno es
+  un trozo diminuto y se dibuja solo al entrar en pantalla: primero el lápiz,
+  luego la pluma, el color y las notas. Están en los estados vacíos, la primera
+  vez, la prensa de la ingesta, el caracol cuando algo tarda, la zona de soltar,
+  404, error y sin conexión, las claves de API, las invitaciones, el compañero de
+  cada cabecera y las notas al margen que salen una sola vez. Para mirarlos:
+  `pnpm exec tsx src/bocetos/mesa.ts lupa,llave /tmp/l.html --cuadricula`.
+- **Reglas**: solo `transform` y `opacity` (las excepciones son de un solo
+  disparo y pequeñas: el subrayado que se entinta y el trazo de los bocetos);
+  con `prefers-reduced-motion` todo aparece ya en su estado final (los bocetos,
+  terminados); ningún dato vive solo en el movimiento. El marco sigue por debajo
+  de 150 KB: los bocetos, el motor y el arrastre van en sus trozos.
+
+Capturas en `capturas/movimiento/` (escritorio y móvil, claro y oscuro).
