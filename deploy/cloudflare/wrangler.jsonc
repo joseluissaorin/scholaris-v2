@@ -102,7 +102,8 @@
     "produccion": {
       "name": "scholaris-produccion",
       "workers_dev": true,
-      // RUTA_PRODUCCION (se activa al cambiar el DNS)
+      // Dominio propio desde el 2026-10-06 (antes, CNAME a la v1 de pop-os: ver deploy/produccion/volver-a-v1.sh).
+      "routes": [{ "pattern": "scholaris.joseluissaorin.com", "custom_domain": true }],
       "durable_objects": {
         "bindings": [
           { "name": "ESTANTERIA", "class_name": "Estanteria" },
