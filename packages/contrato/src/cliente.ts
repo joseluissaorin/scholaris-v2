@@ -165,6 +165,7 @@ export function crearCliente(opciones: OpcionesCliente) {
       listar: (p: FiltrosDocumentos = {}) => get<Pagina<ResumenDocumento>>('/documentos', p),
       obtener: (id: string) => get<DetalleDocumento>(`/documentos/${e(id)}`),
       metadatos: (id: string, p: ParcheMetadatos) => patch<DetalleDocumento>(`/documentos/${e(id)}/metadatos`, p),
+      rehacerMetadatos: (id: string) => post<DetalleDocumento>(`/documentos/${e(id)}/metadatos/rehacer`),
       borrar: (id: string) => del(`/documentos/${e(id)}`),
       reprocesar: (id: string, p: Reprocesar = {}) => post<IngestaIniciada>(`/documentos/${e(id)}/reprocesar`, p),
       reintentar: (id: string) => post<IngestaIniciada>(`/documentos/${e(id)}/reintentar`),

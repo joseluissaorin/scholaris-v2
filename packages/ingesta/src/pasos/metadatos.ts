@@ -624,6 +624,44 @@ export async function refinarConLibroEntero(
   return r === previo ? null : r;
 }
 
+/** Una fila de la tabla `unidades` (SPDF o estantería) como unidad leída. */
+export function unidadDeFila(f: Record<string, unknown>): UnidadLeida {
+  const leer = <T>(v: unknown, def: T): T => { try { return typeof v === 'string' && v ? (JSON.parse(v) as T) : def; } catch { return def; } };
+  const orden = Number(f.orden ?? 0);
+  const ancla = leer<NonNullable<UnidadLeida['ancla']>>(f.ancla, { tipo: 'pagina', fisica: orden + 1, impresa: null, romana: false, origen: 'ninguno', confianza: 0 });
+  const texto = String(f.texto ?? '');
+  return {
+    orden, fisica: ancla.tipo === 'pagina' ? ancla.fisica : orden + 1, texto, notas: leer<string[]>(f.notas, []), cabecera: String(f.cabecera ?? ''), pie: String(f.pie ?? ''),
+    folioVisto: null, titulos: [], figuras: [], vacia: !texto.trim(), lector: String(f.lector ?? 'spdf'), confianza: Number(f.confianza ?? 1), ancla,
+    ...(typeof f.t0 === 'number' ? { t0: f.t0 } : {}), ...(typeof f.t1 === 'number' ? { t1: f.t1 } : {}),
+    ...(ancla.tipo === 'tiempo' && ancla.hablante ? { hablante: ancla.hablante } : {}),
+  };
+}
+
+/**
+ * Rehace SOLO la ficha de un documento ya leído (sin volver a leerlo): lectura
+ * de las primeras páginas o de la transcripción, verificación, enriquecimiento
+ * y refinado con el libro entero. Lo que editó el usuario se conserva.
+ */
+export async function rehacerFicha(
+  previa: MetadatosDocumento,
+  documento: { tipo: string; nombreArchivo: string; duracion?: number; unidades: UnidadLeida[] },
+  puertos: PuertosMetadatos,
+  opciones: { sinVerificacion?: boolean } = {},
+): Promise<ResultadoMetadatos> {
+  const medio = documento.tipo === 'audio' || documento.tipo === 'video';
+  const usuario = camposDeUsuario(previa);
+  const entrada: EntradaMetadatos = {
+    ficha: {}, nombreArchivo: documento.nombreArchivo, tipo: documento.tipo, epub: documento.tipo === 'epub',
+    ...(documento.duracion ? { duracion: documento.duracion } : {}),
+    unidades: medio ? documento.unidades : documento.unidades.slice(0, 5),
+    ...(Object.keys(usuario).length ? { usuario } : {}),
+  };
+  const r = await pasoMetadatos(entrada, puertos, opciones);
+  if (medio) return r;
+  return refinarMetadatos(r, { ...entrada, todas: documento.unidades }, puertos, opciones);
+}
+
 const procedenciaLectura = (m: MetadatosDocumento, campo: string) => m.procedencia?.[campo]?.fuente === 'lectura';
 
 /** Repara la salida del Redactor: autores sin partir, años como texto, DOI con prefijo. */

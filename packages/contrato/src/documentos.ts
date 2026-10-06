@@ -4,6 +4,7 @@
  *   GET    /documentos?…FiltrosDocumentos         → Pagina<ResumenDocumento>
  *   GET    /documentos/:id                        → DetalleDocumento
  *   PATCH  /documentos/:id/metadatos  Partial<MetadatosDocumento> → DetalleDocumento
+ *   POST   /documentos/:id/metadatos/rehacer   → DetalleDocumento  (solo la ficha, sin releer; respeta lo que editó el usuario)
  *   DELETE /documentos/:id                        → Ok
  *   POST   /documentos/:id/reprocesar  { fases? } → IngestaIniciada
  *   POST   /documentos/:id/reintentar             → IngestaIniciada  (tras un error: reaprovecha original, paquete y lecturas ya hechas)

@@ -16,6 +16,7 @@ import { clavesDeDocumento, idsIndiceDeDocumento, tareaDeDocumento, totalesEstan
 import { aBase64Url } from '../compartido/firmas.js';
 import { invalidarBuscador, puertosFunciones } from '../compartido/servicios.js';
 import { alBorrarDocumento } from '@scholaris/funciones';
+import { rehacerFicha, unidadDeFila } from '@scholaris/ingesta';
 import type { PuertosUsuario } from '../puertos.js';
 import { lanzarIngesta, prefijoDocumento } from './subidas.js';
 import { claveDe, cursorADesplazamiento, desplazamientoACursor, entero, etiquetaAncla, exigirEscritura, json, prm, puertos, type Ctx } from './util.js';
@@ -154,6 +155,25 @@ export function rutasDocumentos(app: Hono<Entorno>): void {
       const nuevo = (await leerDocumento(p.sql, d.id))!;
       return { ...nuevo, espacios: [], cuentas: { fragmentos: 0, secciones: 0, figuras: 0 } } satisfies DetalleDocumento;
     })());
+  });
+
+  // Rehace solo la ficha (sin volver a leer el documento): lectura, catálogos y colofón. Lo que editó el usuario se queda.
+  app.post('/documentos/:id/metadatos/rehacer', async (c: Ctx) => {
+    exigirEscritura(c);
+    const p = puertos(c);
+    const d = await documentoOError(p, prm(c, 'id'));
+    if (await tareaDeDocumento(p.sql, d.id)) fallo('conflicto', 'El documento se está procesando: espera a que termine.');
+    const filas = await p.sql.ejecutar<Fila>('SELECT * FROM unidades WHERE documento = ? ORDER BY orden', d.id);
+    if (!filas.length) fallo('conflicto', 'El documento aún no tiene texto leído.');
+    const [sub] = await p.sql.ejecutar<{ nombre: string }>('SELECT nombre FROM pl_subidas WHERE documento = ? ORDER BY creada DESC LIMIT 1', d.id).catch(() => []);
+    const ia = await p.inteligencia();
+    const r = await rehacerFicha(d.metadatos, {
+      tipo: d.tipo, nombreArchivo: sub?.nombre ?? d.original?.split('/').pop() ?? d.metadatos.titulo,
+      ...(d.duracion ? { duracion: d.duracion } : {}), unidades: filas.map((f) => unidadDeFila(f)),
+    }, { redactor: ia.redactor, correo: 'jl@joseluissaorin.com' });
+    await escribirDocumento(p.sql, { ...d, metadatos: r.metadatos, actualizado: ahora() });
+    const nuevo = (await leerDocumento(p.sql, d.id))!;
+    return c.json({ ...nuevo, espacios: [], cuentas: { fragmentos: 0, secciones: 0, figuras: 0 } } satisfies DetalleDocumento);
   });
 
   app.delete('/documentos/:id', async (c: Ctx) => {

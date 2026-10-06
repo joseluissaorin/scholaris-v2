@@ -254,3 +254,20 @@ describe('limpiezas de la fusión', () => {
     expect(m.idiomaOriginal).toBeUndefined();
   });
 });
+
+describe('rehacer solo la ficha', () => {
+  it('desde las filas de unidades, conservando lo que editó el usuario', async () => {
+    const { rehacerFicha, unidadDeFila } = await import('../src/pasos/metadatos.js');
+    const filas = [
+      { orden: 0, ancla: JSON.stringify({ tipo: 'pagina', fisica: 1, impresa: null, romana: false, origen: 'ninguno', confianza: 0 }), texto: 'EL CASAMIENTO EN LA MVERTE' },
+      ...[1, 2, 3, 4, 5].map((i) => ({ orden: i, ancla: JSON.stringify({ tipo: 'pagina', fisica: i + 1, impresa: null, romana: false, origen: 'ninguno', confianza: 0 }), texto: 'Versos' })),
+      { orden: 6, ancla: JSON.stringify({ tipo: 'pagina', fisica: 7, impresa: null, romana: false, origen: 'ninguno', confianza: 0 }), texto: 'FIN.', pie: 'Con licencia: En Sevilla, en la Imprenta de la VIVDA\nde FRANCISCO LEEFDAEL.' },
+    ];
+    const redactor = redactorFalso(() => ({ titulo: 'El casamiento en la muerte', autores: [{ nombre: 'Lope', apellidos: 'de Vega Carpio' }], idioma: 'es', tipoCSL: 'book' }));
+    const previa = { titulo: 'Mi título', autores: [], procedencia: { titulo: { fuente: 'usuario' as const, confianza: 1 } } };
+    const r = await rehacerFicha(previa, { tipo: 'pdf_escaneado', nombreArchivo: 'c.pdf', unidades: filas.map((f) => unidadDeFila(f)) }, { redactor }, { sinVerificacion: true });
+    expect(r.metadatos.titulo).toBe('Mi título');
+    expect(r.metadatos.sinFecha).toMatchObject({ desde: 1729, hasta: 1753 });
+    expect(r.metadatos.autores[0]?.apellidos).toBe('de Vega Carpio');
+  });
+});

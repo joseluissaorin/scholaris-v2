@@ -22,44 +22,57 @@ La autocita necesita saber de cuándo es la obra y no solo de cuándo es el ejem
 5. **Fusión.** Se hace campo a campo, con fuente y confianza por campo (`procedencia`). Lo que editó el usuario gana siempre. Si dos fuentes independientes dan el mismo año de la obra, este se afianza. Si la obra sale posterior a la edición, cede el dato menos fiable. Los autores corporativos («RTVE», «Real Academia Española») van enteros, y las partículas y los dobles apellidos se respetan («de Vega Carpio», «Soler Serrano»).
 6. **Refinado con el libro entero.** Al consolidar, `refinarConLibroEntero` vuelve a leer créditos y colofón con las 12 primeras y las 3 últimas páginas con texto. Solo repite el paso si aparecen pruebas nuevas (ISBN, pie de imprenta, ©…). El colofón del *Casamiento* está en la última página, no en las cinco primeras.
 
+## Emisiones: el episodio, no el programa
+
+En audio y vídeo la ficha es la del episodio (`fichaDeEmision` en `src/enriquecimiento/index.ts`):
+
+- `contenedor` es el programa («A fondo») y `editorial`, quien lo emite («RTVE», sacado de Wikidata, que da la cadena, su dueño, el presentador y los años en antena);
+- `titulo` es el del episodio en el catálogo de RTVE Play («Julio Cortázar», `src/enriquecimiento/rtve.ts`, API pública sin clave). Si no hay catálogo, es el nombre de los invitados, como hace RTVE, y el subtítulo «Entrevista a…» se quita;
+- `autores` son los entrevistados y `entrevistadores`, quien pregunta (el presentador según Wikidata o la descripción del episodio: «Joaquín Soler Serrano entrevista al…»). En CSL va como `interviewer`;
+- `anio` y `fecha` son los de la emisión del catálogo. Así salió un error real: la entrevista a Facundo Cabral se emitió el **2 de julio de 1978**, no en 1977 como decía la ficha anterior (la lectura lo sacaba del nombre del archivo, «serrano1977fondo»). La de Cortázar es del 20 de marzo de 1977;
+- en un vídeo de una serie (3Blue1Brown), el capítulo es el título («Vectors») y la serie, el contenedor.
+
+Para rehacer solo la ficha de un documento ya leído, sin volver a leerlo: `POST /documentos/:id/metadatos/rehacer` (en el cliente, `documentos.rehacerMetadatos(id)`). Usa `rehacerFicha` y conserva lo que editó el usuario.
+
 ## Resultados (banco, 6 de octubre de 2026)
 
 ```
 pnpm --filter @scholaris/bench exec tsx src/metadatos.ts
 ```
 
-«Antes» es la ficha que dejó en los SPDF del banco el paso anterior (lectura más verificación en Crossref y OpenAlex). Está congelada en `bench/resultados/metadatos/antes.json`, porque los `.sqlite` se reescriben al volver a ingerir. «Después» es el paso actual con el refinado, sobre el texto ya leído de esos mismos SPDF. Las fichas de referencia están hechas a mano en `bench/src/metadatos.ts`.
+«Antes» es la ficha que dejó en los SPDF del banco el paso anterior (lectura más verificación en Crossref y OpenAlex). Está congelada en `bench/resultados/metadatos/antes.json`, porque los `.sqlite` se reescriben al volver a ingerir. «Después» es el paso actual con el refinado, sobre el texto ya leído de esos mismos SPDF. Las fichas de referencia están hechas a mano en `bench/src/metadatos.ts`. Las de las emisiones están comprobadas en RTVE Play.
 
 | Campo | Documentos | Antes | Después |
 |---|---|---|---|
-| autores | 6 | 6/6 | 6/6 |
-| título | 4 | 4/4 | 4/4 |
-| año de la edición | 5 | 5/5 | 5/5 |
+| autores (en emisiones, solo los entrevistados) | 7 | 7/7 | 7/7 |
+| título (en emisiones, el del episodio) | 7 | 5/7 | 7/7 |
+| año de la edición o de la emisión | 5 | 4/5 | 5/5 |
 | año de la obra (el que usa la autocita) | 3 | 3/3 | 3/3 |
-| editorial o impresor | 4 | 1/4 | 4/4 |
+| editorial, impresor o cadena | 4 | 1/4 | 4/4 |
 | lugar | 2 | 1/2 | 2/2 |
 | tipo CSL | 6 | 5/6 | 6/6 |
-| contenedor (libro, congreso, programa) | 4 | 0/4 | 4/4 |
+| contenedor (libro, congreso, programa, serie) | 5 | 0/5 | 5/5 |
 | identificador (arXiv/DOI) | 1 | 0/1 | 1/1 |
 | idioma | 1 | 1/1 | 1/1 |
 | partícula («Lope» / «de Vega…») | 1 | 1/1 | 1/1 |
 | «s. f.» con horquilla y fundamento | 1 | 0/1 | 1/1 |
-| entrevistador (Soler Serrano) | 2 | 2/2 | 2/2 |
-| **Total** | 40 | **29/40** | **40/40** |
+| entrevistador aparte (Soler Serrano) | 2 | 0/2 | 2/2 |
+| **Total** | 45 | **28/45** | **45/45** |
 
 Por documento:
 
-- ***The Discarded Image*.** C. S. Lewis, Cambridge University Press, Cambridge, 1964. Según la página de créditos («First printed 1964 / Reprinted 1964»), la edición es la de 1964 y la obra también. Queda «reimpr. 1964» como mención de edición y se quita el ORCID falso de Lewis.
+- ***The Discarded Image*.** C. S. Lewis, Cambridge University Press, Cambridge, 1964. Según la página de créditos («First printed 1964 / Reprinted 1964»), la edición es la de 1964 y la obra también. Queda «reimpr. 1964» como mención de edición y se quita un ORCID falso que OpenAlex le daba a Lewis.
 - ***Attention Is All You Need*.** 2017, *paper-conference*, contenedor «31st Conference on Neural Information Processing Systems (NIPS 2017)», `arxiv.org/abs/1706.03762` y DOI 10.48550/arxiv.1706.03762. Un primer intento cogía el arXiv de una referencia (1607.06450). Ahora solo vale el sello del margen y el registro tiene que casar.
 - ***El perseguidor*.** Julio Cortázar, obra de 1959 (Wikidata y Open Library coinciden: confianza 0,95), *chapter* dentro de *Las armas secretas* (Wikipedia, entre las obras del mismo autor en Wikidata).
 - ***El casamiento en la muerte*.** Lope de Vega Carpio, suelta impresa en Sevilla por la Viuda de Francisco de Leefdael. Sin año, «s. f.» con horquilla 1729-1753 (BNE, autoridad XX4965433, «fl. 1729-1753?») y confianza 0,6. Open Library proponía «1700» como año de la obra: era una edición suelta y se descarta.
-- ***A fondo* (Cabral y Cortázar).** Emisión de RTVE de 1977, *broadcast*, contenedor «A fondo», con Joaquín Soler Serrano. Wikidata confirma que el programa estuvo en antena desde 1976 y que lo presentaba él. Si falta en el reparto, se añade sin quitar al invitado.
+- ***A fondo*.** «Facundo Cabral» (2-7-1978) y «Julio Cortázar» (20-3-1977), las dos de RTVE, *broadcast*, contenedor «A fondo», con el entrevistado como autor y Joaquín Soler Serrano como entrevistador. Cada una lleva su dirección de RTVE Play.
+- **3Blue1Brown.** «Vectors», contenedor «Essence of linear algebra», Grant Sanderson.
 
-Con la red de casa y la caché vacía, cada documento tarda entre 1,4 y 5,9 s. El paso lanza en paralelo de 2 a 5 consultas a catálogos y una sola llamada al Redactor.
+Con la red de casa y la caché vacía, cada documento tarda entre 1,1 y 5,9 s. El paso lanza en paralelo de 2 a 5 consultas a catálogos y una sola llamada al Redactor. Las emisiones se midieron cuatro veces seguidas, con el mismo resultado.
 
 ## Límites y notas honestas
 
 - Son 6 documentos y 40 comprobaciones. Las fichas de referencia las hice yo, y el código se afinó mirando estos mismos casos. Hacen falta más documentos (traducciones con ISBN, tesis, capítulos de libros colectivos) antes de dar la cifra por general. Las pruebas unitarias (`test/enriquecimiento.test.ts`) cubren además una traducción con «©», una edición Canto con ISBN y una edición numerada en palabras, con respuestas reales recortadas de los catálogos.
 - datos.bne.es y el CERL Thesaurus bloquean a los clientes automáticos (403 y un reto anti-bots). Por eso los años de los impresores salen de una tabla corta con fichas de autoridad comprobadas, más Wikidata, que casi no tiene impresores antiguos. Cada entrada nueva de la tabla tiene que llevar su fuente.
-- La fecha exacta de cada emisión de *A fondo* no está en Wikidata. El año sigue saliendo de la lectura de la transcripción, y Wikidata solo comprueba que caiga dentro de los años en antena.
-- `@scholaris/citas` todavía no imprime `contenedor`, `traductores`, `tituloOriginal` ni la horquilla de `sinFecha`. Están en el tipo (`MetadatosDocumento`), pero `csl/mapeo.ts` es de otro paquete. Además, con «s. f.» la autocita no tiene año y se salta el análisis temporal. Podría usar `sinFecha.hasta` como cota.
+- Solo RTVE tiene catálogo de episodios. En otras cadenas y en los pódcast, el título del episodio sale de la lectura o del nombre de los invitados, y el año, de la transcripción. YouTube sin clave no da metadatos.
+- `@scholaris/citas` ya imprime el contenedor, los traductores, el título original, la horquilla de «s. f.» y, desde ahora, el entrevistador. Con «s. f.», la autocita no tiene año y se salta el análisis temporal. Podría usar `sinFecha.hasta` como cota.
