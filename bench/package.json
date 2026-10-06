@@ -8,6 +8,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@napi-rs/canvas": "^1.0.10",
     "@scholaris/busqueda": "workspace:^",
     "@scholaris/citas": "workspace:^",
     "@scholaris/folios": "workspace:^",

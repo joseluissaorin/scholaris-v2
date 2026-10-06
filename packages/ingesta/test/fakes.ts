@@ -83,6 +83,7 @@ export function inteligenciaFalsa(over: Partial<Inteligencia> = {}): Inteligenci
 export class SqlFalso implements SQL {
   filas: Record<string, ValorSQL[][]> = {};
   async ejecutar<T>(consulta: string, ...p: ValorSQL[]): Promise<T[]> {
+    if (/SELECT dims FROM espacios/.test(consulta)) return [{ dims: 4 } as T];
     const m = /INSERT (?:OR \w+ )?INTO (\w+)/.exec(consulta);
     if (m) (this.filas[m[1] as string] ??= []).push(p);
     return [];
