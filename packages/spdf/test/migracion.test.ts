@@ -117,8 +117,14 @@ describe.skipIf(!ficheros.length)('migración v3 → v4 con los SPDF reales', ()
     const fr = await archivo.leerFragmentos(doc.id);
     expect(fr.some((f) => f.seccion.includes('CHAPTER IV'))).toBe(true);
     expect(fr.filter((f) => f.contexto.length > 0).length).toBeGreaterThan(200);
-    // «Ir a la página 65»
-    expect((await archivo.unidadPorFolio(doc.id, '65'))[0]?.orden).toBe(78);
+    // «Ir a la página 65»: la página física 78, que es la unidad 77 (el contrato numera desde 0).
+    const u65 = (await archivo.unidadPorFolio(doc.id, '65'))[0];
+    expect(u65?.orden).toBe(77);
+    expect((u65?.ancla as { fisica?: number } | undefined)?.fisica).toBe(78);
+    // Ninguna unidad migrada empieza en 1 ni trae el marcado de la OCR vieja.
+    const todas = await archivo.leerUnidades(doc.id);
+    expect(Math.min(...todas.map((u) => u.orden))).toBe(0);
+    expect(todas.some((u) => /!\[[^\]]*\]\(page=|<div align/.test(u.texto))).toBe(false);
   });
 
   it('El perseguidor: el idioma pasa de «EN» a «es» y la búsqueda encuentra a Johnny', async () => {

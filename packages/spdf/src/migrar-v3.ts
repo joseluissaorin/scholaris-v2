@@ -38,7 +38,7 @@ import type {
   TipoEntrada,
   ValorSQL,
 } from '@scholaris/nucleo';
-import { aRomano, sha256, tiempoACadena } from '@scholaris/nucleo';
+import { aRomano, limpiarMarcadoOCR, sha256, tiempoACadena } from '@scholaris/nucleo';
 import { deducirFolios, type FolioPagina, type PaginaFolio } from '@scholaris/folios';
 import { abrirBaseCruda, ArchivoSpdf, bytesSqlite, GENERADOR } from './archivo.js';
 import { rellenarTextoBusqueda } from './esquema.js';
@@ -143,6 +143,8 @@ export async function migrarBaseV3(bytesV3: Uint8Array | ArrayBuffer, opciones: 
 // ---------------------------------------------------------------------------
 
 const txt = (v: ValorSQL | undefined): string => (v === null || v === undefined ? '' : String(v));
+/** Texto de página, tramo o fragmento: sin el marcado de imágenes y alineación que dejó la OCR de la v1. */
+const textoLimpio = (v: ValorSQL | undefined): string => limpiarMarcadoOCR(txt(v));
 const num = (v: ValorSQL | undefined): number | null => {
   if (v === null || v === undefined || v === '') return null;
   const n = typeof v === 'number' ? v : Number(v);
@@ -346,7 +348,7 @@ class Migracion {
     this.figuras(esMedio);
 
     // --- Documento ---------------------------------------------------------
-    const textoMuestra = paginas.map((p) => txt(p.text)).join('\n').slice(0, 60000);
+    const textoMuestra = paginas.map((p) => textoLimpio(p.text)).join('\n').slice(0, 60000);
     const metadatos = this.metadatos(textoMuestra);
     this.informe.titulo = metadatos.titulo;
     const duracion = esMedio ? this.duracion() : undefined;
@@ -467,7 +469,7 @@ class Migracion {
     if (this.opciones.repararFolios !== false && paginas.length) {
       const entrada: PaginaFolio[] = paginas.map((p, i) => {
         const a = anclasV3[i] as AnclaPagina;
-        return { fisica: i + 1, folio: a.origen === 'leido' ? a.impresa : null, texto: txt(p.text), vacia: !txt(p.text).trim() };
+        return { fisica: i + 1, folio: a.origen === 'leido' ? a.impresa : null, texto: textoLimpio(p.text), vacia: !textoLimpio(p.text).trim() };
       });
       const r = deducirFolios(entrada);
       const lecturasV3 = anclasV3.filter((a) => a.origen === 'leido').length;
@@ -496,10 +498,11 @@ class Migracion {
     }
 
     paginas.forEach((p, i) => {
-      const orden = i + 1;
-      const pdf = num(p.pdf_page) ?? orden;
-      const ancla = { ...(anclas[i] as AnclaPagina), fisica: orden };
-      const id = `${this.id}:u${orden}`;
+      // El contrato numera las unidades desde 0 (la página física 1 es la unidad 0); el id conserva el número de v3.
+      const orden = i;
+      const pdf = num(p.pdf_page) ?? i + 1;
+      const ancla = { ...(anclas[i] as AnclaPagina), fisica: i + 1 };
+      const id = `${this.id}:u${i + 1}`;
       const u: UnidadMigrada = { id, orden, ancla, pdf };
       let miniatura: string | null = null;
       const prev = previas.get(pdf);
@@ -510,7 +513,7 @@ class Migracion {
       }
       this.s.ejecutarSync(
         `INSERT INTO unidades (id, documento, orden, ancla, texto, lector, confianza, impresa, miniatura) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [id, this.id, orden, JSON.stringify(ancla), txt(p.text), LECTOR_V3, 1, ancla.impresa, miniatura],
+        [id, this.id, orden, JSON.stringify(ancla), textoLimpio(p.text), LECTOR_V3, 1, ancla.impresa, miniatura],
       );
       this.unidades.push(u);
       if (!this.unidadPorPdf.has(pdf)) this.unidadPorPdf.set(pdf, u);
@@ -552,7 +555,7 @@ class Migracion {
         const sp = num(s.speaker_id);
         const c = num(s.confidence) ?? 0;
         const tr: { t0: number; t1: number; texto: string; hablante?: string; confianza: number } = {
-          t0: (num(s.start_ms) ?? 0) / 1000, t1: (num(s.end_ms) ?? 0) / 1000, texto: txt(s.text), confianza: c > 0 ? c : 0.5,
+          t0: (num(s.start_ms) ?? 0) / 1000, t1: (num(s.end_ms) ?? 0) / 1000, texto: textoLimpio(s.text), confianza: c > 0 ? c : 0.5,
         };
         if (sp !== null) tr.hablante = hablantes.get(sp) ?? `Hablante ${sp + 1}`;
         tramos.push(tr);
@@ -562,16 +565,16 @@ class Migracion {
       const tiempos = this.tiemposDeChunks();
       for (const p of paginas) {
         const t = tiempos.porPagina.get(num(p.id) ?? -1);
-        tramos.push({ t0: t?.[0] ?? 0, t1: t?.[1] ?? 0, texto: txt(p.text), confianza: 0.5 });
+        tramos.push({ t0: t?.[0] ?? 0, t1: t?.[1] ?? 0, texto: textoLimpio(p.text), confianza: 0.5 });
       }
       this.informe.avisos.push('Sin segmentos de transcripción: las unidades son las ventanas de v3.');
     }
     tramos.sort((a, b) => a.t0 - b.t0 || a.t1 - b.t1);
     tramos.forEach((tr, i) => {
-      const orden = i + 1;
+      const orden = i;
       const ancla: AnclaTiempo = { tipo: 'tiempo', t0: tr.t0, t1: tr.t1 };
       if (tr.hablante) ancla.hablante = tr.hablante;
-      const id = `${this.id}:u${orden}`;
+      const id = `${this.id}:u${i + 1}`;
       const imagen = this.fotogramas.find((f) => f.t >= tr.t0 && f.t < Math.max(tr.t1, tr.t0 + 0.001))?.clave ?? null;
       this.s.ejecutarSync(
         `INSERT INTO unidades (id, documento, orden, ancla, texto, lector, confianza, t0, t1, imagen) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -683,7 +686,7 @@ class Migracion {
       const id = num(f.id) ?? 0;
       if (esMedio) return [tiempos?.porChunk.get(id)?.[0] ?? 0, num(f.chunk_index) ?? 0, id];
       const u = this.unidadPorPdf.get(num(f.pdf_page) ?? -1) ?? this.unidadPorPagina.get(num(f.page_id) ?? -1);
-      return [u?.orden ?? 0, num(f.chunk_index) ?? 0, id];
+      return [u ? u.orden : -1, num(f.chunk_index) ?? 0, id];
     };
     chunks.sort((a, b) => {
       const x = clave(a), y = clave(b);
@@ -728,7 +731,7 @@ class Migracion {
       const contexto = ctx && !esVacio(ctx.context_before) ? colaDeTexto(txt(ctx.context_before)) : '';
       this.s.ejecutarSync(
         'INSERT INTO fragmentos (id, documento, unidad, orden, texto, contexto, seccion, ancla) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-        [id, this.id, unidad.id, orden, txt(c.text), contexto, JSON.stringify(seccionDe(chunkId, posicion)), JSON.stringify(ancla)],
+        [id, this.id, unidad.id, orden, textoLimpio(c.text), contexto, JSON.stringify(seccionDe(chunkId, posicion)), JSON.stringify(ancla)],
       );
       this.fragmentoPorChunk.set(chunkId, id);
       if (ctx) this.vector('fragmento', id, this.espacio('+contexto', ['texto']), bytesDe(ctx.context_embedding));

@@ -3,7 +3,7 @@
  * junto al esquema SPDF v4 y el de `@scholaris/funciones`.
  */
 import type { SQL } from '@scholaris/nucleo';
-import { aplicarEsquema, ESQUEMA_V4 } from '@scholaris/spdf';
+import { aplicarEsquema, ESQUEMA_V4, REPARACION_MIGRADOS } from '@scholaris/spdf';
 import { aplicarEsquemaFunciones, esquemaFunciones } from '@scholaris/funciones';
 
 export const ESQUEMA_PLATAFORMA = [
@@ -74,7 +74,8 @@ async function anadirColumnas(sql: SQL): Promise<void> {
  * no tiene que repetirlos (cientos de sentencias en frío).
  */
 export const HUELLA_ESQUEMA = (() => {
-  const texto = [ESQUEMA_V4, esquemaFunciones, ...ESQUEMA_PLATAFORMA, JSON.stringify(COLUMNAS_NUEVAS)].join('\u0000');
+  // REPARACION_MIGRADOS entra en la huella: al cambiar, cada estantería vuelve a pasar por prepararEstanteria una vez.
+  const texto = [ESQUEMA_V4, esquemaFunciones, ...ESQUEMA_PLATAFORMA, JSON.stringify(COLUMNAS_NUEVAS), REPARACION_MIGRADOS].join('\u0000');
   let h = 0x811c9dc5;
   for (let i = 0; i < texto.length; i++) h = Math.imul(h ^ texto.charCodeAt(i), 0x01000193) >>> 0;
   return `${texto.length.toString(36)}-${h.toString(36)}`;

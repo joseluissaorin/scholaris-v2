@@ -4,6 +4,9 @@
 
 import type { Autor } from '@scholaris/nucleo';
 
+/** Marcado de la OCR de la v1 dentro del texto («![](page=0,bbox=[…])», «<div align>»): se quita al migrar. */
+export { limpiarMarcadoOCR, cajasOCR } from '@scholaris/nucleo';
+
 const VACIOS = /^(?:\[?not[_ ]found\]?|n\/?a|none|null|unknown|desconocido|sin datos|-+)$/i;
 
 export function esVacio(v: unknown): boolean {

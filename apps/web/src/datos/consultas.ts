@@ -4,8 +4,8 @@
  * la pantalla va a pedir.
  */
 import { QueryClient, queryOptions, keepPreviousData } from '@tanstack/react-query';
-import type { Filtros } from '@scholaris/nucleo';
-import type { FiltrosDocumentos, RespuestaBusqueda, TipoEntidad } from '@scholaris/contrato';
+import { limpiarMarcadoOCR, type Filtros } from '@scholaris/nucleo';
+import type { DetalleDocumento, FiltrosDocumentos, RespuestaBusqueda, TipoEntidad, UnidadVista } from '@scholaris/contrato';
 import { api } from './api';
 import { esMedio } from '../lib/formato';
 
@@ -19,6 +19,50 @@ export const clienteConsultas = new QueryClient({
 /** Unidades por bloque al leer: 12 páginas por petición. */
 export const BLOQUE = 12;
 
+/*
+ * La API numera las unidades desde 0. Los documentos migrados de la v1 que aún
+ * no se han reparado llegan desde 1: la web lo detecta (en el primer bloque o en
+ * los folios) y lo compensa, en vez de dejar la primera fila en esqueleto.
+ */
+const basesUnidades = new Map<string, number>();
+const baseDe = (id: string) => basesUnidades.get(id) ?? 0;
+function anotarBase(id: string, minimo: number) {
+  const b = minimo === 1 ? 1 : 0;
+  if (basesUnidades.get(id) === b) return;
+  const antes = basesUnidades.has(id);
+  basesUnidades.set(id, b);
+  // Si ya se habían traducido bloques con otra base, se vuelven a pedir.
+  if (antes || b) for (const k of ['unidades', 'folios', 'secciones', 'figuras']) void clienteConsultas.invalidateQueries({ queryKey: [k, id], refetchType: 'active' });
+}
+
+async function leerBloque(id: string, bloque: number): Promise<UnidadVista[]> {
+  const desde = bloque * BLOQUE, hasta = (bloque + 1) * BLOQUE - 1;
+  let b = baseDe(id);
+  // El primer bloque pide una unidad de más para saber dónde empieza la numeración.
+  const crudas = await api().documentos.unidades(id, desde + b, hasta + b + (bloque === 0 && !basesUnidades.has(id) ? 1 : 0));
+  if (bloque === 0 && !basesUnidades.has(id) && crudas.length) {
+    const minimo = Math.min(...crudas.map((u) => u.orden));
+    basesUnidades.set(id, minimo === 1 ? 1 : 0);
+    b = baseDe(id);
+  }
+  const unidades = crudas
+    .filter((u) => u.orden - b >= desde && u.orden - b <= hasta)
+    .map((u) => ({ ...u, orden: u.orden - b + 1, texto: limpiarMarcadoOCR(u.texto) }));
+  // Huecos en un documento ya leído: la página existe aunque no haya llegado su unidad; se pinta vacía.
+  const doc = clienteConsultas.getQueryData<DetalleDocumento>(['documento', id]);
+  if (doc?.estado === 'listo' && doc.unidades > 0) {
+    const tiene = new Set(unidades.map((u) => u.orden));
+    const tipoPagina = !esMedio(doc.tipo);
+    for (let o = desde + 1; o <= Math.min(hasta + 1, doc.unidades); o++) {
+      if (tiene.has(o) || !tipoPagina) continue;
+      unidades.push({ id: `hueco:${id}:${o}`, orden: o, etiqueta: '', lector: 'hueco', confianza: 0, texto: '',
+        ancla: { tipo: 'pagina', fisica: o, impresa: null, romana: false, origen: 'ninguno', confianza: 0 } } as UnidadVista);
+    }
+    unidades.sort((x, y) => x.orden - y.orden);
+  }
+  return unidades;
+}
+
 export const q = {
   yo: () => queryOptions({ queryKey: ['yo'], queryFn: () => api().auth.yo(), staleTime: 5 * 60_000 }),
   documentos: (f: FiltrosDocumentos = {}) => queryOptions({ queryKey: ['documentos', f], queryFn: () => api().documentos.listar({ limite: 500, ...f }), placeholderData: keepPreviousData }),
@@ -29,12 +73,17 @@ export const q = {
    */
   bloque: (id: string, bloque: number) => queryOptions({
     queryKey: ['unidades', id, bloque],
-    queryFn: async () => (await api().documentos.unidades(id, bloque * BLOQUE, (bloque + 1) * BLOQUE - 1)).map((u) => ({ ...u, orden: u.orden + 1 })),
+    queryFn: () => leerBloque(id, bloque),
     staleTime: 5 * 60_000,
   }),
-  folios: (id: string) => queryOptions({ queryKey: ['folios', id], queryFn: async () => { const m = await api().documentos.folios(id); return { folios: m.folios.map((f) => ({ ...f, orden: f.orden + 1 })) }; }, staleTime: 5 * 60_000 }),
-  secciones: (id: string) => queryOptions({ queryKey: ['secciones', id], queryFn: async () => (await api().documentos.secciones(id)).map((s) => ({ ...s, unidadDesde: s.unidadDesde + 1, ...(s.unidadHasta != null ? { unidadHasta: s.unidadHasta + 1 } : {}) })), staleTime: 5 * 60_000 }),
-  figuras: (id: string) => queryOptions({ queryKey: ['figuras', id], queryFn: async () => (await api().documentos.figuras(id)).map((f) => ({ ...f, unidad: f.unidad + 1 })), staleTime: 5 * 60_000 }),
+  folios: (id: string) => queryOptions({ queryKey: ['folios', id], queryFn: async () => {
+    const m = await api().documentos.folios(id);
+    if (m.folios.length) anotarBase(id, Math.min(...m.folios.map((f) => f.orden)));
+    const b = baseDe(id);
+    return { folios: m.folios.map((f) => ({ ...f, orden: f.orden - b + 1 })) };
+  }, staleTime: 5 * 60_000 }),
+  secciones: (id: string) => queryOptions({ queryKey: ['secciones', id], queryFn: async () => { const r = await api().documentos.secciones(id); const b = baseDe(id); return r.map((s) => ({ ...s, unidadDesde: s.unidadDesde - b + 1, ...(s.unidadHasta != null ? { unidadHasta: s.unidadHasta - b + 1 } : {}) })); }, staleTime: 5 * 60_000 }),
+  figuras: (id: string) => queryOptions({ queryKey: ['figuras', id], queryFn: async () => { const r = await api().documentos.figuras(id); const b = baseDe(id); return r.map((f) => ({ ...f, unidad: f.unidad - b + 1 })); }, staleTime: 5 * 60_000 }),
   original: (id: string) => queryOptions({ queryKey: ['original', id], queryFn: () => api().documentos.original(id), staleTime: 50 * 60_000 }),
   bibliotecas: () => queryOptions({ queryKey: ['bibliotecas'], queryFn: () => api().bibliotecas.listar() }),
   /*

@@ -4,7 +4,7 @@
  */
 const ESC: Record<string, string> = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
 
-import { separarHablantes } from '@scholaris/nucleo';
+import { limpiarMarcadoOCR, separarHablantes } from '@scholaris/nucleo';
 import { textoLimpio } from './texto';
 
 const ABRE = '\u0002', CIERRA = '\u0003';
@@ -15,7 +15,7 @@ const ABRE = '\u0002', CIERRA = '\u0003';
  * texto («**Nombre:**», enteras o partidas por un corte). Ningún asterisco pasa.
  */
 export function htmlSeguro(html: string): string {
-  const deServidor = html.replace(/<b class="hablante">([^<]*)<\/b>\s*/g, (_m, n: string) => `${ABRE}${n}${CIERRA}`);
+  const deServidor = limpiarMarcadoOCR(html).replace(/<b class="hablante">([^<]*)<\/b>\s*/g, (_m, n: string) => `${ABRE}${n}${CIERRA}`);
   const { texto, hablantes } = separarHablantes(deServidor);
   let t = texto;
   for (const h of [...hablantes].reverse()) t = `${t.slice(0, h.pos)}${ABRE}${h.nombre}${CIERRA}${t.slice(h.pos)}`;

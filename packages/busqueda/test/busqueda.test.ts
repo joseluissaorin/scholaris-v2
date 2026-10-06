@@ -57,6 +57,9 @@ describe('marcas de hablante en el resaltado', () => {
   it('quita las marcas partidas en los bordes del fragmento', () => {
     expect(resaltar('anza:** ¿Qué gigantes? **Don Quij', ['gigantes'])).toBe('¿Qué <mark>gigantes</mark>?');
   });
+  it('el marcado de la OCR de la v1 no llega al resaltado', () => {
+    expect(resaltar('![](page=0,bbox=[25, 11, 817, 447])\n\n<div align="center">\n\n# MAFALDA\n\n</div>', ['mafalda'])).toBe('# <mark>MAFALDA</mark>');
+  });
   it('la etiqueta no queda dentro de la marca de la coincidencia', () => {
     expect(resaltar('¿Qué gigantes? **Don Quijote:** Aquellos que allí ves', ['aquellos'])).toBe('¿Qué gigantes? <b class="hablante">Don Quijote</b> <mark>Aquellos</mark> que allí ves');
   });

@@ -6,7 +6,7 @@
  * estantería del usuario.
  */
 import type { Hono } from 'hono';
-import { anclaACita, repararMarcasHablante, type Ancla } from '@scholaris/nucleo';
+import { anclaACita, limpiarMarcadoOCR, repararMarcasHablante, type Ancla } from '@scholaris/nucleo';
 import { citaDocumento, verificarAfirmacion } from '@scholaris/citas';
 import type { Entorno } from '../entorno.js';
 import { obtenerBuscador } from '../compartido/servicios.js';
@@ -47,7 +47,7 @@ async function llamar(p: PuertosUsuario, nombre: string, a: Record<string, unkno
       const b = await obtenerBuscador(p);
       const filtros = { ...(Array.isArray(a.documents) ? { documentos: a.documents as string[] } : {}), ...(typeof a.library === 'string' ? { bibliotecas: [a.library] } : {}) };
       const r = await b.buscar(String(a.query ?? ''), { limite: Math.min(50, Number(a.k ?? 8)), filtros });
-      const lineas = r.resultados.map((x, i) => `[${i + 1}] ${citaCorta(x.documento.metadatos, x.fragmento.ancla, x.fragmento.anclaFin)}: «${x.documento.metadatos.titulo}» (documento ${x.documento.id}, fragmento ${x.fragmento.id})\n${repararMarcasHablante(x.fragmento.texto)}`);
+      const lineas = r.resultados.map((x, i) => `[${i + 1}] ${citaCorta(x.documento.metadatos, x.fragmento.ancla, x.fragmento.anclaFin)}: «${x.documento.metadatos.titulo}» (documento ${x.documento.id}, fragmento ${x.fragmento.id})\n${repararMarcasHablante(limpiarMarcadoOCR(x.fragmento.texto))}`);
       return { ...texto(lineas.join('\n\n') || 'Sin resultados.'), structuredContent: { results: r.resultados.map((x) => ({ fragment: x.fragmento.id, document: x.documento.id, title: x.documento.metadatos.titulo, locator: anclaACita(x.fragmento.ancla, x.fragmento.anclaFin), text: x.fragmento.texto, score: x.puntuacion })) } };
     }
     case 'cite': {

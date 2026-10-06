@@ -4,6 +4,7 @@
  * con innerHTML, y sabe resaltar términos de búsqueda.
  */
 import { Fragment, memo, type ReactNode } from 'react';
+import { limpiarMarcadoOCR } from '@scholaris/nucleo';
 import { useMarcadorEntidades, type MarcadorEntidades } from './contexto-entidades';
 
 const normal = (s: string) => s.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase();
@@ -39,7 +40,7 @@ export const Markdown = memo(function Markdown({ texto, q, className, destacar }
   const raices = raicesDe(q);
   const ent = useMarcadorEntidades();
   const destacado = destacar ? normal(destacar).slice(0, 60) : null;
-  const bloques = texto.split(/\n\s*\n/);
+  const bloques = limpiarMarcadoOCR(texto).split(/\n\s*\n/);
   return (
     <div className={['prosa', className].filter(Boolean).join(' ')}>
       {bloques.map((b, i) => {

@@ -4,7 +4,7 @@
  */
 
 import { variantesConsulta } from '@scholaris/normalizacion';
-import { separarHablantes } from '@scholaris/nucleo';
+import { limpiarMarcadoOCR, separarHablantes } from '@scholaris/nucleo';
 
 /** Pliega un carácter: minúscula y sin diacríticos. Devuelve siempre un carácter. */
 function plegarCaracter(c: string): string {
@@ -178,7 +178,7 @@ function escaparHtml(s: string): string {
 export function resaltar(textoCrudo: string, consultaTerminos: string[], ventana = 280): string {
   // Las marcas de hablante («**Nombre:**») se separan antes de recortar: si la
   // ventana las partiera, el Markdown saldría crudo. Vuelven como etiqueta propia.
-  const { texto, hablantes } = separarHablantes(textoCrudo);
+  const { texto, hablantes } = separarHablantes(limpiarMarcadoOCR(textoCrudo));
   const plano = plegar(texto);
   const unicos = [...new Set(consultaTerminos.filter((t) => t.length >= 2))].sort((a, b) => b.length - a.length);
   const tramos: Array<[number, number]> = [];

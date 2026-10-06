@@ -72,3 +72,33 @@ describe('utilidades de migración', () => {
     expect(c.length).toBeLessThanOrEqual(31);
   });
 });
+
+describe('reparación de los documentos migrados con el migrador antiguo', () => {
+  it('renumera desde 0 y quita el marcado de la OCR vieja una sola vez', async () => {
+    const { DatabaseSync } = await import('node:sqlite');
+    const { aplicarEsquema, repararMigrados, REPARACION_MIGRADOS } = await import('../src/index.js');
+    const bd = new DatabaseSync(':memory:');
+    const sql = { async ejecutar<T>(c: string, ...p: unknown[]) { return bd.prepare(c).all(...(p as never[])) as T[]; }, async transaccion<T>(fn: (s: never) => Promise<T>) { return fn(sql as never); } };
+    await aplicarEsquema(sql as never);
+    // Simula una estantería anterior a la reparación.
+    await sql.ejecutar('DELETE FROM spdf WHERE clave = ?', REPARACION_MIGRADOS);
+    await sql.ejecutar(`INSERT INTO documentos (id, tipo, metadatos, estado, huella, original, mime, bytes, creado, actualizado) VALUES ('m', 'pdf_escaneado', '{"titulo":"Mafalda 1","autores":[]}', 'listo', 'h', '', 'x', 1, 'x', 'x')`);
+    await sql.ejecutar(`INSERT INTO documentos (id, tipo, metadatos, estado, huella, original, mime, bytes, creado, actualizado) VALUES ('n', 'pdf', '{"titulo":"Nuevo","autores":[]}', 'listo', 'h2', '', 'x', 1, 'x', 'x')`);
+    const ancla = (f: number) => JSON.stringify({ tipo: 'pagina', fisica: f, impresa: null, romana: false, origen: 'ninguno', confianza: 1 });
+    for (const o of [1, 2, 3]) await sql.ejecutar('INSERT INTO unidades (id, documento, orden, ancla, texto, lector, confianza) VALUES (?, ?, ?, ?, ?, ?, 1)', `m:u${o}`, 'm', o, ancla(o), o === 1 ? '![](page=0,bbox=[25, 11, 817, 447])\n\n<div align="center">\n\n# MAFALDA\n\n</div>' : `página ${o}`, 'scholaris-v3');
+    // Un documento nuevo a medio leer (empieza en 1 porque falta la 0): no se toca.
+    for (const o of [1, 2]) await sql.ejecutar('INSERT INTO unidades (id, documento, orden, ancla, texto, lector, confianza) VALUES (?, ?, ?, ?, ?, ?, 1)', `n:u${o}`, 'n', o, ancla(o + 1), 'x', 'gemini');
+    await sql.ejecutar(`INSERT INTO fragmentos (id, documento, unidad, orden, texto, contexto, seccion, ancla) VALUES ('f', 'm', 'm:u1', 0, '![](page=0,bbox=[1, 2, 3, 4]) MAFALDA', '', '[]', ?)`, ancla(1));
+    const r = await repararMigrados(sql as never);
+    expect(r.renumerados).toBe(1);
+    const m = await sql.ejecutar<{ orden: number; texto: string }>("SELECT orden, texto FROM unidades WHERE documento = 'm' ORDER BY orden");
+    expect(m.map((u) => u.orden)).toEqual([0, 1, 2]);
+    expect(m[0]!.texto).toBe('# MAFALDA');
+    expect((await sql.ejecutar<{ orden: number }>("SELECT orden FROM unidades WHERE documento = 'n' ORDER BY orden")).map((u) => u.orden)).toEqual([1, 2]);
+    const [f] = await sql.ejecutar<{ texto: string; tb: string | null }>("SELECT texto, texto_busqueda AS tb FROM fragmentos WHERE id = 'f'");
+    expect(f!.texto).toBe('MAFALDA');
+    expect(f!.tb).not.toBeNull();
+    // La segunda vez no hace nada.
+    expect(await repararMigrados(sql as never)).toEqual({ renumerados: 0, textos: 0 });
+  });
+});

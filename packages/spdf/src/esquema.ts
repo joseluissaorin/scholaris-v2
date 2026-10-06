@@ -9,6 +9,7 @@
  */
 
 import type { SQL, ValorSQL } from "@scholaris/nucleo";
+import { limpiarMarcadoOCR } from "@scholaris/nucleo";
 import { epocaDeDocumento, lenguaDe, textoBusqueda, type Epoca } from "@scholaris/normalizacion";
 
 export const VERSION_SPDF = "4.1";
@@ -381,6 +382,38 @@ async function migrarPalabras(sql: SQL): Promise<void> {
   if (t && !/\bpalabras\b/.test(t.sql ?? '')) await sql.ejecutar('ALTER TABLE unidades ADD COLUMN palabras TEXT');
 }
 
+/**
+ * Reparación de una sola vez de los documentos migrados de la v1/v3 con el
+ * migrador antiguo: unidades numeradas desde 1 (el contrato es desde 0; la web
+ * dejaba la primera fila de páginas en esqueleto) y el marcado de la OCR vieja
+ * dentro del texto («![](page=0,bbox=[…])», «<div align="center">»). Queda
+ * anotada en la tabla `spdf`; repetirla no hace nada.
+ */
+export const REPARACION_MIGRADOS = 'reparacion_migrados_v3_1';
+export async function repararMigrados(sql: SQL): Promise<{ renumerados: number; textos: number }> {
+  const [hecha] = await sql.ejecutar<{ valor: string }>('SELECT valor FROM spdf WHERE clave = ?', REPARACION_MIGRADOS);
+  if (hecha) return { renumerados: 0, textos: 0 };
+  // Solo documentos migrados (lector de v3) cuya numeración entera empieza en 1.
+  const docs = await sql.ejecutar<{ documento: string }>(
+    "SELECT documento FROM unidades GROUP BY documento HAVING MIN(orden) = 1 AND SUM(CASE WHEN lector LIKE 'scholaris-v3%' THEN 1 ELSE 0 END) > 0",
+  );
+  for (const d of docs) await sql.ejecutar('UPDATE unidades SET orden = orden - 1 WHERE documento = ?', d.documento);
+  let textos = 0;
+  const sucias = "(texto LIKE '%](page=%' OR texto LIKE '%![](%' OR texto LIKE '%<div align%' OR texto LIKE '%</div>%')";
+  for (const u of await sql.ejecutar<{ id: string; texto: string }>(`SELECT id, texto FROM unidades WHERE ${sucias}`)) {
+    const limpio = limpiarMarcadoOCR(u.texto ?? '');
+    if (limpio !== u.texto) { await sql.ejecutar('UPDATE unidades SET texto = ? WHERE id = ?', limpio, u.id); textos++; }
+  }
+  let fragmentos = 0;
+  for (const f of await sql.ejecutar<{ n: number; texto: string }>(`SELECT n, texto FROM fragmentos WHERE ${sucias}`)) {
+    const limpio = limpiarMarcadoOCR(f.texto ?? '');
+    if (limpio !== f.texto) { await sql.ejecutar('UPDATE fragmentos SET texto = ?, texto_busqueda = NULL WHERE n = ?', limpio, f.n); fragmentos++; }
+  }
+  if (fragmentos) await rellenarTextoBusqueda(sql);
+  await sql.ejecutar("INSERT INTO spdf(clave, valor) VALUES (?, ?) ON CONFLICT(clave) DO UPDATE SET valor = excluded.valor", REPARACION_MIGRADOS, new Date().toISOString());
+  return { renumerados: docs.length, textos: textos + fragmentos };
+}
+
 export async function aplicarEsquema(sql: SQL, opciones: { generador?: string; rellenar?: boolean } = {}): Promise<void> {
   await migrarPalabras(sql);
   const reconstruir = await prepararMigracion41(sql);
@@ -407,4 +440,5 @@ export async function aplicarEsquema(sql: SQL, opciones: { generador?: string; r
   if (opciones.generador) {
     await sql.ejecutar("INSERT INTO spdf(clave, valor) VALUES ('generador', ?) ON CONFLICT(clave) DO UPDATE SET valor = excluded.valor", opciones.generador);
   }
+  await repararMigrados(sql);
 }

@@ -1,7 +1,7 @@
 /** Documentos de la estantería (ver contrato/documentos.ts). */
 import type { Hono } from 'hono';
 import type { Ancla, Documento, MetadatosDocumento, ValorSQL } from '@scholaris/nucleo';
-import { enLista, vectorABytes } from '@scholaris/nucleo';
+import { enLista, limpiarMarcadoOCR, vectorABytes } from '@scholaris/nucleo';
 import type {
   DetalleDocumento, FiguraVista, FoliosRehechos, FragmentoVista, MapaFolios, Pagina, ParcheMetadatos, RehacerFolios, Reprocesar, ResumenDocumento, SeccionVista,
   UnidadVista, VolcadoDocumento,
@@ -68,7 +68,7 @@ export async function borrarDocumentoCompleto(p: PuertosUsuario, id: string): Pr
 function unidadAVista(f: Fila, urls: { imagen?: string; miniatura?: string }): UnidadVista {
   const ancla = json<Ancla>(f.ancla, { tipo: 'pagina', fisica: Number(f.orden), impresa: null, romana: false, origen: 'ninguno', confianza: 0 });
   const v: UnidadVista = {
-    id: String(f.id), orden: Number(f.orden), ancla, etiqueta: etiquetaAncla(ancla), texto: String(f.texto ?? ''),
+    id: String(f.id), orden: Number(f.orden), ancla, etiqueta: etiquetaAncla(ancla), texto: limpiarMarcadoOCR(String(f.texto ?? '')),
     lector: String(f.lector ?? ''), confianza: Number(f.confianza ?? 1),
   };
   const notas = json<string[] | null>(f.notas, null);
@@ -320,7 +320,7 @@ export function rutasDocumentos(app: Hono<Entorno>): void {
     return c.json<FragmentoVista[]>(filas.map((f) => {
       const fr = filaAFragmento(f as never);
       const v: FragmentoVista = {
-        id: fr.id, unidad: Number(f.orden_unidad), orden: fr.orden, texto: fr.texto, contexto: fr.contexto, seccion: fr.seccion,
+        id: fr.id, unidad: Number(f.orden_unidad), orden: fr.orden, texto: limpiarMarcadoOCR(fr.texto), contexto: fr.contexto, seccion: fr.seccion,
         ancla: fr.ancla, etiqueta: etiquetaAncla(fr.ancla, fr.anclaFin),
       };
       if (fr.anclaFin) v.anclaFin = fr.anclaFin;

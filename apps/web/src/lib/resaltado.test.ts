@@ -18,6 +18,10 @@ describe('marcas de hablante en los pasajes', () => {
     expect(r).not.toMatch(/<img|<script/);
     expect(r).not.toContain('*');
   });
+  it('el marcado de la OCR de la v1 no se pinta', () => {
+    expect(textoLimpio('![](page=0,bbox=[0, 0, 589, 753])')).toBe('');
+    expect(htmlSeguro('![](page=0,bbox=[25, 11, 817, 447]) <div align="center">MAFALDA</div>')).toBe('MAFALDA');
+  });
   it('el texto plano dice quién habla sin Markdown', () => {
     expect(textoLimpio('**Sancho Panza:** ¿Qué gigantes?')).toBe('Sancho Panza: ¿Qué gigantes?');
   });

@@ -10,7 +10,7 @@
  * el dueño no los borre mientras alguien los use. Solo la puerta puede pedir
  * esto (va en la sesión, no en la petición).
  */
-import { nuevoId } from '@scholaris/nucleo';
+import { limpiarMarcadoOCR, nuevoId } from '@scholaris/nucleo';
 import {
   abrirSpdf, escribirDocumento, escribirEspacio, escribirFiguras, escribirFragmentos, escribirSecciones, escribirUnidades, escribirVectores,
   leerDocumento, leerVectores, registrarProcedencia,
@@ -111,9 +111,11 @@ export async function importarSpdf(p: PuertosUsuario, bytes: Uint8Array, o: Opci
       const mapaFrag = new Map(fragmentos.map((f) => [f.id, remap(f).id]));
       await p.sql.transaccion(async (tx) => {
         await escribirDocumento(tx, { ...d0, id, original: k(d0.original) ?? claves.get('original') ?? '', estado: 'listo', bibliotecas, actualizado: ahora() });
-        await escribirUnidades(tx, unidades.map((u) => ({ ...remap(u), documento: id, imagen: k(u.imagen), miniatura: k(u.miniatura) })));
+        // Un .spdf del migrador antiguo numera desde 1 y trae el marcado de la OCR de la v1: se normaliza al entrar.
+        const base = unidades.length && Math.min(...unidades.map((u) => u.orden)) === 1 && unidades.some((u) => (u.lector ?? '').startsWith('scholaris-v3')) ? 1 : 0;
+        await escribirUnidades(tx, unidades.map((u) => ({ ...remap(u), documento: id, orden: u.orden - base, texto: limpiarMarcadoOCR(u.texto), imagen: k(u.imagen), miniatura: k(u.miniatura) })));
         await escribirSecciones(tx, secciones.map((s) => ({ ...remap(s), documento: id, unidadDesde: mapaUnidad.get(s.unidadDesde) ?? s.unidadDesde, unidadHasta: s.unidadHasta ? mapaUnidad.get(s.unidadHasta) ?? s.unidadHasta : s.unidadHasta })));
-        await escribirFragmentos(tx, fragmentos.map((f) => ({ ...remap(f), documento: id, unidad: mapaUnidad.get(f.unidad) ?? f.unidad })));
+        await escribirFragmentos(tx, fragmentos.map((f) => ({ ...remap(f), documento: id, texto: limpiarMarcadoOCR(f.texto), unidad: mapaUnidad.get(f.unidad) ?? f.unidad })));
         await escribirFiguras(tx, figuras.map((g) => ({ ...remap(g), documento: id, unidad: mapaUnidad.get(g.unidad) ?? g.unidad, imagen: k(g.imagen) ?? g.imagen })));
         for (const e of espacios) await escribirEspacio(tx, e);
       });

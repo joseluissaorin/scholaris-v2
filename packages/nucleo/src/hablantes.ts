@@ -60,3 +60,34 @@ export function repararMarcasHablante(texto: string): string {
   let k = 0;
   return s.replace(/\u0001/g, () => completas[k++] ?? '');
 }
+
+/**
+ * Marcado que dejó la OCR de la v1 dentro del texto: imágenes con su caja
+ * («![](page=0,bbox=[25, 11, 817, 447])») y envoltorios HTML de alineación
+ * («<div align="center">»). No es texto del documento: se quita al migrar, al
+ * pintar, al buscar y al servir. `cajas` devuelve las cajas por si alguien
+ * quiere aprovecharlas como regiones de figura (en las unidades de la página).
+ */
+const IMAGEN_OCR = /!\[[^\]\n]*\]\(\s*page\s*=\s*(\d+)\s*,\s*bbox\s*=\s*\[\s*([-\d.\s,]+?)\s*\]\s*\)/g;
+const IMAGEN_VACIA = /!\[\]\([^)\n]*\)/g;
+const DIV_OCR = /<\/?div\b[^>\n]*>/gi;
+
+export function cajasOCR(texto: string): Array<{ pagina: number; caja: [number, number, number, number] }> {
+  const salida: Array<{ pagina: number; caja: [number, number, number, number] }> = [];
+  for (const m of texto.matchAll(IMAGEN_OCR)) {
+    const n = (m[2] ?? '').split(',').map((x) => Number(x.trim()));
+    if (n.length === 4 && n.every((x) => Number.isFinite(x))) salida.push({ pagina: Number(m[1]), caja: n as [number, number, number, number] });
+  }
+  return salida;
+}
+
+export function limpiarMarcadoOCR(texto: string): string {
+  if (!texto || (!texto.includes('](') && !/<\/?div/i.test(texto))) return texto;
+  return texto
+    .replace(IMAGEN_OCR, '')
+    .replace(IMAGEN_VACIA, '')
+    .replace(DIV_OCR, '')
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}

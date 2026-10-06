@@ -1,4 +1,4 @@
-import { separarHablantes } from '@scholaris/nucleo';
+import { limpiarMarcadoOCR, separarHablantes } from '@scholaris/nucleo';
 /**
  * Texto de un pasaje listo para enseñar en una línea o en un extracto: sin
  * marcas de Markdown, con el LaTeX de los artículos convertido en algo legible
@@ -25,7 +25,7 @@ function latexATexto(t: string): string {
 
 export function textoLimpio(t: string): string {
   // Marcas de hablante («**Nombre:**», también partidas por un corte): en texto plano, «Nombre: ».
-  const { texto, hablantes } = separarHablantes(t);
+  const { texto, hablantes } = separarHablantes(limpiarMarcadoOCR(t));
   let conNombres = texto;
   for (const h of [...hablantes].reverse()) conNombres = `${conNombres.slice(0, h.pos)}${h.nombre}: ${conNombres.slice(h.pos)}`;
   return conNombres
