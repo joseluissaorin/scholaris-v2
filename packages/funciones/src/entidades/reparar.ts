@@ -12,9 +12,10 @@ import type { Redactor, SQL } from '@scholaris/nucleo';
 import type { TipoEntidad } from '@scholaris/contrato';
 import { ahora, num } from '../util.js';
 import { fijarAjuste, leerAjuste } from '../ajustes.js';
-import { claveEntidad, contextoMencion, formaCompatible } from './normalizar.js';
+import { claveEntidad, contextoMencion, descripcionCorroborada, formaCompatible, palabrasSignificativas } from './normalizar.js';
 import { DESCRIPCION_FICCION, obtenerEntidad, recontar, resolverBiblioteca, textoBusqueda } from './resolver.js';
-import { enlazarWikidata, type OpcionesWikidata } from './wikidata.js';
+import { buscarWikidata, contextoDe, DESAMBIGUACION, enlazarWikidata, FICCION, NO_ES, type OpcionesWikidata } from './wikidata.js';
+import { normalizarClave } from '../util.js';
 import { fraseValida, reconstruirAristasDocumento } from './aristas.js';
 import { tokensAprox, usdAprox, type UsoLote } from './extraer.js';
 
@@ -24,25 +25,69 @@ export const ESQUEMA_FICCION = {
   required: ['f'],
 } as const;
 
-export const SISTEMA_FICCION = `Recibes una lista numerada de personas nombradas en documentos de una biblioteca, cada una con el título del documento y un trozo del pasaje. Devuelve en «f» los números de las que son personajes de ficción (de una novela, un cuento, una obra de teatro, un mito o una leyenda), aunque estén inspirados en alguien real. Las personas reales (autores, músicos, entrevistados, figuras históricas) no van. Si dudas, no lo incluyas. Responde solo con el JSON.`;
+export const SISTEMA_FICCION = `Recibes una lista numerada de personas nombradas en documentos de una biblioteca. De cada una ves los documentos donde aparece y algún pasaje de cada uno. Devuelve en «f» los números de las que son personajes de ficción (de una novela, un cuento, una obra de teatro, un mito o una leyenda).
+Cuidado con los trasuntos: si algún pasaje habla de ella como alguien que existió (su biografía, su música, sus libros, una entrevista), es una persona real aunque en otro texto inspire a un personaje; el personaje inspirado en ella es otra entidad. Las personas reales (autores, músicos, entrevistados, figuras históricas) no van. Si dudas, no la incluyas. Responde solo con el JSON.`;
 
-/** Decide qué personas sin clasificar son personajes de ficción. Devuelve cuántas se clasificaron. */
-export async function clasificarFiccion(sql: SQL, redactor: Redactor, lote = 120): Promise<{ clasificadas: number; ficticias: number; uso: UsoLote }> {
+export interface OpcionesClasificacion {
+  lote?: number;
+  /** Para consultar Wikidata (con caché) y confirmar a las personas reales sin preguntar. */
+  fetch?: typeof fetch | false;
+}
+
+/**
+ * Decide qué personas sin clasificar son personajes de ficción.
+ *  1. Sin preguntar a nadie: si Wikidata tiene una persona real con ese nombre
+ *     exacto y los pasajes confirman su descripción («saxofonista»), es real.
+ *     Así un trasunto («Johnny Carter» como sombra de Parker) no contamina.
+ *  2. Las demás, al redactor, con pasajes de cada documento donde aparecen.
+ */
+export async function clasificarFiccion(sql: SQL, redactor: Redactor, o: OpcionesClasificacion = {}): Promise<{ clasificadas: number; ficticias: number; confirmadas: number; uso: UsoLote }> {
+  const lote = o.lote ?? 100;
+  const f = o.fetch === false ? undefined : o.fetch ?? (typeof fetch === 'function' ? fetch : undefined);
   const uso: UsoLote = { tokensEntrada: 0, tokensSalida: 0, llamadas: 0 };
-  const pendientes = await sql.ejecutar<{ id: string; nombre: string }>(
-    "SELECT id, nombre FROM entidades WHERE tipo = 'persona' AND fusionada_en IS NULL AND n_menciones > 0 AND ficticia IS NULL ORDER BY n_menciones DESC",
+  const pendientes = await sql.ejecutar<{ id: string; nombre: string; clave: string }>(
+    "SELECT id, nombre, clave FROM entidades WHERE tipo = 'persona' AND fusionada_en IS NULL AND n_menciones > 0 AND ficticia IS NULL ORDER BY n_menciones DESC",
   );
-  let clasificadas = 0, ficticias = 0;
-  for (let i = 0; i < pendientes.length; i += lote) {
-    const grupo = pendientes.slice(i, i + lote);
+  let clasificadas = 0, ficticias = 0, confirmadas = 0;
+  const preguntar: Array<{ id: string; nombre: string }> = [];
+  for (const e of pendientes) {
+    let real = false;
+    if (f && palabrasSignificativas(e.clave).length >= 2) {
+      const contexto = await contextoDe(sql, e.id, 6, 220);
+      try {
+        for (const idioma of ['es', 'en']) {
+          const cs = await buscarWikidata(sql, e.nombre, idioma, f);
+          real = cs.some((c) => {
+            const d = c.descripcion ?? '';
+            const exacta = normalizarClave(c.etiqueta) === e.clave || normalizarClave(c.coincide) === e.clave;
+            return exacta && !!d && !DESAMBIGUACION.test(d) && !FICCION.test(d) && !NO_ES.persona!.test(d) && descripcionCorroborada(d, contexto);
+          });
+          if (real) break;
+        }
+      } catch { /* sin Wikidata, decide el redactor */ }
+    }
+    if (real) {
+      await sql.ejecutar('UPDATE entidades SET ficticia = 0 WHERE id = ?', e.id);
+      clasificadas++; confirmadas++;
+    } else preguntar.push(e);
+  }
+  for (let i = 0; i < preguntar.length; i += lote) {
+    const grupo = preguntar.slice(i, i + lote);
     const lineas: string[] = [];
     for (const [j, e] of grupo.entries()) {
-      const [m] = await sql.ejecutar<{ texto: string; ini: number; fin: number; titulo: string | null }>(
-        `SELECT f.texto, m.ini, m.fin, d.titulo FROM menciones m JOIN fragmentos f ON f.id = m.fragmento JOIN documentos d ON d.id = m.documento
-          WHERE m.entidad = ? LIMIT 1`, e.id,
+      // Un pasaje de cada documento (hasta tres documentos), con su título.
+      const filas = await sql.ejecutar<{ documento: string; texto: string; ini: number; fin: number; titulo: string | null }>(
+        `SELECT m.documento, f.texto, m.ini, m.fin, d.titulo FROM menciones m JOIN fragmentos f ON f.id = m.fragmento JOIN documentos d ON d.id = m.documento
+          WHERE m.entidad = ? ORDER BY m.documento, m.orden LIMIT 60`, e.id,
       );
-      const pasaje = m ? contextoMencion(m.texto, num(m.ini), num(m.fin), 90).replace(/[⟦⟧]/g, '') : '';
-      lineas.push(`[${j + 1}] ${e.nombre} · «${m?.titulo ?? ''}» · ${pasaje}`);
+      const vistos = new Set<string>();
+      const trozos: string[] = [];
+      for (const m of filas) {
+        if (vistos.has(m.documento) || vistos.size >= 3) continue;
+        vistos.add(m.documento);
+        trozos.push(`«${m.titulo ?? ''}»: ${contextoMencion(m.texto, num(m.ini), num(m.fin), 90).replace(/[⟦⟧]/g, '')}`);
+      }
+      lineas.push(`[${j + 1}] ${e.nombre} · ${trozos.join(' | ')}`);
     }
     const texto = lineas.join('\n');
     uso.llamadas++;
@@ -61,16 +106,16 @@ export async function clasificarFiccion(sql: SQL, redactor: Redactor, lote = 120
     }
     const si = new Set(indices);
     for (const [j, e] of grupo.entries()) {
-      const f = si.has(j) ? 1 : 0;
+      const fic = si.has(j) ? 1 : 0;
       await sql.ejecutar(
         `UPDATE entidades SET ficticia = ?, descripcion = CASE WHEN ? = 1 THEN ? ELSE descripcion END WHERE id = ?`,
-        f, f, DESCRIPCION_FICCION, e.id,
+        fic, fic, DESCRIPCION_FICCION, e.id,
       );
       clasificadas++;
-      ficticias += f;
+      ficticias += fic;
     }
   }
-  return { clasificadas, ficticias, uso };
+  return { clasificadas, ficticias, confirmadas, uso };
 }
 
 export interface ResultadoReparacion {
@@ -94,21 +139,38 @@ export async function rehacerEnlacesEntidades(sql: SQL, redactor: Redactor | und
   const t0 = Date.now();
   // 1. Fuera las fusiones: cada fila vuelve a ser ella misma.
   await sql.ejecutar('UPDATE entidades SET fusionada_en = NULL');
-  await sql.ejecutar("UPDATE entidades SET ficticia = 1 WHERE tipo = 'persona' AND descripcion = ?", DESCRIPCION_FICCION);
+  // Real o personaje se vuelve a decidir con las reglas de ahora (una reparación
+  // anterior pudo tomar a Charlie Parker por personaje).
+  await sql.ejecutar("UPDATE entidades SET ficticia = NULL WHERE tipo = 'persona'");
 
-  // 2. Cada mención, a la entidad de su nombre canónico; si su forma no puede
-  //    nombrarla («Dédée» como forma de Johnny Carter), a la entidad de esa forma.
-  const combinaciones = await sql.ejecutar<{ tipo: TipoEntidad; normalizado: string; texto: string }>('SELECT DISTINCT tipo, normalizado, texto FROM menciones');
+  // 2. Cada mención, a la entidad de su nombre canónico. Si su forma no puede
+  //    nombrarla («Johnny» dicho de Charlie Parker en «El perseguidor», donde
+  //    Johnny es su trasunto), a la única entidad del mismo documento a la que
+  //    sí puede nombrar (Johnny Carter); y si no hay una sola, a la de esa forma.
+  const combinaciones = await sql.ejecutar<{ documento: string; tipo: TipoEntidad; normalizado: string; texto: string }>(
+    'SELECT DISTINCT documento, tipo, normalizado, texto FROM menciones',
+  );
+  const nombresDoc = new Map<string, Set<string>>();
+  for (const c of combinaciones) {
+    const k = `${c.documento}\u0000${c.tipo}`;
+    (nombresDoc.get(k) ?? nombresDoc.set(k, new Set()).get(k)!).add(c.normalizado);
+  }
   let reasignadas = 0, creadas = 0;
   const antes = num((await sql.ejecutar<{ n: number }>('SELECT COUNT(*) AS n FROM entidades'))[0]?.n);
   for (const c of combinaciones) {
-    const propia = formaCompatible(c.texto, c.normalizado, c.tipo);
-    const nombre = propia ? c.normalizado : c.texto.replace(/\s+/g, ' ').trim();
+    let nombre = c.normalizado;
+    if (!formaCompatible(c.texto, c.normalizado, c.tipo)) {
+      const otros = [...(nombresDoc.get(`${c.documento}\u0000${c.tipo}`) ?? [])].filter((n) => n !== c.normalizado && formaCompatible(c.texto, n, c.tipo));
+      const claves = new Set(otros.map((n) => claveEntidad(n, c.tipo)));
+      nombre = claves.size === 1 ? otros[0]! : c.texto.replace(/\s+/g, ' ').trim();
+    }
     const [fila] = await sql.ejecutar<{ id: string }>('SELECT id FROM entidades WHERE tipo = ? AND clave = ?', c.tipo, claveEntidad(nombre, c.tipo));
     const id = fila?.id ?? (await obtenerEntidad(sql, c.tipo, nombre, [], null));
-    const [cambio] = await sql.ejecutar<{ n: number }>('SELECT COUNT(*) AS n FROM menciones WHERE tipo = ? AND normalizado = ? AND texto = ? AND entidad <> ?', c.tipo, c.normalizado, c.texto, id);
+    const [cambio] = await sql.ejecutar<{ n: number }>(
+      'SELECT COUNT(*) AS n FROM menciones WHERE documento = ? AND tipo = ? AND normalizado = ? AND texto = ? AND entidad <> ?', c.documento, c.tipo, c.normalizado, c.texto, id,
+    );
     if (num(cambio?.n)) {
-      await sql.ejecutar('UPDATE menciones SET entidad = ? WHERE tipo = ? AND normalizado = ? AND texto = ?', id, c.tipo, c.normalizado, c.texto);
+      await sql.ejecutar('UPDATE menciones SET entidad = ? WHERE documento = ? AND tipo = ? AND normalizado = ? AND texto = ?', id, c.documento, c.tipo, c.normalizado, c.texto);
       reasignadas += num(cambio?.n);
     }
   }
@@ -134,7 +196,7 @@ export async function rehacerEnlacesEntidades(sql: SQL, redactor: Redactor | und
   // 4. ¿Personaje o persona real? Solo las que no se sabe (las antiguas).
   let clasificadas = 0, ficticias = 0, usd = 0;
   if (redactor) {
-    const r = await clasificarFiccion(sql, redactor);
+    const r = await clasificarFiccion(sql, redactor, o.wikidata === false ? { fetch: false } : o.wikidata?.fetch ? { fetch: o.wikidata.fetch } : {});
     clasificadas = r.clasificadas; ficticias = r.ficticias; usd += usdAprox(r.uso);
   }
 
@@ -182,15 +244,19 @@ export async function rehacerEnlacesEntidades(sql: SQL, redactor: Redactor | und
  * repara sola una vez (la primera vez que se mira el estado de las entidades,
  * en el barrido diario o tras una ingesta), sin volver a extraer.
  * 2: personajes de ficción, formas compatibles y obras por autor y año.
+ * 3: las personas reales confirmadas por Wikidata y los textos no pasan a
+ *    personaje; las formas que no nombran a su entidad van a la entidad del
+ *    mismo documento que sí nombran; «Johnny» se une a Johnny Carter.
  */
-export const VERSION_ENLACES = 2;
+export const VERSION_ENLACES = 3;
 const CLAVE_VERSION = 'entidades_enlaces_version';
 const CLAVE_EN_MARCHA = 'entidades_enlaces_en_marcha';
 
 export async function enlacesAlDia(sql: SQL): Promise<boolean> {
   const hay = num((await sql.ejecutar<{ n: number }>('SELECT COUNT(*) AS n FROM menciones'))[0]?.n);
   if (!hay) return true;
-  if (num(await leerAjuste(sql, CLAVE_VERSION), 1) >= VERSION_ENLACES) return true;
+  const marca = await leerAjuste(sql, CLAVE_VERSION);
+  if (marca !== null) return num(marca, 1) >= VERSION_ENLACES;
   // Sin marca: si todas las personas saben ya si son personajes, la biblioteca
   // se hizo con las reglas de ahora (se apunta y listo); si no, es anterior.
   const antiguas = num((await sql.ejecutar<{ n: number }>("SELECT COUNT(*) AS n FROM entidades WHERE tipo = 'persona' AND ficticia IS NULL AND fusionada_en IS NULL AND n_menciones > 0"))[0]?.n);

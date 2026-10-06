@@ -88,7 +88,12 @@ export async function obtenerEntidad(sql: SQL, tipo: TipoEntidad, nombre: string
   // y si estaba enlazado con una persona real homónima («Johnny Carter,
   // cantante»), se deshace el enlace.
   const ficcionEnWikidata = /personaje|character|ficti|ficción|fiction/i.test(activa.descripcion ?? '') && !!activa.wikidata;
-  if (tipo === 'persona' && ficticia && (num(activa.ficticia) !== 1 || (activa.wikidata && !ficcionEnWikidata))) {
+  // Una persona real ya enlazada con Wikidata (enlace que exige que los textos
+  // confirmen la descripción) no pasa a personaje porque un documento la trate
+  // como trasunto: «Charlie Parker» sigue siendo el saxofonista aunque en «El
+  // perseguidor» Johnny Carter sea su sombra.
+  const realConfirmada = !!activa.wikidata && !ficcionEnWikidata && num(activa.ficticia) === 0;
+  if (tipo === 'persona' && ficticia && !realConfirmada && (num(activa.ficticia) !== 1 || (activa.wikidata && !ficcionEnWikidata))) {
     await sql.ejecutar(
       'UPDATE entidades SET ficticia = 1, descripcion = ?, wikidata = ?, wikidata_visto = 0 WHERE id = ?',
       ficcionEnWikidata ? activa.descripcion : DESCRIPCION_FICCION, ficcionEnWikidata ? activa.wikidata : null, activa.id,
@@ -211,12 +216,17 @@ export function decidirFusiones(cs: readonly Candidata[]): Array<[string, string
     padre.set(id, r);
     return r;
   };
+  // Lo que se sabe de cada grupo: real (0), personaje (1) o sin saber (null).
+  const ficcionGrupo = new Map(cs.map((c) => [c.id, c.ficticia ?? null]));
   const unir = (x: string, y: string) => {
     const rx = raiz(x), ry = raiz(y);
     if (rx === ry) return;
-    // Una persona real y un personaje no son nunca la misma entidad (ni sus grupos).
-    const fx = porId.get(rx)!.ficticia ?? null, fy = porId.get(ry)!.ficticia ?? null;
-    if (porId.get(rx)!.tipo === 'persona' && fx !== fy) return;
+    // Una persona real y un personaje no son nunca la misma entidad (ni sus grupos);
+    // lo que no se sabe se une con cualquiera de los dos.
+    const fx = ficcionGrupo.get(rx) ?? null, fy = ficcionGrupo.get(ry) ?? null;
+    if (porId.get(rx)!.tipo === 'persona' && fx !== null && fy !== null && fx !== fy) return;
+    const f = fx ?? fy;
+    ficcionGrupo.set(rx, f); ficcionGrupo.set(ry, f);
     const g = prefiere(porId.get(rx)!, porId.get(ry)!);
     if (g.id === rx) padre.set(ry, rx); else padre.set(rx, ry);
   };
@@ -241,9 +251,10 @@ export function decidirFusiones(cs: readonly Candidata[]): Array<[string, string
         if (!otra || otra.id === c.id) continue;
         if (c.nombre && !formaCompatible(a, c.nombre, tipo)) continue;
         // Una forma de varias palabras es una prueba fuerte. Una de una sola
-        // («Dédée» dicha de Johnny en un lote) solo arrastra a una entidad
-        // residual (tres menciones o menos) del mismo documento.
-        if (k.split(' ').length >= 2 || (compartenDocumento(c, otra) && otra.menciones <= 3)) unir(c.id, otra.id);
+        // («Johnny» de Johnny Carter) basta si las dos aparecen en el mismo
+        // documento: la forma ya ha pasado el filtro de compatibilidad, así que
+        // «Dédée» nunca llega aquí como forma de Johnny.
+        if (k.split(' ').length >= 2 || compartenDocumento(c, otra)) unir(c.id, otra.id);
       }
     }
     if (tipo !== 'persona') continue;

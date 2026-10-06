@@ -155,3 +155,24 @@ export function formaCompatible(forma: string, nombre: string, tipo: TipoEntidad
   }
   return false;
 }
+
+/** Palabras de una descripción que no dicen nada del contexto (gentilicios, «persona»…). */
+const GENERICAS = new Set([
+  'estadounidense', 'americano', 'americana', 'argentino', 'argentina', 'espanol', 'espanola', 'frances', 'francesa', 'ingles', 'inglesa',
+  'britanico', 'britanica', 'aleman', 'alemana', 'italiano', 'italiana', 'mexicano', 'mexicana', 'chileno', 'chilena', 'uruguayo', 'uruguaya',
+  'cubano', 'cubana', 'ruso', 'rusa', 'griego', 'griega', 'romano', 'romana', 'persona', 'nacido', 'nacida', 'fallecido', 'fallecida', 'american',
+  'british', 'english', 'french', 'spanish', 'german', 'italian', 'russian', 'greek', 'roman', 'person', 'human', 'siglo', 'century', 'nacionalizado',
+  'nacionalizada', 'naturalizado', 'naturalizada', 'politico', 'politica',
+]);
+
+/**
+ * ¿Lo que dice Wikidata de alguien lo confirman los textos? Alguna palabra con
+ * contenido de la descripción («saxofonista», «escritor», «poet») ha de
+ * aparecer en los pasajes donde se le menciona. «Cantante estadounidense» no
+ * se confirma con «el saxofonista Johnny Carter».
+ */
+export function descripcionCorroborada(descripcion: string, contexto: string): boolean {
+  const ctx = ` ${normalizarClave(contexto)} `;
+  const palabras = normalizarClave(descripcion).split(' ').filter((p) => p.length >= 5 && !GENERICAS.has(p) && !/^\d+$/.test(p));
+  return palabras.some((p) => ctx.includes(` ${p} `) || (p.length >= 7 && ctx.includes(` ${p.slice(0, -2)}`)));
+}

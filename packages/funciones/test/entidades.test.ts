@@ -81,7 +81,7 @@ describe('normalizar y localizar', () => {
 
   it('fusiones: apellido suelto solo si comparte documento; alias; Wikidata', () => {
     const c = (id: string, clave: string, docs: string[], extra: Partial<{ alias: string[]; wikidata: string; tipo: any; menciones: number }> = {}) => ({
-      id, tipo: extra.tipo ?? 'persona', clave, palabras: clave.split(' '), alias: extra.alias ?? [], wikidata: extra.wikidata ?? null, menciones: extra.menciones ?? 3, docs: new Set(docs),
+      id, tipo: extra.tipo ?? 'persona', clave, palabras: clave.split(' '), alias: extra.alias ?? [], wikidata: extra.wikidata ?? null, menciones: extra.menciones ?? 3, docs: new Set(docs), nombre: clave,
     });
     const f = decidirFusiones([
       c('cp', 'charlie parker', ['entrevista'], { alias: ['Bird', 'Dedee'] }),
@@ -178,7 +178,7 @@ async function biblioteca() {
   await sembrar(sql, {
     id: 'entrevista', titulo: 'A fondo: Julio Cortázar', anio: 1977, paginas: [
       'Hablamos de París y de Cortázar, que vivía allí desde 1951.',
-      'Cortázar cuenta que admiraba a Charlie Parker como músico; Parker fue la semilla de El perseguidor.',
+      'Cortázar cuenta que admiraba a Charlie Parker como saxofonista; Parker fue la semilla de El perseguidor.',
     ],
   });
   await sembrar(sql, {

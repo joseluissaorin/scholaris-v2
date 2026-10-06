@@ -9,7 +9,7 @@
 import type { SQL } from '@scholaris/nucleo';
 import type { TipoEntidad } from '@scholaris/contrato';
 import { ahora, deJSON, normalizarClave, num } from '../util.js';
-import { claveEntidad, palabrasSignificativas } from './normalizar.js';
+import { claveEntidad, contextoMencion, descripcionCorroborada, palabrasSignificativas } from './normalizar.js';
 
 export const AGENTE_WIKIDATA = 'Scholaris/2.0 (https://scholaris.app; jl@joseluissaorin.com)';
 const API = 'https://www.wikidata.org/w/api.php';
@@ -23,7 +23,7 @@ export interface CandidatoWikidata {
 }
 
 /** Descripciones que delatan otro tipo de cosa. */
-const NO_ES: Partial<Record<TipoEntidad, RegExp>> = {
+export const NO_ES: Partial<Record<TipoEntidad, RegExp>> = {
   persona: /\b(obra|edición|edition|written work|work by|escuela|school|biblioteca|library|museo|museum|calle|street|avenida|premio|award|fundación|foundation|apellido|nombre de pila|nombre propio|family name|surname|given name|male given|female given|película|film|álbum|album|canción|song|novela|novel|libro|book|ciudad|city|municipio|town|pueblo|village|país|country|río|river|banda|band|empresa|company|asteroide|asteroid|cráter|crater|género|genus|especie|species|barco|ship)\b/i,
   obra: /\b(apellido|family name|surname|given name|nombre de pila|ciudad|city|municipio|town|village|asteroide|asteroid|género|genus|especie|species)\b/i,
   lugar: /\b(apellido|family name|surname|given name|nombre de pila|película|film|álbum|album|canción|song|novela|novel|banda|band)\b/i,
@@ -31,9 +31,9 @@ const NO_ES: Partial<Record<TipoEntidad, RegExp>> = {
   evento: /\b(apellido|family name|surname|given name|nombre de pila)\b/i,
   concepto: /\b(apellido|family name|surname|given name|nombre de pila|película|film|álbum|album|canción|song|banda|band)\b/i,
 };
-const DESAMBIGUACION = /desambiguaci|disambiguation|página de wikimedia|wikimedia (list|category)|categoría de wikimedia|lista de wikimedia/i;
+export const DESAMBIGUACION = /desambiguaci|disambiguation|página de wikimedia|wikimedia (list|category)|categoría de wikimedia|lista de wikimedia/i;
 
-const FICCION = /personaje|character|ficticio|ficticia|fictional|ficción|fiction/i;
+export const FICCION = /personaje|character|ficticio|ficticia|fictional|ficción|fiction/i;
 /** Lo que describe una obra: si la descripción no lo dice, no es la obra. */
 const ES_OBRA = /novela|cuento|relato|libro|obra|ensayo|poema|poemario|película|film|álbum|album|canción|song|single|sencillo|artículo|article|paper|cuadro|pintura|painting|ópera|opera|comedia|tragedia|drama|teatro|play|novel|book|story|poem|essay|composición|composition|sinfonía|symphony|serie|series|revista|periódico|tratado|treatise|épica|epic|cantar|romance|manuscrito|texto|text|diálogo|dialogue|work|disco|pieza|piece|standard|tema musical/i;
 /** Versiones de una obra que no son la obra: adaptaciones, traducciones, películas, discos. */
@@ -49,6 +49,8 @@ export interface PistasEntidad {
   anios: number[];
   /** Títulos de las obras con que aparece (para los personajes). */
   obras?: string[];
+  /** Los pasajes donde se la menciona: una persona real solo se enlaza si confirman la descripción. */
+  contexto?: string;
 }
 
 const contiene = (d: string, palabra: string) => palabra.length >= 3 && new RegExp(`(?<![\\p{L}])${palabra.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\p{L}])`, 'u').test(d);
@@ -89,6 +91,8 @@ export function elegirCandidato(nombre: string, tipo: TipoEntidad, cs: readonly 
         continue;
       }
       if (FICCION.test(d) || NO_ES.persona!.test(d)) continue;
+      // «Cantante estadounidense» no es el saxofonista del que hablan los textos.
+      if (pistas?.contexto !== undefined && !autor && !descripcionCorroborada(d, pistas.contexto)) continue;
       validos.push({ c, puntos: (autor ? 2 : 0) + (anio ? 1 : 0) });
       continue;
     }
@@ -182,7 +186,24 @@ export async function pistasDe(sql: SQL, id: string): Promise<PistasEntidad> {
     if (v.tipo === 'persona' && num(v.ficticia) !== 1) { const x = palabrasSignificativas(normalizarClave(v.nombre)).pop(); if (x) apellidos.add(x); }
     if (v.tipo === 'obra') obras.add(v.nombre);
   }
-  return { apellidos: [...apellidos], anios: [...anios], obras: [...obras] };
+  return { apellidos: [...apellidos], anios: [...anios], obras: [...obras], contexto: await contextoDe(sql, id) };
+}
+
+/** Los pasajes donde aparece una entidad (unos pocos de cada documento), en un solo texto. */
+export async function contextoDe(sql: SQL, id: string, porDocumento = 4, radio = 200): Promise<string> {
+  const filas = await sql.ejecutar<{ documento: string; texto: string; ini: number; fin: number }>(
+    `SELECT m.documento, f.texto, m.ini, m.fin FROM menciones m JOIN fragmentos f ON f.id = m.fragmento
+      WHERE m.entidad = ? ORDER BY m.documento, m.orden LIMIT 200`, id,
+  );
+  const cuenta = new Map<string, number>();
+  const trozos: string[] = [];
+  for (const f of filas) {
+    const n = cuenta.get(f.documento) ?? 0;
+    if (n >= porDocumento) continue;
+    cuenta.set(f.documento, n + 1);
+    trozos.push(contextoMencion(f.texto, num(f.ini), num(f.fin), radio).replace(/[⟦⟧]/g, ''));
+  }
+  return trozos.join(' … ');
 }
 
 export async function enlazarWikidata(sql: SQL, o: OpcionesWikidata = {}): Promise<{ consultadas: number; enlazadas: number }> {
