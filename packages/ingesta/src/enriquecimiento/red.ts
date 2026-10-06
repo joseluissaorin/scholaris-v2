@@ -24,6 +24,51 @@ export interface OpcionesConsultor {
   /** Milisegundos por petición. */
   plazo?: number;
   cache?: CacheConsultas;
+  /** Clave opcional de OpenAlex (OPENALEX_API_KEY). Sin ella, «polite pool» con mailto. */
+  claveOpenAlex?: string;
+}
+
+/** Catálogos: clave opcional y caché persistente, tal como llegan en los puertos de la ingesta. */
+export interface PuertoCatalogos {
+  claveOpenAlex?: string;
+  cache?: CacheConsultas;
+}
+
+/** Caché sobre un KV de Cloudflare (o cualquier cosa con get/put), con caducidad. */
+export function cacheEnKv(kv: { get(k: string): Promise<string | null>; put(k: string, v: string, o?: { expirationTtl?: number }): Promise<void> }, prefijo = 'catalogos:', segundos = 30 * 24 * 3600): CacheConsultas {
+  return {
+    leer: (k) => kv.get(prefijo + huella(k)),
+    guardar: (k, v) => kv.put(prefijo + huella(k), v, { expirationTtl: segundos }),
+  };
+}
+
+/** Caché sobre el almacén de objetos (R2 en la nube, disco en local) cuando no hay KV. */
+export function cacheEnAlmacen(almacen: { bytes(k: string): Promise<Uint8Array | null>; poner(k: string, cuerpo: string, tipo?: string): Promise<void> }, prefijo = 'cache/catalogos/'): CacheConsultas {
+  return {
+    async leer(k) { const b = await almacen.bytes(prefijo + huella(k)); return b ? new TextDecoder().decode(b) : null; },
+    guardar: (k, v) => almacen.poner(prefijo + huella(k), v, 'application/json'),
+  };
+}
+
+/** Clave corta y estable para una URL (FNV-1a de 64 bits en dos mitades). */
+export function huella(s: string): string {
+  let a = 0x811c9dc5, b = 0x01000193;
+  for (let i = 0; i < s.length; i++) {
+    const c = s.charCodeAt(i);
+    a = Math.imul(a ^ c, 0x01000193) >>> 0;
+    b = Math.imul(b ^ c, 0x5bd1e995) >>> 0;
+  }
+  return `${a.toString(16).padStart(8, '0')}${b.toString(16).padStart(8, '0')}${s.length.toString(16)}`;
+}
+
+/** OpenAlex: siempre con mailto («polite pool») y, si la hay, con la clave. La clave no entra en la caché ni en el registro. */
+function conOpenAlex(url: string, correo: string, clave?: string): { pedir: string; registrar: string } {
+  if (!/^https:\/\/api\.openalex\.org\//.test(url)) return { pedir: url, registrar: url };
+  const u = new URL(url);
+  if (!u.searchParams.has('mailto')) u.searchParams.set('mailto', correo);
+  const registrar = u.toString();
+  if (clave) u.searchParams.set('api_key', clave);
+  return { pedir: u.toString(), registrar };
 }
 
 const memoria = new Map<string, string>();
@@ -44,8 +89,9 @@ export function crearConsultor(o: OpcionesConsultor = {}): Consultor {
   const consultas: string[] = [];
   const ua = { 'User-Agent': `Scholaris/2 (https://scholaris.joseluissaorin.com; mailto:${correo})` };
 
-  async function pedir(url: string, modo: 'json' | 'texto', cabeceras: Record<string, string> = {}): Promise<string | null> {
-    const clave = `${modo}:${url}`;
+  async function pedir(urlPedida: string, modo: 'json' | 'texto', cabeceras: Record<string, string> = {}): Promise<string | null> {
+    const { pedir: url, registrar } = conOpenAlex(urlPedida, correo, o.claveOpenAlex);
+    const clave = `${modo}:${registrar}`;
     const enMemoria = memoria.get(clave);
     if (enMemoria !== undefined) return enMemoria;
     if (o.cache) {
@@ -54,7 +100,7 @@ export function crearConsultor(o: OpcionesConsultor = {}): Consultor {
         if (v !== null && v !== undefined) { memoria.set(clave, v); return v; }
       } catch { /* la caché nunca rompe una ingesta */ }
     }
-    consultas.push(url);
+    consultas.push(registrar);
     const ctrl = new AbortController();
     const t = setTimeout(() => ctrl.abort(), plazo);
     try {

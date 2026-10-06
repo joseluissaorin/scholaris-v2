@@ -28,7 +28,7 @@ import type { Consultor } from './red.js';
 export type { Hallazgo, CampoMeta } from './fuentes.js';
 export { leerColofon, aniosDelColofon, nombreDeImprenta, tipoTitulo, type Colofon } from './colofon.js';
 export { isbnsDelTexto, aIsbn13, isbn10Valido, isbn13Valido } from './isbn.js';
-export { crearConsultor, vaciarCacheConsultas, CONTACTO, type Consultor, type CacheConsultas, type OpcionesConsultor } from './red.js';
+export { crearConsultor, vaciarCacheConsultas, cacheEnKv, cacheEnAlmacen, huella, CONTACTO, type Consultor, type CacheConsultas, type OpcionesConsultor, type PuertoCatalogos } from './red.js';
 export { actividadImpresor, type ActividadImpresor } from './impresores.js';
 export { rtveEpisodio, fechaRtve, slugRtve, presencia, personasDelTitulo, type EvidenciaGrabacion } from './rtve.js';
 export { titulosCasan, autoresCasan, wikidataBuscar, type EntidadWikidata } from './fuentes.js';

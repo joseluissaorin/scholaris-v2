@@ -256,6 +256,8 @@ export interface PuertosIngesta {
   http?: Http;
   /** Correo para el «polite pool» de Crossref y OpenAlex. */
   correoContacto?: string;
+  /** Catálogos de metadatos: clave opcional de OpenAlex y caché persistente de respuestas (KV, disco). */
+  catalogos?: import('./enriquecimiento/red.js').PuertoCatalogos;
   reloj?: () => number;
 }
 

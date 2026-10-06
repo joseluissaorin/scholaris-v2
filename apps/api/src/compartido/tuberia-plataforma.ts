@@ -80,6 +80,7 @@ function contexto(ctx: ContextoMotor, params: ParamsIngesta, paquete: PaqueteCon
       } : {}),
       guardarBlob: async (clave, datos) => { await ctx.almacen.poner(`${params.prefijo}${clave}`, datos.bytes, datos.mime); },
       ...(ctx.correoContacto ? { correoContacto: ctx.correoContacto } : {}),
+      ...(ctx.catalogos ? { catalogos: ctx.catalogos } : {}),
     },
     opciones: {
       ...(params.pista ? { pista: params.pista } : {}),

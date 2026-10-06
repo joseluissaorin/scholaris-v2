@@ -20,7 +20,7 @@ import type { MetadatosIncrustados } from '@scholaris/imprenta';
 import type { Http, Procedencia, UnidadLeida } from '../tipos.js';
 import { normalizar, similitud } from '../texto.js';
 import { nombreCompleto, partirAutores, separarNombre } from './autores.js';
-import { conOrcid, crearConsultor, enriquecer, leerColofon, pruebasNuevas, type CacheConsultas, type Colofon } from '../enriquecimiento/index.js';
+import { conOrcid, crearConsultor, enriquecer, leerColofon, pruebasNuevas, type CacheConsultas, type Colofon, type Consultor } from '../enriquecimiento/index.js';
 import { autorDe } from './metadatos/nombres.js';
 
 export * from '../enriquecimiento/index.js';
@@ -361,17 +361,23 @@ export function coincidencia(lectura: Partial<MetadatosDocumento>, ext: Partial<
   return st * 0.6 + autor * 0.3 + anio * 0.1;
 }
 
+/** Un consultor con la caché, la clave de OpenAlex y el correo de los puertos (uno por paso: comparte la caché en memoria). */
+function consultorDe(puertos: PuertosMetadatos, http: Http) {
+  return crearConsultor({ http, ...(puertos.correo ? { correo: puertos.correo } : {}), ...(puertos.cache ? { cache: puertos.cache } : {}), ...(puertos.claveOpenAlex ? { claveOpenAlex: puertos.claveOpenAlex } : {}) });
+}
+
 export async function verificar(
   base: Partial<MetadatosDocumento>,
   http: Http,
   correo?: string,
+  consultor?: Consultor,
 ): Promise<{ registro: RegistroExterno | null; consultas: string[] }> {
   const consultas: string[] = [];
   const mailto = correo ? `&mailto=${encodeURIComponent(correo)}` : '';
   if (base.doi) {
     const url = `https://api.crossref.org/works/${encodeURIComponent(base.doi)}`;
     consultas.push(url);
-    const j = (await pedir(http, url, correo)) as { message?: ObraCrossref } | null;
+    const j = (consultor ? await consultor.json(url) : await pedir(http, url, correo)) as { message?: ObraCrossref } | null;
     if (j?.message) {
       const r = deCrossref(j.message);
       // Con DOI, basta con que el título se parezca algo (el DOI manda).
@@ -384,7 +390,7 @@ export async function verificar(
   const urlC = `https://api.crossref.org/works?query.bibliographic=${q}&rows=5&select=title,subtitle,author,editor,issued,published-print,publisher,publisher-location,container-title,volume,issue,page,DOI,ISBN,type,language${mailto}`;
   const urlO = `https://api.openalex.org/works?search=${encodeURIComponent(base.titulo)}&per-page=5${mailto}`;
   consultas.push(urlC, urlO);
-  const [jc, jo] = await Promise.all([pedir(http, urlC, correo), pedir(http, urlO, correo)]);
+  const [jc, jo] = await Promise.all(consultor ? [consultor.json(urlC), consultor.json(urlO)] : [pedir(http, urlC, correo), pedir(http, urlO, correo)]);
   const candidatos: RegistroExterno[] = [
     ...(((jc as { message?: { items?: ObraCrossref[] } } | null)?.message?.items ?? []).map(deCrossref)),
     ...(((jo as { results?: ObraOpenAlex[] } | null)?.results ?? []).map(deOpenAlex)),
@@ -494,6 +500,8 @@ export interface PuertosMetadatos {
   reloj?: () => number;
   /** Caché persistente de las consultas a catálogos. */
   cache?: CacheConsultas;
+  /** Clave opcional de OpenAlex. */
+  claveOpenAlex?: string;
 }
 
 export interface ResultadoMetadatos {
@@ -537,7 +545,7 @@ export async function pasoMetadatos(
   const http: Http = puertos.http ?? ((url, init) => fetch(url, init as RequestInit));
   if (!opciones.sinVerificacion && !medio) {
     const t = reloj();
-    const { registro, consultas } = await verificar(provisional, http, puertos.correo);
+    const { registro, consultas } = await verificar(provisional, http, puertos.correo, consultorDe(puertos, http));
     procedencia.push({ fase: 'metadatos', proveedor: registro?.fuente ?? 'verificacion', ms: reloj() - t, detalle: { consultas: consultas.length, encontrado: Boolean(registro), puntuacion: registro?.puntuacion ?? 0, titulo: registro?.titulo } });
     if (registro) {
       const { fuente, puntuacion, ...datos } = registro;
@@ -561,7 +569,7 @@ export async function pasoMetadatos(
 
   // Enriquecimiento: edición (colofón, ISBN) y obra (Wikidata, Open Library, Wikipedia…).
   const t = reloj();
-  const consultor = opciones.sinVerificacion ? null : crearConsultor({ http, ...(puertos.correo ? { correo: puertos.correo } : {}), ...(puertos.cache ? { cache: puertos.cache } : {}) });
+  const consultor = opciones.sinVerificacion ? null : consultorDe(puertos, http);
   const intermedia = fusionarMetadatos(usuario ? [...candidatos, { fuente: 'usuario', confianza: 1, datos: usuario }] : candidatos, entrada.nombreArchivo);
   let colofon: Colofon | null = null;
   let orcid = new Map<string, string>();

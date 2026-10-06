@@ -16,7 +16,7 @@ import { clavesDeDocumento, idsIndiceDeDocumento, tareaDeDocumento, totalesEstan
 import { aBase64Url } from '../compartido/firmas.js';
 import { invalidarBuscador, puertosFunciones } from '../compartido/servicios.js';
 import { alBorrarDocumento } from '@scholaris/funciones';
-import { rehacerFicha, unidadDeFila } from '@scholaris/ingesta';
+import { cacheEnAlmacen, rehacerFicha, unidadDeFila } from '@scholaris/ingesta';
 import type { PuertosUsuario } from '../puertos.js';
 import { lanzarIngesta, prefijoDocumento } from './subidas.js';
 import { extrasFigura } from './contenido.js';
@@ -179,7 +179,10 @@ export function rutasDocumentos(app: Hono<Entorno>): void {
     const r = await rehacerFicha(d.metadatos, {
       tipo: d.tipo, nombreArchivo: sub?.nombre ?? d.original?.split('/').pop() ?? d.metadatos.titulo,
       ...(d.duracion ? { duracion: d.duracion } : {}), unidades: filas.map((f) => unidadDeFila(f)),
-    }, { redactor: ia.redactor, correo: 'jl@joseluissaorin.com' });
+    }, {
+      redactor: ia.redactor, correo: 'jl@joseluissaorin.com', cache: cacheEnAlmacen(p.almacen),
+      ...((c.env as { OPENALEX_API_KEY?: string } | undefined)?.OPENALEX_API_KEY ? { claveOpenAlex: (c.env as { OPENALEX_API_KEY: string }).OPENALEX_API_KEY } : {}),
+    });
     await escribirDocumento(p.sql, { ...d, metadatos: r.metadatos, actualizado: ahora() });
     const nuevo = (await leerDocumento(p.sql, d.id))!;
     return c.json({ ...nuevo, espacios: [], cuentas: { fragmentos: 0, secciones: 0, figuras: 0 } } satisfies DetalleDocumento);

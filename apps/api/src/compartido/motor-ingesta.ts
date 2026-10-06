@@ -17,6 +17,9 @@ import type {
   FuentePaquete, Pliego, ResultadoIngesta,
 } from '@scholaris/ingesta';
 import { cuerpoDominante, leerCapaPagina, ejecutarIngesta, leerPliego, planificar, transcribirTramo, vectorizar, textoVectorizable, escribirVectores as escribirVectoresIngesta, entradasIndice } from '@scholaris/ingesta';
+import type { PuertoCatalogos } from '@scholaris/ingesta';
+/** Para la versión local: caché de catálogos en su almacén de disco. */
+export { cacheEnAlmacen } from '@scholaris/ingesta';
 import type { PaqueteConversion } from '@scholaris/imprenta';
 import { abrirCortador, type CortadorPdf } from '@scholaris/imprenta';
 import type { Documento, IndiceVectorial, Inteligencia, Lector, PaginaLeida, Progreso, SQL, Transcripcion, Transcriptor, Vector } from '@scholaris/nucleo';
@@ -35,6 +38,8 @@ export interface ContextoMotor {
   indice: IndiceVectorial | null;
   espacioNombres: string;
   correoContacto?: string;
+  /** Catálogos de metadatos: clave de OpenAlex y caché persistente. */
+  catalogos?: PuertoCatalogos;
   /** Sin Crossref/OpenAlex (pruebas, sin red). */
   sinVerificacion?: boolean;
   alProgreso?(p: Progreso): Promise<void> | void;
@@ -517,6 +522,7 @@ export async function componer(ctx: ContextoMotor, params: ParamsIngesta, info: 
     ...(ctx.indice ? { indice: indiceSeguro(ctx, base, estadoIndice) } : {}),
     guardarBlob: async (clave, datos) => { await ctx.almacen.poner(`${params.prefijo}${clave}`, datos.bytes, datos.mime); },
     ...(ctx.correoContacto ? { correoContacto: ctx.correoContacto } : {}),
+    ...(ctx.catalogos ? { catalogos: ctx.catalogos } : {}),
   }, {
     documentoId: params.documento,
     tarea: params.tarea,

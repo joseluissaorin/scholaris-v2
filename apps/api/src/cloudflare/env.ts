@@ -56,6 +56,10 @@ export interface Env {
   R2_ACCESS_KEY_ID?: string;
   R2_SECRET_ACCESS_KEY?: string;
   CORREO_CONTACTO?: string;
+  /** Clave opcional de OpenAlex (sin ella, «polite pool» con mailto). */
+  OPENALEX_API_KEY?: string;
+  /** KV opcional para la caché de consultas a catálogos de metadatos (sin él, R2 bajo cache/catalogos/). */
+  CACHE_KV?: KVNamespace;
   /** Solo para migraciones: actuar como un usuario (ver scripts/migrar-desde-v1.ts). */
   ADMIN_TOKEN?: string;
 }

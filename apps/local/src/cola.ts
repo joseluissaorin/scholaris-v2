@@ -11,6 +11,7 @@ import {
   componer, ErrorReserva, leerPrimeraPagina, leerUnPliego, limpiarTrabajo, preparar, revectorizar, soloVectores, transcribirUnTramo, type ContextoMotor,
 } from '@scholaris/api/compartido/motor-ingesta';
 import { cerrarIngesta } from '@scholaris/api/compartido/cierre';
+import { cacheEnAlmacen } from '@scholaris/api/compartido/motor-ingesta';
 import { adelantarMoov, esMp4 } from '@scholaris/api/compartido/medio-rapido';
 import { apuntarProgreso, leerTarea } from '@scholaris/api/compartido/estanteria';
 import { LIMITES } from '@scholaris/api/compartido/planes';
@@ -109,6 +110,8 @@ export class ColaLocal implements Orquestador {
         espacioNombres: puertos.config.espacioNombres(p.usuario),
         ...(this.d.convertir ? { convertir: this.d.convertir } : {}),
         ...(this.d.sinVerificacion ? { sinVerificacion: true } : {}),
+        // Catálogos de metadatos: caché en disco (el almacén local) y clave de OpenAlex si la hay.
+        catalogos: { cache: cacheEnAlmacen(puertos.almacen), ...(process.env.OPENALEX_API_KEY ? { claveOpenAlex: process.env.OPENALEX_API_KEY } : {}) },
         ...(this.d.gemini ? { gemini: await this.d.gemini(p.usuario) } : {}),
         alUnidades: async (desde: number, hasta: number) => { await puertos.emisor.emitir(`usuario:${p.usuario}`, { tipo: 'unidades', tarea: p.tarea, documento: p.documento, desde, hasta }); },
         alProgreso: async (pr: Progreso) => {

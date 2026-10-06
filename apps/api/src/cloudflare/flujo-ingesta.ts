@@ -14,7 +14,7 @@ import { prepararTuberia, type InfoTuberia } from '../compartido/tuberia-platafo
 import { componer, ErrorReserva, leerPrimeraPagina, leerUnPliego, limpiarTrabajo, preparar, revectorizar, soloVectores, transcribirUnTramo, type ContextoMotor, type InfoPlan } from '../compartido/motor-ingesta.js';
 import type { Env } from './env.js';
 import { SqlRemoto } from './sql.js';
-import { almacenDesdeEnv, cuentasDesdeEnv, emisorDesdeEnv, geminiPara, indiceDesdeEnv, inteligenciaPara, origenDe } from './puertos-cf.js';
+import { almacenDesdeEnv, catalogosDesdeEnv, cuentasDesdeEnv, emisorDesdeEnv, geminiPara, indiceDesdeEnv, inteligenciaPara, origenDe } from './puertos-cf.js';
 import { espacioNombresDe } from './indice-vectorize.js';
 import { conversorCF } from './conversor.js';
 import { adelantarMoov, esMp4 } from '../compartido/medio-rapido.js';
@@ -44,6 +44,7 @@ export class FlujoIngesta extends WorkflowEntrypoint<Env, ParamsIngesta> {
       indice: indiceDesdeEnv(env, ia),
       espacioNombres: espacioNombresDe(p.usuario),
       ...(env.CORREO_CONTACTO ? { correoContacto: env.CORREO_CONTACTO } : {}),
+      catalogos: catalogosDesdeEnv(env, almacenDesdeEnv(env, origenDe(env))),
       ...(env.SIN_VERIFICACION === '1' ? { sinVerificacion: true } : {}),
       ...(gemini ? { gemini } : {}),
       alUnidades: async (desde: number, hasta: number) => { await emisor.emitir(`usuario:${p.usuario}`, { tipo: 'unidades', tarea: p.tarea, documento: p.documento, desde, hasta }); },

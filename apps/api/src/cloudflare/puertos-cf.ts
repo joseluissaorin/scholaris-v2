@@ -1,3 +1,4 @@
+import { cacheEnAlmacen, cacheEnKv, type PuertoCatalogos } from '@scholaris/ingesta';
 /**
  * Montaje de los puertos de Cloudflare a partir de los bindings. Lo usan el
  * Worker (la puerta), el Durable Object de cada usuario y el Workflow.
@@ -122,5 +123,13 @@ export function emisorDesdeEnv(env: Env, usuario: string): Emisor<EventoTiempoRe
     async emitir(_canal, evento) {
       await Promise.all(nombresCanal(usuario, evento).map((n) => env.TAREA.getByName(n).emitir(evento).catch((e: unknown) => console.error('emitir', n, e))));
     },
+  };
+}
+
+/** Catálogos de metadatos: clave opcional de OpenAlex y caché persistente (KV si está, si no R2). */
+export function catalogosDesdeEnv(env: Env, almacen: AlmacenAmpliado): PuertoCatalogos {
+  return {
+    ...(env.OPENALEX_API_KEY ? { claveOpenAlex: env.OPENALEX_API_KEY } : {}),
+    cache: env.CACHE_KV ? cacheEnKv(env.CACHE_KV) : cacheEnAlmacen(almacen),
   };
 }

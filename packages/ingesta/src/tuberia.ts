@@ -411,7 +411,7 @@ export async function metadatosTempranos(ctx: ContextoTuberia, unidades: UnidadL
       unidades,
       ...(ctx.opciones.metadatosUsuario ? { usuario: ctx.opciones.metadatosUsuario } : {}),
     },
-    { redactor: puertos.inteligencia.redactor, ...(puertos.http ? { http: puertos.http } : {}), ...(puertos.correoContacto ? { correo: puertos.correoContacto } : {}), ...(ctx.opciones.reloj ? { reloj: ctx.opciones.reloj } : {}) },
+    { redactor: puertos.inteligencia.redactor, ...(puertos.http ? { http: puertos.http } : {}), ...(puertos.correoContacto ? { correo: puertos.correoContacto } : {}), ...(ctx.opciones.reloj ? { reloj: ctx.opciones.reloj } : {}), ...puertos.catalogos },
     { ...(ctx.opciones.sinVerificacion ? { sinVerificacion: true } : {}) },
   );
   await guardarJson(ctx, claveMetadatos(ctx.documento), r);
@@ -509,7 +509,7 @@ export async function consolidar(
     refinada = refinarConLibroEntero(meta, {
       ficha: paquete.metadatos, nombreArchivo: paquete.origen.nombre, tipo: paquete.tipo, epub: paquete.contenido.clase === 'documento' && paquete.contenido.formato === 'epub',
       unidades: unidades.slice(0, 5), todas: [...unidades], ...(ctx.opciones.metadatosUsuario ? { usuario: ctx.opciones.metadatosUsuario } : {}),
-    }, { redactor: ia.redactor, ...(p.http ? { http: p.http } : {}), ...(p.correoContacto ? { correo: p.correoContacto } : {}), reloj }, { ...(ctx.opciones.sinVerificacion ? { sinVerificacion: true } : {}) }).catch(() => null);
+    }, { redactor: ia.redactor, ...(p.http ? { http: p.http } : {}), ...(p.correoContacto ? { correo: p.correoContacto } : {}), reloj, ...p.catalogos }, { ...(ctx.opciones.sinVerificacion ? { sinVerificacion: true } : {}) }).catch(() => null);
   }
   marca('metadatos', tm);
 
