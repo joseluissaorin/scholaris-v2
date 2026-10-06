@@ -7,6 +7,7 @@ import { alIngerirDocumento } from '@scholaris/funciones';
 import type { PuertosUsuario } from '../puertos.js';
 import { ahora, terminarTarea, totalesEstanteria } from './estanteria.js';
 import { invalidarBuscador, puertosFunciones } from './servicios.js';
+import { alCerrarDocumento } from './lotes.js';
 
 export interface DatosCierre {
   tarea: string;
@@ -31,6 +32,7 @@ export async function cerrarIngesta(p: PuertosUsuario, d: DatosCierre): Promise<
   if (!d.ok) {
     await terminarTarea(p.sql, d.tarea, 'error', d.error);
     await p.emisor.emitir(canal, { tipo: 'fin', tarea: d.tarea, documento: d.documento, estado: 'error', error: d.error ?? 'La ingesta ha fallado.' });
+    await alCerrarDocumento(p, d.documento, false, d.error).catch((e) => console.error('lotes', e));
     return;
   }
   const [doc] = await p.sql.ejecutar<{ metadatos: string; bibliotecas: string }>('SELECT metadatos, bibliotecas FROM documentos WHERE id = ?', d.documento);
@@ -55,6 +57,8 @@ export async function cerrarIngesta(p: PuertosUsuario, d: DatosCierre): Promise<
   const t = await totalesEstanteria(p.sql);
   await p.cuentas.totales(p.usuario.id, t.documentos, t.bytes).catch((e) => console.error('totales', e));
   await p.emisor.emitir(canal, { tipo: 'fin', tarea: d.tarea, documento: d.documento, estado: 'listo' });
+  // Si el documento era de un lote, el lote sigue con el siguiente.
+  await alCerrarDocumento(p, d.documento, true).catch((e) => console.error('lotes', e));
   // Vigilantes «al ingerir», grafo de citas y corpus: después, sin bloquear el cierre.
   p.segundoPlano((async () => alIngerirDocumento(await puertosFunciones(p), d.documento))().catch((e) => console.error('alIngerirDocumento', e)));
 }

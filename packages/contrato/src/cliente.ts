@@ -197,8 +197,9 @@ export function crearCliente(opciones: OpcionesCliente) {
       urlMedio: (id: string) => `${base}${PREFIJO_API}/documentos/${e(id)}/medio`,
       volcado: (id: string) => get<VolcadoDocumento>(`/documentos/${e(id)}/volcado`),
       spdf: async (id: string) => new Uint8Array(await (await bruto('GET', `/documentos/${e(id)}/spdf`)).arrayBuffer()),
-      importar: (spdf: Uint8Array | Blob, opciones: { biblioteca?: string } = {}) =>
-        bruto('POST', '/documentos/importar', spdf, opciones, { 'content-type': 'application/x-spdf' }).then((r) => r.json() as Promise<ImportacionSpdf>),
+      /** Con `deduplicar`, lo que ya está (misma huella) no se copia: se añade a la biblioteca y vuelve `repetido`. */
+      importar: (spdf: Uint8Array | Blob, opciones: { biblioteca?: string; deduplicar?: boolean } = {}) =>
+        bruto('POST', '/documentos/importar', spdf, { biblioteca: opciones.biblioteca, deduplicar: opciones.deduplicar ? '1' : undefined }, { 'content-type': 'application/x-spdf' }).then((r) => r.json() as Promise<ImportacionSpdf>),
       /** Importación por el almacén (.spdf grandes): binarios primero, luego el .spdf ligero. */
       importarRecursos: (p: ImportarRecursos) => post<RecursosFirmados>('/documentos/importar/recursos', p),
       importarPartes: (p: PedirPartesImportacion) => post<UrlsPartes>('/documentos/importar/partes', p),

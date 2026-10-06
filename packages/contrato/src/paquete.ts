@@ -341,7 +341,7 @@ export async function importarPaquete(
       const e = zip.entrada(d.archivo);
       if (!e) throw new Error('No está en el paquete.');
       if (e.tamano > MAX_SPDF_DIRECTO) throw new Error('Es demasiado grande para importarlo de una vez: exporta el paquete sin originales.');
-      const r = await api.documentos.importar(await zip.leer(e), { biblioteca: b }) as ImportacionSpdf & { repetido?: boolean };
+      const r = await api.documentos.importar(await zip.leer(e), { biblioteca: b, deduplicar: true }) as ImportacionSpdf & { repetido?: boolean };
       if (r.repetido) salida.repetidos.push({ origen: d.id, documento: r.documento });
       else salida.importados.push({ origen: d.id, documento: r.documento, ...(r.tarea ? { tarea: r.tarea } : {}) });
       for (const a of r.avisos) if (!salida.avisos.includes(a)) salida.avisos.push(a);

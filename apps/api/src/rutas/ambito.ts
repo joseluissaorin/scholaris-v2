@@ -19,6 +19,8 @@ const REGLAS: Regla[] = [
   { metodo: 'GET', ruta: R('/bibliotecas/([^/]+)'), biblioteca: 1, publico: true },
   { metodo: 'GET', ruta: R('/bibliotecas/([^/]+)/paquete'), biblioteca: 1 },
   { metodo: 'GET', ruta: R('/documentos'), publico: true },
+  // El .spdf y el volcado enteros, no por un enlace sin cuenta (se lee, no se descarga la base).
+  { metodo: 'GET', ruta: R('/documentos/([^/]+)/(?:spdf|volcado)'), documento: 1 },
   { metodo: 'GET', ruta: R('/documentos/([^/]+)(?:/.*)?'), documento: 1, publico: true },
   { metodo: 'POST', ruta: R('/busqueda(?:/similares)?'), publico: true },
   { metodo: 'POST', ruta: R('/busqueda/(?:responder|multilingue)') },

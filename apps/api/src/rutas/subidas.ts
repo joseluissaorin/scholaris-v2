@@ -96,6 +96,25 @@ export async function lanzarIngesta(p: PuertosUsuario, params: Omit<ParamsIngest
   return { documento: params.documento, tarea: tarea.id };
 }
 
+/** Crea el documento de una URL y lanza su ingesta (la ruta /subidas/url y los lotes). */
+export async function ingerirDesdeUrl(p: PuertosUsuario, b: SubidaUrl): Promise<IngestaIniciada> {
+  let url: URL;
+  try { url = new URL(b.url); } catch { return fallo('peticion_invalida', 'La URL no es válida.'); }
+  exigir(url.protocol === 'https:' || url.protocol === 'http:', 'Solo se admiten URLs http y https.');
+  if (!p.config.conversionServidor) fallo('no_disponible', 'Esta instancia no puede descargar URLs: sube el fichero desde el navegador.');
+  await comprobarCuotaDocumento(p, 1);
+  const esVideo = /(^|\.)(youtube\.com|youtu\.be|vimeo\.com)$/.test(url.hostname);
+  const tipo: TipoEntrada = b.tipo ?? (esVideo ? 'video' : /\.pdf($|\?)/i.test(url.pathname) ? 'pdf' : 'web');
+  const documento = nuevoId('d');
+  const prefijo = prefijoDocumento(p.usuario.id, documento);
+  await crearDocumentoPendiente(p.sql, {
+    id: documento, tipo, huella: '', original: '', mime: tipo === 'web' ? 'text/html' : 'application/octet-stream', bytes: 0,
+    metadatos: { autores: [], titulo: b.metadatos?.titulo ?? url.hostname + url.pathname, url: url.toString(), ...b.metadatos },
+    bibliotecas: b.bibliotecas ?? [],
+  });
+  return lanzarIngesta(p, { documento, prefijo, original: '', url: url.toString(), tipo, mime: '', nombre: url.toString(), bibliotecas: b.bibliotecas, ...(b.modo ? { modo: b.modo } : {}) });
+}
+
 export function rutasSubidas(app: Hono<Entorno>): void {
   app.post('/subidas', async (c: Ctx) => {
     exigirEscritura(c);
@@ -151,22 +170,7 @@ export function rutasSubidas(app: Hono<Entorno>): void {
     const p = puertos(c);
     const b = await cuerpoJson<SubidaUrl>(c);
     if (c.get('usuario').ambito) b.bibliotecas = [c.get('usuario').ambito!.biblioteca];
-    let url: URL;
-    try { url = new URL(b.url); } catch { return fallo('peticion_invalida', 'La URL no es válida.'); }
-    exigir(url.protocol === 'https:' || url.protocol === 'http:', 'Solo se admiten URLs http y https.');
-    if (!p.config.conversionServidor) fallo('no_disponible', 'Esta instancia no puede descargar URLs: sube el fichero desde el navegador.');
-    await comprobarCuotaDocumento(p, 1);
-    const esVideo = /(^|\.)(youtube\.com|youtu\.be|vimeo\.com)$/.test(url.hostname);
-    const tipo: TipoEntrada = b.tipo ?? (esVideo ? 'video' : /\.pdf($|\?)/i.test(url.pathname) ? 'pdf' : 'web');
-    const documento = nuevoId('d');
-    const prefijo = prefijoDocumento(p.usuario.id, documento);
-    await crearDocumentoPendiente(p.sql, {
-      id: documento, tipo, huella: '', original: '', mime: tipo === 'web' ? 'text/html' : 'application/octet-stream', bytes: 0,
-      metadatos: { autores: [], titulo: b.metadatos?.titulo ?? url.hostname + url.pathname, url: url.toString(), ...b.metadatos },
-      bibliotecas: b.bibliotecas ?? [],
-    });
-    const r = await lanzarIngesta(p, { documento, prefijo, original: '', url: url.toString(), tipo, mime: '', nombre: url.toString(), bibliotecas: b.bibliotecas, ...(b.modo ? { modo: b.modo } : {}) });
-    return c.json(r, 202);
+    return c.json(await ingerirDesdeUrl(p, b), 202);
   });
 
   app.post('/subidas/:id/partes', async (c: Ctx) => {

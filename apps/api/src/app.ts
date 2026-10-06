@@ -29,6 +29,7 @@ import { LIMITES } from './compartido/planes.js';
 import { rutasSubidas } from './rutas/subidas.js';
 import { rutasDocumentos } from './rutas/documentos.js';
 import { rutasBibliotecas } from './rutas/bibliotecas.js';
+import { rutasLotes } from './rutas/lotes.js';
 import { rutasTareas } from './rutas/tareas.js';
 import { rutasCuenta } from './rutas/cuenta.js';
 import { rutasBusqueda } from './rutas/busqueda.js';
@@ -71,6 +72,7 @@ export function crearAppUsuario() {
   rutasSpdf(sub);
   rutasMedios(sub);
   rutasBibliotecas(sub);
+  rutasLotes(sub);
   rutasTareas(sub);
   rutasBusqueda(sub);
   rutasCitas(sub);
