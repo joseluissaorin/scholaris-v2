@@ -14,6 +14,7 @@
  */
 import { estadoDe, INICIAL, transicion, puntoDePartida, type Banderas, type Estado, type Evento } from './maquina';
 import { RelojVirtual } from './reloj-virtual';
+import { MedioYoutube } from './medio-youtube';
 import { ponerMini } from './estado-global';
 
 export interface FuenteMedio {
@@ -29,6 +30,8 @@ export interface FuenteMedio {
    * hay que pedir una nueva (la anterior caducó o falló); sin él vale la de la caché.
    */
   url: (renovar?: boolean) => Promise<string | null>;
+  /** Vídeo de YouTube: se reproduce con su reproductor insertado, sin descargar nada (la URL no se pide). */
+  youtube?: string;
 }
 
 export interface Instantanea {
@@ -62,7 +65,7 @@ export interface Instantanea {
   osd: { texto: string; n: number } | null;
 }
 
-type ElementoMedio = HTMLVideoElement | RelojVirtual;
+type ElementoMedio = HTMLVideoElement | RelojVirtual | MedioYoutube;
 
 const CLAVE_POSICIONES = 'scholaris.reproductor.posiciones';
 const CLAVE_PREFERENCIAS = 'scholaris.reproductor.preferencias';
@@ -101,6 +104,7 @@ export class Motor {
   private fuente: FuenteMedio | null = null;
   private video: HTMLVideoElement | null = null;
   private virtual: RelojVirtual | null = null;
+  private externo: MedioYoutube | null = null;
   readonly marco: HTMLDivElement | null = null;
   private aparcamiento: HTMLDivElement | null = null;
   private anfitrion: HTMLElement | null = null;
@@ -178,7 +182,7 @@ export class Motor {
       retomado: this.retomado,
       virtual: !!this.virtual,
       haSonado: this.haSonado,
-      aspecto: this.video && !this.virtual && this.video.videoWidth ? this.video.videoWidth / this.video.videoHeight : null,
+      aspecto: this.externo ? 16 / 9 : this.video && !this.virtual && this.video.videoWidth ? this.video.videoWidth / this.video.videoHeight : null,
       osd: this.osd,
     };
   }
@@ -252,10 +256,10 @@ export class Motor {
 
   // ------------------------------------------------------------------ fuente
 
-  private medio(): ElementoMedio | null { return this.virtual ?? this.video; }
+  private medio(): ElementoMedio | null { return this.virtual ?? this.externo ?? this.video; }
 
   private crearVideo(): HTMLVideoElement {
-    if (this.video) return this.video;
+    if (this.video) { this.video.hidden = false; return this.video; }
     const v = document.createElement('video');
     v.playsInline = true;
     v.setAttribute('playsinline', '');
@@ -342,6 +346,17 @@ export class Motor {
     this.despachar({ tipo: 'cargar' });
     if (o.sonar) this.despachar({ tipo: 'pedirSonar' });
     this.sesionMedios();
+    if (fuente.youtube) {
+      // YouTube: su reproductor insertado hace de elemento; el instante pendiente se aplica al estar listo.
+      if (this.video) this.video.hidden = true;
+      const y = new MedioYoutube(fuente.youtube, { inicio: this.pendiente ?? 0, ...(fuente.duracion ? { duracion: fuente.duracion } : {}) });
+      this.externo = y;
+      this.escucharElemento(y);
+      this.marco!.appendChild(y.nodo);
+      if (this.b.quiere) this.reproducirElemento();
+      this.emitir();
+      return;
+    }
     let url: string | null;
     try { url = await fuente.url(); } catch { url = null; if (ficha === this.ficha) this.error = 'No se pudo pedir el archivo al servidor.'; }
     if (ficha !== this.ficha) return;
@@ -379,6 +394,7 @@ export class Motor {
 
   private descargarElemento() {
     if (this.virtual) { this.virtual.pause(); this.virtual = null; }
+    if (this.externo) { this.externo.destruir(); this.externo = null; }
     if (this.video) {
       if (!this.video.paused) { this.pausasPropias++; this.video.pause(); }
       this.video.removeAttribute('src');
@@ -587,11 +603,23 @@ export class Motor {
 
   // ------------------------------------------------------------------ lugares
 
+  /**
+   * Cambia el marco de sitio. Con `moveBefore` (Chrome 133+) el iframe de YouTube no
+   * se recarga; sin él, se recarga y el reproductor de YouTube se vuelve a crear donde iba.
+   */
+  private mover(destino: HTMLElement) {
+    const m = this.marco!;
+    const mb = (destino as HTMLElement & { moveBefore?: (n: Node, r: Node | null) => void }).moveBefore;
+    if (this.externo && mb && m.isConnected && destino.isConnected) { try { mb.call(destino, m, null); return; } catch { /* sigue abajo */ } }
+    destino.appendChild(m);
+    if (this.externo) this.externo.reanclar();
+  }
+
   /** El escenario del lector o del reproductor pequeño acoge el marco. */
   alojar(nodo: HTMLElement, lugar: 'lector' | 'mini') {
     if (!this.marco) return;
     if (this.soltar) { clearTimeout(this.soltar); this.soltar = null; }
-    if (this.marco.parentElement !== nodo) nodo.appendChild(this.marco);
+    if (this.marco.parentElement !== nodo) this.mover(nodo);
     this.anfitrion = nodo;
     this.lugar = lugar;
     if (lugar === 'lector') this.miniActivo = false;
@@ -605,7 +633,7 @@ export class Motor {
   desalojar(nodo: HTMLElement) {
     if (this.anfitrion !== nodo || !this.marco) return;
     const lugar = this.lugar;
-    this.aparcamiento?.appendChild(this.marco);
+    if (this.aparcamiento) this.mover(this.aparcamiento);
     this.anfitrion = null;
     this.lugar = null;
     if (lugar === 'lector') {

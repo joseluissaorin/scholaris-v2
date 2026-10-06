@@ -28,33 +28,73 @@ export function idYoutube(url: string): string | null {
 
 export const esVimeo = (url: string) => { try { return /(^|\.)vimeo\.com$/.test(new URL(url).hostname); } catch { return false; } };
 
-export interface InfoYoutube { id: string; url: string; titulo?: string; canal?: string; duracion?: number; idioma?: string }
+export interface InfoYoutube {
+  id: string; url: string; titulo?: string; canal?: string; duracion?: number; idioma?: string;
+  /** Fecha de publicación (AAAA-MM-DD). */
+  fecha?: string; descripcion?: string; miniatura?: string;
+}
 
-/** Título y canal por oEmbed; duración, si se puede, de la página. */
+const NAVEGADOR = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130 Safari/537.36';
+
+/**
+ * Datos del vídeo. Primero la API del reproductor de YouTube (la que usa su
+ * propia web: duración, canal, fecha, descripción), que responde también desde
+ * Cloudflare; luego oEmbed y la página (con el consentimiento ya dado, que si
+ * no YouTube devuelve su aviso de cookies y no hay duración).
+ */
 export async function infoYoutube(url: string, f: typeof fetch = fetch): Promise<InfoYoutube> {
   const id = idYoutube(url);
   if (!id) throw new Error('No es una URL de YouTube válida.');
   const canonica = `https://www.youtube.com/watch?v=${id}`;
-  const info: InfoYoutube = { id, url: canonica };
+  const info: InfoYoutube = { id, url: canonica, miniatura: `https://i.ytimg.com/vi/${id}/hqdefault.jpg` };
   try {
-    const o = await f(`https://www.youtube.com/oembed?format=json&url=${encodeURIComponent(canonica)}`);
-    if (o.ok) {
-      const j = (await o.json()) as { title?: string; author_name?: string };
-      if (j.title) info.titulo = j.title;
-      if (j.author_name) info.canal = j.author_name;
+    const r = await f('https://www.youtube.com/youtubei/v1/player?prettyPrint=false', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'user-agent': NAVEGADOR },
+      body: JSON.stringify({ videoId: id, context: { client: { clientName: 'WEB', clientVersion: '2.20251001.00.00', hl: 'en', gl: 'US' } } }),
+    });
+    if (r.ok) {
+      const j = (await r.json()) as {
+        videoDetails?: { title?: string; author?: string; lengthSeconds?: string; shortDescription?: string };
+        microformat?: { playerMicroformatRenderer?: { publishDate?: string; uploadDate?: string } };
+      };
+      const v = j.videoDetails ?? {};
+      if (v.title) info.titulo = v.title;
+      if (v.author) info.canal = v.author;
+      if (v.lengthSeconds && Number(v.lengthSeconds) > 0) info.duracion = Number(v.lengthSeconds);
+      if (v.shortDescription) info.descripcion = v.shortDescription.slice(0, 2000);
+      const fecha = j.microformat?.playerMicroformatRenderer?.publishDate ?? j.microformat?.playerMicroformatRenderer?.uploadDate;
+      if (fecha && /^\d{4}-\d{2}-\d{2}/.test(fecha)) info.fecha = fecha.slice(0, 10);
     }
-  } catch { /* sin oEmbed */ }
-  try {
-    const p = await f(canonica, { headers: { 'accept-language': 'es,en;q=0.8', 'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130 Safari/537.36' } });
-    if (p.ok) {
-      const html = await p.text();
-      const d = /"lengthSeconds":"(\d+)"/.exec(html)?.[1] ?? /<meta itemprop="duration" content="PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?"/.exec(html)?.slice(1).join(':');
-      if (d && /^\d+$/.test(d)) info.duracion = Number(d);
-      else if (d) { const [h, m, s] = d.split(':').map((x) => Number(x || 0)); info.duracion = (h ?? 0) * 3600 + (m ?? 0) * 60 + (s ?? 0); }
-      const idioma = /"defaultAudioLanguage":"([a-zA-Z-]+)"/.exec(html)?.[1] ?? /<html[^>]+lang="([a-zA-Z-]+)"/.exec(html)?.[1];
-      if (idioma) info.idioma = idioma.slice(0, 2).toLowerCase();
-    }
-  } catch { /* sin página */ }
+  } catch { /* sin la API del reproductor */ }
+  if (!info.titulo || !info.canal) {
+    try {
+      const o = await f(`https://www.youtube.com/oembed?format=json&url=${encodeURIComponent(canonica)}`);
+      if (o.ok) {
+        const j = (await o.json()) as { title?: string; author_name?: string; thumbnail_url?: string };
+        if (j.title) info.titulo ??= j.title;
+        if (j.author_name) info.canal ??= j.author_name;
+        if (j.thumbnail_url) info.miniatura = j.thumbnail_url;
+      }
+    } catch { /* sin oEmbed */ }
+  }
+  if (!info.duracion || !info.fecha || !info.idioma) {
+    try {
+      const p = await f(canonica, { headers: { 'accept-language': 'en;q=0.8', 'user-agent': NAVEGADOR, cookie: 'SOCS=CAI; CONSENT=YES+cb' } });
+      if (p.ok) {
+        const html = await p.text();
+        const d = /"lengthSeconds":"(\d+)"/.exec(html)?.[1];
+        if (!info.duracion && d) info.duracion = Number(d);
+        const fecha = /"publishDate":"(\d{4}-\d{2}-\d{2})/.exec(html)?.[1] ?? /itemprop="datePublished" content="(\d{4}-\d{2}-\d{2})/.exec(html)?.[1];
+        if (!info.fecha && fecha) info.fecha = fecha;
+        // Solo el idioma del audio: el de la página es el de la interfaz, no el del vídeo.
+        const idioma = /"defaultAudioLanguage":"([a-zA-Z-]+)"/.exec(html)?.[1];
+        if (idioma) info.idioma = idioma.slice(0, 2).toLowerCase();
+      }
+    } catch { /* sin página */ }
+  }
+  // «Título | Canal» → «Título».
+  if (info.titulo && info.canal) info.titulo = info.titulo.replace(new RegExp(`\\s*[|·–—-]\\s*${info.canal.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*$`), '').trim() || info.titulo;
   return info;
 }
 
@@ -69,15 +109,15 @@ export function tramosDe(duracion?: number): Array<{ t0: number; t1: number }> {
 const ESQUEMA = {
   type: 'object',
   properties: {
-    idioma: { type: 'string', description: 'Código BCP-47 del idioma hablado.' },
+    idioma: { type: 'string', description: 'Código BCP-47 del idioma hablado (o del texto en pantalla si no se habla).' },
     segmentos: {
       type: 'array',
       items: {
         type: 'object',
         properties: {
-          inicio: { type: 'string', description: 'Marca de inicio H:MM:SS desde el principio del vídeo completo.' },
-          fin: { type: 'string', description: 'Marca de fin H:MM:SS.' },
-          hablante: { type: 'string' },
+          inicio: { type: 'string', description: 'Marca de inicio H:MM:SS.s desde el principio del vídeo completo.' },
+          fin: { type: 'string', description: 'Marca de fin H:MM:SS.s.' },
+          hablante: { type: 'string', description: 'Nombre o papel de quien habla; «Rótulo» si es texto en pantalla que nadie lee en voz alta.' },
           texto: { type: 'string' },
         },
         required: ['inicio', 'fin', 'texto'],
@@ -90,27 +130,57 @@ const ESQUEMA = {
 const aSegundos = (s: string) => s.split(':').map(Number).reduce((a, x) => a * 60 + (Number.isFinite(x) ? x : 0), 0);
 const marca = (s: number) => `${Math.floor(s / 3600)}:${String(Math.floor((s % 3600) / 60)).padStart(2, '0')}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
 
-/** Transcribe un tramo de un vídeo de YouTube con Gemini, sin descargarlo. */
+/**
+ * Las palabras de un segmento con su instante: Gemini da el segmento (una frase
+ * corta) y el tiempo se reparte entre sus palabras según su longitud. Para el
+ * karaoke y las citas al segundo basta; el segmento sigue siendo exacto.
+ */
+export function palabrasDeSegmento(s: { t0: number; t1: number; texto: string; hablante?: string }): PalabraTranscrita[] {
+  const ps = s.texto.split(/\s+/).filter(Boolean);
+  if (!ps.length) return [];
+  const dur = Math.max(0.3, s.t1 - s.t0);
+  const pesos = ps.map((p) => p.length + 1);
+  const total = pesos.reduce((a, b) => a + b, 0);
+  let t = s.t0;
+  return ps.map((texto, i) => {
+    const d = (dur * pesos[i]!) / total;
+    const w: PalabraTranscrita = { texto, t0: Math.round(t * 100) / 100, t1: Math.round((t + d) * 100) / 100, ...(s.hablante ? { hablante: s.hablante } : {}) };
+    t += d;
+    return w;
+  });
+}
+
+/** Transcribe un tramo de un vídeo de YouTube con Gemini, sin descargarlo: lo que se dice y, si no se dice, lo que se lee en pantalla. */
 export async function transcribirYoutube(cfg: ConfigGemini, url: string, t0: number, t1: number, opciones: { idioma?: string; pista?: string } = {}): Promise<Transcripcion> {
   const g = crearGemini({ ...cfg, timeoutMs: Math.max(cfg.timeoutMs ?? 0, 600_000), intentos: cfg.intentos ?? 3 });
   const parteVideo: Record<string, unknown> = { fileData: { fileUri: url, mimeType: 'video/*' } };
   if (t1 > t0) parteVideo.videoMetadata = { startOffset: `${Math.floor(t0)}s`, endOffset: `${Math.ceil(t1)}s` };
   const intervalo = t1 > t0 ? ` Transcribe SOLO el intervalo de ${marca(t0)} a ${marca(t1)}.` : '';
   const instrucciones = `Transcribe literalmente todo lo que se dice en este vídeo, en su idioma original, sin traducir ni resumir.${intervalo} ` +
-    'Divide en segmentos de una o dos frases, con marcas H:MM:SS contadas desde el principio del vídeo completo y el nombre o rol del hablante si se distingue. ' +
-    `Si en el intervalo no se habla, devuelve una lista vacía.${opciones.idioma ? ` Idioma probable: ${opciones.idioma}.` : ''}${opciones.pista ? ` Pista: ${opciones.pista}.` : ''}`;
+    'Divide en segmentos cortos (una frase, como mucho unos ocho segundos), con marcas H:MM:SS.s contadas desde el principio del vídeo completo y el nombre o papel del hablante si se distingue. ' +
+    'Además, el texto que aparece escrito en pantalla y que nadie lee en voz alta (rótulos, citas, títulos, explicaciones) es parte del contenido: transcríbelo también, cuando aparece, como segmento con hablante «Rótulo». ' +
+    'Ignora los créditos repetitivos y los logotipos. ' +
+    `Si en el intervalo no se habla ni hay texto en pantalla, devuelve una lista vacía.${opciones.idioma ? ` Idioma probable: ${opciones.idioma}.` : ''}${opciones.pista ? ` Pista: ${opciones.pista}.` : ''}`;
   const { texto } = await g.generar(MODELOS_GEMINI.redactorAlto, {
     contents: [{ role: 'user', parts: [parteVideo, { text: instrucciones }] }],
-    generationConfig: { temperature: 0, responseMimeType: 'application/json', responseSchema: ESQUEMA, maxOutputTokens: 32768, mediaResolution: 'MEDIA_RESOLUTION_LOW' },
+    generationConfig: { temperature: 0, responseMimeType: 'application/json', responseSchema: ESQUEMA, maxOutputTokens: 65536 },
   }, 'transcribir');
   let j: { idioma?: string; segmentos?: Array<{ inicio: string; fin: string; hablante?: string; texto: string }> };
   try { j = JSON.parse(texto); } catch { j = JSON.parse(texto.slice(texto.indexOf('{'), texto.lastIndexOf('}') + 1)); }
-  let segs = (j.segmentos ?? []).filter((s) => s.texto?.trim()).map((s) => ({ t0: aSegundos(s.inicio), t1: aSegundos(s.fin), hablante: s.hablante, texto: s.texto.trim() }));
+  let segs = (j.segmentos ?? []).filter((s) => s.texto?.trim()).map((s) => ({ t0: aSegundos(s.inicio), t1: aSegundos(s.fin), hablante: s.hablante?.trim() || undefined, texto: s.texto.trim() }));
   // Si el modelo contó desde el inicio del tramo, se desplaza.
   if (t0 > 1 && segs.length && segs.every((s) => s.t1 <= t1 - t0 + 5) && segs[0]!.t0 < t0 - 5) segs = segs.map((s) => ({ ...s, t0: s.t0 + t0, t1: s.t1 + t0 }));
-  // Una «palabra» por frase: la segmentación posterior trabaja igual con frases.
-  const palabras: PalabraTranscrita[] = segs.map((s) => ({ texto: s.texto, t0: s.t0, t1: Math.max(s.t1, s.t0 + 0.5), ...(s.hablante ? { hablante: s.hablante } : {}) }));
-  return { ...(j.idioma ? { idioma: j.idioma.slice(0, 2) } : {}), palabras, texto: segs.map((s) => s.texto).join(' ') };
+  // En orden, dentro del tramo y sin solaparse (el siguiente empieza donde acaba el anterior como pronto).
+  segs.sort((a, b) => a.t0 - b.t0);
+  const fin = t1 > t0 ? t1 : Infinity;
+  const limpios: typeof segs = [];
+  for (const s of segs) {
+    const a = Math.max(s.t0, t0, limpios.at(-1)?.t1 ?? 0);
+    const b = Math.min(Math.max(s.t1, a + 0.4), fin);
+    if (b > a) limpios.push({ ...s, t0: a, t1: b });
+  }
+  const palabras = limpios.flatMap((s) => palabrasDeSegmento(s as { t0: number; t1: number; texto: string; hablante?: string }));
+  return { ...(j.idioma ? { idioma: j.idioma.slice(0, 2) } : {}), palabras, texto: limpios.map((s) => s.texto).join(' ') };
 }
 
 /** Un transcriptor que, para las partes de YouTube, llama a Gemini con la URL. */

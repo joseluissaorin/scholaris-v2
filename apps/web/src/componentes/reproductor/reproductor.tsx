@@ -17,6 +17,7 @@ import { q } from '../../datos/consultas';
 import { autores, tiempoACadena } from '../../lib/formato';
 import { BarraSeleccion } from '../lector/seleccion';
 import { motor, type FuenteMedio, type Instantanea } from './motor';
+import { idYoutubeDeUrl } from './medio-youtube';
 import { VELOCIDADES } from './maquina';
 import { fotogramaEn, useFotogramas, useMenosMovimiento, useMotor, useRelojDom, useSegundo, useTranscripcion } from './ganchos';
 import { aVtt, buscarEnTranscripcion, buscarIndice, parrafoEn, type Transcripcion } from './transcripcion';
@@ -45,12 +46,15 @@ interface Props {
 /** La fuente del motor para un documento: la primera URL de la caché (precargada), las siguientes nuevas. */
 function useFuente(doc: DetalleDocumento): FuenteMedio {
   const qc = useQueryClient();
+  // YouTube: su reproductor insertado, sin descargar el vídeo; la portada, su miniatura.
+  const youtube = doc.mime === 'application/x-youtube' ? idYoutubeDeUrl(doc.metadatos.url) : null;
   return useMemo(() => ({
+    ...(youtube ? { youtube } : {}),
     documento: doc.id,
     tipo: doc.tipo === 'video' ? 'video' : 'audio',
     titulo: doc.metadatos.titulo || 'Sin título',
     autores: autores(doc.metadatos),
-    ...(doc.portadaUrl ? { portada: doc.portadaUrl } : {}),
+    ...(doc.portadaUrl ? { portada: doc.portadaUrl } : youtube ? { portada: `https://i.ytimg.com/vi/${youtube}/hqdefault.jpg` } : {}),
     ...(doc.duracion ? { duracion: doc.duracion } : {}),
     url: async (renovar?: boolean) => {
       // La primera vez vale la de la caché (el cargador del lector ya la pidió); al renovar, una nueva.

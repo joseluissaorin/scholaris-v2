@@ -152,5 +152,6 @@ export function precargarLector(c: QueryClient, id: string, u = 1, pedirOriginal
     ?? c.getQueriesData<{ elementos?: Array<{ id: string; tipo: string }> }>({ queryKey: ['documentos'] }).flatMap(([, v]) => v?.elementos ?? []).find((x) => x.id === id)?.tipo;
   const original = pedirOriginal || (tipoSabido && esMedio(tipoSabido as never)) ? c.prefetchQuery(q.original(id)) : null;
   const documento = c.ensureQueryData(q.documento(id));
-  return documento.then(async (d) => { if (esMedio(d.tipo)) await (original ?? c.prefetchQuery(q.original(id))); return d; });
+  // Los de YouTube no tienen original: se ven con su reproductor insertado.
+  return documento.then(async (d) => { if (esMedio(d.tipo) && d.mime !== 'application/x-youtube') await (original ?? c.prefetchQuery(q.original(id))); return d; });
 }
