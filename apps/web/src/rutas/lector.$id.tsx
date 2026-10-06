@@ -192,6 +192,7 @@ function Lector() {
 
       {/* Botón de panel en el móvil */}
       <div className="fixed bottom-[calc(4.75rem+env(safe-area-inset-bottom))] right-4 z-20 flex gap-2 sm:hidden">
+        {paginado ? <Boton variante="linea" tam="m" soloIcono icono={modo === 'pagina' ? 'documento' : 'imagen'} aria-label={modo === 'pagina' ? 'Ver el texto' : 'Ver la página escaneada'} aria-pressed={modo === 'pagina'} className="bg-papel" onClick={() => setModo((m) => (m === 'pagina' ? 'ambas' : 'pagina'))} /> : null}
         <Boton variante="tinta" tam="m" icono="indice" onClick={() => setPanel('indice')}>Índice</Boton>
         <Boton variante="linea" tam="m" soloIcono icono="editar" aria-label="Ficha" className="bg-papel" onClick={() => setPanel('ficha')} />
       </div>
