@@ -48,8 +48,12 @@ export async function infoYoutube(url: string, f: typeof fetch = fetch): Promise
   const canonica = `https://www.youtube.com/watch?v=${id}`;
   const info: InfoYoutube = { id, url: canonica, miniatura: `https://i.ytimg.com/vi/${id}/hqdefault.jpg` };
   // Desde Cloudflare, el cliente «WEB» pide confirmar que no es un robot; el de la web móvil responde.
-  for (const client of [{ clientName: 'MWEB', clientVersion: '2.20251001.00.00', hl: 'en', gl: 'US' }, { clientName: 'WEB', clientVersion: '2.20251001.00.00', hl: 'en', gl: 'US' }]) {
+  // Responde según la IP de salida: varios intentos, alternando clientes.
+  const MWEB = { clientName: 'MWEB', clientVersion: '2.20251001.00.00', hl: 'en', gl: 'US' };
+  const WEB = { clientName: 'WEB', clientVersion: '2.20251001.00.00', hl: 'en', gl: 'US' };
+  for (const [i, client] of [MWEB, WEB, MWEB, MWEB, WEB].entries()) {
     if (info.duracion) break;
+    if (i) await new Promise((r) => setTimeout(r, 300 * i));
     try {
       const r = await f('https://www.youtube.com/youtubei/v1/player?prettyPrint=false', {
         method: 'POST',

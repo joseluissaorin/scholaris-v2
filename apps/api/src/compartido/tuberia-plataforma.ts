@@ -226,6 +226,11 @@ export async function consolidarTuberia(ctx: ContextoMotor, params: ParamsIngest
   const pendientes = { vectores: false };
   const metadatos = await metadatosGuardados(ctx, params.documento);
   const r = await consolidar(contexto(ctx, params, paquete, plan, pendientes), { metadatos });
+  // Un medio sin duración conocida (YouTube cuando su API no responde): la del final de lo transcrito.
+  if (plan.modo === 'medio' && !paquete.duracion) {
+    const [f] = await ctx.sql.ejecutar<{ fin: number | null }>("SELECT max(CAST(json_extract(ancla, '$.t1') AS REAL)) AS fin FROM unidades WHERE documento = ?", params.documento);
+    if (f?.fin && f.fin > 0 && f.fin < 1e6) await ctx.sql.ejecutar('UPDATE documentos SET duracion = ? WHERE id = ? AND (duracion IS NULL OR duracion = 0)', Math.ceil(f.fin), params.documento);
+  }
   await (ctx.sql as { vaciarPendientes?: () => Promise<void> }).vaciarPendientes?.();
   return {
     unidades: r.unidades.length, fragmentos: r.fragmentos.length, secciones: r.secciones.length, figuras: r.figuras.length,
