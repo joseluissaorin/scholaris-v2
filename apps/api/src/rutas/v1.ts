@@ -622,7 +622,8 @@ export function montarV1(app: AppPuerta, pl: Plataforma, autenticar: (r: Request
       if (quiereDocx) {
         return new Response(ex.body, { headers: { 'content-type': MIME_DOCX, 'content-disposition': ex.headers.get('content-disposition') ?? 'attachment; filename="citado.docx"' } });
       }
-      salida.texto = await ex.text();
+      // La exportación ya trae la bibliografía al final; en la v1 va aparte, en «bibliografia».
+      salida.texto = (await ex.text()).replace(/\n+#{1,3}\s*(Referencias|Bibliografía|References|Bibliography)\s*\n[\s\S]*$/i, '').trimEnd();
       salida.citas = aceptadas.map((p) => citaDePropuesta(o, p));
       salida.bibliografia = a.bibliografia;
     } else if (a.estado === 'error') {
