@@ -21,16 +21,17 @@ para el folio y las figuras), 1600 px si la página va a visión; JPEG de calida
 
 | Archivo | Páginas | Navegador | Node | Páginas/s (nav. / Node) | Primera página (nav. / Node) | MB producidos | Escaneadas |
 |---|---:|---:|---:|---:|---:|---:|---:|
-| attention_2017.pdf (digital) | 15 | 0,51 s | 1,31 s ¹ | 29 / 11 | 0,31 s / 0,52 s | 2,4 | 0 |
+| attention_2017.pdf (digital) | 15 | 0,41 s | 1,31 s ¹ | 37 / 11 | 0,18 s / 0,52 s | 2,4 | 0 |
 | the_discarded_image (ClearScan) | 245 | 0,86 s | 4,4 s (4,2 s ¹) | 285 / 55 | 0,18 s / 1,6 s | 50,6 | 7 |
 | el-casamiento (escaneado, s. XVII) | 43 | 1,02 s | 3,6 s | 42 / 12 | 0,12 s / 1,3 s | 19,6 | 43 |
 | cortazar1959perseguidor (digital) | 37 | 0,25 s | 1,8 s | 148 / 21 | 0,12 s / 1,3 s | 10,7 | 0 |
-| scanned_ocr_test (escaneado) | 1 | 0,10 s | 1,2 s | | | 0,17 | 1 |
+| scanned_ocr_test (escaneado) | 1 | 0,04 s | 0,4 s ¹ | | | 0,17 | 1 |
 
 ¹ En el mismo hilo. En Node, arrancar cada `worker_thread` (tsx + pdf.js + el
 documento) cuesta 0,8-1,5 s, así que por defecto se usa un trabajador por cada 25
-páginas (como mucho núcleos − 1, máximo 8) y ninguno hasta 25 páginas. En el navegador un trabajador arranca en unos
-70 ms y Chrome rasteriza y codifica en GPU: ahí está la diferencia.
+páginas (como mucho núcleos − 1, máximo 8) y ninguno hasta 25 páginas. En el
+navegador un trabajador arranca en unos 70 ms (se usa uno por cada 4 páginas) y
+Chrome rasteriza y codifica en GPU: ahí está la diferencia.
 
 Tamaño y tiempo de la imagen por página (Node, un hilo, 10 páginas):
 

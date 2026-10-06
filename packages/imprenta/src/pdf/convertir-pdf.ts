@@ -72,11 +72,11 @@ export async function convertirPdf(ctx: Contexto, bytes: Uint8Array, origen: Ori
   await ctx.emitir({ tipo: 'inicio', entrada: 'pdf', origen, unidades: total, metadatos });
 
   const lista = (op.paginas ?? Array.from({ length: total }, (_, i) => i + 1)).filter((p) => p >= 1 && p <= total);
-  // Arrancar un trabajador cuesta (pdf.js + el documento): uno por cada ~25
-  // páginas como mucho; con pocos, en este mismo hilo.
+  // Arrancar un trabajador cuesta: ~70 ms en el navegador, ~1 s en Node (tsx +
+  // pdf.js + el documento). Uno por cada 4 o 25 páginas; con pocas, en este hilo.
   let hilos = Math.min(op.hilos, lista.length);
   if (op.hilosAuto) {
-    hilos = Math.min(hilos, Math.ceil(lista.length / 25));
+    hilos = Math.min(hilos, Math.ceil(lista.length / (plataforma.nombre === 'navegador' ? 4 : 25)));
     if (hilos <= 1) hilos = 0;
   }
   const motor = hilos > 0 ? await ctx.medir('trabajadores', () => plataforma.motorPdf(bytes, hilos)) : motorLocal(plataforma, lib, doc);
