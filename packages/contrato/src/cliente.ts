@@ -24,7 +24,7 @@ import type {
   Buscar, BuscarMultilingue, EventoRespuesta, Responder, RespuestaBusqueda, RespuestaMultilingue, Similares,
 } from './busqueda.js';
 import type {
-  Autocita, AutocitaIniciada, Bibliografia, CitaDocumento, DecisionesAutocita, DetalleAutocita, EstiloCsl, ExportarReferencias,
+  Autocita, AutocitaIniciada, Bibliografia, FicheroCitas, CitaDocumento, DecisionesAutocita, DetalleAutocita, EstiloCsl, ExportarReferencias,
   ImportacionBibtex, ImportarBibtex, InsertarEnDocx, PedirBibliografia, ResumenAutocita, TextoExtraido, Verificacion, Verificar,
 } from './citas.js';
 import type {
@@ -211,6 +211,8 @@ export function crearCliente(opciones: OpcionesCliente) {
       decidir: (id: string, p: DecisionesAutocita) => patch<DetalleAutocita>(`/citas/autocita/${e(id)}`, p),
       borrarAutocita: (id: string) => del(`/citas/autocita/${e(id)}`),
       exportarAutocita: async (id: string, formato: 'docx' | 'md' | 'txt' | 'latex') => (await bruto('GET', `/citas/autocita/${e(id)}/exportar`, undefined, { formato })).blob(),
+      subir: (fichero: Blob | Uint8Array, mime: string, nombre?: string) =>
+        bruto('POST', '/citas/subir', fichero, nombre ? { nombre } : undefined, { 'content-type': mime }).then((r) => r.json() as Promise<FicheroCitas>),
       extraerTexto: (fichero: Blob | Uint8Array, mime: string) =>
         bruto('POST', '/citas/extraer-texto', fichero, undefined, { 'content-type': mime }).then((r) => r.json() as Promise<TextoExtraido>),
       verificar: (p: Verificar) => post<Verificacion>('/citas/verificar', p),

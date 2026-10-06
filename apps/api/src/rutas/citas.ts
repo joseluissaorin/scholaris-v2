@@ -4,7 +4,7 @@ import type { Documento, MetadatosDocumento, ValorSQL } from '@scholaris/nucleo'
 import { nuevoId } from '@scholaris/nucleo';
 import type {
   Autocita, DecisionesAutocita, DetalleAutocita, ExportarReferencias, ImportacionBibtex, ImportarBibtex, InsertarEnDocx, Pagina,
-  PedirBibliografia, PropuestaCita, ResumenAutocita, Verificar,
+  PedirBibliografia, PropuestaCita, ResumenAutocita, Verificar, FicheroCitas,
 } from '@scholaris/contrato';
 import {
   autocitar, bibliografia, citaDocumento, exportarReferencias, extraerTexto, importarBibtex, insertarCitasDocx, insertarCitasTexto,
@@ -13,7 +13,7 @@ import {
 import { leerDocumento } from '@scholaris/spdf';
 import type { Entorno } from '../entorno.js';
 import { cuerpoJson, exigir, fallo, noEncontrado } from '../compartido/errores.js';
-import { ahora, crearTarea, terminarTarea } from '../compartido/estanteria.js';
+import { ahora, crearTarea, DIAS_TEMPORAL, limpiarTemporales, terminarTarea } from '../compartido/estanteria.js';
 import { obtenerBuscador } from '../compartido/servicios.js';
 import type { PuertosUsuario } from '../puertos.js';
 import { filtrosEnAmbito } from './ambito.js';
@@ -168,6 +168,25 @@ export function rutasCitas(app: Hono<Entorno>): void {
     exigir(formato === 'md' || formato === 'txt' || formato === 'latex', 'Formatos: docx, md, txt, latex.');
     const texto = await insertarCitasTexto(d.texto, aceptadas, docs, { formato: formato === 'txt' ? 'texto' : 'markdown', estilo: d.estilo });
     return new Response(texto.texto, { headers: { 'content-type': formato === 'txt' ? 'text/plain; charset=utf-8' : 'text/markdown; charset=utf-8', 'content-disposition': `attachment; filename*=UTF-8''${encodeURIComponent(nombre)}.${formato === 'latex' ? 'tex' : formato}` } });
+  });
+
+  app.post('/citas/subir', async (c: Ctx) => {
+    exigirEscritura(c);
+    const p = puertos(c);
+    const mime = (c.req.header('content-type') ?? '').split(';')[0]!.trim() || MIME_DOCX;
+    const nombre = decodeURIComponent(c.req.query('nombre') ?? c.req.header('x-nombre') ?? 'texto.docx').replace(/[^\p{L}\p{N} ._-]+/gu, '').slice(0, 120) || 'texto.docx';
+    exigir([MIME_DOCX, 'text/plain', 'text/markdown', 'text/html', 'application/vnd.oasis.opendocument.text'].includes(mime), 'Sube un DOCX, ODT, TXT, Markdown o HTML.');
+    const bytes = new Uint8Array(await c.req.arrayBuffer());
+    exigir(bytes.length > 0 && bytes.length <= 50 * 1024 * 1024, 'El fichero debe pesar entre 1 byte y 50 MB.');
+    // Lo caducado se va al subir lo nuevo (y a diario con el mantenimiento).
+    await limpiarTemporales(p.sql, (k) => p.almacen.borrar(k));
+    const ext = mime === MIME_DOCX ? 'docx' : mime === 'application/vnd.oasis.opendocument.text' ? 'odt' : mime === 'text/markdown' ? 'md' : mime === 'text/html' ? 'html' : 'txt';
+    const clave = `u/${p.usuario.id}/citas/${Date.now().toString(36)}-${nuevoId('t')}.${ext}`;
+    await p.almacen.poner(clave, bytes, mime);
+    const caduca = new Date(Date.now() + DIAS_TEMPORAL * 86400_000).toISOString();
+    await p.sql.ejecutar('INSERT INTO pl_temporales (clave, nombre, mime, bytes, creado, caduca) VALUES (?, ?, ?, ?, ?, ?)', clave, nombre, mime, bytes.length, ahora(), caduca);
+    const { texto, parrafos } = await extraerTexto(bytes, mime);
+    return c.json<FicheroCitas>({ clave, nombre, caduca, texto, parrafos }, 201);
   });
 
   app.post('/citas/extraer-texto', async (c: Ctx) => {

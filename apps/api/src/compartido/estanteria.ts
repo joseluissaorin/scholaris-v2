@@ -185,3 +185,19 @@ export async function cambiarBiblioteca(sql: SQL, biblioteca: string, documentos
 }
 
 export type { FaseIngesta };
+
+// ---------------------------------------------------------------------------
+// Ficheros temporales (DOCX para la autocita): caducan solos
+// ---------------------------------------------------------------------------
+
+export const DIAS_TEMPORAL = 7;
+
+/** Borra los temporales caducados del almacén y de la estantería. */
+export async function limpiarTemporales(sql: SQL, borrar: (clave: string) => Promise<void>): Promise<number> {
+  const viejos = await sql.ejecutar<{ clave: string }>('SELECT clave FROM pl_temporales WHERE caduca < ?', ahora());
+  for (const v of viejos) {
+    await borrar(v.clave).catch(() => undefined);
+    await sql.ejecutar('DELETE FROM pl_temporales WHERE clave = ?', v.clave);
+  }
+  return viejos.length;
+}

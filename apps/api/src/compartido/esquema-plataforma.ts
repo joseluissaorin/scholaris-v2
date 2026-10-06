@@ -21,6 +21,9 @@ export const ESQUEMA_PLATAFORMA = [
     huella TEXT, tipo TEXT NOT NULL, clave TEXT NOT NULL, id_partes TEXT, prefijo TEXT NOT NULL,
     bibliotecas TEXT NOT NULL DEFAULT '[]', metadatos TEXT, estado TEXT NOT NULL, creada TEXT NOT NULL
   )`,
+  `CREATE TABLE IF NOT EXISTS pl_temporales (
+    clave TEXT PRIMARY KEY, nombre TEXT NOT NULL, mime TEXT NOT NULL, bytes INTEGER NOT NULL, creado TEXT NOT NULL, caduca TEXT NOT NULL
+  )`,
   `CREATE TABLE IF NOT EXISTS pl_autocitas (
     id TEXT PRIMARY KEY, titulo TEXT NOT NULL, estado TEXT NOT NULL, peticion TEXT NOT NULL, texto TEXT NOT NULL DEFAULT '',
     parrafos TEXT NOT NULL DEFAULT '[]', propuestas TEXT NOT NULL DEFAULT '[]', bibliografia TEXT NOT NULL DEFAULT '[]',

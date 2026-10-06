@@ -7,6 +7,9 @@
  *   PATCH  /citas/autocita/:id  { decisiones }    → DetalleAutocita   (aceptar/rechazar citas propuestas)
  *   DELETE /citas/autocita/:id                    → Ok
  *   GET    /citas/autocita/:id/exportar?formato=docx|md|txt|latex → fichero
+ *   POST   /citas/subir?nombre=…  cuerpo binario (DOCX, ODT, TXT, MD, HTML) → FicheroCitas
+ *          Guarda el fichero para la autocita (no entra en la biblioteca) durante 7 días;
+ *          su `clave` va en Autocita.subida para conservar el formato del DOCX.
  *   POST   /citas/extraer-texto  cuerpo binario (DOCX, PDF, TXT, MD) → { texto, parrafos }
  *
  *   POST   /citas/verificar     Verificar   → Verificacion
@@ -71,6 +74,17 @@ export interface DetalleAutocita extends ResumenAutocita {
 
 export interface DecisionesAutocita {
   decisiones: Array<{ propuesta: string; decision: 'aceptada' | 'rechazada' }>;
+}
+
+export interface FicheroCitas {
+  /** Para `Autocita.subida` e `InsertarEnDocx.subida`. */
+  clave: string;
+  nombre: string;
+  /** Fecha ISO en la que se borra solo. */
+  caduca: string;
+  /** El texto tal como lo verá la autocita (los desplazamientos de las propuestas se refieren a él). */
+  texto: string;
+  parrafos: string[];
 }
 
 export interface TextoExtraido {

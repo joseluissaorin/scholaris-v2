@@ -10,7 +10,7 @@ import { ejecutarVigilantesProgramados } from '@scholaris/funciones';
 import { crearAppUsuario } from '../app.js';
 import type { PuertosUsuario, UsuarioSesion, ParamsIngesta } from '../puertos.js';
 import { prepararEstanteria } from '../compartido/esquema-plataforma.js';
-import { apuntarProgreso, leerTarea } from '../compartido/estanteria.js';
+import { apuntarProgreso, leerTarea, limpiarTemporales } from '../compartido/estanteria.js';
 import { cerrarIngesta, type DatosCierre } from '../compartido/cierre.js';
 import { puertosFunciones } from '../compartido/servicios.js';
 import type { Env } from './env.js';
@@ -109,6 +109,9 @@ export class Estanteria extends DurableObject<Env> {
   /** Cron: vigilantes diarios o semanales del usuario. */
   async vigilantes(usuario: Pick<UsuarioSesion, 'id' | 'plan'>, modo: 'diario' | 'semanal'): Promise<void> {
     const u: UsuarioSesion = { id: usuario.id, plan: usuario.plan, correo: '', nombre: '', funciones: [], via: 'clerk' };
+    // Mantenimiento diario: fuera los temporales caducados.
+    const almacen = almacenDesdeEnv(this.env, origenDe(this.env));
+    await limpiarTemporales(this.base, (k) => almacen.borrar(k)).catch((e: unknown) => console.error('temporales', e));
     await ejecutarVigilantesProgramados(await puertosFunciones(this.puertos(u, origenDe(this.env))), modo);
   }
 }
