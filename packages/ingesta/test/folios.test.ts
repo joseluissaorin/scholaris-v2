@@ -43,4 +43,17 @@ describe('etiquetas del PDF frente a lo que se ve', () => {
     expect(r.anclas.map((a) => a.impresa)).toEqual(['i', 'ii', '1', '2', '3', '4']);
     expect(r.procedencia.proveedor).toBe('etiquetas-pdf');
   });
+
+  it('sin modo propio, las etiquetas pasan por @scholaris/folios: la sobrecubierta («dj A») y las guardas finales quedan sin folio', async () => {
+    const { pasoFolios } = await import('../src/pasos/folios.js');
+    const u = (fisica: number, etiqueta: string | null, pie: string, texto = 'texto de la página '.repeat(10), vacia = false) => ({ orden: fisica - 1, fisica, texto, notas: [], cabecera: '', pie, folioVisto: pie || null, etiqueta, titulos: [], figuras: [], vacia, lector: 't', confianza: 1 });
+    const us = [
+      u(1, 'dj A', '', 'Jacket designed by Will Carter'), u(2, 'i', ''), u(3, 'ii', 'ii'),
+      u(4, '1', '1'), u(5, '2', '2'), u(6, '3', '3'), u(7, '4', '4'), u(8, '5', '', '', true), u(9, '6', '', '', true),
+    ];
+    const r = await pasoFolios(us);
+    expect(r.anclas.map((a) => a.impresa)).toEqual([null, 'i', 'ii', '1', '2', '3', '4', null, null]);
+    expect(r.procedencia.proveedor).toBe('folios');
+    expect(r.procedencia.detalle?.fuente).toBe('etiquetas');
+  });
 });

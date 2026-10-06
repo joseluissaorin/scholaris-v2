@@ -181,8 +181,10 @@ export async function pasoFolios(unidades: UnidadLeida[], opciones: OpcionesFoli
   let anclas: AnclaPagina[] | null = null;
   let proveedor = 'folios-propio';
   const detalle: Record<string, unknown> = {};
-  // 1. Etiquetas del PDF que cuadran con lo que se ve: mandan (son del editor).
-  if (etiquetasInformativas(entradas)) {
+  // 1. Solo en modo propio: etiquetas del PDF que cuadran con lo que se ve. En el modo
+  //    normal las etiquetas van a `@scholaris/folios`, que además deja sin folio las de
+  //    cubierta y sobrecubierta («dj A», «Cover») y las guardas en blanco del final.
+  if (opciones.propio && etiquetasInformativas(entradas)) {
     const { acuerdo, comparadas } = acuerdoEtiquetas(entradas);
     detalle.etiquetas = { acuerdo, comparadas };
     if (comparadas === 0 || acuerdo / comparadas >= 0.5) { anclas = anclasDeEtiquetas(entradas, comparadas > 0); proveedor = 'etiquetas-pdf'; }
@@ -192,11 +194,11 @@ export async function pasoFolios(unidades: UnidadLeida[], opciones: OpcionesFoli
     try {
       if (opciones.deducir) { anclas = await opciones.deducir(entradas); proveedor = 'folios-externo'; }
       else {
-        const paginas: PaginaFolio[] = unidades.map((u) => ({ fisica: u.fisica, cabecera: u.cabecera, pie: u.pie, folio: u.folioVisto, texto: u.texto.slice(0, 600), vacia: u.vacia, confianza: u.confianza }));
+        const paginas: PaginaFolio[] = unidades.map((u) => ({ fisica: u.fisica, cabecera: u.cabecera, pie: u.pie, folio: u.folioVisto, etiqueta: u.etiqueta ?? null, texto: u.texto.slice(0, 600), vacia: u.vacia, confianza: u.confianza }));
         const r = await calcularFolios(paginas, opciones.juez ? { juez: opciones.juez } : {});
         anclas = r.paginas.map(aAncla);
         proveedor = opciones.juez ? `folios+${opciones.juez.nombre}` : 'folios';
-        Object.assign(detalle, { estrategia: r.estrategia, disposicion: r.disposicion, juez: r.juez, anclasSecuencia: r.anclas, avisos: r.avisos.slice(0, 5) });
+        Object.assign(detalle, { fuente: r.fuente, estrategia: r.estrategia, disposicion: r.disposicion, juez: r.juez, anclasSecuencia: r.anclas, avisos: r.avisos.slice(0, 5) });
       }
     } catch (e) {
       detalle.error = String((e as Error)?.message ?? e).slice(0, 200);
