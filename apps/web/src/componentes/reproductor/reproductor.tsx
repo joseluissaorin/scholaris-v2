@@ -152,7 +152,7 @@ export const Reproductor = forwardRef<ManejadorMedio, Props>(function Reproducto
   return (
     <div className="reproductor -mx-5 md:-mx-12 lg:grid lg:grid-cols-[minmax(22rem,1fr)_minmax(0,1.2fr)] 2xl:grid-cols-[minmax(26rem,1fr)_minmax(0,1.15fr)]">
       {/* Escenario y mandos */}
-      <div ref={columnaEscenario} className="sticky top-[7.75rem] z-20 border-b border-cream-300 bg-cream-50/95 px-3 pb-2 pt-2 shadow-[var(--shadow-soft)] backdrop-blur sm:px-5 lg:top-[4.25rem] lg:h-[calc(100dvh-4.25rem)] lg:self-start lg:overflow-y-auto lg:overscroll-contain lg:border-b-0 lg:border-r lg:bg-cream-100/60 lg:px-8 lg:pb-8 lg:pt-6 lg:shadow-none lg:backdrop-blur-none">
+      <div ref={columnaEscenario} className="sticky top-[7.75rem] z-20 border-b border-cream-300 bg-cream-50 px-3 pb-2 pt-2 shadow-[var(--shadow-soft)] sm:px-5 lg:top-[4.25rem] lg:h-[calc(100dvh-4.25rem)] lg:self-start lg:overflow-y-auto lg:overscroll-contain lg:border-b-0 lg:border-r lg:bg-cream-100/60 lg:px-8 lg:pb-8 lg:pt-6 lg:shadow-none lg:backdrop-blur-none">
         <div ref={pantalla} className={cx('reproductor-pantalla', inst.pantallaCompleta && propio && 'en-pantalla')}>
           {esVideo ? (
             <EscenarioVideo hueco={hueco} inst={inst} propio={propio} pantalla={pantalla} />

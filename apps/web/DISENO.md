@@ -229,9 +229,25 @@ la ingesta). Los tiempos de la nube dependen del servidor.
   elegido con su localizador, también rangos «pp. 23-24»), **Parecidos** y
   **Al cuaderno**.
 - La URL sigue a la lectura (`?u=`, `?t=`): cualquier momento se puede enlazar.
-- Audio y vídeo: reproductor arriba, transcripción palabra a palabra; cada marca
-  de tiempo y cada palabra saltan a su instante; «Seguir la voz» se suelta al
-  desplazarse a mano. Espacio reproduce, flechas saltan 10 s.
+- Audio y vídeo (`src/componentes/reproductor/`): un solo motor para toda la
+  aplicación, con una máquina de estados pura (cargando, esperando, buscando,
+  error con reintentos que piden otra URL firmada y siguen en el mismo
+  segundo). El elemento de medio cambia de sitio sin pararse: al salir del
+  lector mientras suena, sigue en el reproductor pequeño. En escritorio, el
+  escenario pegado a la izquierda (vídeo, o la onda del audio con un disco de
+  Kandinsky), la línea del tiempo como una línea de Kandinsky (lo oído en tinta,
+  los turnos de cada hablante en su color, los capítulos como círculos, el
+  cabezal en tres círculos concéntricos, el fotograma clave al pasar), quién
+  habla y las escenas; a la derecha, la transcripción virtualizada con karaoke
+  por búsqueda binaria (sin renders por fotograma) que sigue a la voz y se
+  aparta en cuanto la persona se desplaza. Cada hablante tiene forma y color
+  (círculo azul, cuadrado rojo, triángulo amarillo). Seleccionar un pasaje lo
+  cita con su intervalo exacto («9:50-9:56») o copia el enlace a ese minuto.
+  Subtítulos WebVTT generados de la transcripción; velocidad sin cambiar el
+  tono; imagen dentro de imagen; posición recordada por documento. Teclas:
+  espacio o K, J/L ±10 s, flechas ±5 s, Mayús+flechas por líneas, [ ] la
+  velocidad, M, F, C, I, 0-9. En el móvil, dos toques a un lado saltan 10 s y
+  deslizar sobre el vídeo lo recorre.
 - Ficha editable en el sitio con la procedencia de cada campo (leído, Crossref,
   OpenAlex, tú) y su confianza; lo dudoso se marca en amarillo.
 - En pantallas estrechas el panel (índice, figuras, ficha) es una hoja que sube.
