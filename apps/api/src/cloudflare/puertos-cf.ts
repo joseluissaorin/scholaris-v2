@@ -68,7 +68,10 @@ export function entornoInteligencia(env: Env, propias: Partial<Record<string, st
 const cacheIA = new Map<string, { ia: Inteligencia; hasta: number }>();
 
 type FabricaIA = (env: Env, propias: Partial<Record<string, string>>) => Inteligencia;
-let fabrica: FabricaIA = (env, propias) => crearInteligencia(entornoInteligencia(env, propias), { concurrencia: 16 });
+let fabrica: FabricaIA = (env, propias) => crearInteligencia(entornoInteligencia(env, propias), {
+  concurrencia: 16,
+  alPasarLector: (i) => console.log(JSON.stringify({ que: 'cascada', ...i })),
+});
 
 /** Sustituye cómo se crea la inteligencia (pruebas con puertos falsos). */
 export function establecerFabricaInteligencia(f: FabricaIA): void {
@@ -85,9 +88,10 @@ export async function geminiPara(env: Env, cuentas: Cuentas, usuario: string): P
 }
 
 /** Inteligencia del usuario, cacheada 10 minutos por aislamiento. */
-export async function inteligenciaPara(env: Env, cuentas: Cuentas, usuario: string): Promise<Inteligencia> {
-  const hay = cacheIA.get(usuario);
+export async function inteligenciaPara(env: Env, cuentas: Cuentas, usuario: string, o: { sinCache?: boolean } = {}): Promise<Inteligencia> {
+  const hay = o.sinCache ? undefined : cacheIA.get(usuario);
   if (hay && hay.hasta > Date.now()) return hay.ia;
+  if (o.sinCache) return fabrica(env, await cuentas.clavesPropias(usuario).catch(() => ({})));
   const propias = await cuentas.clavesPropias(usuario).catch(() => ({}));
   const ia = fabrica(env, propias);
   cacheIA.set(usuario, { ia, hasta: Date.now() + 600_000 });

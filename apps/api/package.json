@@ -12,7 +12,8 @@
     "dev": "wrangler dev -c ../../deploy/cloudflare/wrangler.jsonc",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "tipos": "wrangler types -c ../../deploy/cloudflare/wrangler.jsonc src/worker-configuration.d.ts"
+    "tipos": "wrangler types -c ../../deploy/cloudflare/wrangler.jsonc src/worker-configuration.d.ts",
+    "desplegar": "pnpm --filter @scholaris/web build && wrangler deploy -c ../../deploy/cloudflare/wrangler.jsonc"
   },
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "^0.22.0",

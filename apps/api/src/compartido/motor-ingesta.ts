@@ -86,9 +86,20 @@ const trabajo = (p: ParamsIngesta) => `${p.prefijo}trabajo/`;
 // Paquete y fuente
 // ---------------------------------------------------------------------------
 
-const paquetes = new Map<string, Promise<PaqueteConversion>>();
+/**
+ * Cachés por contexto, nunca de módulo: en Workers, varios pasos de un Workflow
+ * comparten aislamiento y una promesa de E/S creada en un paso no se puede
+ * esperar desde otro (el runtime lo da por colgado y lo cancela).
+ */
+const cachesPorAlmacen = new WeakMap<AlmacenAmpliado, { paquetes: Map<string, Promise<PaqueteConversion>>; cortadores: Map<string, Promise<CortadorPdf | null>> }>();
+function caches(almacen: AlmacenAmpliado) {
+  let c = cachesPorAlmacen.get(almacen);
+  if (!c) cachesPorAlmacen.set(almacen, (c = { paquetes: new Map(), cortadores: new Map() }));
+  return c;
+}
 
 export function leerPaquete(almacen: AlmacenAmpliado, clave: string): Promise<PaqueteConversion> {
+  const paquetes = caches(almacen).paquetes;
   let p = paquetes.get(clave);
   if (!p) {
     p = (async () => {
@@ -103,9 +114,11 @@ export function leerPaquete(almacen: AlmacenAmpliado, clave: string): Promise<Pa
   return p;
 }
 
+/** Por encima de esto no se abre el PDF original en memoria (pdf-lib lo multiplica). */
+const MAX_PDF_CORTABLE = 12 * 1024 * 1024;
+
 export function fuenteDesdeAlmacen(almacen: AlmacenAmpliado, params: ParamsIngesta, paquete: PaqueteConversion): FuentePaquete {
   const mimes = new Map(paquete.partes.map((x) => [x.id, x.mime]));
-  let cortador: Promise<CortadorPdf> | null = null;
   const esPdf = paquete.contenido.clase === 'pdf' && /pdf/i.test(params.mime || paquete.origen.mime);
   return {
     async parte(id) {
@@ -127,15 +140,29 @@ export function fuenteDesdeAlmacen(almacen: AlmacenAmpliado, params: ParamsInges
     },
     ...(esPdf && params.original ? {
       async subPdf(desde: number, hasta: number) {
-        cortador ??= (async () => {
-          const b = await almacen.bytes(params.original);
-          if (!b) throw new Error('No encuentro el PDF original');
-          return abrirCortador(b);
-        })();
-        return (await cortador).cortar(desde, hasta);
+        const t0 = Date.now();
+        try { return await cortar(desde, hasta); } finally { console.log(JSON.stringify({ que: 'subpdf', desde, hasta, ms: Date.now() - t0 })); }
       },
     } : {}),
   };
+  async function cortar(desde: number, hasta: number): Promise<Uint8Array | null> {
+    // Los pasos en paralelo de un Workflow comparten aislamiento (128 MB): un solo
+    // cortador por original, y solo si el PDF es pequeño; si no, van las imágenes de página.
+    const cortadores = caches(almacen).cortadores;
+    let c = cortadores.get(params.original);
+    if (!c) {
+      c = (async () => {
+        const cab = await almacen.cabecera(params.original);
+        if (!cab || cab.bytes > MAX_PDF_CORTABLE) return null;
+        const b = await almacen.bytes(params.original);
+        return b ? abrirCortador(b) : null;
+      })();
+      cortadores.clear();
+      cortadores.set(params.original, c);
+    }
+    const cortadorPdf = await c;
+    return cortadorPdf ? cortadorPdf.cortar(desde, hasta) : null;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -158,11 +185,23 @@ export function lectorConMemoria(lector: Lector, almacen: AlmacenAmpliado, raiz:
     nombre: lector.nombre,
     async leerPliego(entrada) {
       const clave = claveLector(raiz, lector.nombre, await huellaEntrada(entrada));
+      const t0 = Date.now();
       const guardado = await almacen.bytes(clave);
-      if (guardado) return JSON.parse(new TextDecoder().decode(guardado)) as PaginaLeida[];
-      const r = await lector.leerPliego(entrada);
-      await almacen.poner(clave, JSON.stringify(r), 'application/json');
-      return r;
+      const n = entrada.imagenes?.length ?? 0;
+      const bytes = entrada.pdf?.byteLength ?? (entrada.imagenes ?? []).reduce((s, i) => s + i.bytes.byteLength, 0);
+      if (guardado) {
+        console.log(JSON.stringify({ que: 'lector', lector: lector.nombre, desde: entrada.primeraFisica, imagenes: n, bytes, memoria: true, ms: Date.now() - t0 }));
+        return JSON.parse(new TextDecoder().decode(guardado)) as PaginaLeida[];
+      }
+      try {
+        const r = await lector.leerPliego(entrada);
+        console.log(JSON.stringify({ que: 'lector', lector: lector.nombre, desde: entrada.primeraFisica, imagenes: n, pdf: !!entrada.pdf, bytes, paginas: r.length, ms: Date.now() - t0 }));
+        await almacen.poner(clave, JSON.stringify(r), 'application/json');
+        return r;
+      } catch (e) {
+        console.log(JSON.stringify({ que: 'lector', lector: lector.nombre, desde: entrada.primeraFisica, imagenes: n, pdf: !!entrada.pdf, bytes, error: String((e as Error).message).slice(0, 200), ms: Date.now() - t0 }));
+        throw e;
+      }
     },
   };
 }
@@ -326,6 +365,16 @@ export async function preparar(ctx: ContextoMotor, params: ParamsIngesta): Promi
   const plan = planificar(paquete, OPCIONES_PLAN);
   // El total se conoce ya; las páginas con capa de texto se pueden enseñar desde ahora.
   await ctx.sql.ejecutar('UPDATE documentos SET unidades = ? WHERE id = ?', plan.unidades, params.documento);
+  // Mientras se lee, mejor el título y los autores del propio fichero que el nombre del archivo.
+  const ficha = paquete.metadatos;
+  if (ficha?.titulo && ficha.titulo.trim().length > 2) {
+    const [d] = await ctx.sql.ejecutar<{ metadatos: string }>('SELECT metadatos FROM documentos WHERE id = ?', params.documento);
+    if (d) {
+      const m = { ...(JSON.parse(d.metadatos) as Record<string, unknown>), titulo: ficha.titulo.trim(), ...(ficha.autores?.length ? { autores: ficha.autores } : {}), ...(ficha.anio ? { anio: ficha.anio } : {}) };
+      await ctx.sql.ejecutar('UPDATE documentos SET metadatos = ?, titulo = ?, autores = COALESCE(?, autores) WHERE id = ?',
+        JSON.stringify(m), ficha.titulo.trim(), ficha.autores?.length ? ficha.autores.map((a) => a.apellidos || a.nombre).join('; ') : null, params.documento);
+    }
+  }
   if (paquete.contenido.clase === 'pdf') {
     const paginas = paquete.contenido.paginas;
     const base = cuerpoDominante(paginas);
@@ -343,8 +392,11 @@ export async function leerUnPliego(ctx: ContextoMotor, params: ParamsIngesta, in
   const pliego = plan.pliegos.find((p) => p.id === id) as Pliego | undefined;
   if (!pliego) return 0;
   const ia = inteligenciaConMemoria(ctx.inteligencia, ctx.almacen, trabajo(params), ctx.gemini);
+  const t0 = Date.now();
   const r = await leerPliego(pliego, paquete, fuenteDesdeAlmacen(ctx.almacen, params, paquete), [ia.lector, ...(ia.lectoresReserva ?? [])], { ...(params.pista ? { pista: params.pista } : {}) });
+  const t1 = Date.now();
   await escribirProvisionales(ctx, params, r.paginas.map((u) => provisionalDePagina(u, paquete)));
+  console.log(JSON.stringify({ que: 'pliego', id, leer: t1 - t0, provisionales: Date.now() - t1 }));
   return r.paginas.length;
 }
 
@@ -397,6 +449,7 @@ export async function componer(ctx: ContextoMotor, params: ParamsIngesta, info: 
   const paquete = await leerPaquete(ctx.almacen, info.paquete);
   const ia = inteligenciaConMemoria(ctx.inteligencia, ctx.almacen, trabajo(params), ctx.gemini);
   const base = ia.embebedor.espacio.id;
+  await limpiarDerivados(ctx, params.documento);
   let ultimo = 0;
   let faseAnterior = '';
   const estadoIndice = { pendientes: false };
@@ -434,6 +487,26 @@ export async function componer(ctx: ContextoMotor, params: ParamsIngesta, info: 
     figuras: r.figuras.length, vectores: r.vectores, tiempos: r.tiempos, avisos: r.avisos,
     ...(estadoIndice.pendientes ? { vectoresPendientes: true } : {}),
   };
+}
+
+/**
+ * Antes de escribir una versión nueva de un documento (reintento, reproceso):
+ * fuera las unidades, fragmentos, secciones, figuras y vectores anteriores, y
+ * sus entradas del índice. Así nunca conviven dos versiones (resultados repetidos).
+ */
+async function limpiarDerivados(ctx: ContextoMotor, documento: string): Promise<void> {
+  const viejos = (await ctx.sql.ejecutar<{ id: string }>(
+    "SELECT id FROM fragmentos WHERE documento = ? UNION SELECT id FROM unidades WHERE documento = ? AND id NOT LIKE 'prov:%' UNION SELECT id FROM figuras WHERE documento = ? UNION SELECT id FROM vectores WHERE documento = ?",
+    documento, documento, documento, documento)).map((f) => f.id);
+  if (!viejos.length) return;
+  for (const t of ['vectores', 'fragmentos', 'secciones', 'figuras']) await ctx.sql.ejecutar(`DELETE FROM ${t} WHERE documento = ?`, documento);
+  await ctx.sql.ejecutar("DELETE FROM unidades WHERE documento = ? AND id NOT LIKE 'prov:%'", documento);
+  await (ctx.sql as { vaciarPendientes?: () => Promise<void> }).vaciarPendientes?.();
+  if (ctx.indice) {
+    for (let i = 0; i < viejos.length; i += 1000) {
+      await ctx.indice.borrar(ctx.espacioNombres, viejos.slice(i, i + 1000)).catch((e: unknown) => console.error('borrar del índice', e));
+    }
+  }
 }
 
 /** Recalcula los vectores del espacio base desde el texto ya leído (SPDF importados). */

@@ -355,13 +355,28 @@ describe('imágenes de página', () => {
     expect((await SELF.fetch(lista.cuerpo.elementos[0].portadaUrl)).status).toBe(200);
   });
 
-  it('una subida a medias con la misma huella no cuenta como duplicada', async () => {
+  it('una subida a medias con la misma huella se reanuda (no cuenta como duplicada)', async () => {
     const t = await token('user_reanuda');
     const a = await api('/subidas', { token: t, cuerpo: { nombre: 'x.pdf', mime: 'application/pdf', bytes: 10, huella: 'h-reanuda' } });
     const b = await api('/subidas', { token: t, cuerpo: { nombre: 'x.pdf', mime: 'application/pdf', bytes: 10, huella: 'h-reanuda' } });
     expect(b.cuerpo.duplicado).toBeUndefined();
-    expect((await api(`/documentos/${a.cuerpo.documento}`, { token: t })).estado).toBe(404);
+    expect(b.cuerpo.documento).toBe(a.cuerpo.documento);
+    expect(b.cuerpo.subida).toBe(a.cuerpo.subida);
+    expect(b.cuerpo.original.url).toBeTruthy();
   });
+
+  it('con paquete, la ingesta empieza aunque el original no haya terminado de subir', async () => {
+    const t = await token('user_sin_original', { fea: 'u:scholaris' });
+    const original = new TextEncoder().encode('# Nota\n\nUna nota breve sobre la vigilancia y el panóptico.');
+    const s = await api('/subidas', { token: t, cuerpo: { nombre: 'nota.md', mime: 'text/markdown', bytes: original.byteLength } });
+    const rec = await api(`/subidas/${s.cuerpo.subida}/recursos`, { token: t, cuerpo: { recursos: [{ ruta: 'paquete.json', mime: 'application/json' }] } });
+    await SELF.fetch(rec.cuerpo.recursos[0].subida.url, { method: 'PUT', body: JSON.stringify(paqueteDocumento(['Una nota breve sobre la vigilancia y el panóptico.'])) });
+    const ing = await api(`/subidas/${s.cuerpo.subida}/ingestar`, { token: t, cuerpo: { paquete: 'paquete.json' } });
+    expect(ing.estado).toBe(202);
+    // El original llega después: el Workflow lo espera antes de cerrar.
+    expect((await SELF.fetch(s.cuerpo.original.url, { method: 'PUT', body: original })).status).toBe(200);
+    expect((await esperarTarea(t, ing.cuerpo.tarea, 100_000)).estado).toBe('listo');
+  }, 120_000);
 });
 
 describe('OAuth del servidor MCP', () => {

@@ -22,7 +22,8 @@ export class FlujoIngesta extends WorkflowEntrypoint<Env, ParamsIngesta> {
   private async contexto(p: ParamsIngesta): Promise<ContextoMotor & { emitir(pr: Progreso): Promise<void> }> {
     const env = this.env;
     const cuentas = cuentasDesdeEnv(env);
-    const ia = await inteligenciaPara(env, cuentas, p.usuario);
+    // Una inteligencia por paso: sus limitadores no se comparten entre pasos (ver motor-ingesta).
+    const ia = await inteligenciaPara(env, cuentas, p.usuario, { sinCache: true });
     const gemini = await geminiPara(env, cuentas, p.usuario);
     const estanteria = env.ESTANTERIA.getByName(p.usuario);
     const emisor = emisorDesdeEnv(env, p.usuario);
@@ -72,6 +73,8 @@ export class FlujoIngesta extends WorkflowEntrypoint<Env, ParamsIngesta> {
       const info: InfoPlan = await step.do('preparar', { retries: { limit: 3, delay: '5 seconds', backoff: 'exponential' }, timeout: '30 minutes' }, async () => {
         const ctx = await this.contexto(p);
         await ctx.emitir(progreso('conversion', 0, 0.01, p.paquete ? 'Planificando la lectura' : 'Convirtiendo en el servidor'));
+        // Latido mientras se convierte (el contenedor puede tardar): el vigilante no la da por parada.
+        const latido = setInterval(() => { void ctx.emitir(progreso('conversion', 0.5, 0.02, 'Convirtiendo…')).catch(() => undefined); }, 60_000);
         try {
           const i = await preparar(ctx, p);
           // Cuota de páginas (o minutos) del mes: se consume antes de leer.
@@ -86,6 +89,8 @@ export class FlujoIngesta extends WorkflowEntrypoint<Env, ParamsIngesta> {
         } catch (e) {
           if (e instanceof ErrorReserva) throw new NonRetryableError(e.message);
           throw e;
+        } finally {
+          clearInterval(latido);
         }
       });
 
@@ -98,9 +103,13 @@ export class FlujoIngesta extends WorkflowEntrypoint<Env, ParamsIngesta> {
       };
       await Promise.all([
         ...info.pliegos.map((id) => step.do(`pliego-${id}`, { retries: REINTENTOS, timeout: '6 minutes' }, async () => {
+          const t0 = Date.now();
           const ctx = await this.contexto(p);
+          const t1 = Date.now();
           const n = await leerUnPliego(ctx, p, info, id);
+          const t2 = Date.now();
           await avisar(ctx);
+          console.log(JSON.stringify({ que: 'paso', paso: `pliego-${id}`, contexto: t1 - t0, leer: t2 - t1, avisar: Date.now() - t2 }));
           return n;
         })),
         ...info.tramos.map((n) => step.do(`tramo-${n}`, { retries: REINTENTOS, timeout: '12 minutes' }, async () => {
@@ -119,8 +128,16 @@ export class FlujoIngesta extends WorkflowEntrypoint<Env, ParamsIngesta> {
         return componer(ctx, p, info, metadatosUsuario as Record<string, unknown> | null);
       });
 
+      // El original pudo seguir subiendo mientras se leía el paquete: se espera hasta 2 h.
+      const bytesOriginal = (info.original ?? p.original) ? await step.do('original', { retries: { limit: 720, delay: '10 seconds', backoff: 'constant' } }, async () => {
+        const cab = await almacenDesdeEnv(this.env, origenDe(this.env)).cabecera(info.original ?? p.original);
+        if (!cab) throw new Error('El original aún no ha terminado de subir');
+        return cab.bytes;
+      }) : undefined;
+
       await step.do('cerrar', { retries: REINTENTOS }, async () => {
         await estanteria.cerrar({ id: p.usuario, plan: p.plan }, {
+          ...(bytesOriginal ? { bytes: bytesOriginal } : {}),
           tarea: p.tarea, documento: p.documento, ok: true, original: info.original ?? p.original, bibliotecas: p.bibliotecas ?? [], unidades: resumen.unidades,
           ...(info.mime ? { mime: info.mime } : {}), ...(info.bytes ? { bytes: info.bytes } : {}),
           ...(resumen.vectoresPendientes ? { avisos: [{ codigo: 'vectores_pendientes', mensaje: 'Los vectores aún no están en el índice: ya se puede leer y buscar por texto, y la búsqueda semántica llegará en unos minutos.' }] } : {}),

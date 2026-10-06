@@ -50,10 +50,10 @@ export class Estanteria extends DurableObject<Env> {
           await env.INGESTA.create({ id: params.tarea, params });
         },
         cancelar: async (tarea: string) => {
-          try { await (await env.INGESTA.get(tarea)).terminate(); } catch { /* ya terminada */ }
+          try { await (await env.INGESTA.get(this.instanciaDe(tarea))).terminate(); } catch { /* ya terminada */ }
         },
         estado: async (tarea: string) => {
-          try { return (await (await env.INGESTA.get(tarea)).status()).status; } catch { return null; }
+          try { return (await (await env.INGESTA.get(this.instanciaDe(tarea))).status()).status; } catch { return null; }
         },
       },
       cuentas,
@@ -108,6 +108,42 @@ export class Estanteria extends DurableObject<Env> {
     await cerrarIngesta(this.puertos(u, origenDe(this.env)), datos);
   }
 
+  /** Instancia del Workflow de una tarea (cambia si se relanza). */
+  private instanciaDe(tarea: string): string {
+    const [f] = this.base.ejecutarSync<{ params: string | null }>('SELECT params FROM pl_tareas WHERE id = ?', [tarea]);
+    const p = f?.params ? (JSON.parse(f.params) as { instancia?: string }) : {};
+    return p.instancia ?? tarea;
+  }
+
+  /**
+   * Vigilante: la tarea lleva un rato sin avanzar. Si su Workflow ha muerto o
+   * sigue «corriendo» sin hacer nada, se relanza con los mismos parámetros
+   * (lo ya leído está grabado en el almacén: no se paga dos veces).
+   */
+  async vigilarTarea(tarea: string, sinAvanceMs: number): Promise<string> {
+    const [f] = this.base.ejecutarSync<{ estado: string; params: string | null; actualizada: string }>('SELECT estado, params, actualizada FROM pl_tareas WHERE id = ?', [tarea]);
+    if (!f || (f.estado !== 'en_cola' && f.estado !== 'procesando')) return 'terminada';
+    const params = f.params ? (JSON.parse(f.params) as ParamsIngesta & { instancia?: string; relanzamientos?: number }) : null;
+    if (!params?.documento || !params.usuario) return 'sin_parametros';
+    let estado: string | null = null;
+    try { estado = (await (await this.env.INGESTA.get(params.instancia ?? tarea)).status()).status; } catch { estado = null; }
+    const muerto = estado === null || estado === 'errored' || estado === 'terminated' || estado === 'complete';
+    const parado = estado === 'running' || estado === 'waiting' || estado === 'queued';
+    if (!muerto && !(parado && sinAvanceMs > 240_000)) return `sigue (${estado})`;
+    const n = (params.relanzamientos ?? 0) + 1;
+    if (n > 3) {
+      await this.cerrar({ id: params.usuario, plan: params.plan }, { tarea, documento: params.documento, ok: false, error: 'La ingesta se ha detenido varias veces. Prueba a reintentarla más tarde.' });
+      return 'abandonada';
+    }
+    try { await (await this.env.INGESTA.get(params.instancia ?? tarea)).terminate(); } catch { /* ya estaba muerta */ }
+    const instancia = `${tarea}-r${n}`;
+    const nuevos = { ...params, instancia, relanzamientos: n };
+    this.base.ejecutarSync("UPDATE pl_tareas SET params = ?, estado = 'procesando', actualizada = ? WHERE id = ?", [JSON.stringify(nuevos), new Date().toISOString(), tarea]);
+    await this.env.INGESTA.create({ id: instancia, params: nuevos });
+    console.log(JSON.stringify({ que: 'vigilante', tarea, estado, instancia }));
+    return `relanzada (${estado ?? 'desconocido'})`;
+  }
+
   /** Cola: reenvía al índice los vectores pendientes de un documento. */
   async reindexar(usuario: string, documento: string): Promise<number> {
     const ia = await inteligenciaPara(this.env, cuentasDesdeEnv(this.env), usuario);
@@ -124,6 +160,14 @@ export class Estanteria extends DurableObject<Env> {
     // Mantenimiento diario: fuera los temporales caducados.
     const almacen = almacenDesdeEnv(this.env, origenDe(this.env));
     await limpiarTemporales(this.base, (k) => almacen.borrar(k)).catch((e: unknown) => console.error('temporales', e));
+    // Subidas que se quedaron a medias hace más de un día: fuera, con lo que llegaran a subir.
+    const hace24 = new Date(Date.now() - 86400_000).toISOString();
+    for (const d of this.base.ejecutarSync<{ id: string }>("SELECT id FROM documentos WHERE estado = 'pendiente' AND creado < ? AND id NOT IN (SELECT documento FROM pl_tareas WHERE estado IN ('en_cola','procesando') AND documento IS NOT NULL)", [hace24])) {
+      await almacen.borrarPrefijo(`u/${usuario.id}/d/${d.id}/`).catch(() => undefined);
+      this.base.ejecutarSync('DELETE FROM pl_subidas WHERE documento = ?', [d.id]);
+      this.base.ejecutarSync('DELETE FROM unidades WHERE documento = ?', [d.id]);
+      this.base.ejecutarSync('DELETE FROM documentos WHERE id = ?', [d.id]);
+    }
     await ejecutarVigilantesProgramados(await puertosFunciones(this.puertos(u, origenDe(this.env))), modo);
   }
 }

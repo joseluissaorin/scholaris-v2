@@ -49,8 +49,20 @@ function enAmbito<T extends Buscar | Similares>(c: Ctx, b: T): T {
   return { ...b, filtros: filtrosEnAmbito(c, b.filtros), ...('consulta' in b ? { sinHistorial: true } : {}) };
 }
 
+/** Sin repetidos: mismo fragmento, o mismo documento, ancla y texto (versiones viejas, reintentos). */
+function sinRepetidos(rs: Resultado[]): Resultado[] {
+  const vistos = new Set<string>();
+  return rs.filter((r) => {
+    const claves = [`f:${r.fragmento.id}`, `a:${r.documento.id}|${JSON.stringify(r.fragmento.ancla)}|${r.fragmento.texto.slice(0, 120)}`];
+    if (claves.some((k) => vistos.has(k))) return false;
+    for (const k of claves) vistos.add(k);
+    return true;
+  });
+}
+
 /** Por si acaso: fuera lo que no sea de la biblioteca compartida. */
-async function soloAmbito(c: Ctx, rs: Resultado[]): Promise<Resultado[]> {
+async function soloAmbito(c: Ctx, rs0: Resultado[]): Promise<Resultado[]> {
+  const rs = sinRepetidos(rs0);
   const a = c.get('usuario').ambito;
   if (!a) return rs;
   const ok = new Set((await puertos(c).sql.ejecutar<{ id: string }>('SELECT d.id FROM documentos d, json_each(d.bibliotecas) je WHERE je.value = ?', a.biblioteca)).map((f) => f.id));

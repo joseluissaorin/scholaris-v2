@@ -79,6 +79,8 @@ async function comprobarCuotaDocumento(p: PuertosUsuario, bytes: number): Promis
 export async function lanzarIngesta(p: PuertosUsuario, params: Omit<ParamsIngesta, 'usuario' | 'plan' | 'tarea'>, tipoTarea: 'ingesta' | 'reproceso' | 'importacion' = 'ingesta'): Promise<IngestaIniciada> {
   const tarea = await crearTarea(p.sql, tipoTarea, params.documento, { paquete: params.paquete, url: params.url, fases: params.fases });
   const completos: ParamsIngesta = { ...params, usuario: p.usuario.id, plan: p.usuario.plan, tarea: tarea.id };
+  // Todo lo necesario para relanzarla tal cual si se queda parada.
+  await p.sql.ejecutar('UPDATE pl_tareas SET params = ? WHERE id = ?', JSON.stringify(completos), tarea.id);
   await marcarDocumento(p.sql, params.documento, 'procesando');
   try {
     await p.orquestador.lanzarIngesta(completos);
@@ -106,7 +108,16 @@ export function rutasSubidas(app: Hono<Entorno>): void {
     const tipo = b.tipo ?? deducirTipo(b.nombre, b.mime);
     if (!tipo) fallo('peticion_invalida', `No sé leer ficheros «${extension(b.nombre) || b.mime}». Prueba con PDF, EPUB, DOCX, audio, vídeo o imágenes.`);
     if (b.huella) {
-      // Lo que quedó a medias con la misma huella se reemplaza: nunca cuenta como duplicado.
+      // Una subida a medias con la misma huella se reanuda: mismo documento, enlaces nuevos.
+      const [abierta] = await p.sql.ejecutar<{ id: string; documento: string; clave: string; id_partes: string | null; prefijo: string; tipo: TipoEntrada }>(
+        "SELECT s.id, s.documento, s.clave, s.id_partes, s.prefijo, s.tipo FROM pl_subidas s JOIN documentos d ON d.id = s.documento WHERE s.huella = ? AND s.estado IN ('abierta','subida') AND d.estado = 'pendiente' ORDER BY s.creada DESC LIMIT 1", b.huella);
+      if (abierta && abierta.tipo === (b.tipo ?? deducirTipo(b.nombre, b.mime))) {
+        if (abierta.id_partes) await p.almacen.abortarPartes(abierta.clave, abierta.id_partes).catch(() => undefined);
+        const original = await p.almacen.subidaDirecta(abierta.clave, { tipo: b.mime, bytes: b.bytes, partes: b.bytes > 64 * 1024 * 1024 });
+        await p.sql.ejecutar("UPDATE pl_subidas SET id_partes = ?, estado = 'abierta', creada = ? WHERE id = ?", original.idSubida ?? null, ahora(), abierta.id);
+        return c.json<SubidaCreada>({ subida: abierta.id, documento: abierta.documento, tipo: abierta.tipo, original, prefijo: abierta.prefijo }, 201);
+      }
+      // Lo demás que quedó a medias con la misma huella (errores) se reemplaza: nunca cuenta como duplicado.
       for (const viejo of await pendientesPorHuella(p.sql, b.huella)) await borrarDocumentoCompleto(p, viejo);
       const dup = await documentoPorHuella(p.sql, b.huella);
       if (dup) {
@@ -201,8 +212,10 @@ export function rutasSubidas(app: Hono<Entorno>): void {
     const s = await leerSubida(p, prm(c, 'id'));
     if (s.estado === 'ingestando') fallo('conflicto', 'Esta subida ya se está procesando.');
     const b = await cuerpoJson<Ingestar>(c);
+    // Con paquete, la ingesta trabaja con las partes de la imprenta: el original puede seguir subiendo
+    // (el Workflow lo espera al final). Sin paquete, el servidor lo necesita ya.
     const cab = await p.almacen.cabecera(s.clave);
-    if (!cab) fallo('peticion_invalida', 'El original todavía no ha llegado al almacén. Termina la subida antes de procesar.');
+    if (!cab && !b.paquete && !b.manifiesto) fallo('peticion_invalida', 'El original todavía no ha llegado al almacén. Termina la subida antes de procesar.');
     let paquete: string | undefined;
     if (b.paquete) {
       paquete = `${s.prefijo}${rutaSegura(b.paquete)}`;
@@ -214,7 +227,7 @@ export function rutasSubidas(app: Hono<Entorno>): void {
       fallo('no_disponible', 'Esta instancia no convierte en el servidor: convierte el fichero en el navegador y manda el paquete.');
     }
     await p.sql.ejecutar("UPDATE pl_subidas SET estado = 'ingestando' WHERE id = ?", s.id);
-    await p.sql.ejecutar('UPDATE documentos SET bytes = ? WHERE id = ?', cab.bytes, s.documento);
+    if (cab) await p.sql.ejecutar('UPDATE documentos SET bytes = ? WHERE id = ?', cab.bytes, s.documento);
     const r = await lanzarIngesta(p, {
       documento: s.documento, prefijo: s.prefijo, original: s.clave, paquete, tipo: s.tipo, mime: s.mime, nombre: s.nombre,
       forzarVision: b.forzarVision, pista: b.pista, bibliotecas: JSON.parse(s.bibliotecas) as string[],

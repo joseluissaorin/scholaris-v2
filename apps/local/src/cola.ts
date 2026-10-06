@@ -141,9 +141,17 @@ export class ColaLocal implements Orquestador {
         const [sub] = await puertos.sql.ejecutar<{ metadatos: string | null }>('SELECT metadatos FROM pl_subidas WHERE documento = ? ORDER BY creada DESC LIMIT 1', p.documento);
         const metadatosUsuario = sub?.metadatos ? (JSON.parse(sub.metadatos) as Record<string, unknown>) : null;
         const r = await componer(ctx, p, info, metadatosUsuario);
+        // El original pudo seguir subiendo: se espera (hasta 2 h) antes de cerrar.
+        const claveOriginal = info.original ?? p.original;
+        let bytesOriginal: number | undefined;
+        for (let i = 0; claveOriginal && i < 240; i++) {
+          const cab = await puertos.almacen.cabecera(claveOriginal);
+          if (cab) { bytesOriginal = cab.bytes; break; }
+          await new Promise((res) => setTimeout(res, 30_000));
+        }
         await cerrarIngesta(puertos, {
           tarea: p.tarea, documento: p.documento, ok: true, original: info.original ?? p.original, bibliotecas: p.bibliotecas ?? [], unidades: r.unidades,
-          ...(info.mime ? { mime: info.mime } : {}), ...(info.bytes ? { bytes: info.bytes } : {}),
+          ...(info.mime ? { mime: info.mime } : {}), ...(info.bytes ?? bytesOriginal ? { bytes: info.bytes ?? bytesOriginal } : {}),
           ...(r.vectoresPendientes ? { avisos: [{ codigo: 'vectores_pendientes', mensaje: 'Los vectores aún no están en el índice: ya se puede leer y buscar por texto, y la búsqueda semántica llegará en unos minutos.' }] } : {}),
           ...(metadatosUsuario ? { metadatosUsuario } : {}),
         });

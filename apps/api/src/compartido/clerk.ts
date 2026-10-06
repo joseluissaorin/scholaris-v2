@@ -5,7 +5,7 @@
  * organización) es el plan Pro, igual que en el backend de Python
  * (`auth_service.py`).
  */
-import { createLocalJWKSet, createRemoteJWKSet, jwtVerify, type JSONWebKeySet, type JWTPayload } from 'jose';
+import { createLocalJWKSet, jwtVerify, type JSONWebKeySet, type JWTPayload } from 'jose';
 import type { Plan } from '@scholaris/contrato';
 
 export interface ConfigClerk {
@@ -74,9 +74,26 @@ export function planDesdeFunciones(funciones: string[]): Plan {
 
 export function crearVerificadorClerk(cfg: ConfigClerk) {
   const emisor = (cfg.emisor ?? emisorDesdeClave(cfg.publishableKey)).replace(/\/$/, '');
-  const jwks = cfg.jwks
-    ? createLocalJWKSet(JSON.parse(cfg.jwks) as JSONWebKeySet)
-    : createRemoteJWKSet(new URL(`${emisor}/.well-known/jwks.json`), { cacheMaxAge: 3600_000, cooldownDuration: 30_000 });
+  // Las claves se guardan ya resueltas (no una promesa compartida entre peticiones,
+  // que en Workers puede quedarse colgada); se vuelven a pedir cada hora o si llega un kid nuevo.
+  let local = cfg.jwks ? createLocalJWKSet(JSON.parse(cfg.jwks) as JSONWebKeySet) : null;
+  let pedidas = 0;
+  const refrescar = async () => {
+    const r = await fetch(`${emisor}/.well-known/jwks.json`);
+    if (!r.ok) throw new Error(`JWKS de Clerk: ${r.status}`);
+    local = createLocalJWKSet((await r.json()) as JSONWebKeySet);
+    pedidas = Date.now();
+  };
+  const jwks: Parameters<typeof jwtVerify>[1] = async (cabecera, token) => {
+    if (!cfg.jwks && (!local || Date.now() - pedidas > 3600_000)) await refrescar();
+    try {
+      return await (local as ReturnType<typeof createLocalJWKSet>)(cabecera, token);
+    } catch (e) {
+      if (cfg.jwks || Date.now() - pedidas < 30_000) throw e;
+      await refrescar();
+      return (local as ReturnType<typeof createLocalJWKSet>)(cabecera, token);
+    }
+  };
   return async function verificar(token: string): Promise<IdentidadClerk | null> {
     let payload: JWTPayload;
     try {

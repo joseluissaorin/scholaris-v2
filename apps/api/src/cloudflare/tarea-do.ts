@@ -31,6 +31,12 @@ export class Tarea extends DurableObject<Env> {
   /** RPC: reparte un evento a todos los conectados. */
   async emitir(evento: EventoTiempoReal): Promise<number> {
     if (evento.tipo === 'progreso' || evento.tipo === 'fin') await this.ctx.storage.put('ultimo', evento);
+    // Vigilante: los objetos de tarea («tarea:<usuario>:<tarea>») miran a los dos minutos si sigue avanzando.
+    if (evento.tipo === 'progreso' && this.nombre()?.startsWith('tarea:')) {
+      await this.ctx.storage.put('avance', Date.now());
+      if (!(await this.ctx.storage.get<boolean>('fin'))) await this.ctx.storage.setAlarm(Date.now() + 120_000);
+    }
+    if (evento.tipo === 'fin') await this.ctx.storage.put('fin', true);
     const texto = JSON.stringify(evento);
     let n = 0;
     for (const ws of this.ctx.getWebSockets()) {
@@ -48,8 +54,26 @@ export class Tarea extends DurableObject<Env> {
     return v;
   }
 
+  private nombre(): string | undefined {
+    return (this.ctx.id as unknown as { name?: string }).name;
+  }
+
   async alarm(): Promise<void> {
-    await this.ctx.storage.deleteAll();
+    const nombre = this.nombre();
+    if (await this.ctx.storage.get<boolean>('fin')) {
+      // Una tarea terminada se olvida al día siguiente.
+      const avance = (await this.ctx.storage.get<number>('avance')) ?? 0;
+      if (Date.now() - avance > 86_000_000) await this.ctx.storage.deleteAll();
+      else await this.ctx.storage.setAlarm(Date.now() + 86400_000);
+      return;
+    }
+    if (!nombre?.startsWith('tarea:')) return;
+    const [, usuario, tarea] = nombre.split(':');
+    const avance = (await this.ctx.storage.get<number>('avance')) ?? 0;
+    const sin = Date.now() - avance;
+    if (sin < 115_000) { await this.ctx.storage.setAlarm(avance + 120_000); return; }
+    const r = await this.env.ESTANTERIA.getByName(usuario!).vigilarTarea(tarea!, sin);
+    if (r.startsWith('sigue') || r.startsWith('relanzada')) await this.ctx.storage.setAlarm(Date.now() + 120_000);
   }
 
   async webSocketMessage(ws: WebSocket, mensaje: string | ArrayBuffer): Promise<void> {
