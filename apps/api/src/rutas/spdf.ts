@@ -17,7 +17,9 @@ import { claveDe, exigirEscritura, prm, puertos, type Ctx } from './util.js';
 import type { PuertosUsuario } from '../puertos.js';
 
 /** Máximo que se incrusta en un .spdf armado en el servidor (memoria del Worker). */
-export const MAX_INCRUSTADO = 64 * 1024 * 1024;
+// Medido con un libro de 1000 páginas: con 64 MB incrustados (más las copias de SQLite en wasm,
+// la exportación y el gzip) el Durable Object pasaba de sus 128 MB y se reiniciaba.
+export const MAX_INCRUSTADO = 24 * 1024 * 1024;
 
 export interface OpcionesArmar {
   /** Incrustar los binarios (páginas, figuras y, si `originales`, el original). */
@@ -30,7 +32,7 @@ export interface OpcionesArmar {
   referencias?: boolean;
 }
 
-export async function armarSpdf(p: PuertosUsuario, d: Documento, o: OpcionesArmar): Promise<{ bytes: Uint8Array; sinOriginal: boolean }> {
+export async function armarSpdf(p: PuertosUsuario, d: Documento, o: OpcionesArmar): Promise<{ bytes: Uint8Array; sinOriginal: boolean; omitidos: number }> {
   const v = await volcarDocumento(p, d);
   const a = await crearSpdf({ generador: `scholaris-nube ${p.config.version}` });
   let sinOriginal = !!d.original;
@@ -72,7 +74,7 @@ export async function armarSpdf(p: PuertosUsuario, d: Documento, o: OpcionesArma
     }
     for (const e of v.procedencia) await a.registrarProcedencia({ documento: d.id, fase: e.fase, proveedor: e.proveedor ?? null, detalle: e.detalle, ms: e.ms ?? null, cuando: e.cuando });
     await a.optimizarIndice();
-    return { bytes: a.exportar(), sinOriginal };
+    return { bytes: a.exportar(), sinOriginal, omitidos: Object.keys(v.binarios).length - blobs.size - (o.originales === false && d.original && v.binarios[d.original] ? 1 : 0) };
   } finally {
     a.cerrar();
   }
@@ -85,9 +87,16 @@ export function rutasSpdf(app: Hono<Entorno>): void {
     if (!d) noEncontrado('El documento');
     if (d.estado !== 'listo') fallo('conflicto', 'El documento todavía no está listo para exportar.');
     const q = c.req.query();
-    const { bytes } = await armarSpdf(p, d, { incrustar: q.incrustar !== '0', originales: q.originales !== '0', vectores: q.vectores !== '0', referencias: q.referencias === '1' });
+    const incrustar = q.incrustar !== '0';
+    const { bytes, omitidos } = await armarSpdf(p, d, { incrustar, originales: q.originales !== '0', vectores: q.vectores !== '0', referencias: q.referencias === '1' });
     const nombre = `${(d.metadatos.titulo || d.id).replace(/[^\p{L}\p{N} _-]+/gu, '').slice(0, 80)}.spdf`;
-    return new Response(bytes as Uint8Array<ArrayBuffer>, { headers: { 'content-type': 'application/x-spdf', 'content-disposition': `attachment; filename*=UTF-8''${encodeURIComponent(nombre)}` } });
+    const h = new Headers({ 'content-type': 'application/x-spdf', 'content-disposition': `attachment; filename*=UTF-8''${encodeURIComponent(nombre)}` });
+    if (incrustar && omitidos > 0) {
+      // Límite claro: el servidor incrusta hasta MAX_INCRUSTADO; el resto se queda fuera del fichero.
+      h.set('x-scholaris-omitidos', String(omitidos));
+      h.set('x-scholaris-aviso', encodeURIComponent(`Este .spdf lleva el texto, los vectores y los primeros ${Math.round(MAX_INCRUSTADO / 1048576)} MB de imágenes y del original; ${omitidos} ficheros más pesaban demasiado para armarlo en el servidor. Para el .spdf completo, descárgalo desde la aplicación, que lo arma en tu navegador.`));
+    }
+    return new Response(bytes as Uint8Array<ArrayBuffer>, { headers: h });
   });
 
   // Importación por el almacén: los binarios de un .spdf grande se suben directos

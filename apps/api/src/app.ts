@@ -137,7 +137,7 @@ export function crearPuerta(pl: Plataforma) {
     origin: (origen) => (!origen || origen === pl.config.origen || pl.origenes?.includes(origen) || /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origen) ? origen : null),
     allowHeaders: ['authorization', 'content-type', 'range', 'x-scholaris-cliente'],
     allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    exposeHeaders: ['etag', 'content-range', 'accept-ranges', 'content-length', 'retry-after', 'server-timing'],
+    exposeHeaders: ['etag', 'content-range', 'accept-ranges', 'content-length', 'retry-after', 'server-timing', 'x-scholaris-omitidos', 'x-scholaris-aviso'],
     maxAge: 86400,
   }));
 
