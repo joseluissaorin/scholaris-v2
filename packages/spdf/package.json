@@ -13,6 +13,7 @@
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
+    "@scholaris/folios": "workspace:*",
     "@scholaris/nucleo": "workspace:*",
     "@sqlite.org/sqlite-wasm": "3.53.4-build2",
     "fflate": "^0.8.3"

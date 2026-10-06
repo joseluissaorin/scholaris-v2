@@ -1,4 +1,15 @@
--- SPDF 4.0: un documento leído y citable, de cualquier cosa.
+/**
+ * El esquema SPDF 4.0 como cadena, para poder aplicarlo en cualquier plataforma
+ * (navegador, Workers, Node) sin leer ficheros. `esquema/v4.0.sql` es una copia
+ * legible; una prueba comprueba que ambos coinciden.
+ */
+
+import type { SQL } from "@scholaris/nucleo";
+
+export const VERSION_SPDF = "4.0";
+export const USER_VERSION_SPDF = 400;
+
+export const ESQUEMA_V4 = `-- SPDF 4.0: un documento leído y citable, de cualquier cosa.
 --
 -- Un .spdf es una base SQLite comprimida con gzip. Este esquema es también el de
 -- la «estantería» (el Durable Object de cada usuario): allí conviven muchos
@@ -164,3 +175,92 @@ CREATE TABLE IF NOT EXISTS procedencia (
   cuando      TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS procedencia_doc ON procedencia(documento);
+`;
+
+/**
+ * Parte un guion SQL en sentencias. Respeta comentarios, cadenas entre comillas
+ * y los cuerpos BEGIN … END de los disparadores, que llevan «;» dentro.
+ */
+export function partirSentencias(guion: string): string[] {
+  const sentencias: string[] = [];
+  let actual = "";
+  let profundidad = 0; // dentro de BEGIN … END
+  let i = 0;
+  const n = guion.length;
+  while (i < n) {
+    const c = guion[i] as string;
+    // Comentario de línea
+    if (c === "-" && guion[i + 1] === "-") {
+      const fin = guion.indexOf("\n", i);
+      i = fin < 0 ? n : fin + 1;
+      actual += " ";
+      continue;
+    }
+    // Comentario de bloque
+    if (c === "/" && guion[i + 1] === "*") {
+      const fin = guion.indexOf("*/", i + 2);
+      i = fin < 0 ? n : fin + 2;
+      actual += " ";
+      continue;
+    }
+    // Cadenas y nombres entre comillas
+    if (c === "'" || c === '"') {
+      let j = i + 1;
+      while (j < n) {
+        if (guion[j] === c) {
+          if (guion[j + 1] === c) { j += 2; continue; }
+          break;
+        }
+        j++;
+      }
+      actual += guion.slice(i, j + 1);
+      i = j + 1;
+      continue;
+    }
+    // Palabras clave BEGIN / END (solo como palabras completas)
+    if (/[A-Za-z_]/.test(c) && (i === 0 || !/[A-Za-z0-9_]/.test(guion[i - 1] as string))) {
+      let j = i;
+      while (j < n && /[A-Za-z0-9_]/.test(guion[j] as string)) j++;
+      const palabra = guion.slice(i, j).toUpperCase();
+      if (palabra === "BEGIN" && /\bCREATE\s+(TEMP\s+|TEMPORARY\s+)?TRIGGER\b/i.test(actual)) profundidad++;
+      else if (palabra === "END" && profundidad > 0) profundidad--;
+      actual += guion.slice(i, j);
+      i = j;
+      continue;
+    }
+    if (c === ";" && profundidad === 0) {
+      const s = actual.trim();
+      if (s) sentencias.push(s);
+      actual = "";
+      i++;
+      continue;
+    }
+    actual += c;
+    i++;
+  }
+  const s = actual.trim();
+  if (s) sentencias.push(s);
+  return sentencias;
+}
+
+/**
+ * Crea (o completa) el esquema v4 sobre cualquier puerto SQL. Es idempotente:
+ * todas las sentencias llevan IF NOT EXISTS. Las plataformas que no permiten
+ * PRAGMA user_version (Durable Objects) se conforman con la tabla `spdf`.
+ */
+export async function aplicarEsquema(sql: SQL, opciones: { generador?: string } = {}): Promise<void> {
+  for (const sentencia of partirSentencias(ESQUEMA_V4)) {
+    await sql.ejecutar(sentencia);
+  }
+  try {
+    await sql.ejecutar(`PRAGMA user_version = ${USER_VERSION_SPDF}`);
+  } catch {
+    // Plataforma sin PRAGMA: la versión queda en la tabla spdf.
+  }
+  const ahora = new Date().toISOString();
+  await sql.ejecutar("INSERT INTO spdf(clave, valor) VALUES ('spdf_version', ?) ON CONFLICT(clave) DO UPDATE SET valor = excluded.valor", VERSION_SPDF);
+  await sql.ejecutar("INSERT INTO spdf(clave, valor) VALUES ('creado', ?) ON CONFLICT(clave) DO NOTHING", ahora);
+  if (opciones.generador) {
+    await sql.ejecutar("INSERT INTO spdf(clave, valor) VALUES ('generador', ?) ON CONFLICT(clave) DO UPDATE SET valor = excluded.valor", opciones.generador);
+  }
+}

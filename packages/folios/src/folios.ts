@@ -32,7 +32,11 @@ export interface OpcionesFolios {
   foliacion?: boolean | 'auto';
   /** Margen por debajo del cual una decisión es dudosa y se pregunta al juez. */
   umbralDuda?: number;
-  /** Preguntas por llamada al juez (las llamadas, si hay varias, van en paralelo). */
+  /**
+   * Preguntas por llamada al juez (100 por defecto: cada lote lleva en el estado
+   * solo sus páginas, ~140 tokens por página, por debajo del tope de ~28 000
+   * tokens de estado del adaptador de Jev). Si hay más, los lotes van en paralelo.
+   */
   preguntasPorLlamada?: number;
   /** Llamadas simultáneas al juez si hay que partir. */
   llamadasSimultaneas?: number;
@@ -79,7 +83,7 @@ export async function elegirConJuez(juez: Juez, paginas: readonly PaginaFolio[],
   if (!dudosas.length) return previo;
 
   const { preguntas, estado, opcionesPorPagina } = construirPreguntas(prep, previo, dudosas);
-  const porLlamada = Math.max(1, opciones.preguntasPorLlamada ?? 200);
+  const porLlamada = Math.max(1, opciones.preguntasPorLlamada ?? 100);
   const claves = Object.keys(preguntas);
   const lotes: string[][] = [];
   for (let i = 0; i < claves.length; i += porLlamada) lotes.push(claves.slice(i, i + porLlamada));
