@@ -32,6 +32,7 @@ if (s.duplicado) {
 
   const b = await api.tiempoReal.billete(ing.tarea);
   const ws = new WebSocket(b.url.startsWith('/') ? base.replace(/^http/, 'ws') + b.url : b.url);
+  const latido = setInterval(() => ws.readyState === 1 && ws.send(JSON.stringify({ tipo: 'ping', t: Date.now() })), 30_000);
   const fin = new Promise<EventoTiempoReal>((res) => {
     ws.on('message', (m) => {
       const e = JSON.parse(String(m)) as EventoTiempoReal;
@@ -40,6 +41,7 @@ if (s.duplicado) {
     });
   });
   const r = await fin;
+  clearInterval(latido);
   ws.close();
   console.log(`\n[${seg()}] fin: ${JSON.stringify(r)}`);
   if (r.tipo === 'fin' && r.estado !== 'listo') process.exit(1);

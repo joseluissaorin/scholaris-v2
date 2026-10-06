@@ -91,13 +91,13 @@ export class FlujoIngesta extends WorkflowEntrypoint<Env, ParamsIngesta> {
         await ctx.emitir(progreso('lectura', hechos / Math.max(1, total), 0.03 + 0.22 * (hechos / Math.max(1, total)), `${hechos} de ${total}`));
       };
       await Promise.all([
-        ...info.pliegos.map((id) => step.do(`pliego-${id}`, { retries: REINTENTOS, timeout: '15 minutes' }, async () => {
+        ...info.pliegos.map((id) => step.do(`pliego-${id}`, { retries: REINTENTOS, timeout: '6 minutes' }, async () => {
           const ctx = await this.contexto(p);
           const n = await leerUnPliego(ctx, p, info, id);
           await avisar(ctx);
           return n;
         })),
-        ...info.tramos.map((n) => step.do(`tramo-${n}`, { retries: REINTENTOS, timeout: '20 minutes' }, async () => {
+        ...info.tramos.map((n) => step.do(`tramo-${n}`, { retries: REINTENTOS, timeout: '12 minutes' }, async () => {
           const ctx = await this.contexto(p);
           const palabras = await transcribirUnTramo(ctx, p, info, n);
           await avisar(ctx);

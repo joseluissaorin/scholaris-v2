@@ -37,7 +37,7 @@
   ],
 
   "d1_databases": [
-    { "binding": "DB", "database_name": "scholaris", "database_id": "REPLACE_D1_ID" }
+    { "binding": "DB", "database_name": "scholaris", "database_id": "0d1ff2db-2d72-4ead-bf7c-34f7db7caed6" }
   ],
 
   "r2_buckets": [

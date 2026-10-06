@@ -338,6 +338,8 @@ export function crearCliente(opciones: OpcionesCliente) {
         let ws: WebSocket | null = null;
         let cerrado = false;
         let espera = 1000;
+        // Latido cada 30 s: los proxies cierran los WebSocket callados (unos 100 s en Cloudflare).
+        const latido = setInterval(() => { if (ws?.readyState === 1) ws.send(JSON.stringify({ tipo: 'ping', t: Date.now() })); }, 30_000);
         const abrir = async () => {
           try {
             const b = await post<Billete>('/tiempo-real/billete', { tarea: opciones.tarea });
@@ -359,7 +361,7 @@ export function crearCliente(opciones: OpcionesCliente) {
         void abrir();
         return {
           enviar: (m: MensajeCliente) => ws?.readyState === 1 && ws.send(JSON.stringify(m)),
-          cerrar: () => { cerrado = true; ws?.close(); },
+          cerrar: () => { cerrado = true; clearInterval(latido); ws?.close(); },
         };
       },
     },
