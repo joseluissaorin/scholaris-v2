@@ -22,7 +22,7 @@ import { convertirEnMemoria } from '@scholaris/imprenta/node';
 
 setGlobalDispatcher(new Agent({ connections: 64, allowH2: false }));
 const [orden, base = 'https://scholaris-v2.jlsf2005.workers.dev', ...resto] = process.argv.slice(2);
-const RUTA_CLAVE = `${homedir()}/.scholaris-prueba.key`;
+const RUTA_CLAVE = process.env.SCHOLARIS_CLAVE_FICHERO ?? `${homedir()}/.scholaris-prueba.key`;
 const s = (ms: number) => `${(ms / 1000).toFixed(1)} s`;
 
 async function clerk<T>(ruta: string, cuerpo?: unknown): Promise<T> {
@@ -51,7 +51,7 @@ if (orden === 'usuario') {
 }
 
 if (!existsSync(RUTA_CLAVE)) throw new Error(`Falta ${RUTA_CLAVE}: ejecuta antes «usuario»`);
-const api = crearCliente({ base, token: readFileSync(RUTA_CLAVE, 'utf8').trim() });
+const api = crearCliente({ base, token: readFileSync(RUTA_CLAVE, 'utf8').split('\n')[0]!.trim() });
 
 if (orden === 'subir') {
   for (const ruta of resto) {
