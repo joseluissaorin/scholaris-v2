@@ -19,7 +19,7 @@ const DIST = process.argv[2] ?? new URL('../dist', import.meta.url).pathname;
 const ORIGEN = process.argv[3] ?? process.env.SCHOLARIS_ORIGEN ?? 'https://scholaris.joseluissaorin.com';
 
 /** Lo que sirve el Worker y no está en dist. */
-const DINAMICAS = new Set(['/api/v1/openapi.json', '/api/v1/llms.txt', '/api/v1', '/mcp', '/.well-known/oauth-authorization-server', '/.well-known/oauth-protected-resource', '/']);
+const DINAMICAS = new Set(['/api/v1/openapi.json', '/api/v1/llms.txt', '/api/v1', '/mcp', '/.well-known/oauth-authorization-server', '/.well-known/oauth-protected-resource/mcp', '/']);
 const errores = [];
 const fallo = (donde, que) => errores.push(`${donde}: ${que}`);
 

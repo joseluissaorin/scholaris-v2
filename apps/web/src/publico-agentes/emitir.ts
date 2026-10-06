@@ -141,7 +141,7 @@ function tarjetaMcp(): string {
     icons: [{ src: `${ORIGEN}/portada/logo-192.webp`, mimeType: 'image/webp', sizes: ['192x192'] }],
     _meta: {
       'com.joseluissaorin.scholaris/autenticacion': {
-        oauth: `${ORIGEN}/.well-known/oauth-protected-resource`,
+        oauth: `${ORIGEN}/.well-known/oauth-protected-resource/mcp`,
         clave: 'Authorization: Bearer sch_… (alcance «mcp»)',
       },
       'com.joseluissaorin.scholaris/herramientas': ['search', 'cite', 'open_page', 'verify_claim'],
@@ -211,6 +211,20 @@ ${agente}
 /sitemap.xml
   Content-Type: application/xml; charset=utf-8
   Cache-Control: public, max-age=600
+
+/.well-known/api-catalog
+  Content-Type: application/linkset+json
+${agente}
+
+/.well-known/mcp/*
+  Content-Type: application/json
+${agente}
+
+/.well-known/agent-skills/*
+${agente}
+
+/.well-known/security.txt
+  Content-Type: text/plain; charset=utf-8
 `;
 }
 

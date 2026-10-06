@@ -66,8 +66,10 @@ export async function servirPublica(
     const r = await leer(ruta, peticion);
     if (!r) return null;
     if (!r.ok) return r;
-    if (/text\/html/i.test(r.headers.get('content-type') ?? '')) return new Response('No encontrado', { status: 404, headers: { 'content-type': 'text/plain; charset=utf-8' } });
-    return conCabeceras(r, {
+    const texto = await r.text();
+    // Lo que no existe vuelve como la aplicación (index.html), a veces con el tipo de un .md.
+    if (esHtml(texto, r)) return new Response('No encontrado', { status: 404, headers: { 'content-type': 'text/plain; charset=utf-8' } });
+    return conCabeceras(new Response(texto, r), {
       'content-type': 'text/markdown; charset=utf-8', 'access-control-allow-origin': '*',
       link: `<${url.origin}${ruta.slice(0, -3)}>; rel="canonical"; type="text/html"`,
     });
@@ -75,8 +77,9 @@ export async function servirPublica(
   if (!esPaginaPublica(ruta)) return null;
   if (md) {
     const r = await leer(`${ruta}.md`, peticion);
-    if (r && r.ok && !/text\/html/i.test(r.headers.get('content-type') ?? '')) {
-      return conCabeceras(r, {
+    const texto = r && r.ok ? await r.text() : '';
+    if (r && r.ok && !esHtml(texto, r)) {
+      return conCabeceras(new Response(peticion.method === 'HEAD' ? null : texto, r), {
         'content-type': 'text/markdown; charset=utf-8', vary: 'Accept', 'access-control-allow-origin': '*',
         'content-location': `${ruta}.md`, link: `<${url.origin}${ruta}>; rel="alternate"; type="text/html"`,
       });
@@ -86,6 +89,10 @@ export async function servirPublica(
   if (!r) return null;
   if (!r.ok || !/text\/html/i.test(r.headers.get('content-type') ?? '')) return r;
   return conCabeceras(r, { vary: 'Accept', link: cabeceraLink(url.origin, ruta) });
+}
+
+function esHtml(texto: string, r: Response): boolean {
+  return /text\/html/i.test(r.headers.get('content-type') ?? '') || /^\s*<!doctype html/i.test(texto);
 }
 
 function conCabeceras(r: Response, extra: Record<string, string>): Response {

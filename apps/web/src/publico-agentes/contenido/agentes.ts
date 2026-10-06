@@ -22,7 +22,7 @@ const FICHEROS = (en: boolean) => `| ${en ? 'Address' : 'Dirección'} | ${en ? '
 | [/api/v1/openapi.json](/api/v1/openapi.json) | ${en ? 'OpenAPI 3.1 specification of API v1' : 'Especificación OpenAPI 3.1 de la API v1'} |
 | [/.well-known/api-catalog](/.well-known/api-catalog) | ${en ? 'API catalogue (RFC 9727)' : 'Catálogo de API (RFC 9727)'} |
 | [/.well-known/mcp/server-card.json](/.well-known/mcp/server-card.json) | ${en ? 'MCP server card' : 'Tarjeta del servidor MCP'} |
-| [/.well-known/oauth-protected-resource](/.well-known/oauth-protected-resource) | ${en ? 'OAuth metadata of the MCP resource' : 'Metadatos OAuth del recurso MCP'} |
+| [/.well-known/oauth-protected-resource/mcp](/.well-known/oauth-protected-resource/mcp) | ${en ? 'OAuth metadata of the MCP resource' : 'Metadatos OAuth del recurso MCP'} |
 | [/.well-known/oauth-authorization-server](/.well-known/oauth-authorization-server) | ${en ? 'OAuth authorisation server metadata' : 'Metadatos del servidor de autorización OAuth'} |
 | [/.well-known/security.txt](/.well-known/security.txt) | ${en ? 'Where to report a security problem' : 'Dónde avisar de un problema de seguridad'} |
 | [/sitemap.xml](/sitemap.xml) | ${en ? 'Every public page, with its date and languages' : 'Todas las páginas públicas, con su fecha y sus lenguas'} |

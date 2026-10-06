@@ -10,7 +10,8 @@ const ESTATICOS: Record<string, [string, string]> = {
 const leer = async (ruta: string) => {
   const e = ESTATICOS[ruta];
   // Como Cloudflare con «single-page-application»: lo que no existe devuelve index.html.
-  return e ? new Response(e[0], { headers: { 'content-type': e[1] } }) : new Response('<!doctype html>app', { headers: { 'content-type': 'text/html' } });
+  // (y con el tipo que diga _headers para esa ruta, p. ej. text/markdown en un .md).
+  return e ? new Response(e[0], { headers: { 'content-type': e[1] } }) : new Response('<!doctype html>app', { headers: { 'content-type': ruta.endsWith('.md') ? 'text/markdown' : 'text/html' } });
 };
 const pedir = (ruta: string, accept?: string) => new Request(`https://scholaris.test${ruta}`, accept ? { headers: { accept } } : {});
 

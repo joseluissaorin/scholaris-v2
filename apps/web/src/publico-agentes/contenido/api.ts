@@ -138,7 +138,7 @@ ${MCP_CLAUDE}
 ${MCP_JSON}
 \`\`\`
 
-Los metadatos de OAuth están donde los buscan los clientes: [/.well-known/oauth-authorization-server](/.well-known/oauth-authorization-server) y [/.well-known/oauth-protected-resource](/.well-known/oauth-protected-resource). Hay además una tarjeta del servidor en [/.well-known/mcp/server-card.json](/.well-known/mcp/server-card.json).
+Los metadatos de OAuth están donde los buscan los clientes: [/.well-known/oauth-authorization-server](/.well-known/oauth-authorization-server) y [/.well-known/oauth-protected-resource/mcp](/.well-known/oauth-protected-resource/mcp). Hay además una tarjeta del servidor en [/.well-known/mcp/server-card.json](/.well-known/mcp/server-card.json).
 
 ## Para agentes
 
@@ -230,7 +230,7 @@ ${MCP_CLAUDE}
 ${MCP_JSON}
 \`\`\`
 
-The OAuth metadata is where clients look for it: [/.well-known/oauth-authorization-server](/.well-known/oauth-authorization-server) and [/.well-known/oauth-protected-resource](/.well-known/oauth-protected-resource). There is also a server card at [/.well-known/mcp/server-card.json](/.well-known/mcp/server-card.json).
+The OAuth metadata is where clients look for it: [/.well-known/oauth-authorization-server](/.well-known/oauth-authorization-server) and [/.well-known/oauth-protected-resource/mcp](/.well-known/oauth-protected-resource/mcp). There is also a server card at [/.well-known/mcp/server-card.json](/.well-known/mcp/server-card.json).
 
 ## For agents
 
