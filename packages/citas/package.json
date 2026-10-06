@@ -13,7 +13,10 @@
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
+    "@scholaris/busqueda": "workspace:^",
+    "@scholaris/folios": "workspace:^",
     "@scholaris/nucleo": "workspace:*",
+    "@scholaris/spdf": "workspace:^",
     "citeproc": "^2.4.63",
     "fflate": "^0.8.3"
   }

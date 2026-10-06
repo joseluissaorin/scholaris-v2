@@ -8,7 +8,17 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@scholaris/nucleo": "workspace:*"
+    "@scholaris/busqueda": "workspace:^",
+    "@scholaris/citas": "workspace:^",
+    "@scholaris/folios": "workspace:^",
+    "@scholaris/imprenta": "workspace:^",
+    "@scholaris/ingesta": "workspace:^",
+    "@scholaris/nucleo": "workspace:*",
+    "@scholaris/proveedores": "workspace:^",
+    "@scholaris/spdf": "workspace:^",
+    "better-sqlite3": "^13.0.3",
+    "sqlite-vec": "^0.1.9",
+    "tsx": "^4.23.15"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^9.6.0"
