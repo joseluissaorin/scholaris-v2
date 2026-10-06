@@ -4,6 +4,7 @@ import { EsqueletoTexto, FormaBauhaus, Icono, Rotulo } from '@scholaris/ui';
 import { q } from '../datos/consultas';
 import { Lienzo } from '../componentes/comunes/cabecera';
 import { haceCuanto } from '../lib/formato';
+import { numero } from '../lib/numero';
 
 export const Route = createFileRoute('/explorar/perspectivas')({
   loader: ({ context }) => Promise.all([context.consultas.ensureQueryData(q.arqueologia()), context.consultas.prefetchQuery(q.huecos()), context.consultas.prefetchQuery(q.recomendaciones())]),
@@ -42,7 +43,7 @@ function Perspectivas() {
             <div key={h.tema} className="border-l-[3px] border-amarillo pl-4">
               <p className="italic">{h.tema}</p>
               {h.sugerencia ? <p className="mt-1 text-[0.875rem] text-tinta-2">{h.sugerencia}</p> : null}
-              <Rotulo className="mt-1 block">{h.consultas} búsquedas · {h.resultadosMedios.toLocaleString('es-ES')} resultados de media</Rotulo>
+              <Rotulo className="mt-1 block">{h.consultas} búsquedas · {numero(h.resultadosMedios)} resultados de media</Rotulo>
             </div>
           ))}
         </Columna>

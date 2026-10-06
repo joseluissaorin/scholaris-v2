@@ -8,6 +8,7 @@ import { q } from '../datos/consultas';
 import { Lienzo } from '../componentes/comunes/cabecera';
 import { useSesion } from '../sesion';
 import { bytes } from '../lib/formato';
+import { numero } from '../lib/numero';
 
 const Precios = lazy(() => import('../componentes/cuenta/precios'));
 
@@ -16,7 +17,7 @@ export const Route = createFileRoute('/ajustes/')({
   component: Cuenta,
 });
 
-function Medidor({ nombre, cuota, formato = (n: number) => n.toLocaleString('es-ES') }: { nombre: string; cuota: Cuota; formato?: (n: number) => string }) {
+function Medidor({ nombre, cuota, formato = (n: number) => numero(n) }: { nombre: string; cuota: Cuota; formato?: (n: number) => string }) {
   const pct = cuota.limite ? Math.min(1, cuota.usados / cuota.limite) : 0;
   return (
     <div>

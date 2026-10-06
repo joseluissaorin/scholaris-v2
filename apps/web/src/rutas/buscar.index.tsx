@@ -11,6 +11,7 @@ import { Lienzo } from '../componentes/comunes/cabecera';
 import { anclaABusqueda } from '../lib/anclas';
 import { etiquetaCorta, haceCuanto } from '../lib/formato';
 import { textoLimpio } from '../lib/texto';
+import { numero } from '../lib/numero';
 
 type Modo = 'buscar' | 'preguntar';
 interface BusquedaBuscar { q?: string; modo?: Modo; grupo?: string; col?: string; cruzada?: boolean; desde?: number; hasta?: number }
@@ -297,7 +298,7 @@ function Respuesta({ pregunta, filtros }: { pregunta: string; filtros: Filtros }
         {estado === 'hecho' ? (
           <div className="mt-5 flex flex-wrap items-center gap-3 pl-5">
             {fin?.confianza ? <span className={cx('rotulo rounded-full px-2 py-1', fin.confianza === 'alta' ? 'bg-amarillo text-tinta' : fin.confianza === 'media' ? 'bg-hondo text-tinta' : 'bg-rojo-suave text-rojo')}>Confianza {fin.confianza}</span> : null}
-            <Rotulo>{citas.size} citas verificadas · {fin ? `${(fin.ms / 1000).toLocaleString('es-ES', { maximumFractionDigits: 1 })} s` : ''}</Rotulo>
+            <Rotulo>{citas.size} citas verificadas · {fin ? `${numero(fin.ms / 1000, { maximumFractionDigits: 1 })} s` : ''}</Rotulo>
             <Boton variante="fantasma" tam="p" icono="copiar" onClick={() => void copiar()}>Copiar con citas</Boton>
           </div>
         ) : null}

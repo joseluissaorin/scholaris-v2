@@ -278,7 +278,7 @@ async function* responder(p: Responder): AsyncGenerator<EventoRespuesta> {
     const quien = autoresCorto(doc);
     const plantillas = [
       `Según ${quien}, ${minus(r.fragmento.texto)} [${i + 1}]`,
-      `${quien} lo plantea de otro modo: ${minus(r.fragmento.texto)} [${i + 1}]`,
+      `Para ${quien}, ${minus(r.fragmento.texto)} [${i + 1}]`,
       `En la misma línea, ${minus(r.fragmento.texto)} [${i + 1}]`,
     ];
     return plantillas[i % plantillas.length]!;

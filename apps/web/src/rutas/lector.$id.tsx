@@ -159,7 +159,7 @@ function Lector() {
         {ingesta || doc.estado === 'procesando' ? (
           <div className="flex items-center gap-3 border-t border-filete bg-amarillo-suave/60 px-4 py-2 text-[0.8125rem] md:px-6">
             <span className="h-2 w-2 shrink-0 rounded-full bg-rojo anim-pulso" />
-            <span>{ingesta?.preparadas && !ingesta.leidas ? 'Estás viendo la vista previa de tu navegador; Scholaris sigue leyendo y en unos segundos se podrá buscar y citar.' : `Se está leyendo${ingesta?.leidas ? `: ${ingesta.leidas} de ${ingesta.unidades ?? doc.unidades}` : ''}. Lo que ya está leído se puede buscar y citar.`}</span>
+            <span>{ingesta?.preparadas && !ingesta.leidas ? 'Estás viendo la vista previa de tu navegador. Scholaris sigue leyendo; en cuanto termine se podrá buscar y citar.' : `Se está leyendo${ingesta?.leidas ? `: ${ingesta.leidas} de ${ingesta.unidades ?? doc.unidades}` : ''}. Ya puedes leerlo; se podrá buscar y citar en cuanto termine.`}</span>
           </div>
         ) : null}
       </div>

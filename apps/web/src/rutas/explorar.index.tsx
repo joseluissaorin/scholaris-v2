@@ -8,6 +8,7 @@ import { q } from '../datos/consultas';
 import { Lienzo } from '../componentes/comunes/cabecera';
 import { haceCuanto } from '../lib/formato';
 import { esOscuro } from '../lib/acciones';
+import { numero } from '../lib/numero';
 
 export const Route = createFileRoute('/explorar/')({
   loader: ({ context }) => context.consultas.ensureQueryData(q.mapa()),
@@ -56,7 +57,7 @@ function Mapa() {
           <p className="mt-1 text-tinta-2">Los pasajes que dicen cosas parecidas quedan cerca, vengan del libro que vengan. Pulsa un tema para leer sus pasajes.</p>
         </div>
         <div className="ml-auto flex items-center gap-3">
-          {data?.meta.construido ? <Rotulo>{data.meta.puntos?.toLocaleString('es-ES')} pasajes · hecho {haceCuanto(data.meta.construido)}</Rotulo> : null}
+          {data?.meta.construido ? <Rotulo>{numero(data.meta.puntos ?? data.puntos.length)} pasajes · hecho {haceCuanto(data.meta.construido)}</Rotulo> : null}
           <Boton variante="linea" icono="rayo" cargando={!!construyendo} onClick={() => void construir()}>Rehacer</Boton>
         </div>
       </div>
@@ -135,7 +136,7 @@ function Lamina({ mapa, elegido, alElegir }: { mapa: MapaConceptos; elegido: num
           {g.etiqueta ?? `Tema ${g.indice + 1}`}
         </button>
       ))}
-      <span className="rotulo absolute bottom-2 right-3 text-apagado">{mapa.puntos.length.toLocaleString('es-ES')} puntos</span>
+      <span className="rotulo absolute bottom-2 right-3 text-apagado">{numero(mapa.puntos.length)} puntos</span>
     </div>
   );
 }

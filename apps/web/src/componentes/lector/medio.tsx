@@ -11,6 +11,7 @@ import { Chip, cx, EsqueletoTexto, Icono, Rotulo } from '@scholaris/ui';
 import { BLOQUE, q } from '../../datos/consultas';
 import { tiempoACadena } from '../../lib/formato';
 import { raicesDe } from './markdown';
+import { numero } from '../../lib/numero';
 
 export interface ManejadorMedio { irA: (t: number) => void }
 
@@ -168,7 +169,7 @@ function Controles({ r }: { r: Reloj }) {
         style={{ background: `linear-gradient(to right, var(--s-rojo) ${(r.t / r.dur) * 100}%, var(--s-hondo) ${(r.t / r.dur) * 100}%)` }}
       />
       <span className="tnum hidden w-16 shrink-0 font-mono text-[0.875rem] text-apagado sm:block">{tiempoACadena(r.dur)}</span>
-      <button type="button" onClick={() => r.ponerVel(VELS[(VELS.indexOf(r.vel) + 1) % VELS.length]!)} aria-label={`Velocidad ${r.vel}×`} className="h-8 shrink-0 rounded-full border border-filete-fuerte px-2.5 font-mono text-[0.75rem] hover:border-tinta">{r.vel.toLocaleString('es-ES')}×</button>
+      <button type="button" onClick={() => r.ponerVel(VELS[(VELS.indexOf(r.vel) + 1) % VELS.length]!)} aria-label={`Velocidad ${r.vel}×`} className="h-8 shrink-0 rounded-full border border-filete-fuerte px-2.5 font-mono text-[0.75rem] hover:border-tinta">{numero(r.vel)}×</button>
     </div>
   );
 }

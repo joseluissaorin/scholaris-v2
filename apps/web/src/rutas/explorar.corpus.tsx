@@ -6,6 +6,7 @@ import { api } from '../datos/api';
 import { q } from '../datos/consultas';
 import { Lienzo } from '../componentes/comunes/cabecera';
 import { bytes, haceCuanto, NOMBRE_TIPO } from '../lib/formato';
+import { numero } from '../lib/numero';
 
 export const Route = createFileRoute('/explorar/corpus')({
   loader: ({ context }) => context.consultas.ensureQueryData(q.corpus()),
@@ -41,10 +42,10 @@ function Corpus() {
   }
   if (isPending || !data) return <Lienzo><div className="grid grid-cols-2 gap-6 md:grid-cols-4">{[0, 1, 2, 3].map((i) => <Esqueleto key={i} className="h-28" />)}</div></Lienzo>;
   const cifras: Array<[string, string]> = [
-    ['documentos', data.documentos.toLocaleString('es-ES')],
-    ['páginas y unidades', data.unidades.toLocaleString('es-ES')],
-    ['pasajes citables', data.fragmentos.toLocaleString('es-ES')],
-    ['horas de audio y vídeo', (data.segundosDeMedio / 3600).toLocaleString('es-ES', { maximumFractionDigits: 1 })],
+    ['documentos', numero(data.documentos)],
+    ['páginas y unidades', numero(data.unidades)],
+    ['pasajes citables', numero(data.fragmentos)],
+    ['horas de audio y vídeo', numero(data.segundosDeMedio / 3600, { maximumFractionDigits: 1 })],
   ];
   return (
     <Lienzo>

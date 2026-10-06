@@ -50,6 +50,7 @@ export interface Ingesta {
 // Tiempos percibidos: desde soltar hasta ver, leer y buscar.
 // ---------------------------------------------------------------------------
 
+/** miniatura: se ve la primera página · legible: se puede leer su texto · listo: se puede buscar y citar. */
 export interface Hitos { miniatura?: number; legible?: number; listo?: number }
 const hitos = new Map<string, Hitos>();
 /** Anota un hito una sola vez y lo deja en la consola y en `performance` (para medir). */
@@ -306,7 +307,7 @@ async function correr(i: Ingesta, archivo: File, biblioteca?: string, fotos?: Fi
           partes.anadir(e.parte, e.datos);
           if (e.parte.clase === 'pagina' && e.parte.unidad) {
             anotarPagina(sub.documento, e.parte.unidad, { imagenUrl: URL.createObjectURL(new Blob([e.datos as BlobPart], { type: e.parte.mime })) });
-            if (i.tipo !== 'pdf') hito(i, 'legible');
+            hito(i, 'miniatura');
           }
           // En el vídeo, los fotogramas clave hacen de páginas que aparecen.
           if (e.parte.clase === 'miniatura' || (e.parte.clase === 'fotograma' && i.miniaturas.length < 400)) {
@@ -397,6 +398,13 @@ function manejar(e: EventoTiempoReal) {
     // Todo lo del documento se vuelve a pedir: lo que se cacheó mientras se leía estaba vacío.
     if (e.documento) for (const k of ['documento', 'unidades', 'folios', 'secciones', 'figuras', 'original']) void clienteConsultas.invalidateQueries({ queryKey: [k, e.documento] });
     if (i && e.estado === 'listo') setTimeout(() => retirarIngesta(i.id), 5200);
+  } else if (e.tipo === 'fase' && (e.fase === 'metadatos' || e.fase === 'estructura')) {
+    // Título, autores e índice llegan antes del final: el lector y la biblioteca los recogen ya.
+    void clienteConsultas.invalidateQueries({ queryKey: ['documento', e.documento] });
+    void clienteConsultas.invalidateQueries({ queryKey: ['secciones', e.documento] });
+    void clienteConsultas.invalidateQueries({ queryKey: ['documentos'] });
+    const i = porTarea(e.tarea, e.documento);
+    if (i && e.fase === 'metadatos') void clienteConsultas.fetchQuery({ queryKey: ['documento', e.documento], queryFn: () => api().documentos.obtener(e.documento) }).then((d) => d.metadatos.titulo && poner(i.id, { nombre: d.metadatos.titulo })).catch(() => undefined);
   } else if (e.tipo === 'alerta') {
     void clienteConsultas.invalidateQueries({ queryKey: ['alertas'] });
     void clienteConsultas.invalidateQueries({ queryKey: ['vigilantes'] });

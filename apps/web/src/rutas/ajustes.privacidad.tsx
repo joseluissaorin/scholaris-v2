@@ -5,6 +5,7 @@ import { avisar, Boton, Campo, Dialogo, Filete, Interruptor } from '@scholaris/u
 import { api } from '../datos/api';
 import { q } from '../datos/consultas';
 import { Lienzo } from '../componentes/comunes/cabecera';
+import { numero } from '../lib/numero';
 
 export const Route = createFileRoute('/ajustes/privacidad')({
   loader: ({ context }) => context.consultas.ensureQueryData(q.grabacion()),
@@ -47,7 +48,7 @@ function Privacidad() {
     try {
       const r = que === 'todo' ? await api().privacidad.purgar() : await api().privacidad.borrarHistorial();
       const n = Object.values(r.borrados).reduce((a, b) => a + b, 0);
-      avisar(`Borrados ${n.toLocaleString('es-ES')} elementos.`);
+      avisar(`Borrados ${numero(n)} elementos.`);
       await qc.invalidateQueries();
     } catch { avisar('No se pudo borrar.', { tono: 'error' }); }
   }

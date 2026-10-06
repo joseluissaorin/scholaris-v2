@@ -1,6 +1,7 @@
 /** Formatos que se repiten en todas las pantallas. Todo en español de España. */
 import { anclaACita, tiempoACadena, type Ancla, type MetadatosDocumento, type TipoEntrada } from '@scholaris/nucleo';
 import type { NombreIcono } from '@scholaris/ui';
+import { numero } from './numero';
 
 export const NOMBRE_TIPO: Record<TipoEntrada, string> = {
   pdf: 'PDF', pdf_escaneado: 'Escaneado', fotos: 'Fotos de libro', imagen: 'Imagen', audio: 'Audio', video: 'Vídeo',
@@ -20,7 +21,7 @@ export function nombreUnidad(tipo: TipoEntrada, n: number): string {
     : tipo === 'epub' || tipo === 'documento' || tipo === 'web' ? ['sección', 'secciones']
     : tipo === 'fotos' ? ['foto', 'fotos']
     : ['página', 'páginas'];
-  return `${n.toLocaleString('es-ES')} ${n === 1 ? s : p}`;
+  return `${numero(n)} ${n === 1 ? s : p}`;
 }
 
 export const esMedio = (t: TipoEntrada) => t === 'audio' || t === 'video';
@@ -38,7 +39,7 @@ export function bytes(n: number): string {
   const u = ['KB', 'MB', 'GB', 'TB'];
   let v = n / 1024, i = 0;
   while (v >= 1024 && i < u.length - 1) { v /= 1024; i++; }
-  return `${v.toLocaleString('es-ES', { maximumFractionDigits: v < 10 ? 1 : 0 })} ${u[i]}`;
+  return `${numero(v, { maximumFractionDigits: v < 10 ? 1 : 0 })} ${u[i]}`;
 }
 
 const relativo = new Intl.RelativeTimeFormat('es', { numeric: 'auto' });

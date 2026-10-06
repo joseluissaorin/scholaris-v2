@@ -10,6 +10,7 @@ import type { DetalleDocumento } from '@scholaris/contrato';
 import { avisar, cx, Icono, Rotulo } from '@scholaris/ui';
 import { api } from '../../datos/api';
 import { bytes, fecha, NOMBRE_TIPO, nombreUnidad, duracion, esMedio } from '../../lib/formato';
+import { numero } from '../../lib/numero';
 
 type Campo = keyof MetadatosDocumento;
 
@@ -83,7 +84,7 @@ export function Ficha({ doc }: { doc: DetalleDocumento }) {
       <dl className="grid grid-cols-2 gap-x-4 gap-y-2 border-t border-filete pt-4 text-[0.8125rem]">
         <dt className="rotulo text-apagado">Tipo</dt><dd>{NOMBRE_TIPO[doc.tipo]}</dd>
         <dt className="rotulo text-apagado">Extensión</dt><dd>{esMedio(doc.tipo) && doc.duracion ? duracion(doc.duracion) : nombreUnidad(doc.tipo, doc.unidades)}</dd>
-        <dt className="rotulo text-apagado">Fragmentos</dt><dd className="tnum">{doc.cuentas.fragmentos.toLocaleString('es-ES')}</dd>
+        <dt className="rotulo text-apagado">Fragmentos</dt><dd className="tnum">{numero(doc.cuentas.fragmentos)}</dd>
         <dt className="rotulo text-apagado">Original</dt><dd>{bytes(doc.bytes)}</dd>
         <dt className="rotulo text-apagado">Añadido</dt><dd>{fecha(doc.creado)}</dd>
         <dt className="rotulo text-apagado">Vectores</dt><dd className="truncate font-mono text-[0.75rem]" title={doc.espacios.map((e) => e.id).join(', ')}>{doc.espacios.map((e) => e.modelo).join(', ') || '—'}</dd>
