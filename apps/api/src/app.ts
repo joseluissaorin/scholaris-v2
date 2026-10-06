@@ -221,11 +221,16 @@ export function crearPuerta(pl: Plataforma) {
   const autenticar = async (peticion: Request): Promise<UsuarioSesion> => {
     const cab = peticion.headers.get('authorization') ?? '';
     const token = /^Bearer\s+(.+)$/i.exec(cab)?.[1]?.trim() ?? new URL(peticion.url).searchParams.get('token') ?? '';
+    // En local (SQLite en el mismo proceso, sin coste) la concesión se mira en cada petición.
+    const conConcesion = async (l: UsuarioSesion): Promise<UsuarioSesion> => {
+      const c = await pl.cuentas.concesionVigente(l.id);
+      return c ? { ...l, plan: mejorPlan(l.plan, c.plan), concesion: c } : l;
+    };
     const local = token ? pl.usuariosLocales?.get(token) : undefined;
-    if (local) return local;
+    if (local) return conConcesion(local);
     if (pl.usuarioLocal) {
       if (pl.tokenLocal && token !== pl.tokenLocal) fallo('no_autenticado', 'Falta el token de esta instancia (SCHOLARIS_TOKEN).');
-      return pl.usuarioLocal;
+      return conConcesion(pl.usuarioLocal);
     }
     if (!token) fallo('no_autenticado', 'Inicia sesión para continuar.');
     if (pl.tokenAdmin && pl.tokenAdmin.length >= 32 && igualesSeguro(token, pl.tokenAdmin)) {

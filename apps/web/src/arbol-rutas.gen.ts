@@ -10,11 +10,14 @@
 
 import { Route as rootRouteImport } from './rutas/__root'
 import { Route as IndexRouteImport } from './rutas/index'
+import { Route as AdministracionRouteImport } from './rutas/administracion'
 import { Route as AjustesRouteImport } from './rutas/ajustes'
 import { Route as BuscarRouteImport } from './rutas/buscar'
 import { Route as EscribirRouteImport } from './rutas/escribir'
 import { Route as ExplorarRouteImport } from './rutas/explorar'
 import { Route as InvitacionesRouteImport } from './rutas/invitaciones'
+import { Route as AdministracionIndexRouteImport } from './rutas/administracion.index'
+import { Route as AdministracionCuponesRouteImport } from './rutas/administracion.cupones'
 import { Route as AjustesIndexRouteImport } from './rutas/ajustes.index'
 import { Route as AjustesAparienciaRouteImport } from './rutas/ajustes.apariencia'
 import { Route as AjustesClavesRouteImport } from './rutas/ajustes.claves'
@@ -41,6 +44,11 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AdministracionRoute = AdministracionRouteImport.update({
+  id: '/administracion',
+  path: '/administracion',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AjustesRoute = AjustesRouteImport.update({
   id: '/ajustes',
   path: '/ajustes',
@@ -65,6 +73,16 @@ const InvitacionesRoute = InvitacionesRouteImport.update({
   id: '/invitaciones',
   path: '/invitaciones',
   getParentRoute: () => rootRouteImport,
+} as any)
+const AdministracionIndexRoute = AdministracionIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AdministracionRoute,
+} as any)
+const AdministracionCuponesRoute = AdministracionCuponesRouteImport.update({
+  id: '/cupones',
+  path: '/cupones',
+  getParentRoute: () => AdministracionRoute,
 } as any)
 const AjustesIndexRoute = AjustesIndexRouteImport.update({
   id: '/',
@@ -169,11 +187,13 @@ const DocumentosIdContenidoRoute = DocumentosIdContenidoRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/administracion': typeof AdministracionRouteWithChildren
   '/ajustes': typeof AjustesRouteWithChildren
   '/buscar': typeof BuscarRouteWithChildren
   '/escribir': typeof EscribirRouteWithChildren
   '/explorar': typeof ExplorarRouteWithChildren
   '/invitaciones': typeof InvitacionesRoute
+  '/administracion/cupones': typeof AdministracionCuponesRoute
   '/ajustes/apariencia': typeof AjustesAparienciaRoute
   '/ajustes/claves': typeof AjustesClavesRoute
   '/ajustes/privacidad': typeof AjustesPrivacidadRoute
@@ -189,6 +209,7 @@ export interface FileRoutesByFullPath {
   '/lector/$id': typeof LectorIdRoute
   '/lotes/$id': typeof LotesIdRoute
   '/recibir/$token': typeof RecibirTokenRoute
+  '/administracion/': typeof AdministracionIndexRoute
   '/ajustes/': typeof AjustesIndexRoute
   '/buscar/': typeof BuscarIndexRoute
   '/escribir/': typeof EscribirIndexRoute
@@ -198,6 +219,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/invitaciones': typeof InvitacionesRoute
+  '/administracion/cupones': typeof AdministracionCuponesRoute
   '/ajustes/apariencia': typeof AjustesAparienciaRoute
   '/ajustes/claves': typeof AjustesClavesRoute
   '/ajustes/privacidad': typeof AjustesPrivacidadRoute
@@ -213,6 +235,7 @@ export interface FileRoutesByTo {
   '/lector/$id': typeof LectorIdRoute
   '/lotes/$id': typeof LotesIdRoute
   '/recibir/$token': typeof RecibirTokenRoute
+  '/administracion': typeof AdministracionIndexRoute
   '/ajustes': typeof AjustesIndexRoute
   '/buscar': typeof BuscarIndexRoute
   '/escribir': typeof EscribirIndexRoute
@@ -222,11 +245,13 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/administracion': typeof AdministracionRouteWithChildren
   '/ajustes': typeof AjustesRouteWithChildren
   '/buscar': typeof BuscarRouteWithChildren
   '/escribir': typeof EscribirRouteWithChildren
   '/explorar': typeof ExplorarRouteWithChildren
   '/invitaciones': typeof InvitacionesRoute
+  '/administracion/cupones': typeof AdministracionCuponesRoute
   '/ajustes/apariencia': typeof AjustesAparienciaRoute
   '/ajustes/claves': typeof AjustesClavesRoute
   '/ajustes/privacidad': typeof AjustesPrivacidadRoute
@@ -242,6 +267,7 @@ export interface FileRoutesById {
   '/lector/$id': typeof LectorIdRoute
   '/lotes/$id': typeof LotesIdRoute
   '/recibir/$token': typeof RecibirTokenRoute
+  '/administracion/': typeof AdministracionIndexRoute
   '/ajustes/': typeof AjustesIndexRoute
   '/buscar/': typeof BuscarIndexRoute
   '/escribir/': typeof EscribirIndexRoute
@@ -252,11 +278,13 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/administracion'
     | '/ajustes'
     | '/buscar'
     | '/escribir'
     | '/explorar'
     | '/invitaciones'
+    | '/administracion/cupones'
     | '/ajustes/apariencia'
     | '/ajustes/claves'
     | '/ajustes/privacidad'
@@ -272,6 +300,7 @@ export interface FileRouteTypes {
     | '/lector/$id'
     | '/lotes/$id'
     | '/recibir/$token'
+    | '/administracion/'
     | '/ajustes/'
     | '/buscar/'
     | '/escribir/'
@@ -281,6 +310,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/invitaciones'
+    | '/administracion/cupones'
     | '/ajustes/apariencia'
     | '/ajustes/claves'
     | '/ajustes/privacidad'
@@ -296,6 +326,7 @@ export interface FileRouteTypes {
     | '/lector/$id'
     | '/lotes/$id'
     | '/recibir/$token'
+    | '/administracion'
     | '/ajustes'
     | '/buscar'
     | '/escribir'
@@ -304,11 +335,13 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/'
+    | '/administracion'
     | '/ajustes'
     | '/buscar'
     | '/escribir'
     | '/explorar'
     | '/invitaciones'
+    | '/administracion/cupones'
     | '/ajustes/apariencia'
     | '/ajustes/claves'
     | '/ajustes/privacidad'
@@ -324,6 +357,7 @@ export interface FileRouteTypes {
     | '/lector/$id'
     | '/lotes/$id'
     | '/recibir/$token'
+    | '/administracion/'
     | '/ajustes/'
     | '/buscar/'
     | '/escribir/'
@@ -333,6 +367,7 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AdministracionRoute: typeof AdministracionRouteWithChildren
   AjustesRoute: typeof AjustesRouteWithChildren
   BuscarRoute: typeof BuscarRouteWithChildren
   EscribirRoute: typeof EscribirRouteWithChildren
@@ -352,6 +387,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/administracion': {
+      id: '/administracion'
+      path: '/administracion'
+      fullPath: '/administracion'
+      preLoaderRoute: typeof AdministracionRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/ajustes': {
@@ -388,6 +430,20 @@ declare module '@tanstack/react-router' {
       fullPath: '/invitaciones'
       preLoaderRoute: typeof InvitacionesRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/administracion/': {
+      id: '/administracion/'
+      path: '/'
+      fullPath: '/administracion/'
+      preLoaderRoute: typeof AdministracionIndexRouteImport
+      parentRoute: typeof AdministracionRoute
+    }
+    '/administracion/cupones': {
+      id: '/administracion/cupones'
+      path: '/cupones'
+      fullPath: '/administracion/cupones'
+      preLoaderRoute: typeof AdministracionCuponesRouteImport
+      parentRoute: typeof AdministracionRoute
     }
     '/ajustes/': {
       id: '/ajustes/'
@@ -532,6 +588,20 @@ declare module '@tanstack/react-router' {
   }
 }
 
+interface AdministracionRouteChildren {
+  AdministracionCuponesRoute: typeof AdministracionCuponesRoute
+  AdministracionIndexRoute: typeof AdministracionIndexRoute
+}
+
+const AdministracionRouteChildren: AdministracionRouteChildren = {
+  AdministracionCuponesRoute: AdministracionCuponesRoute,
+  AdministracionIndexRoute: AdministracionIndexRoute,
+}
+
+const AdministracionRouteWithChildren = AdministracionRoute._addFileChildren(
+  AdministracionRouteChildren,
+)
+
 interface AjustesRouteChildren {
   AjustesAparienciaRoute: typeof AjustesAparienciaRoute
   AjustesClavesRoute: typeof AjustesClavesRoute
@@ -602,6 +672,7 @@ const ExplorarRouteWithChildren = ExplorarRoute._addFileChildren(
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AdministracionRoute: AdministracionRouteWithChildren,
   AjustesRoute: AjustesRouteWithChildren,
   BuscarRoute: BuscarRouteWithChildren,
   EscribirRoute: EscribirRouteWithChildren,

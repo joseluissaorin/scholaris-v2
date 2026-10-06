@@ -79,6 +79,19 @@ describe('versión local', () => {
     expect(imp.documento).not.toBe(ing.documento);
   });
 
+  it('cupones en SQLite: el usuario local administra, el lote vale una vez y la concesión se ve en /auth/yo', async () => {
+    const c = api();
+    expect((await c.auth.yo()).admin).toBe(true);
+    const lote = await c.admin.crearLote({ cantidad: 2, plan: 'pro', lote: 'Local', nota: 'Pruebas' });
+    expect(lote.codigos).toHaveLength(2);
+    const canje = await c.cupones.canjear(lote.codigos[0]!.toLowerCase());
+    expect(canje.concesion).toMatchObject({ origen: 'cupon', plan: 'pro' });
+    expect((await c.auth.yo()).concesion?.origen).toBe('cupon');
+    await expect(c.cupones.canjear(lote.codigos[0]!)).rejects.toMatchObject({ codigo: 'conflicto' });
+    await expect(c.cupones.canjear(lote.codigos[1]!)).rejects.toMatchObject({ codigo: 'conflicto' });
+    expect((await c.admin.lotes()).find((l) => l.lote === 'Local')).toMatchObject({ total: 2, canjeados: 1 });
+  });
+
   it('el billete del WebSocket se verifica y da el canal del usuario', async () => {
     const b = await api().tiempoReal.billete('t123');
     expect(await s.canalDeBillete(b.billete)).toBe('tarea:local:t123');

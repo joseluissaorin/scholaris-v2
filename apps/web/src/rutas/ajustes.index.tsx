@@ -1,5 +1,5 @@
 import { lazy, Suspense, useState } from 'react';
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute, Link } from '@tanstack/react-router';
 import { useQuery } from '@tanstack/react-query';
 import type { Cuota } from '@scholaris/contrato';
 import { avisar, Boton, Campo, cx, Dialogo, Esqueleto } from '@scholaris/ui';
@@ -10,6 +10,7 @@ import { Lienzo, Seccion } from '../componentes/comunes/cabecera';
 import { useSesion } from '../sesion';
 import { bytes } from '../lib/formato';
 import { numero } from '../lib/numero';
+import { CanjearCupon, etiquetaPlan } from '../componentes/cuenta/cupon';
 
 const Precios = lazy(() => import('../componentes/cuenta/precios'));
 
@@ -68,7 +69,7 @@ function Cuenta() {
         ) : null}
       </Seccion>
 
-      <Seccion icono="rayo" titulo="Facturación y uso" descripcion={`Plan actual: ${yo.plan === 'pro' ? 'Pro' : 'Gratuito'}`}
+      <Seccion icono="rayo" titulo="Facturación y uso" descripcion={`Plan actual: ${etiquetaPlan(yo)}`}
         accion={<span className={cx('rounded-lg px-2 py-0.5 text-[0.6875rem] font-semibold shadow-[var(--relieve)]', yo.plan === 'pro' ? 'bg-amarillo text-coffee-800' : 'bg-cream-200 text-coffee-700')}>{yo.plan === 'pro' ? 'Pro' : 'Gratuito'}</span>}>
         <div className="grid gap-5 sm:grid-cols-2">
           <Medidor nombre="Páginas leídas este mes" cuota={yo.cuotas.paginasMes} />
@@ -77,6 +78,17 @@ function Cuenta() {
           <Medidor nombre="Almacenamiento" cuota={yo.cuotas.bytes} formato={bytes} />
         </div>
       </Seccion>
+
+      {yo.via !== 'local' || yo.admin ? (
+        <Seccion icono="marcador" titulo="Canjear un cupón" descripcion="Si te han dado un código SCHO-XXXX-XXXX, escríbelo aquí y el plan pasa a tu cuenta al momento.">
+          <CanjearCupon />
+        </Seccion>
+      ) : null}
+
+      {yo.admin ? (
+        <Seccion icono="llave" titulo="Administración" descripcion="Cupones por lotes y planes concedidos a mano. Solo lo ve quien administra Scholaris."
+          accion={<Link to="/administracion/cupones" className="tactil inline-flex h-8 items-center rounded-lg border border-cream-400 bg-cream-50 px-3 text-[0.8125rem] font-medium text-coffee-700 shadow-[var(--relieve)] hover:bg-cream-100 active:translate-y-px active:shadow-[var(--hundido)]">Cupones</Link>} />
+      ) : null}
 
       <Seccion icono="documento" titulo="Lectura de documentos" descripcion="Cómo se leen los archivos que añades. Se puede cambiar también al añadirlos.">
         <ModoIngestaAjuste />
