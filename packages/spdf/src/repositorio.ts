@@ -19,6 +19,7 @@ import type {
   ValorSQL,
   Vector,
 } from '@scholaris/nucleo';
+import { enLista } from '@scholaris/nucleo';
 import { textoBusqueda, variantesConsulta } from '@scholaris/normalizacion';
 import { contextoBusqueda, type ContextoBusqueda } from './esquema.js';
 import { bytesAFloat32, float32ABytes } from './vectores.js';
@@ -358,14 +359,16 @@ export async function buscarTexto(
   if (!q) return [];
   const limite = opciones.limite ?? 20;
   const docs = opciones.documentos ?? [];
-  const filtro = docs.length ? `AND f.documento IN (${docs.map(() => '?').join(', ')})` : '';
+  // Un solo parámetro JSON para la lista: D1 y los Durable Objects admiten 100 por sentencia.
+  const enDocs = docs.length ? enLista(docs) : null;
+  const filtro = enDocs ? `AND f.documento IN ${enDocs.sql}` : '';
   const filas = await sql.ejecutar<Fila>(
     `SELECT f.*, bm25(fragmentos_fts, 1.0, 0.4, 0.6, ${PESO_NORMALIZADA}) AS rango,
             highlight(fragmentos_fts, 0, '[', ']') AS resaltado
        FROM fragmentos_fts JOIN fragmentos f ON f.n = fragmentos_fts.rowid
       WHERE fragmentos_fts MATCH ? ${filtro}
       ORDER BY rango LIMIT ?`,
-    q, ...docs, limite,
+    q, ...(enDocs ? [enDocs.param] : []), limite,
   );
   return filas.map((f) => ({ fragmento: filaAFragmento(f), puntuacion: -numero(f.rango), resaltado: texto(f.resaltado) }));
 }
@@ -455,7 +458,7 @@ export async function leerVectores(
   const params: ValorSQL[] = [filtro.espacio];
   if (filtro.documento) { condiciones.push('documento = ?'); params.push(filtro.documento); }
   if (filtro.objetivo) { condiciones.push('objetivo = ?'); params.push(filtro.objetivo); }
-  if (filtro.ids?.length) { condiciones.push(`id IN (${filtro.ids.map(() => '?').join(', ')})`); params.push(...filtro.ids); }
+  if (filtro.ids?.length) { const l = enLista(filtro.ids); condiciones.push(`id IN ${l.sql}`); params.push(l.param); }
   const filas = await sql.ejecutar<Fila>(`SELECT * FROM vectores WHERE ${condiciones.join(' AND ')} ORDER BY objetivo, id`, ...params);
   return filas.map((f) => ({
     objetivo: texto(f.objetivo) as ObjetivoVector,

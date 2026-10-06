@@ -10,8 +10,8 @@
  * Las fechas no entran en el grafo (sirven a la línea temporal).
  */
 
-import type { Redactor, SQL } from '@scholaris/nucleo';
-import { ahora, marcas, normalizarClave, num } from '../util.js';
+import { enLista, type Redactor, type SQL } from '@scholaris/nucleo';
+import { ahora, normalizarClave, num } from '../util.js';
 import { contextoMencion } from './normalizar.js';
 import { tokensAprox, type UsoLote } from './extraer.js';
 
@@ -132,8 +132,8 @@ export async function etiquetarRelaciones(sql: SQL, redactor: Redactor, document
     documento, maximo,
   );
   if (!fuertes.length) return { etiquetadas: 0, uso };
-  const ids = [...new Set(fuertes.flatMap((f) => [f.a, f.b]))];
-  const nombres = new Map((await sql.ejecutar<{ id: string; nombre: string }>(`SELECT id, nombre FROM entidades WHERE id IN (${marcas(ids.length)})`, ...ids)).map((f) => [f.id, f.nombre]));
+  const ids = enLista([...new Set(fuertes.flatMap((f) => [f.a, f.b]))]);
+  const nombres = new Map((await sql.ejecutar<{ id: string; nombre: string }>(`SELECT id, nombre FROM entidades WHERE id IN ${ids.sql}`, ids.param)).map((f) => [f.id, f.nombre]));
   const pares: Array<{ a: string; b: string; fragmento: string; pasaje: string }> = [];
   for (const f of fuertes) {
     const [fr] = await sql.ejecutar<{ texto: string }>('SELECT texto FROM fragmentos WHERE id = ?', f.fragmento);

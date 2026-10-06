@@ -1,7 +1,7 @@
 /** Citas (ver contrato/citas.ts). La lógica vive en @scholaris/citas. */
 import type { Hono } from 'hono';
 import type { Documento, MetadatosDocumento, ValorSQL } from '@scholaris/nucleo';
-import { nuevoId } from '@scholaris/nucleo';
+import { enLista, nuevoId } from '@scholaris/nucleo';
 import type {
   Autocita, DecisionesAutocita, DetalleAutocita, ExportarReferencias, ImportacionBibtex, ImportarBibtex, InsertarEnDocx, Pagina,
   PedirBibliografia, PropuestaCita, ResumenAutocita, Verificar, FicheroCitas,
@@ -29,7 +29,8 @@ async function documentosDe(p: PuertosUsuario, ids?: string[], biblioteca?: stri
   let filas: Array<{ id: string; tipo: string; metadatos: string }>;
   if (ids?.length) {
     exigir(ids.length <= 5000, 'Demasiados documentos (máximo 5000).');
-    filas = await p.sql.ejecutar(`SELECT id, tipo, metadatos FROM documentos WHERE id IN (${ids.map(() => '?').join(',')})`, ...ids);
+    const l = enLista(ids);
+    filas = await p.sql.ejecutar(`SELECT id, tipo, metadatos FROM documentos WHERE id IN ${l.sql}`, l.param);
   } else if (biblioteca) {
     filas = await p.sql.ejecutar('SELECT d.id, d.tipo, d.metadatos FROM documentos d, json_each(d.bibliotecas) je WHERE je.value = ? ORDER BY d.autores, d.anio', biblioteca);
   } else {

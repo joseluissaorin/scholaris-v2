@@ -4,7 +4,7 @@
  * de un documento y formas para resaltar en el lector.
  */
 
-import { anclaACita, type Ancla, type SQL, type ValorSQL } from '@scholaris/nucleo';
+import { anclaACita, enLista, type Ancla, type SQL, type ValorSQL } from '@scholaris/nucleo';
 import type {
   CaminoEntidades, DocumentoConMenciones, ElementoLineaTemporal, Entidad, EntidadesDocumento, EntidadesLector, EstadoEntidades,
   FichaEntidad, LineaTemporalEntidad, MencionEntidad, Pagina, PasoCamino, TipoEntidad, VecindarioEntidad, VecinoEntidad,
@@ -67,7 +67,7 @@ export async function buscarEntidades(sql: SQL, f: FiltrosEntidades = {}): Promi
   if (q) { donde.push('busqueda LIKE ?'); p.push(`%${q.replace(/[%_]/g, '')}%`); }
   if (f.tipo) {
     const tipos = f.tipo.split(',').map((t) => t.trim()).filter(esTipoEntidad);
-    if (tipos.length) { donde.push(`tipo IN (${marcas(tipos.length)})`); p.push(...tipos); }
+    if (tipos.length) { const l = enLista(tipos); donde.push(`tipo IN ${l.sql}`); p.push(l.param); }
   }
   if (f.documento) { donde.push('id IN (SELECT entidad FROM menciones WHERE documento = ?)'); p.push(f.documento); }
   // Con consulta, primero lo que empieza por ella; después, lo más presente.
@@ -172,9 +172,10 @@ export async function vecindarioEntidad(sql: SQL, id: string, o: { limite?: numb
     }
   }
   const lista = [...nodos];
+  const enNodos = enLista(lista);
   const aristas = (await sql.ejecutar<{ a: string; b: string; peso: number }>(
-    `SELECT a, b, SUM(peso) AS peso FROM aristas_entidades WHERE a IN (${marcas(lista.length)}) AND b IN (${marcas(lista.length)}) GROUP BY a, b`,
-    ...lista, ...lista,
+    `SELECT a, b, SUM(peso) AS peso FROM aristas_entidades WHERE a IN ${enNodos.sql} AND b IN ${enNodos.sql} GROUP BY a, b`,
+    enNodos.param, enNodos.param,
   )).map((f) => ({ a: f.a, b: f.b, peso: num(f.peso) }));
   // Para no dibujar una maraña: todas las del centro y, del resto, las de peso apreciable.
   const visibles = aristas.filter((x) => x.a === e.id || x.b === e.id || x.peso >= 0.8);

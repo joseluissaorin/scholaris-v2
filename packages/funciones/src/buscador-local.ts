@@ -7,6 +7,7 @@
 
 import {
   bytesAVector,
+  enLista,
   fusionarRangos,
   type Embebedor,
   type Filtros,
@@ -17,25 +18,27 @@ import {
 } from '@scholaris/nucleo';
 import { filaAFragmento, leerDocumentos } from './estanteria.js';
 import type { Buscador, PeticionBusqueda, RespuestaBusqueda } from './puertos.js';
-import { aBytes, consultaFTSAmplia, marcas } from './util.js';
+import { aBytes, consultaFTSAmplia } from './util.js';
 
 /** Condición SQL sobre la tabla `documentos` (alias `d`) según los filtros. */
 export function condicionDocumentos(f: Filtros | undefined): { donde: string; p: ValorSQL[] } {
   const c: string[] = [];
   const p: ValorSQL[] = [];
   if (!f) return { donde: '1', p };
-  if (f.documentos?.length) { c.push(`d.id IN (${marcas(f.documentos.length)})`); p.push(...f.documentos); }
-  if (f.tipos?.length) { c.push(`d.tipo IN (${marcas(f.tipos.length)})`); p.push(...f.tipos); }
-  if (f.idiomas?.length) { c.push(`d.idioma IN (${marcas(f.idiomas.length)})`); p.push(...f.idiomas); }
+  // Cada lista va en un solo parámetro JSON (D1 y los Durable Objects admiten 100 por sentencia).
+  const en = (columna: string, valores: readonly string[]) => { const l = enLista(valores); c.push(`${columna} IN ${l.sql}`); p.push(l.param); };
+  if (f.documentos?.length) en('d.id', f.documentos);
+  if (f.tipos?.length) en('d.tipo', f.tipos);
+  if (f.idiomas?.length) en('d.idioma', f.idiomas);
   if (f.anioDesde !== undefined) { c.push('d.anio >= ?'); p.push(f.anioDesde); }
   if (f.anioHasta !== undefined) { c.push('d.anio <= ?'); p.push(f.anioHasta); }
   if (f.bibliotecas?.length) {
-    c.push(`EXISTS (SELECT 1 FROM json_each(d.bibliotecas) b WHERE b.value IN (${marcas(f.bibliotecas.length)}))`);
-    p.push(...f.bibliotecas);
+    c.push('EXISTS (SELECT 1 FROM json_each(d.bibliotecas) b WHERE b.value IN (SELECT value FROM json_each(?)))');
+    p.push(JSON.stringify(f.bibliotecas));
   }
   if (f.autores?.length) {
-    c.push('(' + f.autores.map(() => 'd.autores LIKE ?').join(' OR ') + ')');
-    p.push(...f.autores.map((a) => `%${a}%`));
+    c.push('EXISTS (SELECT 1 FROM json_each(?) a WHERE d.autores LIKE a.value)');
+    p.push(JSON.stringify(f.autores.map((a) => `%${a}%`)));
   }
   return { donde: c.length ? c.join(' AND ') : '1', p };
 }
@@ -111,10 +114,10 @@ export function buscadorLocal(sql: SQL, embebedor?: Embebedor): Buscador {
 
       const puntos = [...fusionarRangos(listas).entries()].sort((a, b) => b[1] - a[1]).slice(0, k);
       if (!puntos.length) return { resultados: [], ...(vectorConsulta ? { vectorConsulta, espacio: embebedor!.espacio.id } : {}) };
-      const ids = puntos.map(([id]) => id);
+      const ids = enLista(puntos.map(([id]) => id));
       const filas = await sql.ejecutar(
-        `SELECT id, documento, unidad, orden, texto, contexto, seccion, ancla, ancla_fin FROM fragmentos WHERE id IN (${marcas(ids.length)})`,
-        ...ids,
+        `SELECT id, documento, unidad, orden, texto, contexto, seccion, ancla, ancla_fin FROM fragmentos WHERE id IN ${ids.sql}`,
+        ids.param,
       );
       const porId = new Map(filas.map((f) => [String(f.id), filaAFragmento(f)]));
       const docs = await leerDocumentos(sql, [...new Set(filas.map((f) => String(f.documento)))]);

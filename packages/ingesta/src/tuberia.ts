@@ -26,7 +26,7 @@
  * Identificadores deterministas: reintentar un paso escribe las mismas filas.
  */
 
-import { enParalelo, type AnclaPagina, type Documento, type MetadatosDocumento, type PalabraTranscrita, type Vector } from '@scholaris/nucleo';
+import { enLista, enParalelo, type AnclaPagina, type Documento, type MetadatosDocumento, type PalabraTranscrita, type Vector } from '@scholaris/nucleo';
 import type { PaqueteConversion } from '@scholaris/imprenta';
 import * as spdf from '@scholaris/spdf';
 import type { FragmentoPlano, FuentePaquete, Plan, Procedencia, PuertosIngesta, Seccion, Tanda, UnidadLeida } from './tipos.js';
@@ -629,11 +629,11 @@ export async function consolidar(
   }
   const documentoFinal: Documento = { ...documentoProvisional(ctx), metadatos: meta, estado: 'listo', unidades: unidades.length, actualizado: ahora };
   await escribir(sql, async (tx) => {
-    for (let i = 0; i < sobrantes.length; i += 200) {
-      const lote = sobrantes.slice(i, i + 200);
-      const marcas = lote.map(() => '?').join(',');
-      await tx.ejecutar(`DELETE FROM fragmentos WHERE id IN (${marcas})`, ...lote);
-      await tx.ejecutar(`DELETE FROM vectores WHERE objetivo = 'fragmento' AND id IN (${marcas})`, ...lote);
+    // Un solo parámetro JSON por lista: D1 y los Durable Objects admiten 100 parámetros por sentencia.
+    for (let i = 0; i < sobrantes.length; i += 500) {
+      const l = enLista(sobrantes.slice(i, i + 500));
+      await tx.ejecutar(`DELETE FROM fragmentos WHERE id IN ${l.sql}`, l.param);
+      await tx.ejecutar(`DELETE FROM vectores WHERE objetivo = 'fragmento' AND id IN ${l.sql}`, l.param);
     }
     if (medio) {
       // Las unidades provisionales de los tramos se sustituyen por las definitivas.

@@ -3,7 +3,7 @@
  * Solo lecturas; todas las consultas van parametrizadas.
  */
 import type { Ancla, Documento, Filtros, Fragmento, MetadatosDocumento, SQL, ValorSQL } from '@scholaris/nucleo';
-import { deRomano } from '@scholaris/nucleo';
+import { deRomano, enLista } from '@scholaris/nucleo';
 import { plegar } from './texto.js';
 
 export type DocumentoBreve = Pick<Documento, 'id' | 'tipo' | 'metadatos'>;
@@ -31,11 +31,6 @@ export function filaADocumento(f: FilaDocumento): DocumentoBreve {
 /** Año que cuenta para filtrar y para la lógica temporal: el de la edición original si se conoce. */
 export function anioDe(m: MetadatosDocumento): number | undefined {
   return m.anioOriginal ?? m.anio;
-}
-
-/** Marcadores «?, ?, ?» para una lista IN. */
-export function marcadores(n: number): string {
-  return Array.from({ length: n }, () => '?').join(', ');
 }
 
 /** Peso BM25 de la capa normalizada (texto_busqueda) frente al texto fiel (1.0). */
@@ -148,8 +143,9 @@ export class Estanteria {
     const params: ValorSQL[] = [match];
     let filtro = '';
     if (permitidos && permitidos.size <= 500) {
-      filtro = ` AND f.documento IN (${marcadores(permitidos.size)})`;
-      params.push(...permitidos);
+      const l = enLista([...permitidos]);
+      filtro = ` AND f.documento IN ${l.sql}`;
+      params.push(l.param);
     }
     params.push(permitidos && permitidos.size > 500 ? k * 4 : k);
     const filas = await this.sql.ejecutar<{ id: string; documento: string; puntos: number }>(
@@ -165,12 +161,13 @@ export class Estanteria {
   /** Carga fragmentos por id, en el orden pedido, descartando los que no existan. */
   async fragmentos(ids: string[]): Promise<Map<string, Fragmento>> {
     const salida = new Map<string, Fragmento>();
-    for (let i = 0; i < ids.length; i += 200) {
-      const lote = ids.slice(i, i + 200);
+    for (let i = 0; i < ids.length; i += 500) {
+      const lote = ids.slice(i, i + 500);
       if (!lote.length) continue;
+      const l = enLista(lote);
       const filas = await this.sql.ejecutar<{ id: string; documento: string; unidad: string; orden: number; texto: string; contexto: string; seccion: string | null; ancla: string; ancla_fin: string | null }>(
-        `SELECT id, documento, unidad, orden, texto, contexto, seccion, ancla, ancla_fin FROM fragmentos WHERE id IN (${marcadores(lote.length)})`,
-        ...lote,
+        `SELECT id, documento, unidad, orden, texto, contexto, seccion, ancla, ancla_fin FROM fragmentos WHERE id IN ${l.sql}`,
+        l.param,
       );
       for (const f of filas) {
         const anclaFin = json<Ancla | null>(f.ancla_fin, null);
@@ -187,24 +184,27 @@ export class Estanteria {
   /** Fragmentos (id, unidad, orden) de unas unidades: para traducir aciertos visuales. */
   async fragmentosDeUnidades(unidades: string[]): Promise<Array<{ id: string; unidad: string; orden: number }>> {
     if (!unidades.length) return [];
+    const l = enLista(unidades);
     return this.sql.ejecutar<{ id: string; unidad: string; orden: number }>(
-      `SELECT id, unidad, orden FROM fragmentos WHERE unidad IN (${marcadores(unidades.length)}) ORDER BY orden`,
-      ...unidades,
+      `SELECT id, unidad, orden FROM fragmentos WHERE unidad IN ${l.sql} ORDER BY orden`,
+      l.param,
     );
   }
 
   async figuras(ids: string[]): Promise<Array<{ id: string; documento: string; unidad: string; pie: string | null; descripcion: string | null; ancla: Ancla }>> {
     if (!ids.length) return [];
+    const l = enLista(ids);
     const filas = await this.sql.ejecutar<{ id: string; documento: string; unidad: string; pie: string | null; descripcion: string | null; ancla: string }>(
-      `SELECT id, documento, unidad, pie, descripcion, ancla FROM figuras WHERE id IN (${marcadores(ids.length)})`,
-      ...ids,
+      `SELECT id, documento, unidad, pie, descripcion, ancla FROM figuras WHERE id IN ${l.sql}`,
+      l.param,
     );
     return filas.map((f) => ({ ...f, ancla: json<Ancla>(f.ancla, { tipo: 'imagen' }) }));
   }
 
   async unidadesExisten(ids: string[]): Promise<Map<string, string>> {
     if (!ids.length) return new Map();
-    const filas = await this.sql.ejecutar<{ id: string; documento: string }>(`SELECT id, documento FROM unidades WHERE id IN (${marcadores(ids.length)})`, ...ids);
+    const l = enLista(ids);
+    const filas = await this.sql.ejecutar<{ id: string; documento: string }>(`SELECT id, documento FROM unidades WHERE id IN ${l.sql}`, l.param);
     return new Map(filas.map((f) => [f.id, f.documento]));
   }
 

@@ -1,7 +1,7 @@
 /** Documentos de la estantería (ver contrato/documentos.ts). */
 import type { Hono } from 'hono';
 import type { Ancla, Documento, MetadatosDocumento, ValorSQL } from '@scholaris/nucleo';
-import { vectorABytes } from '@scholaris/nucleo';
+import { enLista, vectorABytes } from '@scholaris/nucleo';
 import type {
   DetalleDocumento, FiguraVista, FoliosRehechos, FragmentoVista, MapaFolios, Pagina, ParcheMetadatos, RehacerFolios, Reprocesar, ResumenDocumento, SeccionVista,
   UnidadVista, VolcadoDocumento,
@@ -83,7 +83,7 @@ export function rutasDocumentos(app: Hono<Entorno>): void {
     if (amb) q.biblioteca = amb.biblioteca;
     if (q.biblioteca) { donde.push('EXISTS (SELECT 1 FROM json_each(documentos.bibliotecas) je WHERE je.value = ?)'); params.push(q.biblioteca); }
     const tipos = c.req.queries('tipo') ?? [];
-    if (tipos.length) { donde.push(`tipo IN (${tipos.map(() => '?').join(',')})`); params.push(...tipos); }
+    if (tipos.length) { const l = enLista(tipos); donde.push(`tipo IN ${l.sql}`); params.push(l.param); }
     if (q.estado) { donde.push('estado = ?'); params.push(q.estado); }
     if (q.autor) { donde.push('autores LIKE ?'); params.push(`%${q.autor}%`); }
     if (q.anioDesde) { donde.push('anio >= ?'); params.push(entero(q.anioDesde, 0)); }

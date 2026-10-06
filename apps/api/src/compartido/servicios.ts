@@ -5,7 +5,7 @@
  */
 import { Buscador } from '@scholaris/busqueda';
 import type { Buscador as BuscadorFunciones, PuertosFunciones } from '@scholaris/funciones';
-import type { SQL } from '@scholaris/nucleo';
+import { enLista, type SQL } from '@scholaris/nucleo';
 import type { PuertosUsuario } from '../puertos.js';
 
 const buscadores = new WeakMap<SQL, { buscador: Buscador; creado: number }>();
@@ -28,8 +28,9 @@ export async function obtenerBuscador(p: PuertosUsuario): Promise<Buscador> {
     // La pertenencia vive en `documentos.bibliotecas` (JSON): se resuelve en SQL.
     documentosDeBibliotecas: async (bibliotecas) => {
       if (!bibliotecas.length) return [];
+      const l = enLista(bibliotecas);
       const filas = await p.sql.ejecutar<{ id: string }>(
-        `SELECT DISTINCT d.id FROM documentos d, json_each(d.bibliotecas) je WHERE je.value IN (${bibliotecas.map(() => '?').join(',')})`, ...bibliotecas);
+        `SELECT DISTINCT d.id FROM documentos d, json_each(d.bibliotecas) je WHERE je.value IN ${l.sql}`, l.param);
       return filas.map((f) => f.id);
     },
   });
