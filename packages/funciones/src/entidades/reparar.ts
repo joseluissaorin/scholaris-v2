@@ -11,6 +11,7 @@
 import type { Redactor, SQL } from '@scholaris/nucleo';
 import type { TipoEntidad } from '@scholaris/contrato';
 import { ahora, num } from '../util.js';
+import { fijarAjuste, leerAjuste } from '../ajustes.js';
 import { claveEntidad, contextoMencion, formaCompatible } from './normalizar.js';
 import { DESCRIPCION_FICCION, obtenerEntidad, recontar, resolverBiblioteca, textoBusqueda } from './resolver.js';
 import { enlazarWikidata, type OpcionesWikidata } from './wikidata.js';
@@ -175,3 +176,40 @@ export async function rehacerEnlacesEntidades(sql: SQL, redactor: Redactor | und
   };
 }
 
+
+/**
+ * Versión de las reglas de enlace y fusión. Cuando sube, cada biblioteca se
+ * repara sola una vez (la primera vez que se mira el estado de las entidades,
+ * en el barrido diario o tras una ingesta), sin volver a extraer.
+ * 2: personajes de ficción, formas compatibles y obras por autor y año.
+ */
+export const VERSION_ENLACES = 2;
+const CLAVE_VERSION = 'entidades_enlaces_version';
+const CLAVE_EN_MARCHA = 'entidades_enlaces_en_marcha';
+
+export async function enlacesAlDia(sql: SQL): Promise<boolean> {
+  const hay = num((await sql.ejecutar<{ n: number }>('SELECT COUNT(*) AS n FROM menciones'))[0]?.n);
+  if (!hay) return true;
+  if (num(await leerAjuste(sql, CLAVE_VERSION), 1) >= VERSION_ENLACES) return true;
+  // Sin marca: si todas las personas saben ya si son personajes, la biblioteca
+  // se hizo con las reglas de ahora (se apunta y listo); si no, es anterior.
+  const antiguas = num((await sql.ejecutar<{ n: number }>("SELECT COUNT(*) AS n FROM entidades WHERE tipo = 'persona' AND ficticia IS NULL AND fusionada_en IS NULL AND n_menciones > 0"))[0]?.n);
+  if (!antiguas) { await fijarAjuste(sql, CLAVE_VERSION, String(VERSION_ENLACES)); return true; }
+  return false;
+}
+
+/** Repara la biblioteca si sus enlaces son de una versión anterior. Devuelve el resultado o null si no hacía falta. */
+export async function ponerAlDiaEnlaces(sql: SQL, redactor: Redactor | undefined, o: { wikidata?: false | OpcionesWikidata } = {}): Promise<ResultadoReparacion | null> {
+  if (await enlacesAlDia(sql)) return null;
+  // Un cerrojo con caducidad: dos peticiones a la vez no reparan dos veces.
+  const enMarcha = await leerAjuste(sql, CLAVE_EN_MARCHA);
+  if (enMarcha && Date.now() - Date.parse(enMarcha) < 10 * 60_000) return null;
+  await fijarAjuste(sql, CLAVE_EN_MARCHA, ahora());
+  try {
+    const r = await rehacerEnlacesEntidades(sql, redactor, o);
+    await fijarAjuste(sql, CLAVE_VERSION, String(VERSION_ENLACES));
+    return r;
+  } finally {
+    await fijarAjuste(sql, CLAVE_EN_MARCHA, null);
+  }
+}

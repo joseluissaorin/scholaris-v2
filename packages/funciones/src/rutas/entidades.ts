@@ -3,7 +3,7 @@
 import type { EntornoFunciones } from '../puertos.js';
 import {
   buscarEntidades, caminoEntidades, encolarEntidades, entidadesDocumento, entidadesLector, estadoEntidades, estadoExtraccion,
-  extraerEntidadesDocumento, fichaEntidad, hayEntidadesPendientes, lineaTemporalEntidad, mencionesEntidad, reanudarEntidades, rehacerEnlacesEntidades,
+  extraerEntidadesDocumento, fichaEntidad, hayEntidadesPendientes, lineaTemporalEntidad, mencionesEntidad, reanudarEntidades, rehacerEnlacesEntidades, enlacesAlDia, ponerAlDiaEnlaces,
   vecindarioEntidad,
 } from '../entidades/index.js';
 import { ErrorFunciones } from '../util.js';
@@ -19,6 +19,8 @@ export function rutasEntidades<E extends EntornoFunciones>(app: AppFunciones<E>)
   app.get('/entidades/estado', manejar(async (c, p) => {
     // Mirar el estado también despierta lo que se quedó parado (un Durable Object reciclado).
     if (p.enSegundoPlano && p.inteligencia?.redactor && (await hayEntidadesPendientes(p.sql))) p.enSegundoPlano(reanudarEntidades(p));
+    // Reglas de enlace nuevas: la biblioteca se repara sola, una vez, sin volver a extraer.
+    if (p.enSegundoPlano && !(await enlacesAlDia(p.sql))) p.enSegundoPlano(ponerAlDiaEnlaces(p.sql, p.inteligencia?.redactor).catch((e) => console.error('enlaces', e)));
     return c.json(await estadoEntidades(p.sql));
   }));
 

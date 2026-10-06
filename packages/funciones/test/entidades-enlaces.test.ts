@@ -7,10 +7,12 @@
  *   3. «Charlie Parker» con el alias «Johnny».
  * Y la reparación sin volver a extraer de una biblioteca que ya los tiene.
  */
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { SQL } from '@scholaris/nucleo';
 import { buscarEntidades, caminoEntidades, elegirCandidato, extraerEntidadesDocumento, fichaEntidad, formaCompatible, rehacerEnlacesEntidades } from '../src/index.js';
 import { estanteria, puertos, redactorFalso, sembrar } from './ayudas.js';
+
+afterEach(() => { vi.unstubAllGlobals(); });
 
 const FICTICIOS = new Set(['Johnny Carter', 'Dédée', 'Johnny']);
 
@@ -178,5 +180,32 @@ describe('enlaces honestos', () => {
     await rehacerEnlacesEntidades(sql, redactor, { wikidata: { fetch: w.f, pausa: 0 } });
     expect(await sql.ejecutar('SELECT id, nombre, alias, wikidata, ficticia, fusionada_en, n_menciones FROM entidades ORDER BY id')).toEqual(antes);
     expect(w.llamadas.length).toBe(consultas);
+  });
+
+  it('una biblioteca anterior se repara sola al mirar el estado, una sola vez', async () => {
+    const { Hono } = await import('hono');
+    const { rutasFunciones } = await import('../src/index.js');
+    const w = wikidataFalso();
+    vi.stubGlobal('fetch', w.f);
+    const sql = await biblioteca();
+    const redactor = redactorConErrores();
+    const tareas: Promise<unknown>[] = [];
+    const p = puertos(sql, { inteligencia: { redactor }, enSegundoPlano: (x) => { tareas.push(x); } });
+    for (const d of ['entrevista', 'perseguidor']) await extraerEntidadesDocumento(p, d, { wikidata: false, relaciones: false });
+    // Así estaba una biblioteca hecha con las reglas anteriores.
+    await sql.ejecutar("UPDATE entidades SET ficticia = NULL, descripcion = NULL WHERE tipo = 'persona'");
+    await sql.ejecutar("DELETE FROM funciones_ajustes WHERE clave = 'entidades_enlaces_version'");
+    const app = new Hono<{ Variables: { funciones: typeof p } }>();
+    app.use('*', async (c, next) => { c.set('funciones', p); await next(); });
+    rutasFunciones(app);
+    expect((await app.request('/entidades/estado')).status).toBe(200);
+    await Promise.all(tareas);
+    expect((await entidad(sql, 'Johnny Carter')).ficticia).toBe(1);
+    expect((await entidad(sql, 'El perseguidor')).wikidata).toBe('Q5999002');
+    const llamadas = redactor.llamadas;
+    tareas.length = 0;
+    await app.request('/entidades/estado');
+    await Promise.all(tareas);
+    expect(redactor.llamadas).toBe(llamadas);
   });
 });

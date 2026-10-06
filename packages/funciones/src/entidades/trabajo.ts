@@ -240,6 +240,11 @@ export async function borrarEntidadesDocumento(sql: SQL, documento: string, conT
  */
 export async function reanudarEntidades(p: PuertosFunciones, o: OpcionesEntidades & { todos?: boolean; maximo?: number } = {}): Promise<string[]> {
   if (!p.inteligencia?.redactor) return [];
+  // Antes de nada, si las reglas de enlace han cambiado, la biblioteca se pone al día.
+  try {
+    const { ponerAlDiaEnlaces } = await import('./reparar.js');
+    await ponerAlDiaEnlaces(p.sql, p.inteligencia.redactor, o.wikidata === false ? { wikidata: false } : o.wikidata ? { wikidata: o.wikidata } : {});
+  } catch { /* la reparación es un añadido: la extracción sigue */ }
   const limite = new Date(Date.now() - CADUCIDAD_TRABAJO_MS).toISOString();
   const docs = (await p.sql.ejecutar<{ documento: string }>(
     `SELECT documento FROM entidades_trabajos
