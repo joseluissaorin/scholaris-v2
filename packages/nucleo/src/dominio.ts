@@ -128,9 +128,29 @@ export interface MetadatosDocumento {
   idioma?: string;            // BCP-47: «es», «la», «fr»
   tipoCSL?: string;           // «book», «article-journal», «chapter», «interview»…
   resumen?: string;
+  /** Lengua original de la obra (BCP-47), si es una traducción. */
+  idiomaOriginal?: string;
+  /** Mención de edición tal como figura: «2.ª ed.», «Canto edition», «reimpr. 1964». */
+  edicion?: string;
+  /** Colección o serie editorial: «Letras Hispánicas», «Canto». */
+  coleccion?: string;
+  /** Obra que contiene a esta: el libro de un cuento o capítulo, el programa de una emisión. */
+  contenedor?: string;
+  /** Fecha completa si se conoce (emisiones, artículos): ISO «1977-03-20». */
+  fecha?: string;
+  /**
+   * Sin año impreso («s. f.»): horquilla plausible SOLO si hay pruebas
+   * (p. ej., años de actividad del impresor). Es incierta por definición.
+   */
+  sinFecha?: { desde?: number; hasta?: number; fundamento: string };
   /** Confianza 0-1 por campo, y de dónde salió cada uno. */
-  procedencia?: Record<string, { fuente: 'lectura' | 'crossref' | 'openalex' | 'usuario' | 'epub' | 'pdf'; confianza: number }>;
+  procedencia?: Record<string, { fuente: FuenteMetadato; confianza: number }>;
 }
+
+/** De dónde sale un campo de la ficha. */
+export type FuenteMetadato =
+  | 'lectura' | 'crossref' | 'openalex' | 'usuario' | 'epub' | 'pdf'
+  | 'colofon' | 'openlibrary' | 'wikidata' | 'wikipedia' | 'googlebooks' | 'arxiv' | 'datacite' | 'impresores';
 
 export type EstadoDocumento = 'pendiente' | 'procesando' | 'listo' | 'error';
 
