@@ -17,6 +17,7 @@ import { BLOQUE_INSPECCION, qi } from './consultas';
 import { esFotograma, esVacio, ImagenFigura, useFigurasDocumento, VisorFigura } from './figuras';
 import { Apartado, Carril, nombreLector, pct } from './resumen';
 import { coincide } from './texto';
+import { RehacerFiguras } from './rehacer-figuras';
 
 /** El margen del contenedor respecto al principio de la página (para el virtualizador de ventana). */
 function useMargen(ref: React.RefObject<HTMLElement | null>) {
@@ -241,7 +242,7 @@ export function FigurasInspector({ doc }: { doc: DetalleDocumento }) {
   const fotogramas = figuras.some(esFotograma);
   return (
     <Apartado titulo={fotogramas ? 'Fotogramas clave' : 'Figuras'} descripcion={fotogramas ? 'Los fotogramas que se guardaron del vídeo, con lo que se ve en cada uno (texto en pantalla, personas, objetos), descrito al leerlo.' : 'Las figuras que se encontraron al leer: la imagen, su pie impreso y la descripción automática de lo que se ve.'}
-      accion={<span className="shrink-0 text-[0.8125rem] text-coffee-600 tnum">{numero(visibles.length)} de {numero(figuras.length)}</span>}>
+      accion={<div className="flex shrink-0 flex-col items-end gap-2 sm:flex-row sm:items-center sm:gap-3"><span className="text-[0.8125rem] text-coffee-600 tnum">{numero(visibles.length)} de {numero(figuras.length)}</span>{doc.estado === 'listo' ? <RehacerFiguras doc={doc} /> : null}</div>}>
       <label className="relative mb-4 block">
         <span className="sr-only">Buscar en lo que se ve</span>
         <Icono nombre="buscar" tam={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-coffee-400" />
@@ -249,7 +250,7 @@ export function FigurasInspector({ doc }: { doc: DetalleDocumento }) {
           className="h-10 w-full rounded-xl border border-cream-400 bg-cream-50 pl-9 pr-3 text-[0.875rem] shadow-[var(--hundido)] outline-none focus:border-coffee-500" />
       </label>
       {cargando ? <div className="grid grid-cols-2 gap-4 md:grid-cols-3">{Array.from({ length: 6 }, (_, i) => <Esqueleto key={i} className="aspect-[4/3]" />)}</div>
-        : !figuras.length ? <p className="text-[0.875rem] text-apagado">Este documento no tiene figuras ni imágenes.</p>
+        : !figuras.length ? <p className="text-[0.875rem] text-apagado">Este documento no tiene figuras ni imágenes. Si crees que sí las tiene, «Volver a buscar figuras» mira sus páginas otra vez.</p>
         : (
           <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
             {visibles.map((f) => (

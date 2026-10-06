@@ -20,7 +20,7 @@ import type {
   ParcheMetadatos, PedirPartesImportacion, RehacerFolios,
   Reprocesar, ResumenDocumento, SeccionVista, UnidadVista, VolcadoDocumento,
 } from './documentos.js';
-import type { ContenidoDocumento, FiguraEncontrada, FragmentoInspeccion, MapaVectores, UnidadInspeccion } from './contenido.js';
+import type { ContenidoDocumento, FiguraEncontrada, FigurasRehechas, FragmentoInspeccion, MapaVectores, RehacerFiguras, UnidadInspeccion } from './contenido.js';
 import type { AnadirDocumentos, Biblioteca, Compartir, Miembro, NuevaBiblioteca } from './bibliotecas.js';
 import type {
   BibliotecaSeguida, BuscarConjunta, Copiar, DetalleLote, ElementoLote, Enlace, EstimacionLote, EstimarLote, Invitacion, InvitacionRecibida,
@@ -210,6 +210,10 @@ export function crearCliente(opciones: OpcionesCliente) {
       unidadesInspeccion: (id: string, desde: number, hasta: number) => get<UnidadInspeccion[]>(`/documentos/${e(id)}/contenido/unidades`, { desde, hasta }),
       fragmentosInspeccion: (id: string, p: { unidad?: number } & ParamsPagina = {}) => get<Pagina<FragmentoInspeccion>>(`/documentos/${e(id)}/contenido/fragmentos`, p),
       mapaVectores: (id: string, p: { espacio?: string; max?: number } = {}) => get<MapaVectores>(`/documentos/${e(id)}/contenido/mapa`, p),
+      /** Rehace solo las figuras (región, pie, descripción, vectores, escenas) desde las imágenes guardadas. */
+      rehacerFiguras: (id: string, p: RehacerFiguras = {}) => post<FigurasRehechas>(`/documentos/${e(id)}/figuras/rehacer`, p),
+      /** Vectoriza recortes de figuras hechos en el navegador (JPEG o PNG en base64). */
+      vectoresFiguras: (id: string, figuras: Array<{ id: string; mime: string; base64: string }>) => post<{ vectores: number }>(`/documentos/${e(id)}/figuras/vectores`, { figuras }),
     },
 
     /** Figuras e imágenes de toda la biblioteca (láminas, diagramas, fotogramas). */

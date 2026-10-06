@@ -148,3 +148,35 @@ export interface FiguraResultado {
   region?: RegionFigura;
   t?: number;
 }
+
+/**
+ * Rehacer solo las figuras, sin volver a leer el texto:
+ *
+ *   POST /documentos/:id/figuras/rehacer  RehacerFiguras → FigurasRehechas
+ *   POST /documentos/:id/figuras/vectores { figuras: [{ id, mime, base64 }] } → { vectores: number }
+ *        (el navegador recorta las figuras de página y las manda a vectorizar:
+ *        en el servidor no se pueden recortar imágenes)
+ */
+export interface RehacerFiguras {
+  /** Solo contar: páginas, llamadas y coste estimado, sin llamar a ningún modelo. */
+  simular?: boolean;
+  /** Mirar todas las páginas con imagen (por defecto) o solo las candidatas. */
+  paginas?: 'todas' | 'candidatas';
+}
+
+export interface FigurasRehechas {
+  documento: string;
+  clase: 'paginas' | 'fotogramas' | 'ninguna';
+  simulado: boolean;
+  paginas: { todas: number; candidatas: number; examinadas: number };
+  llamadas: { vision: number; descripcion: number; vectores: number; total: number };
+  /** Coste en dólares: estimado si es simulado; el medido (o estimado si no se pudo medir) si no. */
+  costeUsd: number;
+  /** Para elegir antes de lanzar: llamadas y coste mirando todas las páginas o solo las candidatas. */
+  estimacion: { todas: { llamadas: number; usd: number }; candidatas: { llamadas: number; usd: number } };
+  figuras: { antes: number; despues: number; conservadas: number; nuevas: number; borradas: number; conRegion: number; descritas: number; conVector: number; sinVector: number };
+  /** Vídeo: fotogramas marcados como cambio de escena. */
+  escenas?: number;
+  ms: number;
+  avisos: string[];
+}

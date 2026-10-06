@@ -7,13 +7,16 @@ import type { Hono } from 'hono';
 import type { Ancla, ValorSQL } from '@scholaris/nucleo';
 import { bytesAVector, enLista } from '@scholaris/nucleo';
 import type {
-  ContenidoDocumento, FiguraEncontrada, FiguraResultado, FragmentoInspeccion, MapaVectores, Pagina, RegionFigura, UnidadInspeccion,
+  ContenidoDocumento, FiguraEncontrada, FiguraResultado, FigurasRehechas, FragmentoInspeccion, MapaVectores, Pagina, RegionFigura, RehacerFiguras, UnidadInspeccion,
 } from '@scholaris/contrato';
-import { leerDocumento, leerEspacios, leerProcedencia } from '@scholaris/spdf';
+import type { Documento, Vector } from '@scholaris/nucleo';
+import { escribirEspacio, escribirVectores, leerDocumento, leerEspacios, leerProcedencia } from '@scholaris/spdf';
+import { metadatosIndice, rehacerFiguras } from '@scholaris/ingesta';
+import { costeTokens } from '@scholaris/proveedores';
 import type { Entorno } from '../entorno.js';
-import { fallo, noEncontrado } from '../compartido/errores.js';
+import { cuerpoJson, exigir, fallo, noEncontrado } from '../compartido/errores.js';
 import type { PuertosUsuario } from '../puertos.js';
-import { claveDe, cursorADesplazamiento, desplazamientoACursor, entero, etiquetaAncla, json, prm, puertos, type Ctx } from './util.js';
+import { claveDe, cursorADesplazamiento, desplazamientoACursor, entero, etiquetaAncla, exigirEscritura, json, prm, puertos, type Ctx } from './util.js';
 
 type Fila = Record<string, ValorSQL>;
 
@@ -123,10 +126,39 @@ async function figurasPorId(p: PuertosUsuario, ids: string[]): Promise<Map<strin
 }
 
 /** Vecinos de un vector entre las figuras del índice (ids sin prefijo). */
-async function vecinasEnIndice(p: PuertosUsuario, v: Float32Array, k: number): Promise<Array<{ id: string; puntuacion: number }>> {
+async function vecinasEnIndice(p: PuertosUsuario, v: Float32Array, k: number, conPaginas = false): Promise<Array<{ id: string; puntuacion: number }>> {
   if (!p.indice) return [];
-  const r = await p.indice.consultar(p.config.espacioNombres(p.usuario.id), v, { k, filtro: { objetivo: 'figura' }, conMetadatos: true });
-  return r.map((c) => ({ id: c.id.replace(/^[a-z]:/, ''), puntuacion: c.puntuacion }));
+  const r = await p.indice.consultar(p.config.espacioNombres(p.usuario.id), v, { k, filtro: { objetivo: conPaginas ? { $in: ['figura', 'unidad'] } : 'figura' }, conMetadatos: true });
+  const salida = r.map((c) => ({ id: c.id.replace(/^[a-z]:/, ''), puntuacion: c.puntuacion }));
+  if (!conPaginas) return salida;
+  // Las páginas parecidas cuentan por sus figuras.
+  const paginas = salida.filter((x) => !x.id.startsWith('fg'));
+  if (!paginas.length) return salida;
+  const l = enLista(paginas.map((x) => x.id));
+  const figs = await p.sql.ejecutar<{ id: string; unidad: string }>(`SELECT id, unidad FROM figuras WHERE unidad IN ${l.sql}`, l.param);
+  const punt = new Map(paginas.map((x) => [x.id, x.puntuacion]));
+  const todas = [...salida.filter((x) => x.id.startsWith('fg')), ...figs.map((f) => ({ id: f.id, puntuacion: punt.get(f.unidad) ?? 0 }))];
+  const vistas = new Set<string>();
+  return todas.sort((a, b) => b.puntuacion - a.puntuacion).filter((x) => !vistas.has(x.id) && vistas.add(x.id));
+}
+
+/** Coste estimado de rehacer figuras: visión con Flash (imágenes de ~1100 tokens), descripciones con Flash-Lite, vectores de imagen. */
+function estimarCoste(vision: number, imagenes: number, descripcion: number, vectores: number): number {
+  const v = costeTokens('gemini-3.8-flash', imagenes * 1100 + vision * 700, vision * 900) ?? 0;
+  const d = costeTokens('gemini-3.5-flash-lite', descripcion * (4 * 1100 + 300), descripcion * 840) ?? 0;
+  const e = costeTokens('gemini-embedding-2', vectores * 8 * 1100, 0) ?? 0;
+  return Math.round((v + d + e) * 10_000) / 10_000;
+}
+
+const MIME_IMAGEN = (clave: string) => (/\.png$/i.test(clave) ? 'image/png' : /\.webp$/i.test(clave) ? 'image/webp' : 'image/jpeg');
+
+/** Escribe vectores de figuras en la estantería y en el índice. */
+async function guardarVectoresFiguras(p: PuertosUsuario, d: Documento, vs: Vector[], tiempos: Map<string, number>): Promise<void> {
+  if (!vs.length) return;
+  const ia = await p.inteligencia();
+  await escribirEspacio(p.sql, ia.embebedor.espacio);
+  await p.sql.transaccion((tx) => escribirVectores(tx, vs.map((v) => ({ ...v, documento: d.id }))));
+  if (p.indice) await p.indice.insertar(p.config.espacioNombres(p.usuario.id), vs.map((v) => ({ id: v.id, valores: v.valores, metadatos: metadatosIndice(d, v.objetivo, tiempos.get(v.id)) })));
 }
 
 /**
@@ -158,6 +190,68 @@ export async function figuraDeResultado(p: PuertosUsuario, documento: string, fr
 }
 
 export function rutasContenido(app: Hono<Entorno>): void {
+  app.post('/documentos/:id/figuras/rehacer', async (c: Ctx) => {
+    const p = puertos(c);
+    const id = prm(c, 'id');
+    const b = await cuerpoJson<RehacerFiguras>(c).catch(() => ({} as RehacerFiguras));
+    if (!b.simular) exigirEscritura(c);
+    const d = (await leerDocumento(p.sql, id)) ?? noEncontrado('El documento');
+    exigir(d.estado === 'listo', 'El documento aún se está leyendo; vuelve a intentarlo cuando termine.');
+    const ia = await p.inteligencia();
+    const contador = ia.contador as { total?: () => { usd: number; llamadas: number } } | undefined;
+    const antes = contador?.total?.();
+    const r = await rehacerFiguras(id, {
+      sql: p.sql,
+      imagen: async (clave) => { const bytes = await p.almacen.bytes(claveDe(p.usuario.id, id, clave)); return bytes ? { bytes, mime: MIME_IMAGEN(clave) } : null; },
+      redactor: ia.redactor,
+      embebedor: ia.embebedor,
+      guardarVectores: (vs, tiempos) => guardarVectoresFiguras(p, d, vs, tiempos),
+      borrarVectores: async (ids) => {
+        const l = enLista(ids);
+        await p.sql.ejecutar(`DELETE FROM vectores WHERE objetivo = 'figura' AND id IN ${l.sql}`, l.param);
+        if (p.indice) await p.indice.borrar(p.config.espacioNombres(p.usuario.id), ids).catch(() => undefined);
+      },
+    }, { simular: !!b.simular, paginas: b.paginas ?? 'todas', ...(d.metadatos.idioma ? { idioma: d.metadatos.idioma } : {}), contexto: `«${d.metadatos.titulo}»` });
+    const despues = contador?.total?.();
+    const { descripcion, vectores } = r.llamadas;
+    const paginas = r.clase === 'paginas';
+    const estimacion = {
+      todas: { llamadas: r.llamadasSegun.todas, usd: estimarCoste(paginas ? r.llamadasSegun.todas : 0, paginas ? r.paginas.todas : 0, descripcion, vectores) },
+      candidatas: { llamadas: r.llamadasSegun.candidatas, usd: estimarCoste(paginas ? r.llamadasSegun.candidatas : 0, paginas ? r.paginas.candidatas : 0, descripcion, vectores) },
+    };
+    const medido = antes && despues ? Math.round((despues.usd - antes.usd) * 10_000) / 10_000 : null;
+    const salida: FigurasRehechas = {
+      documento: id, clase: r.clase, simulado: r.simulado, paginas: r.paginas,
+      llamadas: { ...r.llamadas, total: r.llamadas.vision + r.llamadas.descripcion + r.llamadas.vectores },
+      costeUsd: !r.simulado && medido !== null && medido > 0 ? medido : estimarCoste(r.llamadas.vision, r.imagenesVision, descripcion, vectores),
+      estimacion, figuras: r.figuras, ...(r.escenas !== undefined ? { escenas: r.escenas } : {}), ms: r.ms, avisos: r.avisos,
+    };
+    if (!r.simulado) {
+      await p.sql.ejecutar('INSERT INTO procedencia (documento, fase, proveedor, detalle, ms, cuando) VALUES (?, ?, ?, ?, ?, ?)', id, 'figuras', `rehacer:${ia.redactor.nombre}`,
+        JSON.stringify({ que: 'rehacer', paginas: r.paginas.examinadas, ...r.figuras, ...(r.escenas !== undefined ? { escenas: r.escenas } : {}), llamadas: salida.llamadas.total, usd: salida.costeUsd }), Math.round(r.ms), new Date().toISOString());
+    }
+    return c.json(salida);
+  });
+
+  app.post('/documentos/:id/figuras/vectores', async (c: Ctx) => {
+    const p = puertos(c);
+    exigirEscritura(c);
+    const id = prm(c, 'id');
+    const b = await cuerpoJson<{ figuras: Array<{ id: string; mime: string; base64: string }> }>(c);
+    exigir(Array.isArray(b.figuras) && b.figuras.length > 0 && b.figuras.length <= 16, 'Manda entre 1 y 16 recortes.');
+    const d = (await leerDocumento(p.sql, id)) ?? noEncontrado('El documento');
+    const l = enLista(b.figuras.map((f) => f.id));
+    const existen = new Set((await p.sql.ejecutar<{ id: string }>(`SELECT id FROM figuras WHERE documento = ? AND id IN ${l.sql}`, id, l.param)).map((f) => f.id));
+    const piezas = b.figuras.filter((f) => existen.has(f.id) && /^image\/(jpeg|png|webp)$/.test(f.mime) && f.base64.length < 4_000_000);
+    if (!piezas.length) return c.json({ vectores: 0 });
+    const ia = await p.inteligencia();
+    exigir(ia.embebedor.admite('imagen'), 'El modelo de vectores no admite imágenes.');
+    const bytes = piezas.map((f) => Uint8Array.from(atob(f.base64), (ch) => ch.charCodeAt(0)));
+    const vs = await ia.embebedor.vectorizar(piezas.map((f, i) => ({ modalidad: 'imagen' as const, bytes: bytes[i]!, mime: f.mime })), 'documento');
+    await guardarVectoresFiguras(p, d, piezas.map((f, i) => ({ objetivo: 'figura' as const, id: f.id, espacio: ia.embebedor.espacio.id, valores: vs[i]! })), new Map());
+    return c.json({ vectores: vs.length });
+  });
+
   app.get('/documentos/:id/contenido', async (c: Ctx) => {
     const p = puertos(c);
     const id = prm(c, 'id');
@@ -422,8 +516,11 @@ export function rutasContenido(app: Hono<Entorno>): void {
     if (!base) noEncontrado('La figura');
     const ia = await p.inteligencia();
     const [fila] = await p.sql.ejecutar<{ valores: Uint8Array }>("SELECT valores FROM vectores WHERE objetivo = 'figura' AND id = ? AND espacio = ?", id, ia.embebedor.espacio.id);
-    if (fila && p.indice) {
-      const vecinas = (await vecinasEnIndice(p, bytesAVector(fila.valores), k + 1)).filter((x) => x.id !== id);
+    // Sin vector propio (figuras de página sin recortar), el de su página.
+    const [dePagina] = fila ? [] : await p.sql.ejecutar<{ valores: Uint8Array }>("SELECT valores FROM vectores WHERE objetivo = 'unidad' AND id = ? AND espacio = ?", base!.unidad, ia.embebedor.espacio.id);
+    const vector = fila ?? dePagina;
+    if (vector && p.indice) {
+      const vecinas = (await vecinasEnIndice(p, bytesAVector(vector.valores), k + 8, !fila)).filter((x) => x.id !== id && x.id !== base!.unidad);
       const filas = await figurasPorId(p, vecinas.map((x) => x.id));
       const salida = await Promise.all(vecinas.filter((x) => filas.has(x.id)).slice(0, k).map((x) => aEncontrada(p, filas.get(x.id)!, x.puntuacion, ['imagen'])));
       if (salida.length) return c.json(salida);
