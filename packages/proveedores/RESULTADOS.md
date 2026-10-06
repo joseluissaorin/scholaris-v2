@@ -119,6 +119,22 @@ para que el lector por defecto sea 3.8 Flash.
 Llama 4 Scout queda como reserva por defecto (mejor que la tubería antigua, pero
 lejos de Gemini). Ninguno acepta PDF: en la cascada se saltan los pliegos PDF.
 
+## Modo económico: lectura por lotes (Batch API)
+
+Tres páginas del *Casamiento* (físicas 9-11) con `gemini-3.8-flash`, el mismo cuerpo que
+el lector síncrono:
+
+| modo | resultado | tiempo hasta el resultado | CER oro p. 10 | coste |
+|---|---|---|---|---|
+| JSONL por la Files API (por defecto) | 3 de 3 páginas | 211 s | 0,005 | 0,0070 $ (al 50 %) |
+| peticiones en línea | 3 errores «invalid argument» | 128 s | sin dato | 0 |
+
+En línea, las peticiones sencillas pasan (texto, esquema, imagen, presupuesto 0, filtros
+de seguridad, probados uno a uno), pero el cuerpo completo del lector falla aunque se le
+quite el esquema, la resolución o los filtros; el mismo cuerpo funciona por
+`generateContent` y en JSONL. Por eso `lotes()` usa siempre el fichero. Con lotes tan
+pequeños, el resultado llega en 2-4 minutos; Google promete menos de 24 h.
+
 ## Embebedor: Gemini Embedding 2 @1536
 
 | prueba | ms | resultado |
@@ -183,5 +199,5 @@ El coste de almacenamiento de la caché no está incluido.
   probado con `fetch` simulado.
 - **Binding `env.AI`** dentro de un Worker: probado con un binding simulado; en vivo
   se usó la API REST con el token OAuth de wrangler.
-- Subida a la Files API de Gemini para audios de más de 18 MB.
+- Subida a la Files API para audios de más de 18 MB (la subida reanudable sí está probada en vivo con los lotes).
 - AI Gateway (`baseUrl`): solo comprobada la forma de la URL.

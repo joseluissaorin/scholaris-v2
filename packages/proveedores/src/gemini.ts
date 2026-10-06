@@ -145,7 +145,12 @@ export interface LotesLectura {
 }
 
 export interface OpcionesLotesGemini extends OpcionesLectorGemini {
-  /** Por encima de este tamaño (bytes de JSON) el lote va como JSONL por la Files API. Por defecto 15 MB. */
+  /**
+   * Por encima de este tamaño (bytes de JSON) el lote va como JSONL por la Files API. Por defecto 0:
+   * SIEMPRE por fichero. Probado el 6-10-2026: el mismo cuerpo del lector que funciona en
+   * generateContent y en JSONL devuelve «Request contains an invalid argument» en lote en línea
+   * (las peticiones pequeñas en línea sí pasan). Subir el umbral solo para peticiones sencillas.
+   */
   maxEnLinea?: number;
 }
 
@@ -433,7 +438,7 @@ export function crearGemini(config: ConfigGemini): ClienteGemini {
 
   function lotes(o: OpcionesLotesGemini = {}): LotesLectura {
     const modelo = o.modelo ?? MODELOS_GEMINI.lector;
-    const maxEnLinea = o.maxEnLinea ?? 15_000_000;
+    const maxEnLinea = o.maxEnLinea ?? 0;
     const contados = new Set<string>();
     // La clave de cada petición lleva la primera página física y el número de páginas,
     // para poder interpretar la respuesta sin guardar estado (un Workflow puede consultar desde otro proceso).

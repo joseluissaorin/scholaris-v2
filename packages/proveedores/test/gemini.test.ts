@@ -222,7 +222,7 @@ describe('Gemini · lotes (Batch API)', () => {
       };
     });
     const usos: number[] = [];
-    const l = crearGemini({ clave: 'K', fetch, onUso: (u) => usos.push(u.usd ?? 0) }).lotes({ modelo: 'gemini-3.8-flash' });
+    const l = crearGemini({ clave: 'K', fetch, onUso: (u) => usos.push(u.usd ?? 0) }).lotes({ modelo: 'gemini-3.8-flash', maxEnLinea: Infinity });
     const id = await l.enviar([{ clave: 'a|b', entrada: { imagenes: IMG(1), primeraFisica: 9 } }, { clave: 'c', entrada: { imagenes: IMG(1), primeraFisica: 10 } }]);
     expect(id).toBe('batches/abc');
     expect(llamadas[0]?.url).toBe('https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:batchGenerateContent');
@@ -237,7 +237,7 @@ describe('Gemini · lotes (Batch API)', () => {
     expect(usos).toHaveLength(1);
   });
 
-  it('por encima del umbral sube un JSONL con la subida reanudable y descarga el fichero de respuestas', async () => {
+  it('por defecto sube un JSONL con la subida reanudable y descarga el fichero de respuestas', async () => {
     const { fetch, llamadas } = fetchFalso((ll) => {
       if (ll.url.endsWith('/upload/v1beta/files')) return new Response('{}', { headers: { 'x-goog-upload-url': 'https://subida/sesion' } });
       if (ll.url === 'https://subida/sesion') return { file: { name: 'files/entrada', uri: 'https://x/files/entrada' } };
@@ -248,7 +248,7 @@ describe('Gemini · lotes (Batch API)', () => {
       }
       return { name: 'batches/f', metadata: { state: 'JOB_STATE_SUCCEEDED' }, response: { responsesFile: 'files/salida' } };
     });
-    const l = crearGemini({ clave: 'K', fetch }).lotes({ maxEnLinea: 1 });
+    const l = crearGemini({ clave: 'K', fetch }).lotes();
     const id = await l.enviar([{ clave: 'x', entrada: { imagenes: IMG(1), primeraFisica: 5 } }]);
     expect(llamadas[0]?.cabeceras['x-goog-upload-protocol']).toBe('resumable');
     expect((llamadas[2]?.cuerpo as { batch: { input_config: unknown } }).batch.input_config).toEqual({ file_name: 'files/entrada' });
