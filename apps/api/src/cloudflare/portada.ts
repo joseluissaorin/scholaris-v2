@@ -64,3 +64,20 @@ export function recordarDemostracion(peticion: Request, r: Response): Response {
   nueva.headers.set('cache-control', 'no-store');
   return nueva;
 }
+
+/**
+ * Un fichero que no existe (con extensión: /.well-known/ai-catalog.json, /x.json…)
+ * no debe recibir el index.html de la SPA con un 200: los agentes y los
+ * validadores lo leen como un JSON roto. Si los estáticos devolvieron HTML para
+ * una ruta con extensión que no es .html, es la vuelta de la SPA: 404 limpio.
+ */
+export function sinVueltaSpa(ruta: string, r: Response): Response {
+  const ultimo = ruta.split('/').pop() ?? '';
+  const extension = /\.([a-z0-9]+)$/i.exec(ultimo)?.[1]?.toLowerCase();
+  if (!extension || extension === 'html' || extension === 'htm') return r;
+  if (!(r.headers.get('content-type') ?? '').includes('text/html')) return r;
+  return new Response('No encontrado\n', {
+    status: 404,
+    headers: { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'public, max-age=300', 'x-content-type-options': 'nosniff' },
+  });
+}

@@ -23,7 +23,9 @@
       // Páginas públicas: el Worker negocia el Markdown (Accept: text/markdown) y añade la cabecera Link.
       "/acerca*", "/en", "/en.md", "/en/api*", "/en/knowledge*", "/en/agents*", "/api", "/api.md", "/saber*", "/agentes*",
       // La demostración en vídeo: MP4 en R2, con Range (apps/api/src/cloudflare/demo.ts).
-      "/demo/*"
+      "/demo/*",
+      // Sin catálogo de IA: 404 limpio en vez del index.html de la SPA (ver sinVueltaSpa).
+      "/ai-catalog.json"
     ]
   },
 

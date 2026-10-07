@@ -9,7 +9,7 @@ Los estilos de cita de `packages/citas/src/csl/vendor/estilos` (APA, Chicago, ML
 ## Tipografías
 
 - **DM Sans** (`apps/web/public/fuentes/dm-sans-latin.woff2`, `apps/web/public/portada/dm-sans.woff2`), © 2014 The DM Sans Project Authors, bajo la **SIL Open Font License 1.1**.
-- **Nothing You Could Do** (`apps/web/public/portada/mano.woff2`), © 2010 Kimberly Geswein, bajo la **SIL Open Font License 1.1**.
+- **Nothing You Could Do** (`apps/web/public/portada/mano.woff2`), © 2010 Kimberly Geswein, bajo la **SIL Open Font License 1.1**. Versión modificada (sin nombre reservado en la original): subconjunto latino con el repertorio español y la «í» redibujada con un acento visible; se rehace con `apps/web/scripts/rehacer-mano.py`.
 
 Texto de la licencia: <https://openfontlicense.org/open-font-license-official-text/>.
 

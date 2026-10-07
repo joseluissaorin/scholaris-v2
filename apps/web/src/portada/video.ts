@@ -79,7 +79,7 @@ export const TEXTOS_VIDEO: Record<Lengua, TextosVideo> = {
     entradilla:
       'Una comedia de Lope impresa hacia 1700, un artículo, una lectura de Bécquer y dos horas de Cortázar en televisión entran a la vez, y en ocho minutos se ve lo que cuenta esta portada: el folio impreso, el segundo exacto, la búsqueda, las respuestas con su nota y la cita comprobada.',
     dato: '8:43 · en inglés, con subtítulos',
-    nota: 'pulsa y mira',
+    nota: 'mírala trabajar',
     ver: 'Ver la demostración (8 min)',
     capitulos: 'Capítulos del vídeo',
     descargar: 'Descargar el MP4',

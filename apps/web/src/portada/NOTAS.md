@@ -106,8 +106,13 @@ FCP 1,2 s, LCP 1,6 s, CLS 0, TBT 0 ms. Escritorio: LCP 0,5 s. El HTML pesa
   buckets (`CLOUDFLARE_ACCOUNT_ID=… wrangler r2 object put <bucket>/publico/demo/<fichero> --remote`)
   y cambiar los nombres en `video.ts`. Los nombres versionados permiten la
   caché inmutable.
-- Ojo: la letra de mano (`mano.woff2`) dibuja la «í» sin tilde; las notas a
-  mano nuevas la evitan.
+- La letra de mano (`mano.woff2`) se rehízo el 7-10-2026: en la fuente original
+  la tilde de la «í» es un trazo finísimo en la dirección del asta y, al tamaño
+  de las notas, la «í» se leía como «i». Ahora la «í» es el asta de la «i» más
+  un acento propio (`acute.i`), separado y visible, y el subconjunto lleva todo
+  el repertorio español (á é í ó ú ü ñ, mayúsculas, ¿ ¡ « » —). Se rehace y se
+  comprueba con `apps/web/scripts/rehacer-mano.py` (`--comprobar` falla si
+  falta un glifo o si la «í» no tiene su acento).
 
 ## Cambiar un dibujo
 

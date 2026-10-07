@@ -46,3 +46,21 @@ describe('portada en la raíz', () => {
     expect(await servirPortadaEnRaiz(new Request('https://ejemplo.org/', { headers: { cookie: '__session=abc' } }), estaticos)).toBeNull();
   });
 });
+
+import { sinVueltaSpa } from '../src/cloudflare/portada.js';
+
+describe('sin vuelta de la SPA para ficheros', () => {
+  const html = () => new Response('<!doctype html>', { status: 200, headers: { 'content-type': 'text/html; charset=utf-8' } });
+  it('un .json que no existe da 404, no el index.html', async () => {
+    const r = sinVueltaSpa('/.well-known/ai-catalog.json', html());
+    expect(r.status).toBe(404);
+    expect(r.headers.get('content-type')).toContain('text/plain');
+    expect(sinVueltaSpa('/ai-catalog.json', html()).status).toBe(404);
+  });
+  it('las páginas, los .html y los ficheros que sí existen pasan', () => {
+    expect(sinVueltaSpa('/biblioteca', html()).status).toBe(200);
+    expect(sinVueltaSpa('/acerca.html', html()).status).toBe(200);
+    const json = new Response('{}', { headers: { 'content-type': 'application/json' } });
+    expect(sinVueltaSpa('/.well-known/mcp/server-card.json', json).status).toBe(200);
+  });
+});

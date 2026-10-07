@@ -8,7 +8,7 @@
  *   scheduled  Cron: encola los vigilantes diarios (y los semanales los lunes).
  */
 import type { MensajeCorreo } from '../rutas/social.js';
-import { recordarDemostracion, servirPortadaEnRaiz } from './portada.js';
+import { recordarDemostracion, servirPortadaEnRaiz, sinVueltaSpa } from './portada.js';
 import { servirPublica } from '../compartido/markdown-publico.js';
 import { servirDemo } from './demo.js';
 import { prepararMotorWorkers } from '@scholaris/spdf/workers';
@@ -118,7 +118,7 @@ const normal: ExportedHandler<Env> = {
     // «/» sin sesión de Clerk: la portada estática servida en la propia raíz (200, sin redirección).
     const portada = await servirPortadaEnRaiz(peticion, (ruta) => env.ASSETS!.fetch(new Request(new URL(ruta, peticion.url), { method: 'GET', headers: peticion.headers })));
     if (portada) return portada;
-    const r = recordarDemostracion(peticion, await env.ASSETS.fetch(peticion));
+    const r = sinVueltaSpa(url.pathname, recordarDemostracion(peticion, await env.ASSETS.fetch(peticion)));
     if (r.status === 404 && peticion.method === 'GET' && esPagina(url.pathname)) {
       return env.ASSETS.fetch(new Request(new URL('/index.html', url), peticion));
     }
