@@ -15,7 +15,7 @@ Cada cifra es la mediana de 3 a 5 ejecuciones. Los tiempos de la app se toman co
 | Tras teclear el código de Clerk: barra y armazón | 1,7 s | 1,6 s |
 | Tras teclear el código de Clerk: biblioteca con documentos | ~3,3 s | **~2,0 s** |
 | CLS del lector de libros en el móvil (390 px) | **0,466** | **0,000** |
-| Infracciones de axe-core (38 pantallas) | 17 | 1 (moderada) |
+| Infracciones de axe-core (38 pantallas) | 17 | 0 |
 | Fotogramas con la barra lateral a la derecha o sin barra al cambiar de sección | 0 | 0 |
 
 El salto de la API venía de las cuentas en D1: cada petición creaba su `Cuentas` y repetía el esquema entero, unos 30 viajes a D1 en fila. Pasaba en cualquier ruta que tocara D1, también en la cuota de cada búsqueda. Ahora el esquema se comprueba una vez por aislamiento y en un solo lote, y las cuatro lecturas de las cuotas van a la vez.
@@ -69,10 +69,12 @@ Se recorrieron con capturas 31 pantallas en el escritorio y 7 en el móvil: bibl
 10. En la biblioteca, mientras llegaba la lista, la cabecera decía «0 documentos · 0 colecciones · 0 páginas». Ahora es un esqueleto.
 11. En Buscar y Preguntar, «Hace poco» repetía la misma consulta cuatro veces. Ya no hay repetidas.
 12. En un enlace caducado el motivo repetía el titular («Este enlace ya no funciona. Este enlace ya no funciona: …»).
-13. Accesibilidad: el botón «Copiar referencia» y los hablantes tenían un nombre accesible distinto del texto visible; los dos `aside` de la barra no tenían nombre; el SPDF entero tenía un `<main>` dentro de otro; y en Privacidad un `h3` iba sin `h2`. Queda una moderada en «recibir» (orden de encabezados del estado vacío).
+13. Accesibilidad: el botón «Copiar referencia» y los hablantes tenían un nombre accesible distinto del texto visible; los dos `aside` de la barra no tenían nombre; el SPDF entero tenía un `<main>` dentro de otro; en Privacidad un `h3` iba sin `h2`; y el titular de los estados vacíos es ahora un `h2`, que nunca salta niveles (era la última infracción, en el enlace caducado).
+14. En la ficha, el idioma y el tipo de obra salían en crudo («es», «chapter»). Ahora salen con su nombre («Español», «Capítulo»); el idioma, con `Intl.DisplayNames`, también en Corpus y en la búsqueda en todas las lenguas.
+15. Los temas del mapa salían sin tildes («Teatro aureo»). La instrucción del modelo exige la ortografía del español y una red barata pone las tildes que falten, también en los mapas ya hechos.
+16. Las descripciones de Wikidata de Personas y obras se piden en español y el inglés queda de reserva; las ya enlazadas se corrigen en la siguiente pasada de enlaces.
 
 ## Lo que queda (fuera de la web)
 
 - Los nombres y descripciones de los planes de Clerk Billing están en inglés en la instancia de desarrollo («Free», «All the features of Scholaris unlocked.»). Se cambian en el panel de Clerk, no en el código. En producción conviene comprobarlo con una cuenta real.
-- Algunos datos generados salen sin tilde o en inglés: el tema «Teatro aureo y epopeya carolingia» (lo nombra el modelo al agrupar), descripciones de Wikidata en inglés en Personas y obras («oldest son of Erasmus Darwin…»), y en la ficha el «Tipo (CSL)» y el «Idioma» se enseñan crudos (`chapter`, `es`).
 - La búsqueda definitiva depende de Vectorize y del reordenador. Para bajar de ~500 ms habría que reordenar menos candidatos o cachear la consulta vectorizada.
