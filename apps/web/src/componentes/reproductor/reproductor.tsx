@@ -582,11 +582,11 @@ function Hablantes({ tr }: { tr: Transcripcion }) {
       <ul className="mt-2 flex flex-col gap-1">
         {tr.hablantes.map((n, h) => (
           <li key={n}>
-            <button type="button" onClick={() => siguienteTurno(h)} className="group flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left text-[0.875rem] hover:bg-cream-200" aria-label={`${n}: ir a su siguiente intervención`}>
+            <button type="button" onClick={() => siguienteTurno(h)} className="group flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left text-[0.875rem] hover:bg-cream-200" title={`${n}: ir a su siguiente intervención`}>
               <FormaHablante h={h} tam={11} />
               <span className="min-w-0 flex-1 truncate font-medium text-coffee-800">{n}</span>
               <span className="font-mono text-[0.75rem] tnum text-apagado">{Math.round((tr.tiempoHablado[h]! / total) * 100)} %</span>
-              <span className="text-[0.75rem] text-apagado opacity-0 transition-opacity group-hover:opacity-100">siguiente</span>
+              <span className="text-[0.75rem] text-apagado opacity-0 transition-opacity group-hover:opacity-100">siguiente<span className="sr-only"> intervención</span></span>
             </button>
           </li>
         ))}

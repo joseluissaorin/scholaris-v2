@@ -199,7 +199,7 @@ function MarcaActiva({ nav, ruta }: { nav: RefObject<HTMLElement | null>; ruta: 
 /** Escritorio: la barra lateral fija. */
 export function Riel() {
   return (
-    <aside className="sticky top-0 hidden h-dvh w-56 shrink-0 flex-col bg-barra lg:flex">
+    <aside aria-label="Barra lateral" className="sticky top-0 hidden h-dvh w-56 shrink-0 flex-col bg-barra lg:flex">
       <ContenidoBarra />
     </aside>
   );
@@ -235,7 +235,7 @@ export function BarraMovil() {
       {abierta ? (
         <>
           <div className="fixed inset-0 z-40 bg-[rgb(26_15_10/0.6)] backdrop-blur-sm lg:hidden anim-aparece" onClick={() => setAbierta(false)} />
-          <aside className="fixed inset-y-0 left-0 z-50 flex w-72 flex-col bg-barra shadow-[var(--shadow-lifted)] lg:hidden anim-cajon">
+          <aside aria-label="Menú" className="fixed inset-y-0 left-0 z-50 flex w-72 flex-col bg-barra shadow-[var(--shadow-lifted)] lg:hidden anim-cajon">
             <ContenidoBarra alNavegar={() => setAbierta(false)} />
           </aside>
         </>

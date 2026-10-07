@@ -11,6 +11,7 @@ import { avisar, Boton, Esqueleto, Icono, Tarjeta, Vacio } from '@scholaris/ui';
 import { api } from '../datos/api';
 import { Cabecera } from '../componentes/comunes/cabecera';
 import { numero } from '../lib/numero';
+import { motivoEnlace } from '../componentes/comunes/errores';
 
 export const Route = createFileRoute('/recibir/$token')({ component: Recibir });
 
@@ -52,7 +53,7 @@ function Recibir() {
       <Cabecera forma="circulo" titulo="Añadir a mi Scholaris" antetitulo="Alguien te ha mandado una colección o un documento" />
       <div className="mx-auto w-full max-w-3xl px-4 pb-16 pt-5 sm:px-6 lg:px-10">
         {isPending ? <Esqueleto className="h-48 rounded-2xl" /> : error || !v ? (
-          <Vacio estilo="malevich" titulo="Este enlace ya no funciona.">{error instanceof Error ? error.message : 'Quien lo compartió lo ha retirado o ha caducado.'}</Vacio>
+          <Vacio estilo="malevich" titulo="Este enlace ya no funciona.">{motivoEnlace(error)}</Vacio>
         ) : (
           <Tarjeta className="p-6">
             <p className="text-[0.8125rem] text-coffee-500">{v.de} comparte {v.tipo === 'biblioteca' ? `una colección de ${numero(v.documentos)} documentos` : 'un documento'}</p>
@@ -78,3 +79,4 @@ function Recibir() {
     </>
   );
 }
+

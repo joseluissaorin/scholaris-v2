@@ -107,7 +107,7 @@ function Inspector() {
             ))}
           </nav>
 
-          <main className="min-w-0">
+          <div className="min-w-0">
             {isError ? <p className="rounded-xl border border-rojo/30 bg-rojo-suave/50 p-4 text-[0.875rem] text-coffee-800">No se pudo leer el contenido del documento. Vuelve a intentarlo en unos segundos.</p> : null}
             {ver === 'resumen' ? (
               <div className="flex flex-col gap-5">
@@ -124,7 +124,7 @@ function Inspector() {
               : ver === 'vectores' ? <Vectores c={c} doc={doc} />
               : ver === 'procedencia' ? <Procedencia c={c} doc={doc} />
               : <Fichero c={c} doc={doc} acciones={acciones} />}
-          </main>
+          </div>
         </div>
       </div>
       <VerJson abierto={json} alCambiar={setJson} doc={doc} {...(c ? { contenido: c } : {})} />

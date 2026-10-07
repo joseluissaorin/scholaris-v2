@@ -56,12 +56,25 @@ export const Flujo = memo(forwardRef<ManejadorFlujo, {
 
   useLayoutEffect(() => { setMargen((contenedor.current?.getBoundingClientRect().top ?? 0) + window.scrollY); }, []);
 
-  const estimar = useCallback(() => {
+  const qc = useQueryClient();
+  const estimar = useCallback((i: number) => {
     const ancho = contenedor.current?.clientWidth ?? 900;
-    if (modoReal === 'texto') return texto ? 150 : 560;
+    if (modoReal === 'texto') {
+      // Con el texto ya en la caché, la altura se calcula por su longitud y el ancho real de la
+      // columna: en el móvil una página mide el triple que en el escritorio y, con una cifra fija,
+      // la primera medición empujaba las siguientes (CLS de 0,47 en el lector del móvil).
+      const u = qc.getQueryData<UnidadVista[]>(q.bloque(doc.id, bloqueDe(i + 1)).queryKey)?.find((x) => x.orden === i + 1);
+      if (u) {
+        const columna = Math.min(ancho, 720);
+        const porLinea = Math.max(24, Math.floor(columna / 8.4));
+        const lineas = u.texto.split('\n').reduce((n, p) => n + Math.max(1, Math.ceil(p.length / porLinea)), 0);
+        return Math.round(lineas * 29 + 96);
+      }
+      return Math.round((texto ? 150 : 560) * Math.max(1, 700 / Math.max(320, ancho)));
+    }
     const col = modoReal === 'pagina' ? Math.min(ancho, 760) : ancho * 0.46;
     return col * (apaisada ? 0.5625 : 1.414) + 64;
-  }, [modoReal, texto, apaisada]);
+  }, [modoReal, texto, apaisada, qc, doc.id]);
 
   // El margen superior descuenta la barra del lector, que va pegada arriba.
   const v = useWindowVirtualizer({ count: total, estimateSize: estimar, overscan: 2, scrollMargin: margen, scrollPaddingStart: 84 });

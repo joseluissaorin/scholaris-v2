@@ -63,8 +63,9 @@ function Corpus() {
       </dl>
       <div className="mt-6 grid gap-5 md:grid-cols-3">
         <Barras etiqueta="Por tipo" datos={Object.entries(data.porTipo).sort((a, b) => b[1] - a[1]).map(([k, n]) => [NOMBRE_TIPO[k as TipoEntrada] ?? k, n])} />
-        <Barras etiqueta="Por década de la obra" datos={Object.entries(data.porDecada).sort((a, b) => Number(a[0]) - Number(b[0])).map(([k, n]) => [`${k}-${String(Number(k) + 9).slice(2)}`, n])} />
-        <Barras etiqueta="Por idioma" datos={Object.entries(data.porIdioma).sort((a, b) => b[1] - a[1]).map(([k, n]) => [IDIOMA[k] ?? k, n])} />
+        {/* Las décadas llegan como «1950s»: se leen por su número («1950-59»), y en orden. */}
+        <Barras etiqueta="Por década de la obra" datos={Object.entries(data.porDecada).map(([k, n]) => [parseInt(k, 10), n] as const).filter(([d]) => Number.isFinite(d)).sort((a, b) => a[0] - b[0]).map(([d, n]) => [`${d}-${String(d + 9).slice(-2)}`, n])} />
+        <Barras etiqueta="Por idioma" datos={Object.entries(data.porIdioma).sort((a, b) => b[1] - a[1]).map(([k, n]) => [IDIOMA[k] ?? (k === 'desconocido' ? 'Sin determinar' : k.charAt(0).toUpperCase() + k.slice(1)), n])} />
       </div>
     </Lienzo>
   );

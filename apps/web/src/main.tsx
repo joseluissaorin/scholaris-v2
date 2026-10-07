@@ -7,6 +7,7 @@ import { arrancar, esperarSesion } from './datos/api';
 import { clienteConsultas, precargarLector } from './datos/consultas';
 import { claveClerk, ProveedorSesion } from './sesion';
 import { EsperaContenido, EsperaMarco, FalloArranque } from './componentes/marco/espera';
+import { ErrorDeRuta, NoEncontrado } from './componentes/comunes/errores';
 import { instalarTransiciones } from './movimiento/transiciones';
 import './estilos.css';
 import { capturarCuponDeLaUrl } from './lib/cupon-pendiente';
@@ -26,6 +27,9 @@ export const enrutador = createRouter({
   defaultPendingMs: 300,
   defaultPendingMinMs: 200,
   defaultPendingComponent: EsperaContenido,
+  // Los errores y los «no existe» de cada sección se pintan dentro del marco: la barra lateral se queda.
+  defaultErrorComponent: ErrorDeRuta,
+  defaultNotFoundComponent: NoEncontrado,
   scrollRestoration: true,
 });
 

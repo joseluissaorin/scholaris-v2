@@ -30,7 +30,7 @@ export function BotonReferencia({ documento, compacto, className }: { documento:
         <HoverCard.Trigger asChild>
           <button type="button" onClick={() => void copiar()} onFocus={() => void qc.prefetchQuery(qReferencia(documento, estilo))}
             className="flex items-center gap-1.5 px-3 text-[0.8125rem] font-semibold text-coffee-800 hover:bg-cream-50 active:shadow-[var(--pulsado)]"
-            aria-label={`Copiar la referencia bibliográfica (${nombreEstilo(estilo)})`}>
+            aria-label={compacto ? `Copiar referencia (${nombreEstilo(estilo)})` : undefined} title={`Copiar la referencia bibliográfica (${nombreEstilo(estilo)})`}>
             <Icono nombre={hecho ? 'hecho' : 'citar'} tam={15} className={hecho ? 'text-verde' : 'text-coffee-500'} />
             {compacto ? null : <span>{hecho ? 'Copiada' : 'Copiar referencia'}</span>}
           </button>

@@ -423,14 +423,18 @@ export class Cuentas {
 
   async cuotas(usuario: string, plan: Plan | 'local'): Promise<Cuotas> {
     const l = LIMITES[plan];
-    const [u] = await this.q<{ documentos: number; bytes: number }>('SELECT documentos, bytes FROM usuarios WHERE id = ?', usuario);
+    // Las cuatro lecturas a la vez: en D1 cada una es un viaje.
     const usado = async (m: Metrica) => (await this.q<{ n: number }>('SELECT n FROM uso WHERE usuario = ? AND metrica = ? AND periodo = ?', usuario, m, periodo(m)))[0]?.n ?? 0;
+    const [[u], paginasMes, busquedasDia, autocitasMes] = await Promise.all([
+      this.q<{ documentos: number; bytes: number }>('SELECT documentos, bytes FROM usuarios WHERE id = ?', usuario),
+      usado('paginasMes'), usado('busquedasDia'), usado('autocitasMes'),
+    ]);
     return {
       documentos: { usados: u?.documentos ?? 0, limite: l.documentos },
       bytes: { usados: u?.bytes ?? 0, limite: l.bytes },
-      paginasMes: { usados: await usado('paginasMes'), limite: l.paginasMes },
-      busquedasDia: { usados: await usado('busquedasDia'), limite: l.busquedasDia },
-      autocitasMes: { usados: await usado('autocitasMes'), limite: l.autocitasMes },
+      paginasMes: { usados: paginasMes, limite: l.paginasMes },
+      busquedasDia: { usados: busquedasDia, limite: l.busquedasDia },
+      autocitasMes: { usados: autocitasMes, limite: l.autocitasMes },
     };
   }
 

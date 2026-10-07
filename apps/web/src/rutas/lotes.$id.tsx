@@ -12,6 +12,7 @@ import { api } from '../datos/api';
 import { archivosDeSoltar, conducir, conduciendo, euros, reasociar, tiempoAproximado, tieneFuente } from '../datos/lotes';
 import { Cabecera } from '../componentes/comunes/cabecera';
 import { IconoTipo } from '../componentes/comunes/icono-tipo';
+import { esNoEncontrado, FalloConsulta, NoEncontrado } from '../componentes/comunes/errores';
 import { numero } from '../lib/numero';
 import { bytes } from '../lib/formato';
 
@@ -41,7 +42,7 @@ function PaginaLote() {
   const [filtro, setFiltro] = useState<Filtro>('todos');
   const [encima, setEncima] = useState(false);
   const selArchivos = useRef<HTMLInputElement>(null);
-  const { data: l } = useQuery({
+  const { data: l, error, refetch } = useQuery({
     queryKey: ['lote', id], queryFn: () => api().lotes.obtener(id),
     refetchInterval: (q) => (q.state.data && (q.state.data.estado === 'en_marcha') ? 2500 : false),
   });
@@ -69,6 +70,8 @@ function PaginaLote() {
     refrescar();
   }
 
+  if (!l && esNoEncontrado(error)) return <NoEncontrado />;
+  if (!l && error) return <div className="mx-auto max-w-3xl px-4 pt-8 sm:px-6 lg:px-10"><FalloConsulta error={error} reintentar={() => void refetch()} /></div>;
   if (!l) return <div className="mx-auto max-w-6xl px-4 pt-8 sm:px-6 lg:px-10"><Esqueleto className="h-10 w-1/2" /><Esqueleto className="mt-6 h-40" /></div>;
 
   const c = l.cuentas;

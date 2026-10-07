@@ -15,7 +15,7 @@ export const Route = createFileRoute('/ajustes/privacidad')({
 function Fila({ titulo, children, accion }: { titulo: string; children: React.ReactNode; accion: React.ReactNode }) {
   return (
     <div className="flex flex-col gap-3 border-b border-cream-200 py-5 last:border-0 sm:flex-row sm:items-center sm:gap-8">
-      <div className="min-w-0 flex-1"><h3 className="text-[0.9375rem] font-semibold">{titulo}</h3><p className="mt-1 text-[0.8125rem] text-coffee-500">{children}</p></div>
+      <div className="min-w-0 flex-1"><h2 className="text-[0.9375rem] font-semibold">{titulo}</h2><p className="mt-1 text-[0.8125rem] text-coffee-500">{children}</p></div>
       <div className="shrink-0">{accion}</div>
     </div>
   );

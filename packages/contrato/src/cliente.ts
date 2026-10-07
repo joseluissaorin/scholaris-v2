@@ -118,7 +118,21 @@ export function crearCliente(opciones: OpcionesCliente) {
     if (opciones.publico?.pase) h['x-scholaris-pase'] = opciones.publico.pase;
     const prefijo = opciones.publico ? `/publico/${encodeURIComponent(opciones.publico.token)}`
       : opciones.compartida ? `/compartidas/${encodeURIComponent(opciones.compartida)}` : '';
-    const res = await f(`${base}${PREFIJO_API}${prefijo}${ruta}${aConsulta(consulta)}`, { method: metodo, headers: h, body, ...(body instanceof ReadableStream ? { duplex: 'half' } : {}) } as RequestInit);
+    const url = `${base}${PREFIJO_API}${prefijo}${ruta}${aConsulta(consulta)}`;
+    const init = { method: metodo, headers: h, body, ...(body instanceof ReadableStream ? { duplex: 'half' } : {}) } as RequestInit;
+    let res = await f(url, init);
+    // Límite de ritmo: el servidor no ha hecho nada, así que se puede repetir tal cual tras
+    // esperar lo que pide (Retry-After), hasta dos veces y nunca más de 12 s en total. Un
+    // cuerpo en flujo no se puede volver a mandar: ese error sube como cualquier otro.
+    for (let intento = 0, esperado = 0; res.status === 429 && intento < 2 && !(body instanceof ReadableStream); intento++) {
+      const pide = Number(res.headers.get('retry-after'));
+      const ms = Number.isFinite(pide) && pide > 0 ? pide * 1000 : 1000 * (intento + 1);
+      if (esperado + ms > 12_000) break; // pide más de lo razonable: mejor decirlo ya
+
+      esperado += ms;
+      await new Promise((r) => setTimeout(r, ms));
+      res = await f(url, init);
+    }
     if (!res.ok) {
       let e: CuerpoError | null = null;
       try { e = (await res.json()) as CuerpoError; } catch { /* sin cuerpo JSON */ }

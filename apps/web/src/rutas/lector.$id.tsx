@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
+import { createFileRoute, Link, notFound, useNavigate } from '@tanstack/react-router';
+import { esNoEncontrado } from '../componentes/comunes/errores';
 import { useQuery, useQueryClient, useSuspenseQuery } from '@tanstack/react-query';
 import type { DetalleDocumento, MapaFolios, ResumenDocumento } from '@scholaris/contrato';
 import { Dialog } from 'radix-ui';
@@ -31,7 +32,13 @@ export const Route = createFileRoute('/lector/$id')({
   loaderDeps: ({ search }) => ({ u: search.u }),
   loader: async ({ context, params, deps, location }) => {
     // Un enlace con ?t= es de audio o vídeo. Desde un enlace directo esto ya salió en el arranque (main.tsx).
-    await precargarLector(context.consultas, params.id, deps.u ?? 1, (location.search as { t?: unknown }).t != null);
+    try {
+      await precargarLector(context.consultas, params.id, deps.u ?? 1, (location.search as { t?: unknown }).t != null);
+    } catch (e) {
+      // Un documento que no existe (o no es tuyo) es un 404 dentro del marco, no un error.
+      if (esNoEncontrado(e)) throw notFound();
+      throw e;
+    }
   },
   pendingComponent: EsperaLector,
   component: Lector,

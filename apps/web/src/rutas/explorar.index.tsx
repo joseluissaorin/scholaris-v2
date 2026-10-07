@@ -161,9 +161,11 @@ function Lamina({ mapa, elegido, alElegir }: { mapa: MapaConceptos; elegido: num
       <canvas ref={lienzo} className="absolute inset-0 h-full w-full" onClick={() => alElegir(null)} aria-hidden />
       {mapa.grupos.map((g, k) => (
         <button key={g.indice} type="button" onClick={(e) => { e.stopPropagation(); alElegir(elegido === g.indice ? null : g.indice); }}
-          className={cx('anim-sube absolute -translate-x-1/2 -translate-y-1/2 whitespace-nowrap rounded-s px-2 py-1 text-[0.8125rem] transition-[opacity,background-color] md:text-[0.9375rem]',
+          className={cx('anim-sube absolute max-w-[48%] truncate whitespace-nowrap rounded-s px-2 py-1 text-[0.8125rem] transition-[opacity,background-color] md:text-[0.9375rem]',
             elegido === g.indice ? 'bg-tinta text-sobre-tinta' : 'bg-papel/85 text-tinta hover:bg-tinta hover:text-sobre-tinta', elegido != null && elegido !== g.indice && 'opacity-40')}
-          style={{ left: `${g.x * 100}%`, top: `${g.y * 100}%`, animationDelay: `${(k % 12) * 50 + 260}ms` }} aria-pressed={elegido === g.indice}>
+          // El rótulo se ancla según dónde cae: centrado en medio, por su izquierda junto al borde izquierdo y por su
+          // derecha junto al derecho (igual arriba y abajo). Así nunca se sale de la lámina ni se corta.
+          style={{ left: `${g.x * 100}%`, top: `${g.y * 100}%`, translate: `${-Math.min(1, Math.max(0, g.x)) * 100}% ${-Math.min(1, Math.max(0, g.y)) * 100}%`, animationDelay: `${(k % 12) * 50 + 260}ms` }} aria-pressed={elegido === g.indice} title={g.etiqueta ?? undefined}>
           {g.etiqueta ?? `Tema ${g.indice + 1}`}
         </button>
       ))}

@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { ClerkProvider, SignIn, SignUp, useAuth, useClerk, useUser } from '@clerk/react';
-import { esES } from '@clerk/localizations';
+import { localizacionClerk } from './lib/clerk-es';
 import { Composicion } from '@scholaris/ui';
 import { Logo } from './componentes/marco/logo';
 import { ponerProveedorToken } from './datos/api';
@@ -103,7 +103,7 @@ export default function SesionClerk({ clave, children, espera }: { clave: string
   return (
     <ClerkProvider
       publishableKey={clave}
-      localization={esES}
+      localization={localizacionClerk}
       appearance={apariencia}
       // Tras entrar, sin recargar la página: se cambia la URL y la app aparece en el sitio.
       routerPush={(a) => window.history.pushState(null, '', a)}

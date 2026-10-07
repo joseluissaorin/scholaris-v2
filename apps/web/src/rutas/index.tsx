@@ -137,14 +137,14 @@ function PaginaBiblioteca() {
               className="[&_input]:h-12"
               sufijo={texto ? <button type="button" aria-label="Borrar el filtro" onClick={() => setTexto('')} className="grid h-8 w-8 place-items-center rounded-lg text-coffee-400 hover:bg-cream-200 hover:text-coffee-800"><Icono nombre="cerrar" tam={14} /></button> : undefined}
             />
-            {/* La banda de cifras de siempre */}
-            <div className="flex flex-wrap items-baseline gap-x-5 gap-y-1 pt-1 text-[0.8125rem] text-coffee-400">
+            {/* La banda de cifras de siempre (mientras llega la lista, su hueco: nunca «0 documentos» de mentira) */}
+            {isPending ? <div className="flex h-[1.4rem] items-center gap-5 pt-1" aria-hidden><Esqueleto className="h-3.5 w-24" /><Esqueleto className="h-3.5 w-24" /><Esqueleto className="h-3.5 w-20" /></div> : <div className="flex flex-wrap items-baseline gap-x-5 gap-y-1 pt-1 text-[0.8125rem] text-coffee-400">
               <span><strong className="text-[0.9375rem] font-semibold text-coffee-800"><Cifra valor={todos.length} formato={(n) => numero(n)} /></strong> documentos</span>
               <span><strong className="text-[0.9375rem] font-semibold text-coffee-800"><Cifra valor={bibliotecas.length} formato={(n) => numero(n)} /></strong> colecciones</span>
               <span><strong className="text-[0.9375rem] font-semibold text-coffee-800"><Cifra valor={paginas} formato={(n) => numero(n)} /></strong> páginas</span>
               {horas >= 0.1 ? <span><strong className="tnum text-[0.9375rem] font-semibold text-coffee-800">{numero(horas, { maximumFractionDigits: 1 })}</strong> {numero(horas, { maximumFractionDigits: 1 }) === "1" ? "hora" : "horas"} de audio y vídeo</span> : null}
               <span className="ml-auto text-coffee-400">{bytes(ocupado)}</span>
-            </div>
+            </div>}
             <div className="flex flex-wrap items-center gap-2 border-b border-cream-300 pb-4">
               <div className="sin-barra -mx-4 flex min-w-0 basis-full gap-2 overflow-x-auto px-4 sm:mx-0 sm:flex-1 sm:basis-0 sm:flex-wrap sm:px-0">
                 <Chip activo={!busqueda.grupo} onClick={() => fijar({ grupo: undefined })}>Todo</Chip>

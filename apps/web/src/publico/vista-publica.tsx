@@ -13,6 +13,7 @@ import { Boton, Campo, Composicion, Esqueleto, Icono, Tostadora, Vacio } from '@
 import { Logo } from '../componentes/marco/logo';
 import { LecturaCompartida, type Posicion } from '../componentes/biblioteca/lectura-compartida';
 import { numero } from '../lib/numero';
+import { motivoEnlace } from '../componentes/comunes/errores';
 
 const token = decodeURIComponent(location.pathname.split('/')[2] ?? '');
 const base = (import.meta.env.VITE_API as string | undefined) ?? '';
@@ -68,7 +69,7 @@ export default function VistaPublica() {
       <main className="mx-auto w-full max-w-6xl px-4 pb-16 pt-8 sm:px-6 lg:px-10">
         {isPending ? <><Esqueleto className="h-9 w-1/2" /><Esqueleto className="mt-6 h-64 rounded-2xl" /></> : error || !v ? (
           <Vacio estilo="malevich" titulo="Este enlace ya no funciona." className="mx-auto mt-10 max-w-2xl">
-            {error instanceof Error ? error.message : 'Quien lo compartió lo ha retirado o ha caducado.'}
+            {motivoEnlace(error)}
           </Vacio>
         ) : v.conClave && !pase ? (
           <Contrasena alEntrar={(p) => { try { sessionStorage.setItem(clavePase, p); } catch { /* sin almacenamiento */ } setPase(p); }} />

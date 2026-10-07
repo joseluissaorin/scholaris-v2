@@ -221,7 +221,15 @@ function Anios({ desde, hasta, alCambiar }: { desde?: number; hasta?: number; al
 /** Antes de escribir: lo que buscaste hace poco y ejemplos que enseñan qué se puede hacer. */
 function Inicio({ modo, alElegir }: { modo: Modo; alElegir: (t: string) => void }) {
   const { data } = useQuery(q.historial());
-  const recientes = (data?.elementos ?? []).filter((e) => (modo === 'preguntar') === (e.tipo === 'respuesta')).slice(0, 6);
+  // Sin repetidos: la misma consulta tres veces es una sola entrada (la más reciente).
+  const vistas = new Set<string>();
+  const recientes = (data?.elementos ?? []).filter((e) => {
+    if ((modo === 'preguntar') !== (e.tipo === 'respuesta')) return false;
+    const clave = e.consulta.trim().toLocaleLowerCase('es');
+    if (vistas.has(clave)) return false;
+    vistas.add(clave);
+    return true;
+  }).slice(0, 6);
   const ejemplos = modo === 'preguntar'
     ? ['¿Qué delito cometió Segismundo al nacer?', '¿Cómo presenta Cervantes su libro en el prólogo?', 'What does Bentham mean by the inspection principle?']
     : ['la cárcel y la torre', 'oscuras golondrinas', 'vuelva usted mañana', 'seeing without being seen'];

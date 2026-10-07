@@ -66,7 +66,8 @@ async function leerBloque(id: string, bloque: number): Promise<UnidadVista[]> {
 export const q = {
   yo: () => queryOptions({ queryKey: ['yo'], queryFn: () => api().auth.yo(), staleTime: 5 * 60_000 }),
   documentos: (f: FiltrosDocumentos = {}) => queryOptions({ queryKey: ['documentos', f], queryFn: () => api().documentos.listar({ limite: 500, ...f }), placeholderData: keepPreviousData }),
-  documento: (id: string) => queryOptions({ queryKey: ['documento', id], queryFn: () => api().documentos.obtener(id) }),
+  // Un 404 es definitivo: sin reintento (el lector enseña «no existe» al momento).
+  documento: (id: string) => queryOptions({ queryKey: ['documento', id], queryFn: () => api().documentos.obtener(id), retry: (n, e) => (e as { estado?: number })?.estado !== 404 && n < 1 }),
   /*
    * La API numera las unidades desde 0; la web, desde 1 (la página física 1 es
    * la unidad 1). Se traduce aquí, en un solo sitio, y el resto de la web no lo sabe.

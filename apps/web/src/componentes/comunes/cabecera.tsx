@@ -74,10 +74,10 @@ export function Seccion({ icono, titulo, descripcion, accion, children, classNam
       <div className="flex items-start gap-3">
         <Icono nombre={icono} tam={18} className="mt-0.5 shrink-0 text-coffee-500" />
         <div className="min-w-0 flex-1">
-          <h2 className="text-[0.9375rem] font-semibold text-coffee-800">{titulo}</h2>
-          {descripcion ? <p className="mt-0.5 text-[0.8125rem] text-coffee-500">{descripcion}</p> : null}
+          <h2 className="text-[0.9375rem] font-semibold text-coffee-800 [overflow-wrap:anywhere]">{titulo}</h2>
+          {descripcion ? <p className="mt-0.5 text-[0.8125rem] text-coffee-500 [overflow-wrap:anywhere]">{descripcion}</p> : null}
         </div>
-        {accion}
+        {accion ? <div className="shrink-0">{accion}</div> : null}
       </div>
       {children ? <div className="mt-4">{children}</div> : null}
     </section>

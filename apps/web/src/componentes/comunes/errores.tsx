@@ -30,3 +30,39 @@ export function ErrorDeRuta({ error, reset }: ErrorComponentProps) {
     </section>
   );
 }
+
+/** ¿Es un «no existe» de la API (404)? */
+export function esNoEncontrado(error: unknown): boolean {
+  return !!error && typeof error === 'object' && (error as { estado?: number }).estado === 404;
+}
+
+/**
+ * Una consulta que ha fallado, dentro de la pantalla (la barra y el resto siguen):
+ * el mismo borrón a mano que el error de ruta, el motivo y «Reintentar». Nunca un
+ * hueco en blanco ni un estado vacío que mienta («no hay nada» cuando no se pudo mirar).
+ */
+export function FalloConsulta({ error, reintentar, compacto = false, className }: { error: unknown; reintentar?: () => void; compacto?: boolean; className?: string }) {
+  const motivo = error instanceof Error && error.message ? error.message : 'No se pudo cargar.';
+  if (compacto) {
+    return (
+      <div role="alert" className={`rounded-xl border border-dashed border-cream-500 bg-cream-100/60 px-4 py-3 text-[0.875rem] text-coffee-600 shadow-[var(--hundido)] ${className ?? ''}`}>
+        <p>{motivo}</p>
+        {reintentar ? <button type="button" onClick={reintentar} className="mt-1 font-medium text-coffee-800 underline underline-offset-2 hover:text-rojo">Reintentar</button> : null}
+      </div>
+    );
+  }
+  return (
+    <div role="alert" className={`anim-sube flex flex-col items-center gap-3 rounded-2xl border border-dashed border-cream-500 bg-cream-100/60 px-6 py-10 text-center shadow-[var(--hundido)] ${className ?? ''}`}>
+      <BocetoPerezoso nombre="borron" dibujar="ya" className="w-[min(13rem,60vw)]" />
+      <h3 className="text-[1.0625rem] font-semibold text-coffee-800">No pudimos cargar esto.</h3>
+      <p className="max-w-[48ch] text-[0.875rem] text-coffee-600">{motivo}</p>
+      {reintentar ? <Boton variante="linea" onClick={reintentar}>Reintentar</Boton> : null}
+    </div>
+  );
+}
+
+/** El motivo sin repetir el titular: la API suele decir «Este enlace ya no funciona: …». */
+export function motivoEnlace(error: unknown): string {
+  const m = error instanceof Error ? error.message.replace(/^Este enlace ya no funciona[:.]?\s*/i, '').trim() : '';
+  return m ? m.charAt(0).toUpperCase() + m.slice(1) : 'Quien lo compartió lo ha retirado o ha caducado.';
+}

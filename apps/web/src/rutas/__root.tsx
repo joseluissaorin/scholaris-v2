@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useState } from 'react';
-import { createRootRouteWithContext, Outlet, useRouterState } from '@tanstack/react-router';
+import { createRootRouteWithContext, Outlet, useRouter, useRouterState } from '@tanstack/react-router';
 import type { QueryClient } from '@tanstack/react-query';
 import { Tostadora, BarraAvance } from '@scholaris/ui';
 import { BarraMovil, PieMovil, Riel } from '../componentes/marco/navegacion';
@@ -62,6 +62,21 @@ function Marco() {
   const alta = useAlta();
 
   useEffect(() => alDisparar('paleta', () => { setPaletaCargada(true); setPaleta(true); }), []);
+  const enrutador = useRouter();
+  useEffect(() => {
+    // Con el navegador ocioso, el código de las secciones principales y del lector: la primera
+    // visita a cada una ya no espera a bajar su trozo (solo código; los datos, al pasar el ratón).
+    const rutas = ['/buscar', '/buscar/', '/escribir', '/escribir/', '/explorar', '/explorar/', '/ajustes', '/ajustes/', '/invitaciones', '/lector/$id', '/'];
+    const precargar = () => {
+      for (const id of rutas) {
+        const r = (enrutador.routesById as unknown as Record<string, unknown>)[id];
+        if (r) void enrutador.loadRouteChunk(r as never)?.catch(() => undefined);
+      }
+    };
+    const h = 'requestIdleCallback' in window ? requestIdleCallback(precargar, { timeout: 4000 }) : setTimeout(precargar, 2000);
+    return () => { if ('cancelIdleCallback' in window) cancelIdleCallback(h as number); else clearTimeout(h as ReturnType<typeof setTimeout>); };
+  }, [enrutador]);
+
   useEffect(() => {
     void recuperarTareas();
     // La paleta se precarga cuando el navegador está ocioso: ⌘K abre al instante.

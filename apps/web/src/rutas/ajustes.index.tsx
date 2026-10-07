@@ -14,6 +14,12 @@ import { CanjearCupon, etiquetaPlan } from '../componentes/cuenta/cupon';
 
 const Precios = lazy(() => import('../componentes/cuenta/precios'));
 
+/** El nombre que se enseña: nunca el id interno; si no hay nombre, el correo; si tampoco, «Tu cuenta». */
+function nombreCuenta(deSesion: string | undefined, guardado: string, id: string, correo: string): string {
+  for (const n of [deSesion, guardado]) if (n && n !== id && n !== 'Tu cuenta') return n;
+  return correo || 'Tu cuenta';
+}
+
 export const Route = createFileRoute('/ajustes/')({
   loader: ({ context }) => context.consultas.ensureQueryData(q.yo()),
   component: Cuenta,
@@ -60,9 +66,12 @@ function Cuenta() {
   }
 
   if (isPending || !yo) return <Lienzo ancho="estrecho"><Esqueleto className="h-40" /></Lienzo>;
+  const correo = sesion.usuario?.correo || yo.usuario.correo;
+  const titulo = nombreCuenta(sesion.usuario?.nombre, yo.usuario.nombre, yo.usuario.id, correo);
   return (
     <Lienzo ancho="estrecho" className="space-y-5">
-      <Seccion icono="ajustes" titulo={yo.usuario.nombre} descripcion={yo.usuario.correo}
+      {/* Lo que guarda el servidor puede ir a medias (sin nombre, o el id por nombre): manda lo que sabe la sesión. */}
+      <Seccion icono="ajustes" titulo={titulo} descripcion={correo && correo !== titulo ? correo : undefined}
         accion={sesion.abrirPerfil ? <Boton variante="linea" tam="p" onClick={sesion.abrirPerfil}>Correo y contraseña</Boton> : undefined}>
         {yo.via === 'local' ? (
           <p className="rounded-xl bg-cream-200/60 px-4 py-3 text-[0.8125rem] text-coffee-600 shadow-[var(--hundido)]">{esSimulado() ? 'Estás viendo Scholaris con una biblioteca de ejemplo. Nada de lo que hagas sale de este navegador.' : 'Versión local: un solo usuario, sin cuenta y sin límites de plan. Tus datos viven en este ordenador.'}</p>
