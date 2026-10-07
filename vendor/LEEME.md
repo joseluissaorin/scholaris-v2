@@ -15,7 +15,9 @@ falla si el fichero cambia.
 ### De dónde sale
 
 Es `npm pack` de la carpeta `js/` del repositorio de SPDF (`github.com/joseluissaorin/spdf`),
-con `dist/` ya compilado. Para regenerarlo con una versión nueva:
+con `dist/` ya compilado. El de ahora sale del commit `74e7ff6` de ese repositorio (pasa la
+batería de conformidad 0.2.0 entera); la versión que se publique en npm como 0.1.0 puede
+traer más cosas, así que al cambiar a npm conviene repasar las notas de la versión. Para regenerarlo con una versión nueva:
 
 ```sh
 cd <repo spdf>/js
