@@ -16,7 +16,7 @@ import { crearPuerta, type Plataforma } from '../app.js';
 import { crearVerificadorClerk } from '../compartido/clerk.js';
 import type { UsuarioSesion } from '../puertos.js';
 import type { Env } from './env.js';
-import type { MensajeCola } from './cola.js';
+import { atenderLote, type MensajeCola } from './cola.js';
 import { almacenDesdeEnv, configDesdeEnv, cuentasDesdeEnv, origenDe } from './puertos-cf.js';
 import { conOAuth } from './oauth.js';
 
@@ -128,18 +128,11 @@ export default {
   fetch: (peticion: Request, env: Env, ctx: ExecutionContext) => conAutorizacion.fetch(peticion, env, ctx),
 
   async queue(lote: MessageBatch<MensajeCola>, env: Env): Promise<void> {
-    for (const m of lote.messages) {
-      try {
-        const b = m.body;
-        if (b.tipo === 'vigilantes') await env.ESTANTERIA.getByName(b.usuario).vigilantes({ id: b.usuario, plan: b.plan }, b.modo);
-        else if (b.tipo === 'reindexar') await env.ESTANTERIA.getByName(b.usuario).reindexar(b.usuario, b.documento);
-        else if (b.tipo === 'mantenimiento') await env.ESTANTERIA.getByName(b.usuario).mantenimiento(b.usuario, b.trabajo, b.desde);
-        m.ack();
-      } catch (e) {
-        console.error(JSON.stringify({ nivel: 'error', cola: m.body, error: (e as Error).message }));
-        m.retry({ delaySeconds: Math.min(900, 60 * 2 ** Math.min(4, m.attempts)) });
-      }
-    }
+    await atenderLote(lote.messages, {
+      vigilantes: (b) => env.ESTANTERIA.getByName(b.usuario).vigilantes({ id: b.usuario, plan: b.plan }, b.modo),
+      reindexar: (b) => env.ESTANTERIA.getByName(b.usuario).reindexar(b.usuario, b.documento),
+      mantenimiento: (b) => env.ESTANTERIA.getByName(b.usuario).mantenimiento(b.usuario, b.trabajo, b.desde),
+    });
   },
 
   async scheduled(evento: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {

@@ -13,8 +13,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "tipos": "wrangler types -c ../../deploy/cloudflare/wrangler.jsonc src/worker-configuration.d.ts",
-    "desplegar": "SCHOLARIS_ORIGEN=https://scholaris-v2.jlsf2005.workers.dev pnpm --filter @scholaris/web build && wrangler deploy -c ../../deploy/cloudflare/wrangler.jsonc",
-    "desplegar:produccion": "SCHOLARIS_ORIGEN=https://scholaris.joseluissaorin.com pnpm --filter @scholaris/web build && wrangler deploy -c ../../deploy/cloudflare/wrangler.jsonc --env produccion"
+    "desplegar": "node scripts/guarda-despliegue.mjs && SCHOLARIS_ORIGEN=https://scholaris-v2.jlsf2005.workers.dev pnpm --filter @scholaris/web build && wrangler deploy -c ../../deploy/cloudflare/wrangler.jsonc",
+    "desplegar:produccion": "node scripts/guarda-despliegue.mjs && SCHOLARIS_ORIGEN=https://scholaris.joseluissaorin.com pnpm --filter @scholaris/web build && wrangler deploy -c ../../deploy/cloudflare/wrangler.jsonc --env produccion"
   },
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "^0.22.0",
