@@ -195,6 +195,23 @@ describe('Buscador', () => {
     expect(ids.length).toBeGreaterThan(0);
   });
 
+  it('la vía visual filtra los documentos en el índice y no pide de más', async () => {
+    const consultas: Array<{ k: number; filtro?: Record<string, unknown> }> = [];
+    const indice = m.buscador['puertos'].indice!;
+    const original = indice.consultar.bind(indice);
+    indice.consultar = async (ns, v, o) => { consultas.push({ k: o.k, filtro: o.filtro }); return original(ns, v, o); };
+    try {
+      const r = await m.buscador.buscar('lámina del diagrama de la divergencia de caracteres', { vias: ['visual'], filtros: { documentos: ['doc-darwin'] }, limite: 10 });
+      expect(r.resultados.some((x) => x.fragmento.id === 'fg-dar-01')).toBe(true);
+      const visuales = consultas.filter((x) => JSON.stringify(x.filtro?.objetivo).includes('figura'));
+      expect(visuales.length).toBeGreaterThan(0);
+      for (const x of visuales) {
+        expect(x.filtro?.documento).toEqual({ $in: ['doc-darwin'] });
+        expect(x.k).toBeLessThanOrEqual(20); // la mitad de los candidatos, no cinco veces más
+      }
+    } finally { indice.consultar = original; }
+  });
+
   it('el juez filtra lo que no responde', async () => {
     const sin = await m.buscador.buscar('felicidad y dios');
     const r = await m.buscador.buscar('felicidad y dios', { juez: true, umbralJuez: 0.3 });

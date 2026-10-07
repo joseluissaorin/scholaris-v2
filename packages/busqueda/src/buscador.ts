@@ -298,8 +298,8 @@ export class Buscador {
           const [d, vi] = await Promise.all([
             vias.has('densa') ? this.viaDensa(conPeso, k, permitidos) : Promise.resolve([]),
             // La vía visual solo con la consulta original y su enunciado: el HyDE la despista.
-            // Con filtro de documentos se pide más: Vectorize no indexa «documento» y el filtro se aplica después.
-            vias.has('visual') ? this.viaVisual(conPeso.filter((_, i) => exps[i]?.tipo !== 'hyde').slice(0, 2), permitidos ? Math.min(100, k * 5) : Math.ceil(k / 2), permitidos, sinteticos) : Promise.resolve([]),
+            // El filtro de documentos va al índice (Vectorize indexa «documento»): no hace falta pedir de más.
+            vias.has('visual') ? this.viaVisual(conPeso.filter((_, i) => exps[i]?.tipo !== 'hyde').slice(0, 2), Math.ceil(k / 2), permitidos, sinteticos) : Promise.resolve([]),
           ]);
           marca(`vectores${fase}`, tr);
           return [d, vi] as const;
