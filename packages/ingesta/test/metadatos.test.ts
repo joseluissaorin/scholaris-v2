@@ -107,3 +107,36 @@ describe('nombres compatibles', () => {
     expect(nombresCompatibles('Julio', 'Javier')).toBe(false);
   });
 });
+
+describe('contenedor', () => {
+  const video = (datos: Record<string, unknown>) => fusionarMetadatos([
+    { fuente: 'lectura', confianza: 0.8, datos: { titulo: 'What on earth is a manicule?', url: 'https://www.youtube.com/watch?v=rWd0lrxJit4', tipoCSL: 'motion_picture', editorial: 'BBC Ideas', ...datos } as never },
+  ], '');
+
+  it('nunca es el propio título (ni lo contiene ni está dentro de él)', () => {
+    expect(video({ contenedor: 'What on earth is a manicule?' }).contenedor).toBeUndefined();
+    expect(video({ contenedor: 'what on earth is a manicule' }).contenedor).toBeUndefined();
+    expect(video({ contenedor: 'Manicule' }).contenedor).toBeUndefined();
+    expect(video({ contenedor: 'What on earth is a manicule? | BBC Ideas' }).contenedor).toBeUndefined();
+  });
+
+  it('un vídeo suelto no lleva la plataforma como contenedor', () => {
+    expect(video({ contenedor: 'YouTube' }).contenedor).toBeUndefined();
+    expect(video({}).contenedor).toBeUndefined();
+  });
+
+  it('una serie real se conserva', () => {
+    const m = fusionarMetadatos([
+      { fuente: 'lectura', confianza: 0.8, datos: { titulo: 'Vectors', contenedor: 'Essence of linear algebra', editorial: '3Blue1Brown', tipoCSL: 'motion_picture' } as never },
+    ], '');
+    expect(m.contenedor).toBe('Essence of linear algebra');
+  });
+
+  it('lo que escribió el usuario no se toca', () => {
+    const m = fusionarMetadatos([
+      { fuente: 'lectura', confianza: 0.8, datos: { titulo: 'Manicule', tipoCSL: 'motion_picture' } as never },
+      { fuente: 'usuario', confianza: 1, datos: { contenedor: 'Manicule' } as never },
+    ], '');
+    expect(m.contenedor).toBe('Manicule');
+  });
+});

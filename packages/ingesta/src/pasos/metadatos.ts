@@ -472,7 +472,28 @@ export function fusionarMetadatos(candidatos: Candidato[], nombreArchivo: string
   if (salida.anio !== undefined && salida.sinFecha && procedencia.sinFecha?.fuente !== 'usuario') { delete salida.sinFecha; delete procedencia.sinFecha; }
   if (salida.titulo) salida.titulo = limpiarTitulo(salida.titulo);
   repararPersonas(salida, procedencia);
+  repararContenedor(salida, procedencia);
   return { titulo: salida.titulo, autores: salida.autores ?? [], ...salida, procedencia };
+}
+
+const PLATAFORMAS = /^(youtube|vimeo|dailymotion|twitch|tiktok|instagram|facebook|spotify|apple podcasts|ivoox|soundcloud)$/i;
+const plano = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+
+/**
+ * El contenedor es la obra que contiene a esta (el libro, la serie, el programa). Nunca
+ * es el propio título (ni lo contiene ni está contenido en él) ni la plataforma donde
+ * está colgado: un vídeo suelto de YouTube no tiene contenedor salvo una serie real.
+ * Lo que puso el usuario no se toca.
+ */
+export function repararContenedor(m: Partial<MetadatosDocumento>, procedencia: NonNullable<MetadatosDocumento['procedencia']>): void {
+  if (!m.contenedor || procedencia.contenedor?.fuente === 'usuario') return;
+  const c = plano(m.contenedor);
+  const t = m.titulo ? plano(m.titulo) : '';
+  const igualQueTitulo = !!t && (c === t || (c.length >= 4 && t.includes(c)) || (t.length >= 4 && c.includes(t)));
+  if (!c || igualQueTitulo || PLATAFORMAS.test(m.contenedor.trim())) {
+    delete m.contenedor;
+    delete procedencia.contenedor;
+  }
 }
 
 /**
@@ -732,7 +753,10 @@ export async function rehacerFicha(
   const otraIdentidad = Boolean(pt && ['rtve', 'wikidata', 'crossref', 'datacite', 'arxiv'].includes(pt.fuente) && pt.confianza >= 0.9
     && normalizar(r.metadatos.titulo) !== normalizar(previa.titulo)
     && !previa.autores.some((a) => r.metadatos.autores.some((b) => mismaPersonaNombre(a, b))));
-  return { ...r, metadatos: noEmpeorar(base, r.metadatos, { otraIdentidad }) };
+  const final = noEmpeorar(base, r.metadatos, { otraIdentidad });
+  // «No empeorar» podría devolver un contenedor viejo igual al título: la misma regla al final.
+  repararContenedor(final, (final.procedencia ??= {}));
+  return { ...r, metadatos: final };
 }
 
 /** Campos que dependen de qué obra o qué episodio es: si cambia la identidad con pruebas, cambian juntos. */
