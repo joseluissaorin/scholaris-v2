@@ -16,6 +16,7 @@ import type { AlProgreso, PuertosFunciones } from '../puertos.js';
 import { aBytes, ahora, ceder, deJSON, ErrorFunciones, marcas, num, recortar, texto, una } from '../util.js';
 import { ajustarPCA, dist2, elegirK, elegirReduccion, kMedias, muestraEstratificada, proyectarPCA, reducir, type Reduccion } from './algebra.js';
 import { grafoDifuso, normalizarDisposicion, optimizarDisposicion, vecinosAproximados } from './umap.js';
+import { tildarRotulo } from './ortografia.js';
 
 export type ObjetivoMapa = 'fragmento' | 'unidad' | 'figura';
 
@@ -263,7 +264,10 @@ export async function construirMapa(p: PuertosFunciones, o: OpcionesMapa = {}, a
         const r = await redactor.generar<{ etiqueta: string; descripcion?: string }>({
           sistema:
             `Pones nombre a grupos temáticos de una biblioteca académica. Responde en ${o.idioma === 'en' ? 'inglés' : 'español'} ` +
-            'con una etiqueta breve (de dos a seis palabras, sin punto final, como un título de sección) y una descripción de una frase.',
+            'con una etiqueta breve (de dos a seis palabras, sin punto final, como un título de sección) y una descripción de una frase. ' +
+            (o.idioma === 'en'
+              ? 'Use correct English spelling.'
+              : 'Escribe con la ortografía correcta del español: todas las tildes y eñes («áureo», «épica», «teoría», «traducción», «España»), nunca sin ellas.'),
           mensajes: [{ rol: 'usuario', partes: [{ texto: `Pasajes representativos del grupo:\n\n${muestras.map((s, j) => `${j + 1}. ${s}`).join('\n')}` }] }],
           esquema: {
             type: 'object',
@@ -274,7 +278,8 @@ export async function construirMapa(p: PuertosFunciones, o: OpcionesMapa = {}, a
           maxTokens: 120,
           calidad: 'rapida',
         });
-        const etiqueta = pulirEtiqueta(r.json?.etiqueta ?? r.texto);
+        // Si aun así faltan tildes, una red barata las pone (solo en rótulos españoles).
+        const etiqueta = o.idioma === 'en' ? pulirEtiqueta(r.json?.etiqueta ?? r.texto) : tildarRotulo(pulirEtiqueta(r.json?.etiqueta ?? r.texto));
         if (etiqueta) { g.etiqueta = etiqueta; g.confianza = 0.8; }
         if (r.json?.descripcion) g.descripcion = r.json.descripcion.trim();
       } catch {
@@ -382,7 +387,8 @@ export async function gruposMapa(sql: SQL): Promise<GrupoMapaCompleto[]> {
       x: num(f.x),
       y: num(f.y),
     };
-    if (f.etiqueta) g.etiqueta = String(f.etiqueta);
+    // Los mapas hechos antes de exigir las tildes se leen ya corregidos (sin rehacerlos).
+    if (f.etiqueta) g.etiqueta = tildarRotulo(String(f.etiqueta));
     if (f.confianza !== null && f.confianza !== undefined) g.confianzaEtiqueta = num(f.confianza);
     if (f.descripcion) g.descripcion = String(f.descripcion);
     return g;
@@ -398,7 +404,7 @@ export async function centroidesMapa(sql: SQL): Promise<{ meta: MetaMapaCompleta
     meta,
     centroides: filas
       .filter((f) => aBytes(f.centroide))
-      .map((f) => ({ indice: num(f.indice), etiqueta: texto(f.etiqueta), tamano: num(f.tamano), documentos: deJSON<string[]>(f.documentos, []), vector: bytesAVector(aBytes(f.centroide)!) })),
+      .map((f) => ({ indice: num(f.indice), etiqueta: f.etiqueta ? tildarRotulo(String(f.etiqueta)) : texto(f.etiqueta), tamano: num(f.tamano), documentos: deJSON<string[]>(f.documentos, []), vector: bytesAVector(aBytes(f.centroide)!) })),
   };
 }
 

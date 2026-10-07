@@ -11,6 +11,7 @@ import { avisar, cx, Icono, Rotulo } from '@scholaris/ui';
 import { api } from '../../datos/api';
 import { bytes, fecha, NOMBRE_TIPO, nombreUnidad, duracion, esMedio } from '../../lib/formato';
 import { numero } from '../../lib/numero';
+import { nombreIdioma } from '../../lib/nombres';
 
 type Metadatos = MetadatosDocumento;
 type Campo = Exclude<keyof Metadatos, 'procedencia' | 'sinFecha' | 'editores'>;
@@ -95,7 +96,8 @@ export function Ficha({ doc }: { doc: DetalleDocumento }) {
       <div className="grid grid-cols-2 gap-x-4 gap-y-4">
         {CAMPOS.filter((c) => !c.solo || c.solo(m)).map((c) => (
           <CampoEditable key={c.k} etiqueta={c.nombre} valor={aTexto(m, c.k)} ancho={c.ancho} numerico={c.numerico}
-            procedencia={m.procedencia?.[c.k as string]} ayuda={c.k === 'autores' || c.k === 'traductores' ? 'Apellidos, Nombre; separados por punto y coma' : c.k === 'anioOriginal' ? 'Se cita «1975/2009»: la obra y esta edición' : undefined}
+            mostrar={c.k === 'idioma' || c.k === 'idiomaOriginal' ? nombreIdioma : undefined}
+            procedencia={m.procedencia?.[c.k as string]} ayuda={c.k === 'autores' || c.k === 'traductores' ? 'Apellidos, Nombre; separados por punto y coma' : c.k === 'anioOriginal' ? 'Se cita «1975/2009»: la obra y esta edición' : c.k === 'idioma' || c.k === 'idiomaOriginal' ? 'El código del idioma: «es», «en», «la», «fr»…' : undefined}
             alGuardar={(t) => void guardar(c.k, deTexto(c.k, t, c.numerico))} />
         ))}
       </div>
@@ -111,8 +113,10 @@ export function Ficha({ doc }: { doc: DetalleDocumento }) {
   );
 }
 
-function CampoEditable({ etiqueta, valor, alGuardar, procedencia, ancho, numerico, ayuda }: {
+function CampoEditable({ etiqueta, valor, alGuardar, procedencia, ancho, numerico, ayuda, mostrar }: {
   etiqueta: string; valor: string; alGuardar: (v: string) => void; procedencia?: { fuente: string; confianza: number }; ancho?: 'medio'; numerico?: boolean; ayuda?: string;
+  /** Cómo se enseña el valor guardado (el código «es» como «Español»); al editar se ve el valor tal cual. */
+  mostrar?: (v: string) => string;
 }) {
   const [editando, setEditando] = useState(false);
   const [borrador, setBorrador] = useState(valor);
@@ -142,7 +146,7 @@ function CampoEditable({ etiqueta, valor, alGuardar, procedencia, ancho, numeric
         />
       ) : (
         <button type="button" onClick={() => { setBorrador(valor); setEditando(true); }} className={cx('group mt-1 flex min-h-9 w-full items-center gap-2 rounded-s border border-transparent px-2 text-left text-[0.9375rem] hover:border-filete-fuerte hover:bg-hoja', dudoso && 'border-amarillo/70 bg-amarillo-suave/40', !valor && 'text-apagado')}>
-          <span className="min-w-0 flex-1 truncate">{valor || 'Añadir'}</span>
+          <span className="min-w-0 flex-1 truncate" title={mostrar && valor ? valor : undefined}>{valor ? (mostrar ? mostrar(valor) : valor) : 'Añadir'}</span>
           <Icono nombre="editar" tam={13} className="shrink-0 opacity-0 group-hover:opacity-60" />
         </button>
       )}

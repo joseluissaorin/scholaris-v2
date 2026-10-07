@@ -54,7 +54,7 @@ export function FalloConsulta({ error, reintentar, compacto = false, className }
   return (
     <div role="alert" className={`anim-sube flex flex-col items-center gap-3 rounded-2xl border border-dashed border-cream-500 bg-cream-100/60 px-6 py-10 text-center shadow-[var(--hundido)] ${className ?? ''}`}>
       <BocetoPerezoso nombre="borron" dibujar="ya" className="w-[min(13rem,60vw)]" />
-      <h3 className="text-[1.0625rem] font-semibold text-coffee-800">No pudimos cargar esto.</h3>
+      <h2 className="text-[1.0625rem] font-semibold text-coffee-800">No pudimos cargar esto.</h2>
       <p className="max-w-[48ch] text-[0.875rem] text-coffee-600">{motivo}</p>
       {reintentar ? <Boton variante="linea" onClick={reintentar}>Reintentar</Boton> : null}
     </div>

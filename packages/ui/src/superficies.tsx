@@ -176,7 +176,8 @@ export function Vacio({ forma = 'circulo', estilo, titulo, children, accion, cla
   return (
     <div className={cx('con-deriva anim-sube relative flex flex-col items-center gap-3 overflow-hidden rounded-2xl border border-dashed border-cream-500 bg-cream-100/60 px-6 py-10 text-center shadow-[var(--hundido)] sm:px-10', className)}>
       {dibujo ? <div className="mb-1 w-[min(15rem,70vw)]">{dibujo}</div> : <Composicion estilo={e} className="mb-2 h-24 w-36" />}
-      <h3 className="text-[1.0625rem] font-semibold text-coffee-800">{titulo}</h3>
+      {/* h2: nunca salta niveles, venga después del h1 de la página o dentro de una sección. */}
+      <h2 className="text-[1.0625rem] font-semibold text-coffee-800">{titulo}</h2>
       {children ? <div className="max-w-[48ch] text-[0.875rem] text-coffee-600">{children}</div> : null}
       {accion ? <div className="mt-2 flex flex-wrap justify-center gap-2">{accion}</div> : null}
     </div>

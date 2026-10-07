@@ -13,6 +13,7 @@ import { numero } from '../../lib/numero';
 import { bytes, duracion, fecha, NOMBRE_TIPO } from '../../lib/formato';
 import { FormaHablante } from '../reproductor/hablantes';
 import { qi } from './consultas';
+import { nombreIdioma, nombreTipoCsl } from '../../lib/nombres';
 
 // ---------------------------------------------------------------------------
 // Piezas comunes
@@ -93,11 +94,14 @@ const CAMPOS: Array<[keyof MetadatosDocumento, string]> = [
   ['editores', 'Editores'], ['traductores', 'Traductores'], ['anio', 'Año'], ['anioOriginal', 'Año de la obra'], ['fecha', 'Fecha'], ['sinFecha', 'Sin fecha'],
   ['editorial', 'Editorial'], ['lugar', 'Lugar'], ['edicion', 'Edición'], ['coleccion', 'Colección'], ['contenedor', 'Contenedor'], ['revista', 'Revista'],
   ['volumen', 'Volumen'], ['numero', 'Número'], ['paginas', 'Páginas'], ['doi', 'DOI'], ['isbn', 'ISBN'], ['url', 'URL'], ['idioma', 'Idioma'],
-  ['idiomaOriginal', 'Idioma original'], ['tipoCSL', 'Tipo (CSL)'], ['resumen', 'Resumen'],
+  ['idiomaOriginal', 'Idioma original'], ['tipoCSL', 'Tipo de obra'], ['resumen', 'Resumen'],
 ];
 
-function valorCampo(v: unknown): string {
+function valorCampo(v: unknown, k?: keyof MetadatosDocumento): string {
   if (v == null || v === '') return '';
+  // Códigos que se guardan tal cual y se enseñan con su nombre: «es» → «Español», «chapter» → «Capítulo».
+  if (typeof v === 'string' && (k === 'idioma' || k === 'idiomaOriginal')) return nombreIdioma(v);
+  if (typeof v === 'string' && k === 'tipoCSL') return nombreTipoCsl(v);
   if (Array.isArray(v)) return (v as Autor[]).map((a) => [a.nombre, a.apellidos].filter(Boolean).join(' ')).join('; ');
   if (typeof v === 'object') { const s = v as { desde?: number; hasta?: number; fundamento?: string }; return `h. ${s.desde ?? '…'}-${s.hasta ?? '…'}${s.fundamento ? ` (${s.fundamento})` : ''}`; }
   return String(v);
@@ -105,7 +109,7 @@ function valorCampo(v: unknown): string {
 
 export function FichaProcedencia({ doc }: { doc: DetalleDocumento }) {
   const m = doc.metadatos;
-  const filas = CAMPOS.map(([k, n]) => ({ k, n, v: valorCampo(m[k]), p: m.procedencia?.[k] })).filter((f) => f.v);
+  const filas = CAMPOS.map(([k, n]) => ({ k, n, v: valorCampo(m[k], k), p: m.procedencia?.[k] })).filter((f) => f.v);
   return (
     <Apartado titulo="Ficha" descripcion="Cada campo con su fuente y la confianza que se le da. Lo dudoso va en amarillo; se corrige en la ficha del lector.">
       <dl className="divide-y divide-cream-300">

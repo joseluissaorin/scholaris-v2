@@ -7,13 +7,13 @@ import { q } from '../datos/consultas';
 import { Lienzo } from '../componentes/comunes/cabecera';
 import { bytes, haceCuanto, NOMBRE_TIPO } from '../lib/formato';
 import { numero } from '../lib/numero';
+import { nombreIdioma } from '../lib/nombres';
 
 export const Route = createFileRoute('/explorar/corpus')({
   loader: ({ context }) => context.consultas.ensureQueryData(q.corpus()),
   component: Corpus,
 });
 
-const IDIOMA: Record<string, string> = { es: 'Español', en: 'Inglés', fr: 'Francés', la: 'Latín', it: 'Italiano', de: 'Alemán', pt: 'Portugués', ca: 'Catalán' };
 
 /** Barras horizontales: lo más legible para pocas categorías. Una sola tinta; el dato manda. */
 function Barras({ datos, etiqueta }: { datos: Array<[string, number]>; etiqueta: string }) {
@@ -65,7 +65,7 @@ function Corpus() {
         <Barras etiqueta="Por tipo" datos={Object.entries(data.porTipo).sort((a, b) => b[1] - a[1]).map(([k, n]) => [NOMBRE_TIPO[k as TipoEntrada] ?? k, n])} />
         {/* Las décadas llegan como «1950s»: se leen por su número («1950-59»), y en orden. */}
         <Barras etiqueta="Por década de la obra" datos={Object.entries(data.porDecada).map(([k, n]) => [parseInt(k, 10), n] as const).filter(([d]) => Number.isFinite(d)).sort((a, b) => a[0] - b[0]).map(([d, n]) => [`${d}-${String(d + 9).slice(-2)}`, n])} />
-        <Barras etiqueta="Por idioma" datos={Object.entries(data.porIdioma).sort((a, b) => b[1] - a[1]).map(([k, n]) => [IDIOMA[k] ?? (k === 'desconocido' ? 'Sin determinar' : k.charAt(0).toUpperCase() + k.slice(1)), n])} />
+        <Barras etiqueta="Por idioma" datos={Object.entries(data.porIdioma).sort((a, b) => b[1] - a[1]).map(([k, n]) => [k === 'desconocido' ? 'Sin determinar' : nombreIdioma(k), n])} />
       </div>
     </Lienzo>
   );

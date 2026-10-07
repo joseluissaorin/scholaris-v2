@@ -19,6 +19,7 @@ import { numero } from '../lib/numero';
 import { Boceto } from '../bocetos/boceto';
 import { Cifra } from '../movimiento/cifra';
 import { NotaMargen } from '../bocetos/nota-margen';
+import { nombreIdioma } from '../lib/nombres';
 
 type Modo = 'buscar' | 'preguntar';
 /** Dónde: lo mío (por defecto), las colecciones que sigo, o todo a la vez. */
@@ -180,7 +181,7 @@ function PaginaBuscar() {
             <div className={cx('mb-4 flex flex-wrap items-baseline gap-x-4 gap-y-1 transition-opacity', datos.isPlaceholderData && 'opacity-60')}>
               <h2 className="rotulo text-[0.75rem] text-coffee-700"><Cifra valor={resultados.length} /> pasajes</h2>
               <Rotulo>{preliminar ? <span className="inline-flex items-center gap-1.5"><span className="h-1.5 w-1.5 rounded-full bg-azul anim-pulso" />afinando el orden…</span> : <>{datos.data?.ms ? `${datos.data.ms} ms` : ''}{datos.data?.intencion ? ` · consulta ${datos.data.intencion}` : ''}</>}</Rotulo>
-              {titulo?.length ? <Rotulo className="truncate">También en: {titulo.map((t) => `${t.idioma} «${t.consulta}»`).join(' · ')}</Rotulo> : null}
+              {titulo?.length ? <Rotulo className="truncate">También en: {titulo.map((t) => `${nombreIdioma(t.idioma)} «${t.consulta}»`).join(' · ')}</Rotulo> : null}
               <Boton variante="linea" tam="p" icono="chispa" className="ml-auto" onClick={() => { fijar({ modo: 'preguntar' }); setPregunta(consulta); }}>Preguntar sobre esto</Boton>
             </div>
             <div ref={lista} className={cx('transition-opacity', datos.isPlaceholderData && 'opacity-60')}>

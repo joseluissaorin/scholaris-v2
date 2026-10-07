@@ -135,6 +135,26 @@ export async function buscarWikidata(sql: SQL, nombre: string, idioma: string, f
   return cs;
 }
 
+/**
+ * La descripción de una entidad en el primer idioma de `idiomas` que la tenga (el de la
+ * interfaz primero; el inglés, solo si no hay otra). La búsqueda la da en el idioma en
+ * que se buscó, y al encontrar por la búsqueda inglesa salía «oldest son of Erasmus
+ * Darwin…» en una interfaz española. Con caché: una sola petición por entidad.
+ */
+export async function descripcionWikidata(sql: SQL, qid: string, idiomas: string[], f: typeof fetch): Promise<string | null> {
+  const clave = `descripcion:${qid}`, lenguas = idiomas.join('|');
+  const [cache] = await sql.ejecutar<{ respuesta: string }>('SELECT respuesta FROM entidades_wikidata WHERE consulta = ? AND idioma = ?', clave, lenguas);
+  if (cache) return deJSON<{ d: string | null }>(cache.respuesta, { d: null }).d;
+  const url = `${API}?action=wbgetentities&format=json&props=descriptions&ids=${encodeURIComponent(qid)}&languages=${encodeURIComponent(lenguas)}`;
+  const r = await f(url, { headers: { 'user-agent': AGENTE_WIKIDATA, 'api-user-agent': AGENTE_WIKIDATA, accept: 'application/json' } });
+  if (!r.ok) throw new Error(`Wikidata respondió ${r.status}`);
+  const j = (await r.json()) as { entities?: Record<string, { descriptions?: Record<string, { value?: string }> }> };
+  const desc = j.entities?.[qid]?.descriptions ?? {};
+  const d = idiomas.map((l) => desc[l]?.value?.trim()).find((x) => !!x) ?? null;
+  await sql.ejecutar('INSERT OR REPLACE INTO entidades_wikidata (consulta, idioma, respuesta, creada) VALUES (?, ?, ?, ?)', clave, lenguas, JSON.stringify({ d }), ahora());
+  return d;
+}
+
 export interface OpcionesWikidata {
   fetch?: typeof fetch;
   /** Consultas como mucho en esta pasada. */
@@ -239,6 +259,12 @@ export async function enlazarWikidata(sql: SQL, o: OpcionesWikidata = {}): Promi
         elegido = elegirCandidato(e.nombre, e.tipo, cs, ficticia, pistas);
         if (elegido) break;
       }
+      // La descripción, en el idioma de la interfaz si Wikidata la tiene (si no, la de la búsqueda).
+      if (elegido) {
+        const d = await descripcionWikidata(sql, elegido.id, idiomas, f);
+        consultadas++;
+        if (d) elegido = { ...elegido, descripcion: d };
+      }
     } catch {
       // Sin red o con Wikidata caído: se vuelve a intentar en otra pasada.
       break;
@@ -248,6 +274,23 @@ export async function enlazarWikidata(sql: SQL, o: OpcionesWikidata = {}): Promi
       elegido?.id ?? null, elegido?.descripcion ?? null, ahora(), e.id,
     );
     if (elegido) enlazadas++;
+  }
+  // Las ya enlazadas antes de pedir la descripción en el idioma de la interfaz: se rehacen
+  // una vez (la caché marca las ya miradas), dentro del mismo cupo de consultas.
+  if (consultadas < maximo) {
+    const viejas = await sql.ejecutar<{ id: string; wikidata: string }>(
+      `SELECT id, wikidata FROM entidades e WHERE fusionada_en IS NULL AND wikidata IS NOT NULL
+         AND NOT EXISTS (SELECT 1 FROM entidades_wikidata w WHERE w.consulta = 'descripcion:' || e.wikidata AND w.idioma = ?)
+       ORDER BY n_documentos DESC, n_menciones DESC LIMIT ?`,
+      idiomas.join('|'), maximo - consultadas,
+    );
+    for (const v of viejas) {
+      let d: string | null;
+      try { d = await descripcionWikidata(sql, v.wikidata, idiomas, f); } catch { break; }
+      consultadas++;
+      if (pausa) await new Promise((r) => setTimeout(r, pausa));
+      if (d) await sql.ejecutar('UPDATE entidades SET descripcion = ?, actualizada = ? WHERE id = ?', d, ahora(), v.id);
+    }
   }
   return { consultadas, enlazadas };
 }
