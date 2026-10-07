@@ -17,6 +17,9 @@ import type { Env } from './env.js';
 import { reindexar as reindexarMotor } from '../compartido/motor-ingesta.js';
 import { espacioNombresDe } from './indice-vectorize.js';
 import { conversorCF, recortadorCF } from './conversor.js';
+import type { TrabajoMantenimiento } from './cola.js';
+import { rellenarVectoresFiguras } from '../rutas/contenido.js';
+import { leerDocumento } from '@scholaris/spdf';
 import { SqlDO } from './sql.js';
 import { LIMITES } from '../compartido/planes.js';
 import { cuerpoError } from '../compartido/errores.js';
@@ -70,6 +73,7 @@ export class Estanteria extends DurableObject<Env> {
       },
       ...(conversorCF(env) ? { convertir: conversorCF(env)! } : {}),
       ...(recortadorCF(env) ? { recortar: recortadorCF(env)! } : {}),
+      encolarMantenimiento: async (trabajo) => { await env.COLA.send({ tipo: 'mantenimiento', usuario: usuario.id, trabajo }); },
     };
     // El índice depende del espacio del embebedor: se resuelve al primer uso.
     Object.defineProperty(p, 'indice', { get: () => (this.indice ??= indicePerezoso(env, inteligencia, this.base)), enumerable: true });
@@ -175,6 +179,44 @@ export class Estanteria extends DurableObject<Env> {
     const n = await reindexarMotor(this.base, indice, espacioNombresDe(usuario), documento);
     this.base.ejecutarSync("DELETE FROM pl_avisos WHERE documento = ? AND codigo = 'vectores_pendientes'", [documento]);
     return n;
+  }
+
+  /**
+   * Mantenimiento de la cuenta por tandas de ~20 s: «reindexar» vuelve a mandar a
+   * Vectorize los vectores guardados (sin llamar a Gemini; p. ej. al crear un índice
+   * de metadatos nuevo), «figuras» vectoriza las figuras que no tienen vector. Es
+   * idempotente; el progreso queda en la tabla spdf y la tanda siguiente se encola.
+   */
+  async mantenimiento(usuario: string, trabajo: TrabajoMantenimiento, desde = ''): Promise<{ hechos: number; siguiente?: string }> {
+    const inicio = Date.now();
+    const clave = `mantenimiento:${trabajo}`;
+    const previo = JSON.parse(String(this.base.ejecutarSync('SELECT valor FROM spdf WHERE clave = ?', [clave])[0]?.valor ?? '{}')) as { hechos?: number; vectores?: number; usd?: number };
+    const progreso = { estado: 'en_marcha', desde, hechos: desde ? previo.hechos ?? 0 : 0, vectores: desde ? previo.vectores ?? 0 : 0, usd: desde ? previo.usd ?? 0 : 0, actualizado: '' };
+    const guardar = () => { progreso.actualizado = new Date().toISOString(); this.base.ejecutarSync("INSERT INTO spdf(clave, valor) VALUES (?, ?) ON CONFLICT(clave) DO UPDATE SET valor = excluded.valor", [clave, JSON.stringify(progreso)]); };
+    const docs = this.base.ejecutarSync("SELECT id FROM documentos WHERE estado = 'listo' AND id > ? ORDER BY id", [desde]).map((f) => String(f.id));
+    const u: UsuarioSesion = { id: usuario, plan: 'pro', correo: '', nombre: '', funciones: [], via: 'clerk' };
+    const p = this.puertos(u, origenDe(this.env));
+    for (const id of docs) {
+      if (Date.now() - inicio > 20_000) {
+        guardar();
+        await this.env.COLA.send({ tipo: 'mantenimiento', usuario, trabajo, desde: progreso.desde });
+        return { hechos: progreso.hechos, siguiente: progreso.desde };
+      }
+      if (trabajo === 'reindexar') {
+        const ia = await p.inteligencia();
+        const indice = indiceDesdeEnv(this.env, ia, this.base);
+        if (indice) progreso.vectores += await reindexarMotor(this.base, indice, espacioNombresDe(usuario), id);
+      } else {
+        const d = await leerDocumento(this.base, id);
+        if (d) { const r = await rellenarVectoresFiguras(p, d, false); progreso.vectores += r.vectorizadas; progreso.usd = Math.round((progreso.usd + r.costeUsd) * 10_000) / 10_000; }
+      }
+      progreso.hechos++;
+      progreso.desde = id;
+      guardar();
+    }
+    progreso.estado = 'hecho';
+    guardar();
+    return { hechos: progreso.hechos };
   }
 
   /** Cron: vigilantes diarios o semanales del usuario. */

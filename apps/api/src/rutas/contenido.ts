@@ -201,6 +201,25 @@ function recorteDe(p: PuertosUsuario, documento: string) {
   };
 }
 
+/** Relleno de los vectores de figuras de un documento (lo usan la ruta y el trabajo por cuenta). */
+export async function rellenarVectoresFiguras(p: PuertosUsuario, d: Documento, simular: boolean) {
+  const ia = await p.inteligencia();
+  const t0 = Date.now();
+  const r = await vectorizarFigurasPendientes(d.id, {
+    sql: p.sql,
+    imagen: async (clave) => { const bytes = await p.almacen.bytes(claveDe(p.usuario.id, d.id, clave)); return bytes ? { bytes, mime: MIME_IMAGEN(clave) } : null; },
+    ...recorteDe(p, d.id),
+    embebedor: ia.embebedor,
+    guardarVectores: (vs, tiempos) => guardarVectoresFiguras(p, d, vs, tiempos),
+  }, { simular });
+  const costeUsd = estimarCoste(0, 0, 0, r.llamadas);
+  if (!r.simulado && r.vectorizadas) {
+    await p.sql.ejecutar('INSERT INTO procedencia (documento, fase, proveedor, detalle, ms, cuando) VALUES (?, ?, ?, ?, ?, ?)', d.id, 'figuras', `vectores:${ia.embebedor.espacio.id}`,
+      JSON.stringify({ que: 'rellenar', vectorizadas: r.vectorizadas, usd: costeUsd }), Date.now() - t0, new Date().toISOString());
+  }
+  return { documento: d.id, espacio: ia.embebedor.espacio.id, recortador: !!p.recortar, ...r, costeUsd, ms: Date.now() - t0 };
+}
+
 export function rutasContenido(app: Hono<Entorno>): void {
   /*
    * Relleno idempotente de los vectores de las figuras que no lo tienen (recorte
@@ -214,21 +233,7 @@ export function rutasContenido(app: Hono<Entorno>): void {
     if (!b.simular) exigirEscritura(c);
     const d = (await leerDocumento(p.sql, id)) ?? noEncontrado('El documento');
     exigir(d.estado === 'listo', 'El documento aún se está leyendo; vuelve a intentarlo cuando termine.');
-    const ia = await p.inteligencia();
-    const t0 = Date.now();
-    const r = await vectorizarFigurasPendientes(id, {
-      sql: p.sql,
-      imagen: async (clave) => { const bytes = await p.almacen.bytes(claveDe(p.usuario.id, id, clave)); return bytes ? { bytes, mime: MIME_IMAGEN(clave) } : null; },
-      ...recorteDe(p, id),
-      embebedor: ia.embebedor,
-      guardarVectores: (vs, tiempos) => guardarVectoresFiguras(p, d, vs, tiempos),
-    }, { simular: !!b.simular });
-    const costeUsd = estimarCoste(0, 0, 0, r.llamadas);
-    if (!r.simulado && r.vectorizadas) {
-      await p.sql.ejecutar('INSERT INTO procedencia (documento, fase, proveedor, detalle, ms, cuando) VALUES (?, ?, ?, ?, ?, ?)', id, 'figuras', `vectores:${ia.embebedor.espacio.id}`,
-        JSON.stringify({ que: 'rellenar', vectorizadas: r.vectorizadas, usd: costeUsd }), Date.now() - t0, new Date().toISOString());
-    }
-    return c.json({ documento: id, espacio: ia.embebedor.espacio.id, recortador: !!p.recortar, ...r, costeUsd, ms: Date.now() - t0 });
+    return c.json(await rellenarVectoresFiguras(p, d, !!b.simular));
   });
 
   app.post('/documentos/:id/figuras/rehacer', async (c: Ctx) => {

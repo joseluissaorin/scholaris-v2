@@ -133,6 +133,7 @@ export default {
         const b = m.body;
         if (b.tipo === 'vigilantes') await env.ESTANTERIA.getByName(b.usuario).vigilantes({ id: b.usuario, plan: b.plan }, b.modo);
         else if (b.tipo === 'reindexar') await env.ESTANTERIA.getByName(b.usuario).reindexar(b.usuario, b.documento);
+        else if (b.tipo === 'mantenimiento') await env.ESTANTERIA.getByName(b.usuario).mantenimiento(b.usuario, b.trabajo, b.desde);
         m.ack();
       } catch (e) {
         console.error(JSON.stringify({ nivel: 'error', cola: m.body, error: (e as Error).message }));

@@ -141,6 +141,8 @@ export interface PuertosUsuario {
    * para rehacer partes de un documento sin volver a leerlo. Puede faltar.
    */
   convertir?(archivo: ArchivoConvertir, guardar: (id: string, datos: Uint8Array, mime: string) => Promise<void>): Promise<PaqueteConversion>;
+  /** Deja un trabajo de mantenimiento de la cuenta en la cola de segundo plano (Cloudflare). */
+  encolarMantenimiento?(trabajo: 'reindexar' | 'figuras'): Promise<void>;
   /** Recorta una región (0-1) de una imagen: el vector propio de cada figura de página. */
   recortar?: Recortador;
 }

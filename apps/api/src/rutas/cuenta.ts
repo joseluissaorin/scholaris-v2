@@ -4,7 +4,9 @@ import type { AlcanceClave, CrearClaveApi, GuardarClaveProveedor, PreferenciasPa
 import type { Entorno } from '../entorno.js';
 import { cuerpoJson, exigir, fallo } from '../compartido/errores.js';
 import { idsIndiceDeDocumento } from '../compartido/estanteria.js';
-import { prm, puertos, type Ctx } from './util.js';
+import { exigirEscritura, prm, puertos, type Ctx } from './util.js';
+import { leerDocumento } from '@scholaris/spdf';
+import { rellenarVectoresFiguras } from './contenido.js';
 
 const PROVEEDORES: ProveedorClave[] = ['gemini', 'openrouter', 'typesafe', 'mistral', 'voyage', 'cohere', 'jina', 'zeroentropy'];
 const ALCANCES: AlcanceClave[] = ['lectura', 'escritura', 'mcp'];
@@ -15,6 +17,44 @@ function exigirSesion(c: Ctx): void {
 }
 
 export function rutasCuenta(app: Hono<Entorno>): void {
+  /*
+   * Mantenimiento de la cuenta: «reindexar» (reinsertar en Vectorize los vectores
+   * guardados, sin Gemini) o «figuras» (vectorizar las figuras sin vector). Con
+   * `simular`, cuenta y estima el coste; sin él, lo deja en la cola por tandas.
+   */
+  app.post('/cuenta/mantenimiento', async (c: Ctx) => {
+    const p = puertos(c);
+    const b = await cuerpoJson<{ trabajo?: string; simular?: boolean }>(c).catch(() => ({} as { trabajo?: string; simular?: boolean }));
+    const trabajo = b.trabajo === 'figuras' ? 'figuras' : b.trabajo === 'reindexar' ? 'reindexar' : null;
+    exigir(trabajo, 'Indica el trabajo: «reindexar» o «figuras».');
+    const docs = await p.sql.ejecutar<{ id: string }>("SELECT id FROM documentos WHERE estado = 'listo' ORDER BY id");
+    if (b.simular) {
+      if (trabajo === 'reindexar') {
+        const ia = await p.inteligencia();
+        const [n] = await p.sql.ejecutar<{ n: number }>('SELECT count(*) AS n FROM vectores WHERE espacio = ?', ia.embebedor.espacio.id);
+        return c.json({ trabajo, simulado: true, documentos: docs.length, vectores: n?.n ?? 0, costeUsd: 0 });
+      }
+      let sinVector = 0, usd = 0;
+      for (const { id } of docs) {
+        const d = await leerDocumento(p.sql, id);
+        if (!d) continue;
+        const r = await rellenarVectoresFiguras(p, d, true);
+        sinVector += r.sinVector; usd += r.costeUsd;
+      }
+      return c.json({ trabajo, simulado: true, documentos: docs.length, sinVector, costeUsd: Math.round(usd * 10_000) / 10_000, recortador: !!p.recortar });
+    }
+    exigirEscritura(c);
+    exigir(!!p.encolarMantenimiento, 'Este servidor no tiene cola de segundo plano.');
+    await p.encolarMantenimiento!(trabajo!);
+    return c.json({ trabajo, encolado: true, documentos: docs.length }, 202);
+  });
+
+  app.get('/cuenta/mantenimiento', async (c: Ctx) => {
+    const p = puertos(c);
+    const filas = await p.sql.ejecutar<{ clave: string; valor: string }>("SELECT clave, valor FROM spdf WHERE clave LIKE 'mantenimiento:%'");
+    return c.json(Object.fromEntries(filas.map((f) => [f.clave.slice('mantenimiento:'.length), JSON.parse(f.valor)])));
+  });
+
   app.get('/auth/yo', async (c: Ctx) => {
     const p = puertos(c);
     const u = p.usuario;
