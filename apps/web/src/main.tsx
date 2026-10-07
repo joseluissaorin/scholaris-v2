@@ -60,6 +60,14 @@ void promesaConfig.then((config) => {
         const l = document.createElement('link');
         l.rel = 'preconnect'; l.href = `https://${anfitrion}`; l.crossOrigin = 'anonymous';
         document.head.appendChild(l);
+        // Clerk baja sus dos guiones uno tras otro (clerk-js y, al terminar, su interfaz): se piden ya
+        // los dos a la vez. Las mismas URL y el mismo crossorigin que usa @clerk/shared (mayores 6 y 1);
+        // si un día cambian, la precarga solo se desperdicia.
+        for (const ruta of ['npm/@clerk/clerk-js@6/dist/clerk.browser.js', 'npm/@clerk/ui@1/dist/ui.browser.js']) {
+          const s = document.createElement('link');
+          s.rel = 'preload'; s.as = 'script'; s.href = `https://${anfitrion}/${ruta}`; s.crossOrigin = 'anonymous';
+          document.head.appendChild(s);
+        }
       }
     } catch { /* clave sin anfitrión legible */ }
   }

@@ -64,40 +64,15 @@ function tokenLocal(): string | null {
 
 let arranque: Promise<ConfigPublica> | null = null;
 
-const CLAVE_CONFIG = 'scholaris.config';
-const VIDA_CONFIG = 7 * 24 * 3600_000;
-
-/** La configuración de la última visita a esta misma API (y de esta misma web), si es reciente. */
-function configGuardada(base: string): ConfigPublica | null {
-  try {
-    const g = JSON.parse(localStorage.getItem(CLAVE_CONFIG) ?? 'null') as { base: string; web: string; t: number; config: ConfigPublica } | null;
-    if (!g || g.base !== base || g.web !== import.meta.env.MODE || Date.now() - g.t > VIDA_CONFIG) return null;
-    return g.config?.modo ? g.config : null;
-  } catch { return null; }
-}
-
-function guardarConfig(base: string, config: ConfigPublica): void {
-  try { localStorage.setItem(CLAVE_CONFIG, JSON.stringify({ base, web: import.meta.env.MODE, t: Date.now(), config })); } catch { /* sin almacenamiento */ }
-}
-
 /** Lee `/config` (sin autenticar) y deja el cliente listo. */
 export function arrancar(): Promise<ConfigPublica> {
   arranque ??= (async () => {
     const base = (import.meta.env.VITE_API as string | undefined) ?? '';
     if (!quiereSimulado()) {
       const real = crearCliente({ base, token: tokenActual });
-      // La configuración no cambia entre despliegues: la de la última visita deja arrancar a Clerk
-      // y a la primera sección ya (un viaje menos, ~100 ms), y se renueva por detrás para la próxima.
-      const guardada = configGuardada(base);
-      if (guardada) {
-        cliente = real;
-        void real.config().then((c) => guardarConfig(base, c)).catch(() => undefined);
-        return guardada;
-      }
       try {
         const config = await real.config();
         cliente = real;
-        guardarConfig(base, config);
         return config;
       } catch (e) {
         // En producción, sin API no hay demostración que valga salvo que se pida.
