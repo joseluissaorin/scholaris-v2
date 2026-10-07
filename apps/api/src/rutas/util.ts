@@ -21,6 +21,15 @@ export function etiquetaAncla(a: Ancla, fin?: Ancla): string {
   try { return anclaACita(a, fin); } catch { return ''; }
 }
 
+/**
+ * El ancla que se cita de un resultado: la del pasaje relevante (la página o el
+ * segundo de sus oraciones) y, si no la tiene, la del fragmento entero.
+ */
+export function anclaDePasaje(r: { fragmento: { ancla: Ancla; anclaFin?: Ancla }; pasaje?: { ancla?: Ancla; anclaFin?: Ancla } }): [Ancla, Ancla | undefined] {
+  if (r.pasaje?.ancla) return [r.pasaje.ancla, r.pasaje.anclaFin];
+  return [r.fragmento.ancla, r.fragmento.anclaFin];
+}
+
 /** «(Darwin, 1859, p. 81)» a partir de metadatos y ancla. */
 export function citaCorta(m: Pick<MetadatosDocumento, 'autores' | 'anio' | 'titulo'> & Partial<Pick<MetadatosDocumento, 'anioOriginal'>> | undefined, a: Ancla, fin?: Ancla): string {
   const autores = m?.autores ?? [];

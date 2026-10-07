@@ -31,6 +31,9 @@ export const enrutador = createRouter({
   defaultErrorComponent: ErrorDeRuta,
   defaultNotFoundComponent: NoEncontrado,
   scrollRestoration: true,
+  // Buscar se recuerda por su URL (consulta y filtros): al volver del lector, también tras entrar
+  // directamente en /buscar (esa primera entrada del historial no trae clave propia), sale donde estaba.
+  getScrollRestorationKey: (l) => (l.pathname.startsWith('/buscar') ? l.href : (l.state as { __TSR_key?: string }).__TSR_key ?? l.href),
 });
 
 // Entre pantallas: el contenido sube del papel y las portadas viajan al lector.

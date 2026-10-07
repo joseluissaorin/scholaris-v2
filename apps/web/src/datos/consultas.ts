@@ -109,8 +109,34 @@ export const q = {
       }
     },
     enabled: consulta.trim().length > 1,
-    staleTime: 2 * 60_000,
+    // Al volver del lector, los resultados salen de la caché al instante y sin repetir la búsqueda.
+    staleTime: 30 * 60_000,
+    gcTime: 30 * 60_000,
+    refetchOnMount: false,
     placeholderData: keepPreviousData,
+  }),
+  busquedaCruzada: (consulta: string, filtros: Filtros) => queryOptions({
+    queryKey: ['multilingue', consulta, filtros],
+    queryFn: () => api().busqueda.multilingue({ consulta, filtros, k: 30 }),
+    placeholderData: keepPreviousData,
+    staleTime: 30 * 60_000,
+    gcTime: 30 * 60_000,
+    refetchOnMount: false,
+  }),
+  busquedaConjunta: (consulta: string, filtros: Filtros, alcance: 'seguidas' | 'todo') => queryOptions({
+    queryKey: ['conjunta', consulta, filtros, alcance],
+    queryFn: () => api().busqueda.conjunta({ consulta, filtros, k: 30, alcance }),
+    placeholderData: keepPreviousData,
+    staleTime: 30 * 60_000,
+    gcTime: 30 * 60_000,
+    refetchOnMount: false,
+  }),
+  /** Un fragmento con su texto crudo (para el pasaje que se subraya en el lector). */
+  fragmento: (documento: string, fragmento: string) => queryOptions({
+    queryKey: ['fragmento', documento, fragmento],
+    queryFn: () => api().documentos.fragmento(documento, fragmento),
+    staleTime: 30 * 60_000,
+    retry: 0,
   }),
   tareas: () => queryOptions({ queryKey: ['tareas'], queryFn: () => api().tareas.listar(true) }),
   historial: () => queryOptions({ queryKey: ['historial'], queryFn: () => api().historial.listar({ limite: 200 }) }),

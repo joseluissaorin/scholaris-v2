@@ -10,6 +10,8 @@ Los números salen de `bench/calidad/RESULTADOS.md` (183 consultas, 8 879 juicio
 - **Citas literales**: los pasajes que contienen la frase van primero y detrás los afines por sentido (un vector de consulta, sin modelo ni reordenador).
 - **`alPreliminar(resultados)`** en `OpcionesBusqueda`: el orden de la fusión antes de reordenar (a los ~350 ms). La API puede mandarlo por SSE y sustituirlo cuando llegue el definitivo; es la única forma de bajar de 600 ms percibidos con Jev en serie.
 
+- **El pasaje relevante** (`Resultado.pasaje`, definido en `nucleo/pasaje.ts`): de 1 a 3 oraciones completas del fragmento, elegidas en la ventana del resaltado (`resaltarConPasaje`), con sus desplazamientos en el texto crudo y su propia ancla (`anclarPasajes`: la página de esas oraciones si el fragmento cruza páginas; en audio y vídeo, el segundo de su primera palabra). La etiqueta y la cita de la API salen de ahí. En Preguntar, cada nota lleva las oraciones que sostienen su frase (`pasajeRelevante` de la fuente), y solo si casan con dos términos distintos; si no, el fragmento entero.
+
 ## Para otros paquetes
 
 - **Ingesta: los vectores de página no ayudan a buscar texto.** La vía visual sola da nDCG 0,20, y con peso 0,3 restaba en las consultas de texto (0,723 frente a 0,751 sin reordenar sobre Attention, El perseguidor y Lewis). El buscador ya solo los usa en consultas de intención «visual». Conviene mantener `vistaPaginas: 'utiles'` (escaneados, fotos, diapositivas, páginas con figuras). Si hace falta ahorrar, se podrían quitar también en los escaneados de texto corrido; con este banco no se puede medir porque no hay consultas visuales sobre escaneados.

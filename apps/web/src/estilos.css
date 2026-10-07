@@ -20,6 +20,23 @@ mark {
   border-radius: 2px;
 }
 
+/*
+ * El pasaje que se cita: en la tarjeta de un resultado, una raya de tinta fina bajo
+ * sus oraciones (lo que se ve es lo que copia «Cita»); en el lector, el subrayado
+ * de lápiz amarillo sobre sus palabras, con el resto del fragmento en un tono
+ * muy suave alrededor (CSS Custom Highlight API: no toca el texto ni el DOM).
+ */
+.pasaje { text-decoration: underline; text-decoration-color: rgb(184 62 51 / 0.45); text-decoration-thickness: 1.5px; text-underline-offset: 0.22em; text-decoration-skip-ink: auto; }
+::highlight(pasaje) { background-color: rgb(232 168 56 / 0.34); color: inherit; }
+::highlight(pasaje-contexto) { background-color: rgb(232 168 56 / 0.09); }
+.oscuro ::highlight(pasaje) { background-color: rgb(232 168 56 / 0.3); }
+/* Respaldo sin la API de resaltados: el párrafo del pasaje, marcado al margen. */
+[data-pasaje-respaldo] { box-shadow: inset 3px 0 0 var(--s-amarillo, #e8a838); padding-left: 0.6em; margin-left: -0.6em; }
+/* Buscar · el resultado del que se vuelve. */
+.resultado-destacado { border-color: var(--s-coffee-500, #7a5f4f); box-shadow: var(--levantado), 0 0 0 3px rgb(232 168 56 / 0.45); }
+/* Transcripción · las palabras del pasaje que abrió el lector. */
+.palabra[data-marca='pasaje'] { background: rgb(232 168 56 / 0.22); }
+
 /* Quién habla en un pasaje de entrevista: etiqueta en versalitas, no Markdown. */
 .hablante {
   font-family: 'DM Sans', system-ui, sans-serif;

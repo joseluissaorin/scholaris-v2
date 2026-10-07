@@ -1,16 +1,19 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { createFileRoute, Link, notFound, useNavigate } from '@tanstack/react-router';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createFileRoute, Link, notFound, useNavigate, useRouter, useRouterState } from '@tanstack/react-router';
 import { esNoEncontrado } from '../componentes/comunes/errores';
 import { useQuery, useQueryClient, useSuspenseQuery } from '@tanstack/react-query';
-import type { DetalleDocumento, MapaFolios, ResumenDocumento } from '@scholaris/contrato';
+import type { DetalleDocumento, MapaFolios, ResultadoVista, ResumenDocumento } from '@scholaris/contrato';
+import { enmascarar, textoDePasaje } from '@scholaris/nucleo';
 import { Dialog } from 'radix-ui';
 import {
-  avisar, Boton, cx, Esqueleto, Folio, Icono, MenuContenido, MenuDisparador, MenuElemento, MenuRaiz, MenuRotulo, Rotulo, Consejo,
+  avisar, Boton, cx, Dialogo, Esqueleto, Folio, Icono, MenuContenido, MenuDisparador, MenuElemento, MenuRaiz, MenuRotulo, Rotulo, Consejo, Teclas,
 } from '@scholaris/ui';
 import { BLOQUE, precargarLector, q } from '../datos/consultas';
 import { api } from '../datos/api';
 import { useIngestas } from '../datos/ingesta';
-import { validarBusquedaLector, type BusquedaLector } from '../lib/anclas';
+import { validarBusquedaLector, type BusquedaLector, type ContextoBusqueda } from '../lib/anclas';
+import { anotarVenida, busquedaDeResultado, contextoLimpio, opcionesDeContexto, precargarResultado, sembrarFragmento } from '../datos/recorrido';
+import { claveDePasaje, pedirDesplazamiento } from '../componentes/lector/subrayado';
 import { anotarReciente, ponerPreferencia, preferencia } from '../lib/acciones';
 import { anioVisible, contenedorVisible, autores, ESTILOS_RAPIDOS, esMedio, tiempoACadena, NOMBRE_TIPO } from '../lib/formato';
 import { Flujo, useUnidadEnCache, type ManejadorFlujo, type ModoLectura } from '../componentes/lector/flujo';
@@ -41,8 +44,14 @@ export const Route = createFileRoute('/lector/$id')({
     }
   },
   pendingComponent: EsperaLector,
-  component: Lector,
+  component: LectorRuta,
 });
+
+// Otro documento (al pasar al resultado siguiente) es otro lector: nada del anterior (desplazamiento, medio) se arrastra.
+function LectorRuta() {
+  const { id } = Route.useParams();
+  return <Lector key={id} />;
+}
 
 function EsperaLector() {
   return (
@@ -76,9 +85,93 @@ function Lector() {
   const unidad = useUnidadEnCache(id);
   const [sel, limpiarSel] = useSeleccion(zona, unidad);
 
+  // El pasaje que abrió el lector (?f=&pd=&ph=): sus oraciones se subrayan; el resto del fragmento, en suave.
+  const conPasaje = !!busqueda.f && busqueda.pd != null && busqueda.ph != null;
+  const { data: fragmento } = useQuery({ ...q.fragmento(id, busqueda.f ?? ''), enabled: conPasaje });
+  const pasaje = useMemo(() => {
+    const crudo = fragmento?.textoCrudo;
+    const pd = busqueda.pd, ph = busqueda.ph;
+    if (!crudo || pd == null || ph == null || ph <= pd || ph > crudo.length) return undefined;
+    const m = enmascarar(crudo).texto;
+    return { texto: textoDePasaje(m, pd, ph), contexto: textoDePasaje(m, 0, m.length) };
+  }, [fragmento?.textoCrudo, busqueda.pd, busqueda.ph]);
+  // Cada pasaje nuevo se pone a la vista una vez (lo hace la página que lo tiene, cuando se pinta).
+  const pasajePedido = useRef<string | null>(null);
+  if (pasaje && !medio && pasajePedido.current !== pasaje.texto) { pasajePedido.current = pasaje.texto; pedirDesplazamiento(claveDePasaje(pasaje.texto)); }
+
+  // Recorrido de los resultados de la búsqueda de la que se vino (de la caché: no se busca otra vez).
+  const rb = busqueda.rb;
+  const router = useRouter();
+  const desdeResultados = useRouterState({ select: (s) => !!(s.location.state as { desdeResultados?: boolean }).desdeResultados });
+  const { data: listaBusqueda } = useQuery({ ...(rb ? opcionesDeContexto(rb) : { queryKey: ['recorrido', 'ninguno'], queryFn: () => ({ resultados: [] }) }), enabled: false });
+  const lista = useMemo(() => (listaBusqueda?.resultados ?? []).filter((r: ResultadoVista & { origen?: { propia?: boolean } }) => !r.origen || r.origen.propia), [listaBusqueda]);
+  const posicion = rb ? (busqueda.f ? lista.findIndex((r) => r.fragmento.id === busqueda.f) : -1) : -1;
+  const pos = posicion >= 0 ? posicion : busqueda.ri ?? -1;
+  // Mientras se lee uno, el siguiente (y el anterior) ya se están bajando: documento, páginas y texto.
+  useEffect(() => {
+    if (pos < 0) return;
+    const h = window.setTimeout(() => { for (const k of [pos + 1, pos - 1]) { const r = lista[k]; if (r) void precargarResultado(qc, r); } }, 400);
+    return () => window.clearTimeout(h);
+  }, [pos, lista, qc]);
+
+  const irAResultado = useCallback((k: number) => {
+    const r = lista[k];
+    if (!rb || !r) return;
+    sembrarFragmento(qc, r);
+    anotarVenida(rb, r.fragmento.id);
+    const search = busquedaDeResultado(r, { consulta: rb.q, contexto: rb, indice: k });
+    const estado = { desdeResultados };
+    if (r.documento.id === id) {
+      void navegar({ search, replace: true, resetScroll: false, state: estado });
+      // El mismo documento: se desplaza al pasaje sin recargar nada.
+      if (medio) { if (search.t != null) reproductor.current?.irA(search.t); }
+      // Cerca, se desliza; lejos, se salta (deslizar por cien páginas bajaría todas sus imágenes).
+      else if (search.u) flujo.current?.irA(search.u, Math.abs(search.u - actual) <= 3);
+    } else {
+      void navegar({ to: '/lector/$id', params: { id: r.documento.id }, search, replace: true, state: estado });
+    }
+  }, [lista, rb, qc, id, medio, navegar, desdeResultados, actual]);
+
+  const volverAResultados = useCallback(() => {
+    if (!rb) return;
+    // Atrás de verdad: la lista sale de la caché, en su sitio y sin buscar otra vez.
+    if (desdeResultados && router.history.canGoBack()) router.history.back();
+    else void navegar({ to: '/buscar', search: contextoLimpio(rb) as never });
+  }, [rb, desdeResultados, router, navegar]);
+
+  // Teclas: N y P recorren los resultados, Esc vuelve a ellos, ? enseña las teclas (el reproductor tiene las suyas).
+  const [ayuda, setAyuda] = useState(false);
+  useEffect(() => {
+    const k = (e: KeyboardEvent) => {
+      if (e.defaultPrevented || e.metaKey || e.ctrlKey || e.altKey) return;
+      const t = e.target as HTMLElement | null;
+      if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
+      if (document.querySelector('[role="dialog"], [role="menu"]')) return;
+      const tecla = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+      if (rb && tecla === 'n' && pos >= 0 && pos + 1 < lista.length) { e.preventDefault(); irAResultado(pos + 1); }
+      else if (rb && tecla === 'p' && pos > 0) { e.preventDefault(); irAResultado(pos - 1); }
+      else if (rb && tecla === 'Escape' && !document.fullscreenElement && !window.getSelection()?.toString()) { e.preventDefault(); volverAResultados(); }
+      else if (!medio && tecla === '?') { e.preventDefault(); setAyuda(true); }
+    };
+    window.addEventListener('keydown', k);
+    return () => window.removeEventListener('keydown', k);
+  }, [rb, pos, lista.length, irAResultado, volverAResultados, medio]);
+
   // Primera unidad: la del enlace, o la que corresponde a sección y párrafo.
   const { data: secciones } = useQuery(q.secciones(id));
   const inicial = busqueda.u ?? (busqueda.sec && secciones ? (secciones.find((s) => s.titulo === busqueda.sec)?.unidadDesde ?? 1) + Math.max(0, (busqueda.par ?? 1) - 1) : 1);
+  // Un enlace por sección y párrafo (EPUB, Markdown, web) solo se sabe situar cuando llega el índice:
+  // entonces (y al pasar a otro resultado del mismo documento) se va a esa unidad.
+  const destinoSeccion = busqueda.u == null && busqueda.sec && secciones ? inicial : null;
+  const seccionSituada = useRef<string | null>(null);
+  useEffect(() => {
+    if (destinoSeccion == null) return;
+    const clave = `${busqueda.sec}|${busqueda.par ?? ''}|${busqueda.f ?? ''}`;
+    if (seccionSituada.current === clave) return;
+    seccionSituada.current = clave;
+    const h = window.setTimeout(() => flujo.current?.irA(destinoSeccion), 30);
+    return () => window.clearTimeout(h);
+  }, [destinoSeccion]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ⇧⌘C: copiar la referencia de este documento, desde cualquier parte del lector.
   useEffect(() => {
@@ -134,9 +227,15 @@ function Lector() {
       {/* Barra del lector */}
       <div className="sticky top-14 z-30 border-b border-cream-300 bg-cream-50/90 shadow-[var(--shadow-soft)] backdrop-blur lg:top-0">
         <div className="flex h-[4.25rem] items-center gap-2 px-3 md:gap-3 md:px-6">
-          <Consejo texto="Volver a la biblioteca">
-            <Link to="/" aria-label="Volver a la biblioteca" className="grid h-9 w-9 shrink-0 place-items-center rounded-xl text-coffee-500 hover:bg-cream-200 hover:text-coffee-800"><Icono nombre="izquierda" tam={18} /></Link>
-          </Consejo>
+          {rb ? (
+            <Consejo texto="Volver a los resultados (Esc)">
+              <button type="button" onClick={volverAResultados} aria-label="Volver a los resultados" className="grid h-9 w-9 shrink-0 place-items-center rounded-xl text-coffee-500 hover:bg-cream-200 hover:text-coffee-800"><Icono nombre="izquierda" tam={18} /></button>
+            </Consejo>
+          ) : (
+            <Consejo texto="Volver a la biblioteca">
+              <Link to="/" aria-label="Volver a la biblioteca" className="grid h-9 w-9 shrink-0 place-items-center rounded-xl text-coffee-500 hover:bg-cream-200 hover:text-coffee-800"><Icono nombre="izquierda" tam={18} /></Link>
+            </Consejo>
+          )}
           {/* La portada en pequeño: aquí aterriza la de la Biblioteca al abrir el documento. */}
           <span data-compartido="portada" aria-hidden className="hidden h-11 w-8 shrink-0 overflow-hidden rounded-r-md rounded-l-sm border border-cream-400 shadow-[var(--shadow-soft)] [container-type:inline-size] sm:block">
             <Portada id={doc.id} titulo="" tipo={doc.tipo} url={doc.portadaUrl} />
@@ -175,6 +274,7 @@ function Lector() {
             <button type="button" aria-label="Más acciones" className="grid h-9 w-9 shrink-0 place-items-center rounded-xl text-coffee-500 hover:bg-cream-200 hover:text-coffee-800"><Icono nombre="opciones" tam={18} /></button>
           </MenuDocumento>
         </div>
+        {rb ? <BarraRecorrido contexto={rb} posicion={pos} total={lista.length} alAnterior={() => irAResultado(pos - 1)} alSiguiente={() => irAResultado(pos + 1)} alVolver={volverAResultados} /> : null}
         {doc.avisos?.some((a) => a.codigo === 'vectores_pendientes') && doc.estado === 'listo' ? (
           <div className="flex items-center gap-3 border-t border-filete bg-hoja px-4 py-2 text-[0.8125rem] text-tinta-2 md:px-6">
             <Icono nombre="historial" tam={14} className="shrink-0" />
@@ -199,10 +299,10 @@ function Lector() {
       <div className="flex">
         <div ref={medio ? undefined : zona} data-compartido="lectura" className={cx('min-w-0 flex-1 px-5 md:px-12', !medio && 'pb-24')}>
           {medio ? (
-            <Reproductor ref={reproductor} doc={doc} inicial={busqueda.t} resaltar={busqueda.q} alVer={alVerMedio} {...(ingesta?.unidades ? { pendientes: Math.max(0, ingesta.unidades - (ingesta.leidas ?? 0)) } : {})} />
+            <Reproductor ref={reproductor} doc={doc} inicial={busqueda.t} resaltar={busqueda.q} {...(pasaje ? { pasaje: pasaje.texto } : {})} alVer={alVerMedio} {...(ingesta?.unidades ? { pendientes: Math.max(0, ingesta.unidades - (ingesta.leidas ?? 0)) } : {})} />
           ) : (
             <ProveedorEntidades documento={doc.id}>
-              <Flujo ref={flujo} doc={doc} modo={modo} inicial={inicial} resaltar={busqueda.q} leidas={ingesta ? ingesta.leidas : undefined} total={ingesta?.unidades ?? undefined} alVer={alVer} />
+              <Flujo ref={flujo} doc={doc} modo={modo} inicial={inicial} resaltar={busqueda.q} {...(pasaje ? { pasaje: pasaje.texto, contextoPasaje: pasaje.contexto } : {})} leidas={ingesta ? ingesta.leidas : undefined} total={ingesta?.unidades ?? undefined} alVer={alVer} />
             </ProveedorEntidades>
           )}
         </div>
@@ -232,7 +332,57 @@ function Lector() {
       </div>
 
       {sel ? <BarraSeleccion sel={sel} documento={id} meta={doc.metadatos} alCerrar={limpiarSel} /> : null}
+
+      <Dialogo abierto={ayuda} alCambiar={setAyuda} titulo="Teclas del lector">
+        <dl className="grid grid-cols-[auto_1fr] items-center gap-x-5 gap-y-2.5 text-[0.875rem]">
+          {ATAJOS_LECTOR.map(([ts, d]) => (
+            <div key={d} className="contents">
+              <dt className="flex gap-1">{ts.map((t) => <Teclas key={t}>{t}</Teclas>)}</dt>
+              <dd className="text-coffee-700">{d}</dd>
+            </div>
+          ))}
+        </dl>
+      </Dialogo>
     </div>
+  );
+}
+
+const ATAJOS_LECTOR: Array<[string[], string]> = [
+  [['N'], 'Resultado siguiente (al venir de una búsqueda)'],
+  [['P'], 'Resultado anterior'],
+  [['Esc'], 'Volver a los resultados'],
+  [['⇧', '⌘', 'C'], 'Copiar la referencia del documento'],
+  [['/'], 'Buscar'],
+  [['⌘', 'K'], 'La paleta: ir a cualquier sitio'],
+  [['?'], 'Estas teclas'],
+];
+
+/**
+ * La barra del recorrido, cuando se llega desde una búsqueda: en qué resultado se
+ * está, el anterior y el siguiente (N, P) y la vuelta a la lista (Esc).
+ */
+function BarraRecorrido({ contexto, posicion, total, alAnterior, alSiguiente, alVolver }: {
+  contexto: ContextoBusqueda; posicion: number; total: number; alAnterior: () => void; alSiguiente: () => void; alVolver: () => void;
+}) {
+  const conLista = posicion >= 0 && total > 0;
+  const boton = 'tactil flex h-11 items-center gap-1.5 rounded-xl px-2.5 text-[0.8125rem] font-medium text-coffee-600 hover:bg-cream-200 hover:text-coffee-800 disabled:pointer-events-none disabled:opacity-40 md:h-8';
+  return (
+    <nav aria-label="Recorrido de los resultados" className="flex items-center gap-1 border-t border-cream-300 bg-cream-100/80 px-2 py-1 md:gap-2 md:px-6">
+      <button type="button" onClick={alVolver} className={cx(boton, 'min-w-0')}>
+        <Icono nombre="lista" tam={15} className="shrink-0" />
+        <span className="hidden sm:inline">Volver a los resultados</span><span className="sm:hidden">Resultados</span>
+        <span className="hidden min-w-0 truncate text-apagado lg:inline">de «{contexto.q}»</span>
+      </button>
+      {conLista ? (
+        <div className="ml-auto flex items-center gap-1">
+          <button type="button" onClick={alAnterior} disabled={posicion <= 0} aria-label="Resultado anterior (P)" className={boton}><Icono nombre="izquierda" tam={15} /><span className="hidden md:inline">Anterior</span></button>
+          <span aria-live="polite" className="dato min-w-[7.5rem] rounded-lg bg-cream-50 px-2.5 py-1 text-center text-[0.75rem] text-coffee-700 shadow-[var(--hundido)]">
+            Resultado <span key={posicion} className="anim-folio inline-block font-semibold">{posicion + 1}</span> de {total}
+          </span>
+          <button type="button" onClick={alSiguiente} disabled={posicion + 1 >= total} aria-label="Resultado siguiente (N)" className={boton}><span className="hidden md:inline">Siguiente</span><Icono nombre="derecha" tam={15} /></button>
+        </div>
+      ) : null}
+    </nav>
   );
 }
 

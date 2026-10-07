@@ -207,6 +207,8 @@ export function crearCliente(opciones: OpcionesCliente) {
       folios: (id: string) => get<MapaFolios>(`/documentos/${e(id)}/folios`),
       secciones: (id: string) => get<SeccionVista[]>(`/documentos/${e(id)}/secciones`),
       fragmentos: (id: string, p: { unidad?: number; desde?: number; hasta?: number } = {}) => get<FragmentoVista[]>(`/documentos/${e(id)}/fragmentos`, p),
+      /** Un fragmento con su texto crudo (`textoCrudo`): los desplazamientos de un pasaje se cuentan sobre él. */
+      fragmento: (id: string, fragmento: string) => get<FragmentoVista>(`/documentos/${e(id)}/fragmentos/${e(fragmento)}`),
       figuras: (id: string) => get<FiguraVista[]>(`/documentos/${e(id)}/figuras`),
       original: (id: string) => get<{ url: string }>(`/documentos/${e(id)}/original`),
       /** URL del medio con Range (necesita token: úsese con fetch o pida `original`). */

@@ -216,6 +216,8 @@ export interface FragmentoVista {
   ancla: Ancla;
   anclaFin?: Ancla;
   etiqueta: string;
+  /** El texto tal como se guarda (con sus marcas): solo en `GET /documentos/:id/fragmentos/:fragmento`. */
+  textoCrudo?: string;
 }
 
 export interface FiguraVista {

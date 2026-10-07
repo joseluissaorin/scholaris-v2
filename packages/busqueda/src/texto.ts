@@ -4,7 +4,7 @@
  */
 
 import { variantesConsulta } from '@scholaris/normalizacion';
-import { limpiarMarcadoOCR, separarHablantes } from '@scholaris/nucleo';
+import { elegirPasaje, enmascarar, limpiarMarcadoOCR, separarHablantes, ubicarPasaje, type Pasaje, type Tramo } from '@scholaris/nucleo';
 
 /** Pliega un carácter: minúscula y sin diacríticos. Devuelve siempre un carácter. */
 function plegarCaracter(c: string): string {
@@ -169,46 +169,110 @@ function escaparHtml(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
+/** Coincidencias de los términos (plegados) en un texto ya plegado: la palabra entera o con hasta tres letras más. */
+export function tramosDe(plano: string, consultaTerminos: string[]): Tramo[] {
+  const unicos = [...new Set(consultaTerminos.filter((t) => t.length >= 2))].sort((a, b) => b.length - a.length);
+  if (!unicos.length) return [];
+  const patron = new RegExp(`(?<![\\p{L}\\p{N}])(${unicos.map((t) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})[\\p{L}\\p{N}]{0,3}(?![\\p{L}\\p{N}])`, 'gu');
+  const salida: Tramo[] = [];
+  for (const m of plano.matchAll(patron)) salida.push({ desde: m.index, hasta: m.index + m[0].length, termino: m[1] as string });
+  return salida;
+}
+
+/** La ventana de `ventana` caracteres con más coincidencias (empieza un cuarto antes de la primera). */
+export function mejorVentana(tramos: Tramo[], longitud: number, ventana: number): [number, number] {
+  if (longitud <= ventana) return [0, longitud];
+  let mejor = 0, mejorInicio = 0;
+  for (let i = 0; i < tramos.length; i++) {
+    const inicio = (tramos[i] as Tramo).desde;
+    let n = 0;
+    for (let j = i; j < tramos.length && (tramos[j] as Tramo).hasta <= inicio + ventana; j++) n++;
+    if (n > mejor) { mejor = n; mejorInicio = inicio; }
+  }
+  const desde = Math.max(0, mejorInicio - Math.floor(ventana / 4));
+  return [desde, Math.min(longitud, desde + ventana)];
+}
+
+/**
+ * El pasaje relevante de un fragmento para una consulta (ver `nucleo/pasaje.ts`):
+ * las oraciones enteras de la ventana del resaltado con más coincidencias. El
+ * resaltado se centra después en él: lo que se ve es lo que se cita.
+ */
+export function pasajeRelevante(textoCrudo: string, consultaTerminos: string[], ventana = 280): Pasaje {
+  const m = enmascarar(textoCrudo).texto;
+  const tramos = tramosDe(plegar(m), consultaTerminos);
+  return elegirPasaje(textoCrudo, tramos, { foco: mejorVentana(tramos, m.length, ventana) });
+}
+
+/**
+ * El pasaje solo si de verdad responde: sus oraciones casan con al menos
+ * `minimo` términos distintos. Si no (un acierto por sentido), null y quien
+ * llama se queda con el fragmento entero, que es lo honrado.
+ */
+export function pasajeSiResponde(textoCrudo: string, consultaTerminos: string[], minimo = 2): Pasaje | null {
+  const p = pasajeRelevante(textoCrudo, consultaTerminos);
+  if (!p.texto) return null;
+  const m = enmascarar(textoCrudo).texto;
+  const distintos = new Set(tramosDe(plegar(m), consultaTerminos).filter((t) => t.desde >= p.desde && t.hasta <= p.hasta).map((t) => t.termino)).size;
+  return distintos >= Math.min(minimo, new Set(consultaTerminos).size) ? p : null;
+}
+
+/** El resaltado y el pasaje de un fragmento, de una vez y con el mismo criterio. */
+export function resaltarConPasaje(textoCrudo: string, consultaTerminos: string[], ventana = 280): { resaltado: string; pasaje: Pasaje } {
+  const pasaje = pasajeRelevante(textoCrudo, consultaTerminos, ventana);
+  return { pasaje, resaltado: resaltar(textoCrudo, consultaTerminos, ventana, pasaje.texto ? pasaje : undefined) };
+}
+
 /**
  * Resalta en `texto` los términos de la consulta (sin importar acentos ni
  * mayúsculas) y devuelve una ventana de unos `ventana` caracteres centrada en la
  * zona con más coincidencias. El texto sale escapado como HTML y las
  * coincidencias envueltas en `<mark>`.
+ *
+ * Con `pasaje`, la ventana se centra en él (entero, aunque pase de `ventana`) y
+ * sus oraciones van dentro de `<span class="pasaje">`: lo que se ve es lo que se cita.
  */
-export function resaltar(textoCrudo: string, consultaTerminos: string[], ventana = 280): string {
+export function resaltar(textoCrudo: string, consultaTerminos: string[], ventana = 280, pasaje?: Pick<Pasaje, 'texto'>): string {
   // Las marcas de hablante («**Nombre:**») se separan antes de recortar: si la
   // ventana las partiera, el Markdown saldría crudo. Vuelven como etiqueta propia.
   const { texto, hablantes } = separarHablantes(limpiarMarcadoOCR(textoCrudo));
-  const plano = plegar(texto);
-  const unicos = [...new Set(consultaTerminos.filter((t) => t.length >= 2))].sort((a, b) => b.length - a.length);
-  const tramos: Array<[number, number]> = [];
-  if (unicos.length) {
-    const patron = new RegExp(`(?<![\\p{L}\\p{N}])(?:${unicos.map((t) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})[\\p{L}\\p{N}]{0,3}(?![\\p{L}\\p{N}])`, 'gu');
-    for (const m of plano.matchAll(patron)) tramos.push([m.index, m.index + m[0].length]);
-  }
-  // Ventana: la que contiene más coincidencias.
+  const tramos: Array<[number, number]> = tramosDe(plegar(texto), consultaTerminos).map((t) => [t.desde, t.hasta]);
+  // El pasaje en el texto limpio (sin contar blancos ni marcado).
+  const enPasaje = pasaje?.texto ? ubicarPasaje(texto, pasaje.texto.replace(/ \/ /g, ' ')) : null;
   let desde = 0;
   let hasta = texto.length;
-  if (texto.length > ventana) {
-    let mejor = 0, mejorInicio = 0;
-    for (let i = 0; i < tramos.length; i++) {
-      const inicio = (tramos[i] as [number, number])[0];
-      let n = 0;
-      for (let j = i; j < tramos.length && (tramos[j] as [number, number])[1] <= inicio + ventana; j++) n++;
-      if (n > mejor) { mejor = n; mejorInicio = inicio; }
-    }
-    desde = Math.max(0, mejorInicio - Math.floor(ventana / 4));
+  if (enPasaje) {
+    const [pa, pb] = enPasaje;
+    const resto = Math.max(0, ventana - (pb - pa));
+    desde = Math.max(0, pa - Math.max(24, Math.floor(resto / 2)));
+    if (desde > 0) { const e = texto.indexOf(' ', desde); if (e !== -1 && e < pa) desde = e + 1; }
+    hasta = Math.min(texto.length, Math.max(pb + 24, desde + ventana));
+    if (hasta < texto.length) { const e = texto.lastIndexOf(' ', hasta); if (e >= pb) hasta = e; }
+  } else if (texto.length > ventana) {
+    const [d, h] = mejorVentana(tramos.map(([a, b]) => ({ desde: a, hasta: b })), texto.length, ventana);
+    desde = d;
     // Ajusta al principio de palabra.
     if (desde > 0) { const e = texto.indexOf(' ', desde); if (e !== -1 && e - desde < 20) desde = e + 1; }
     hasta = Math.min(texto.length, desde + ventana);
+    void h;
     if (hasta < texto.length) { const e = texto.lastIndexOf(' ', hasta); if (e > desde + ventana / 2) hasta = e; }
   }
+  const [pa, pb] = enPasaje ?? [-1, -1];
+  // Un tramo escapado; la apertura y el cierre del pasaje van fuera de cualquier <mark>.
+  const esc = (a: number, b: number, conFinal: boolean) => {
+    if (!enPasaje) return escaparHtml(texto.slice(a, b));
+    let out = '', c = a;
+    for (const [p, etiqueta] of [[pa, '<span class="pasaje">'], [pb, '</span>']] as Array<[number, string]>) {
+      if (p >= a && (p < b || (conFinal && p === b))) { out += escaparHtml(texto.slice(c, p)) + etiqueta; c = p; }
+    }
+    return out + escaparHtml(texto.slice(c, b));
+  };
   // El tramo [a, b) escapado, con la etiqueta de cada turno que empiece dentro.
   // `antesDeMarca`: la etiqueta que cae justo donde empieza una coincidencia va fuera del <mark>.
   const trozo = (a: number, b: number, antesDeMarca = false, dentroDeMarca = false) => {
     let out = '', c = a;
-    for (const h of hablantes) if ((dentroDeMarca ? h.pos > a : h.pos >= a) && (antesDeMarca ? h.pos <= b : h.pos < b)) { out += escaparHtml(texto.slice(c, h.pos)) + etiquetaHablante(h.nombre); c = h.pos; }
-    return out + escaparHtml(texto.slice(c, b));
+    for (const h of hablantes) if ((dentroDeMarca ? h.pos > a : h.pos >= a) && (antesDeMarca ? h.pos <= b : h.pos < b)) { out += esc(c, h.pos, false) + etiquetaHablante(h.nombre); c = h.pos; }
+    return out + (dentroDeMarca ? escaparHtml(texto.slice(c, b)) : esc(c, b, antesDeMarca));
   };
   let salida = desde > 0 ? '…' : '';
   // Si la ventana empieza a mitad de un turno, se dice de quién es.
@@ -221,7 +285,7 @@ export function resaltar(textoCrudo: string, consultaTerminos: string[], ventana
     salida += trozo(cursor, aa, true) + '<mark>' + trozo(aa, bb, false, true) + '</mark>';
     cursor = bb;
   }
-  salida += trozo(cursor, hasta);
+  salida += trozo(cursor, hasta, true);
   if (hasta < texto.length) salida += '…';
   return salida;
 }

@@ -229,6 +229,18 @@ la ingesta). Los tiempos de la nube dependen del servidor.
   elegido con su localizador, también rangos «pp. 23-24»), **Parecidos** y
   **Al cuaderno**.
 - La URL sigue a la lectura (`?u=`, `?t=`): cualquier momento se puede enlazar.
+- **El pasaje** (`nucleo/pasaje.ts`): un resultado abre el lector con `?f=&pd=&ph=`, las
+  oraciones que responden a la consulta dentro del fragmento. Se subrayan en amarillo con
+  la CSS Custom Highlight API (`componentes/lector/subrayado.ts`, sin tocar el DOM), con el
+  resto del fragmento en un tono muy suave, y se ponen a un tercio de la ventana. En audio y
+  vídeo, el medio salta a su primera palabra con el karaoke en ella. «Cita» copia ese pasaje
+  con la página o el segundo de sus oraciones: lo que se ve es lo que se cita.
+- **El recorrido** (`datos/recorrido.ts`): desde Buscar, la URL lleva también la búsqueda
+  (`rb`) y el número del resultado (`ri`). Una barra discreta dice «Resultado 3 de 20», con
+  anterior y siguiente (N, P) y «Volver a los resultados» (Esc), que es volver atrás de
+  verdad: la lista sale de la caché (sin otra búsqueda), en su desplazamiento (Buscar se
+  recuerda por su URL) y con el resultado del que se vino destacado. Del mismo documento se
+  desplaza sin recargar; de otro, ya está precargado (documento, páginas y texto).
 - Audio y vídeo (`src/componentes/reproductor/`): un solo motor para toda la
   aplicación, con una máquina de estados pura (cargando, esperando, buscando,
   error con reintentos que piden otra URL firmada y siguen en el mismo

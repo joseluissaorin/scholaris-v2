@@ -53,11 +53,13 @@ const ESQUEMAS: Record<string, Esquema> = {
   ListaDocumentos: obj({ documentos: arr(ref('Documento')), total: int(), siguiente: str('Cursor de la página siguiente.') }, ['documentos', 'total']),
   DocumentoBreve: obj({ id: str(), titulo: str(), autores: arr(str()), anio: int() }, ['id', 'titulo', 'autores']),
   Pasaje: obj({
-    id: str('Id del fragmento (el del documento, «:» y su posición).', { examples: ['dmuwtm9kmsanlrbm5:p23.1'] }), documento: ref('DocumentoBreve'), texto: str('Texto literal.'),
-    cita: str('Cita corta lista para pegar.', { examples: ['(Cortázar, 1977, 1:06:56)', '(Darwin, 1859, p. 81)'] }),
+    id: str('Id del fragmento (el del documento, «:» y su posición).', { examples: ['dmuwtm9kmsanlrbm5:p23.1'] }), documento: ref('DocumentoBreve'), texto: str('Texto literal del fragmento entero (el contexto).'),
+    pasaje: str('El pasaje relevante: de 1 a 3 oraciones completas y literales del fragmento que responden a la consulta. Es lo que se cita.'),
+    pasaje_rango: arr(int(), 'Dónde está «pasaje» dentro de «texto»: [desde, hasta) en caracteres UTF-16.'),
+    cita: str('Cita corta del pasaje lista para pegar, con su página o su segundo.', { examples: ['(Cortázar, 1977, 1:06:56)', '(Darwin, 1859, p. 81)'] }),
     localizador: str('Solo el localizador.', { examples: ['p. 23', 'pp. 23-24', '1:06:56', 'diap. 7'] }),
     ancla: ref('Ancla'), enlace: str('El lector abierto en esa página o en ese segundo.', { format: 'uri' }), puntuacion: num(),
-  }, ['id', 'documento', 'texto', 'cita', 'localizador', 'ancla', 'enlace']),
+  }, ['id', 'documento', 'texto', 'pasaje', 'cita', 'localizador', 'ancla', 'enlace']),
   Busqueda: obj({ consulta: str(), pasajes: arr(ref('Pasaje')), ms: int() }, ['consulta', 'pasajes']),
   Fuente: { allOf: [ref('Pasaje'), obj({ n: int('Número de la nota: [^n].') }, ['n'])] },
   Respuesta: obj({

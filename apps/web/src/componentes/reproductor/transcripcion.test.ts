@@ -140,3 +140,12 @@ describe('instantes exactos por palabra', () => {
     expect(estimada.palabras[2]!.t1).toBeCloseTo(20);
   });
 });
+
+describe('buscarPasaje', () => {
+  it('encuentra las palabras del pasaje aunque cambien signos y mayúsculas', async () => {
+    const { buscarPasaje } = await import('./transcripcion');
+    const ws = 'bueno yo empecé en el barrio. Tenía quince años, y una guitarra prestada. Luego vino lo demás'.split(' ').map((texto, i) => ({ texto, t0: i, t1: i + 0.8, p: 0, h: -1 }));
+    expect(buscarPasaje(ws, 'Tenía quince años y una guitarra prestada.')).toEqual({ desde: 6, hasta: 13 });
+    expect(buscarPasaje(ws, 'nada de esto aparece por ninguna parte')).toBeNull();
+  });
+});

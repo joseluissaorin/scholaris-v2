@@ -89,15 +89,22 @@ export interface PasajeV1 {
   /** Id del fragmento: el del documento, «:» y su posición. */
   id: string;
   documento: { id: string; titulo: string; autores: string[]; anio?: number };
-  /** Texto literal del pasaje. */
+  /** Texto literal del fragmento entero (el contexto). */
   texto: string;
-  /** Cita corta lista para pegar: «(Cortázar, 1977, 1:06:56)», «(Darwin, 1859, p. 81)». */
+  /**
+   * El pasaje relevante: las oraciones completas del fragmento que responden a la
+   * consulta (de 1 a 3, literales). Es lo que se cita.
+   */
+  pasaje: string;
+  /** Dónde está `pasaje` dentro de `texto`: [desde, hasta) en caracteres (UTF-16). */
+  pasaje_rango?: [number, number];
+  /** Cita corta del pasaje lista para pegar, con su página o su segundo: «(Cortázar, 1977, 1:06:56)», «(Darwin, 1859, p. 81)». */
   cita: string;
   /** Solo el localizador: «p. 23», «pp. 23-24», «1:06:56», «diap. 7». */
   localizador: string;
-  /** El ancla exacta de la que salen la cita y el enlace. */
+  /** El ancla exacta de la que salen la cita y el enlace (la del pasaje). */
   ancla: Ancla;
-  /** El lector abierto en esa página o en ese segundo. */
+  /** El lector abierto en esa página o en ese segundo, con el pasaje subrayado. */
   enlace: string;
   puntuacion: number;
 }

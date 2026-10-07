@@ -20,10 +20,10 @@ import { motor, type FuenteMedio, type Instantanea } from './motor';
 import { idYoutubeDeUrl } from './medio-youtube';
 import { VELOCIDADES } from './maquina';
 import { fotogramaEn, useFotogramas, useMenosMovimiento, useMotor, useRelojDom, useSegundo, useTranscripcion } from './ganchos';
-import { aVtt, buscarEnTranscripcion, buscarIndice, parrafoEn, type Transcripcion } from './transcripcion';
+import { aVtt, buscarEnTranscripcion, buscarIndice, buscarPasaje, parrafoEn, type Transcripcion } from './transcripcion';
 import { LineaTiempo, type Capitulo } from './linea';
 import { Onda } from './onda';
-import { TranscripcionVista, type ManejadorTranscripcion } from './transcripcion-vista';
+import { ADELANTO, TranscripcionVista, type ManejadorTranscripcion } from './transcripcion-vista';
 import { FormaHablante } from './hablantes';
 import { IconoR } from './iconos';
 import { ATAJOS, useTeclado } from './teclado';
@@ -38,6 +38,8 @@ interface Props {
   inicial?: number;
   /** Términos de la búsqueda que abrió el documento. */
   resaltar?: string;
+  /** El pasaje que abrió el lector: se marca y el medio salta a su primera palabra (con el karaoke en ella). */
+  pasaje?: string;
   alVer: (orden: number, t: number) => void;
   /** Tramos que faltan por leer (ingesta en curso). */
   pendientes?: number;
@@ -66,7 +68,7 @@ function useFuente(doc: DetalleDocumento): FuenteMedio {
   } satisfies FuenteMedio), [doc.id]); // eslint-disable-line react-hooks/exhaustive-deps
 }
 
-export const Reproductor = forwardRef<ManejadorMedio, Props>(function Reproductor({ doc, inicial, resaltar, alVer, pendientes }, ref) {
+export const Reproductor = forwardRef<ManejadorMedio, Props>(function Reproductor({ doc, inicial, resaltar, pasaje, alVer, pendientes }, ref) {
   const m = motor();
   const inst = useMotor();
   const fuente = useFuente(doc);
@@ -115,12 +117,15 @@ export const Reproductor = forwardRef<ManejadorMedio, Props>(function Reproducto
   const [busqueda, setBusqueda] = useState('');
   const [indiceCoincidencia, setIndiceCoincidencia] = useState(0);
   const coincidencias = useMemo(() => (tr && busqueda.trim().length > 1 ? buscarEnTranscripcion(tr.palabras, busqueda) : []), [tr, busqueda]);
+  // El pasaje que abrió el lector, en palabras de la transcripción.
+  const rangoPasaje = useMemo(() => (tr && pasaje ? buscarPasaje(tr.palabras, pasaje) : null), [tr, pasaje]);
   const marcadas = useMemo(() => {
-    if (!tr || !coincidencias.length) return null;
+    if (!tr || (!coincidencias.length && !rangoPasaje)) return null;
     const a = new Uint8Array(tr.palabras.length);
+    if (rangoPasaje) for (let k = rangoPasaje.desde; k < rangoPasaje.hasta; k++) a[k] = 2;
     for (const c of coincidencias) for (let k = 0; k < c.largo; k++) a[c.desde + k] = 1;
     return a;
-  }, [tr, coincidencias]);
+  }, [tr, coincidencias, rangoPasaje]);
   const vista = useRef<ManejadorTranscripcion>(null);
   const irACoincidencia = (i: number) => {
     if (!coincidencias.length) return;
@@ -130,6 +135,21 @@ export const Reproductor = forwardRef<ManejadorMedio, Props>(function Reproducto
     requestAnimationFrame(() => vista.current?.verPalabra(coincidencias[k]!.desde));
   };
   useEffect(() => { setIndiceCoincidencia(0); if (coincidencias.length) { setSeguir(false); requestAnimationFrame(() => vista.current?.verPalabra(coincidencias[0]!.desde)); } }, [coincidencias]);
+
+  // Al llegar a un pasaje (o pasar al siguiente del mismo medio): al segundo de su primera palabra, con el karaoke en ella.
+  const pasajeSituado = useRef<string | null>(null);
+  useEffect(() => {
+    // El motor guarda el instante si el medio aún no ha cargado: basta con que el documento sea el suyo.
+    if (!tr || !rangoPasaje || !pasaje || !propio || pasajeSituado.current === pasaje) return;
+    pasajeSituado.current = pasaje;
+    const t0 = tr.palabras[rangoPasaje.desde]?.t0;
+    if (t0 == null) return;
+    // El karaoke va un cuarto de segundo por delante de la voz: se salta a ese punto, y la palabra encendida es la primera del pasaje.
+    const destino = Math.max(0, t0 - ADELANTO + 0.02);
+    if (Math.abs(m.tiempo() - destino) > 0.01) m.irA(destino);
+    setSeguir(true);
+    requestAnimationFrame(() => vista.current?.verPalabra(rangoPasaje.desde));
+  }, [tr, rangoPasaje, pasaje, propio, m]);
 
   const columnaEscenario = useRef<HTMLDivElement>(null);
   const columnaTexto = useRef<HTMLDivElement>(null);

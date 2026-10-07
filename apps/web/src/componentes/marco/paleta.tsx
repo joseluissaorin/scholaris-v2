@@ -9,10 +9,10 @@ import { useNavigate, useRouterState } from '@tanstack/react-router';
 import { useQuery } from '@tanstack/react-query';
 import { cx, Folio, Icono, Teclas, type NombreIcono } from '@scholaris/ui';
 import type { ResultadoVista } from '@scholaris/contrato';
-import { q } from '../../datos/consultas';
+import { clienteConsultas, q } from '../../datos/consultas';
 import { disparar, ponerTema, recientes, esOscuro } from '../../lib/acciones';
 import { etiquetaCorta, ICONO_TIPO, NOMBRE_TIPO } from '../../lib/formato';
-import { anclaABusqueda } from '../../lib/anclas';
+import { busquedaDeResultado, sembrarFragmento } from '../../datos/recorrido';
 import { Resaltado } from '../../lib/resaltado';
 import { useFlip } from '../../lib/flip';
 import { copiarReferencia } from '../../lib/referencia';
@@ -181,7 +181,7 @@ function opcionPasaje(r: ResultadoVista, ir: (f: () => void) => () => void, nave
     icono: 'citar',
     titulo: <Resaltado html={r.resaltado ?? r.fragmento.texto} />,
     detalle: <><em>{r.documento.metadatos.titulo}</em> · {r.citaCorta}</>,
-    folio: etiquetaCorta(r.fragmento.ancla, r.etiqueta),
-    hacer: ir(() => void navegar({ to: '/lector/$id', params: { id: r.documento.id }, search: anclaABusqueda(r.fragmento.ancla) })),
+    folio: etiquetaCorta(r.pasaje?.ancla ?? r.fragmento.ancla, r.etiqueta),
+    hacer: ir(() => { sembrarFragmento(clienteConsultas, r); void navegar({ to: '/lector/$id', params: { id: r.documento.id }, search: busquedaDeResultado(r) }); }),
   };
 }

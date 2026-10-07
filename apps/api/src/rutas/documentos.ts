@@ -378,6 +378,22 @@ export function rutasDocumentos(app: Hono<Entorno>): void {
     }));
   });
 
+  // Un fragmento suelto, con su texto crudo: el lector subraya el pasaje [pd, ph) que trae el enlace.
+  app.get('/documentos/:id/fragmentos/:fragmento', async (c: Ctx) => {
+    const p = puertos(c);
+    const id = prm(c, 'id');
+    const [f] = await p.sql.ejecutar<Fila>(
+      `SELECT f.*, u.orden AS orden_unidad FROM fragmentos f JOIN unidades u ON u.id = f.unidad WHERE f.documento = ? AND f.id = ?`, id, prm(c, 'fragmento'));
+    if (!f) fallo('no_encontrado', 'El fragmento no existe.');
+    const fr = filaAFragmento(f as never);
+    const v: FragmentoVista = {
+      id: fr.id, unidad: Number(f.orden_unidad), orden: fr.orden, texto: limpiarMarcadoOCR(fr.texto), contexto: fr.contexto, seccion: fr.seccion,
+      ancla: fr.ancla, etiqueta: etiquetaAncla(fr.ancla, fr.anclaFin), textoCrudo: fr.texto,
+    };
+    if (fr.anclaFin) v.anclaFin = fr.anclaFin;
+    return c.json(v);
+  });
+
   app.get('/documentos/:id/figuras', async (c: Ctx) => {
     const p = puertos(c);
     const id = prm(c, 'id');

@@ -28,7 +28,7 @@ from scholaris.api import Scholaris
 s = Scholaris("sch_…")                        # o la variable SCHOLARIS_CLAVE
 doc = s.subir("articulo.pdf")                  # también una URL: web, PDF, YouTube, pódcast
 for p in s.buscar("atención escalada", k=3):
-    print(p["cita"], p["texto"][:80])          # «(Vaswani et al., 2017, p. 4)»
+    print(s.cita_literal(p))                   # «las oraciones que responden» (Vaswani et al., 2017, p. 4)
 print(s.preguntar("¿Qué es la atención multicabeza?")["respuesta"])   # Markdown con notas [^n]
 print(s.citar("La atención sustituye a la recurrencia.")["texto"])
 print(s.verificar("El Transformer prescinde de la recurrencia.")["veredicto"])
@@ -70,7 +70,7 @@ s = Scholaris("https://scholaris.joseluissaorin.com", clave="sch_…")
 doc = s.subir("articulo.pdf")                     # sube, convierte y espera a que esté listo
 s.subir_url("https://www.youtube.com/watch?v=…")
 for r in s.buscar("atención escalada", k=5):
-    print(r["citaCorta"], r["fragmento"]["texto"][:80])
+    print(r["pasaje"]["texto"], r["citaCorta"])     # el pasaje (sus oraciones) y su cita, con su página
 print(s.respuesta("¿Qué es la atención multicabeza?")["texto"])
 s.descargar_spdf(doc["id"], "articulo.spdf")
 autocita = s.autocitar("mi-trabajo.docx", estilo="apa")

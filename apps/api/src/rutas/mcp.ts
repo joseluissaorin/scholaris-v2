@@ -12,14 +12,14 @@ import type { Entorno } from '../entorno.js';
 import { obtenerBuscador } from '../compartido/servicios.js';
 import { VERSION } from '../version.js';
 import type { PuertosUsuario } from '../puertos.js';
-import { citaCorta, puertos, type Ctx } from './util.js';
+import { anclaDePasaje, citaCorta, puertos, type Ctx } from './util.js';
 
 interface PeticionRpc { jsonrpc: '2.0'; id?: string | number | null; method: string; params?: Record<string, unknown> }
 
 const HERRAMIENTAS = [
   {
     name: 'search',
-    description: 'Busca en la biblioteca del usuario (búsqueda híbrida léxica + semántica). Devuelve pasajes con su referencia exacta (página impresa, minuto, sección).',
+    description: 'Busca en la biblioteca del usuario (búsqueda híbrida léxica + semántica). Devuelve, para cada resultado, el pasaje que se cita (de 1 a 3 oraciones completas y literales que responden a la consulta) con su referencia exacta (página impresa, minuto, sección), y el fragmento entero como contexto.',
     inputSchema: { type: 'object', properties: { query: { type: 'string', description: 'Qué buscar, en lenguaje natural o entre comillas para una cita literal.' }, k: { type: 'integer', minimum: 1, maximum: 50, default: 8 }, documents: { type: 'array', items: { type: 'string' }, description: 'Restringir a estos documentos.' }, library: { type: 'string', description: 'Restringir a esta biblioteca.' } }, required: ['query'] },
   },
   {
@@ -47,8 +47,16 @@ async function llamar(p: PuertosUsuario, nombre: string, a: Record<string, unkno
       const b = await obtenerBuscador(p);
       const filtros = { ...(Array.isArray(a.documents) ? { documentos: a.documents as string[] } : {}), ...(typeof a.library === 'string' ? { bibliotecas: [a.library] } : {}) };
       const r = await b.buscar(String(a.query ?? ''), { limite: Math.min(50, Number(a.k ?? 8)), filtros });
-      const lineas = r.resultados.map((x, i) => `[${i + 1}] ${citaCorta(x.documento.metadatos, x.fragmento.ancla, x.fragmento.anclaFin)}: «${x.documento.metadatos.titulo}» (documento ${x.documento.id}, fragmento ${x.fragmento.id})\n${repararMarcasHablante(limpiarMarcadoOCR(x.fragmento.texto))}`);
-      return { ...texto(lineas.join('\n\n') || 'Sin resultados.'), structuredContent: { results: r.resultados.map((x) => ({ fragment: x.fragmento.id, document: x.documento.id, title: x.documento.metadatos.titulo, locator: anclaACita(x.fragmento.ancla, x.fragmento.anclaFin), text: x.fragmento.texto, score: x.puntuacion })) } };
+      // Lo que se cita es el pasaje (las oraciones que responden, con su página o su segundo); el fragmento va de contexto.
+      const lineas = r.resultados.map((x, i) => {
+        const [a, fin] = anclaDePasaje(x);
+        const contexto = repararMarcasHablante(limpiarMarcadoOCR(x.fragmento.texto));
+        return `[${i + 1}] ${citaCorta(x.documento.metadatos, a, fin)}: «${x.documento.metadatos.titulo}» (documento ${x.documento.id}, fragmento ${x.fragmento.id})\nPasaje: «${x.pasaje?.texto || contexto}»\nContexto: ${contexto}`;
+      });
+      return { ...texto(lineas.join('\n\n') || 'Sin resultados.'), structuredContent: { results: r.resultados.map((x) => {
+        const [a, fin] = anclaDePasaje(x);
+        return { fragment: x.fragmento.id, document: x.documento.id, title: x.documento.metadatos.titulo, locator: anclaACita(a, fin), citation: citaCorta(x.documento.metadatos, a, fin), passage: x.pasaje?.texto || x.fragmento.texto, ...(x.pasaje?.texto ? { passage_range: [x.pasaje.desde, x.pasaje.hasta] } : {}), text: x.fragmento.texto, score: x.puntuacion };
+      }) } };
     }
     case 'cite': {
       let docId = typeof a.document === 'string' ? a.document : undefined;

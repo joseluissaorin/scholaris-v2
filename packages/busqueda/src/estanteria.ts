@@ -3,7 +3,7 @@
  * Solo lecturas; todas las consultas van parametrizadas.
  */
 import type { Ancla, Documento, Filtros, Fragmento, MetadatosDocumento, SQL, ValorSQL } from '@scholaris/nucleo';
-import { deRomano, enLista } from '@scholaris/nucleo';
+import { deRomano, enLista, type UnidadPasaje } from '@scholaris/nucleo';
 import { plegar } from './texto.js';
 
 export type DocumentoBreve = Pick<Documento, 'id' | 'tipo' | 'metadatos'>;
@@ -179,6 +179,32 @@ export class Estanteria {
       }
     }
     return salida;
+  }
+
+  private conPalabras = true;
+
+  /**
+   * Las unidades que cubre un fragmento, en orden (para poner al pasaje la página
+   * o el segundo de sus oraciones). Solo hace falta si el fragmento cruza unidades
+   * o es de audio o vídeo; si no, la lista va vacía y vale el ancla del fragmento.
+   */
+  async unidadesDelFragmento(f: Fragmento): Promise<UnidadPasaje[]> {
+    const tiempo = f.ancla.tipo === 'tiempo';
+    if (!tiempo && !f.anclaFin) return [];
+    const tramo = f.ancla.tipo === 'pagina' && f.anclaFin?.tipo === 'pagina' ? Math.min(6, Math.max(1, f.anclaFin.fisica - f.ancla.fisica)) : 6;
+    const consulta = (palabras: boolean) => this.sql.ejecutar<{ orden: number; ancla: string; texto: string; palabras?: string | null }>(
+      `SELECT u.orden, u.ancla, u.texto${palabras ? ', u.palabras' : ''} FROM unidades u JOIN unidades x ON x.id = ? AND u.documento = x.documento
+       WHERE u.orden BETWEEN x.orden AND x.orden + ? ORDER BY u.orden`,
+      f.unidad, tramo,
+    );
+    let filas: Array<{ orden: number; ancla: string; texto: string; palabras?: string | null }>;
+    try { filas = await consulta(this.conPalabras); }
+    catch (e) { if (!this.conPalabras) throw e; this.conPalabras = false; filas = await consulta(false); }
+    const fin = f.anclaFin?.tipo === 'tiempo' ? f.anclaFin.t1 : f.ancla.tipo === 'tiempo' ? f.ancla.t1 : Infinity;
+    return filas.map((u) => ({
+      orden: Number(u.orden), ancla: json<Ancla>(u.ancla, { tipo: 'imagen' }), texto: String(u.texto ?? ''),
+      palabras: json<UnidadPasaje['palabras']>(u.palabras ?? null, null),
+    })).filter((u) => !tiempo || u.ancla.tipo !== 'tiempo' || u.ancla.t0 <= fin);
   }
 
   /** Fragmentos (id, unidad, orden) de unas unidades: para traducir aciertos visuales. */

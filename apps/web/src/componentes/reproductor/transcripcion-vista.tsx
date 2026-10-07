@@ -45,7 +45,7 @@ interface Props {
   escenas?: Escenas | null;
 }
 
-const ADELANTO = 0.25;
+export const ADELANTO = 0.25;
 
 const estimar = (p: Parrafo) => 36 + Math.ceil(((p.hasta - p.desde) * 6.4) / 64) * 29 + (p.turno ? 26 : 0);
 
@@ -234,10 +234,11 @@ const ParrafoVista = memo(function ParrafoVista({ tr, i, marcadas, foco, raices,
           {ws.map((w, j) => {
             const k = p.desde + j;
             const marcada = marcadas?.[k] === 1;
+            const delPasaje = marcadas?.[k] === 2;
             const sugerida = !marcada && raices.length > 0 && raices.some((r) => normalizar(w.texto).startsWith(r));
             return (
               <span key={k}>
-                <span data-w={k} className="palabra" data-marca={marcada ? (foco === k ? 'foco' : 'si') : sugerida ? 'suave' : undefined} onClick={() => ir(w.t0)}>{w.texto}</span>{' '}
+                <span data-w={k} className="palabra" data-marca={marcada ? (foco === k ? 'foco' : 'si') : delPasaje ? 'pasaje' : sugerida ? 'suave' : undefined} onClick={() => ir(w.t0)}>{w.texto}</span>{' '}
               </span>
             );
           })}

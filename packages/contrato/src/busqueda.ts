@@ -16,7 +16,7 @@
  * «12:04») es lo que se cita, nunca lo que diga un modelo.
  */
 
-import type { Filtros, Resultado } from '@scholaris/nucleo';
+import type { Filtros, Pasaje, Resultado } from '@scholaris/nucleo';
 import type { FiguraResultado } from './contenido.js';
 
 export type ModoBusqueda = 'hibrida' | 'lexica' | 'densa' | 'visual';
@@ -37,9 +37,9 @@ export interface Buscar {
 }
 
 export interface ResultadoVista extends Resultado {
-  /** «p. 23», «pp. 23-24», «12:04». */
+  /** «p. 23», «pp. 23-24», «12:04»: la del pasaje relevante (`pasaje`), no la del fragmento entero. */
   etiqueta: string;
-  /** Cita corta lista para pegar: «(Darwin, 1859, p. 81)». */
+  /** Cita corta del pasaje lista para pegar: «(Darwin, 1859, p. 81)». */
   citaCorta: string;
   miniaturaUrl?: string;
   explicacion?: string;
@@ -81,7 +81,8 @@ export type EventoRespuesta =
   | { tipo: 'resultados'; resultados: ResultadoVista[]; intencion?: IntencionConsulta }
   | { tipo: 'texto'; delta: string }
   /** Una cita usada en la respuesta: [n] → fragmento. */
-  | { tipo: 'cita'; n: number; fragmento: string; documento: string; etiqueta: string; citaCorta: string; respaldo?: number }
+  /** `pasaje`: las oraciones del fragmento que sostienen la frase que lleva la nota (con su ancla); la etiqueta y la cita son las suyas. */
+  | { tipo: 'cita'; n: number; fragmento: string; documento: string; etiqueta: string; citaCorta: string; respaldo?: number; pasaje?: Pasaje }
   | { tipo: 'fin'; evento?: string; ms: number; confianza?: 'alta' | 'media' | 'baja' }
   | { tipo: 'error'; mensaje: string };
 

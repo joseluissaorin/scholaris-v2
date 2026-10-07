@@ -272,6 +272,32 @@ export function buscarEnTranscripcion(palabras: Palabra[], consulta: string, max
   return out;
 }
 
+/**
+ * Dónde está un pasaje (texto literal, quizá con « / » entre versos) en la
+ * transcripción: [desde, hasta) en palabras. Busca la secuencia entera de
+ * palabras normalizadas; si no está entera (un tramo que aún no llegó), su principio.
+ */
+export function buscarPasaje(palabras: Palabra[], texto: string): { desde: number; hasta: number } | null {
+  const qs = texto.split(/\s+/).map(normalizar).filter(Boolean);
+  if (!qs.length) return null;
+  const norm = palabras.map((w) => normalizar(w.texto));
+  const busca = (n: number): number => {
+    for (let i = 0; i + n <= norm.length; i++) {
+      let ok = true;
+      for (let j = 0; j < n; j++) if (norm[i + j] !== qs[j]) { ok = false; break; }
+      if (ok) return i;
+    }
+    return -1;
+  };
+  const i = busca(qs.length);
+  if (i >= 0) return { desde: i, hasta: i + qs.length };
+  for (let n = Math.min(qs.length - 1, 12); n >= Math.min(4, qs.length); n--) {
+    const k = busca(n);
+    if (k >= 0) return { desde: k, hasta: Math.min(norm.length, k + qs.length) };
+  }
+  return null;
+}
+
 /** El pasaje [a, b] de palabras como texto y con su intervalo exacto. */
 export function pasaje(tr: Transcripcion, a: number, b: number): { texto: string; t0: number; t1: number; h: number } {
   const [x, y] = a <= b ? [a, b] : [b, a];

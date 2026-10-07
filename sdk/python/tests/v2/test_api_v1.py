@@ -40,6 +40,12 @@ def test_buscar_manda_la_clave_y_devuelve_los_pasajes():
     assert k["params"] == {"q": "x", "k": 3, "documento": "d1,d2"}
 
 
+def test_cita_literal_usa_el_pasaje_y_no_el_fragmento():
+    p = {"texto": "Mirad: este es el bastidor. Un pie salía del caos. Nadie dijo nada.", "pasaje": "Un pie salía del caos.", "cita": "(Balzac, 1837, p. 21)"}
+    assert Scholaris.cita_literal(p) == "«Un pie salía del caos.» (Balzac, 1837, p. 21)"
+    assert Scholaris.cita_literal({"texto": "Solo el fragmento.", "cita": "(X, 2000, p. 1)"}) == "«Solo el fragmento.» (X, 2000, p. 1)"
+
+
 def test_subir_una_url_va_como_json():
     f = SesionFalsa([Respuesta(201, {"id": "d1", "estado": "listo"})])
     s = Scholaris("sch_prueba", base="https://ejemplo.es", sesion=f)

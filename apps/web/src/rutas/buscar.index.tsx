@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Resaltado } from '../lib/resaltado';
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
-import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { Filtros, TipoEntrada } from '@scholaris/nucleo';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import type { Filtros } from '@scholaris/nucleo';
 import type { EventoRespuesta, OrigenPasaje, ResultadoConjunto, ResultadoVista } from '@scholaris/contrato';
 import { avisar, Boton, Campo, Chip, Composicion, cx, EsqueletoTexto, Folio, Icono, MenuContenido, MenuDisparador, MenuElemento, MenuRaiz, Rotulo, Teclas, Vacio } from '@scholaris/ui';
 import { api } from '../datos/api';
@@ -11,7 +11,8 @@ import { Resultado } from '../componentes/busqueda/resultado';
 import { ResultadoAjeno } from '../componentes/busqueda/resultado-ajeno';
 import { ResultadosFiguras } from '../componentes/inspector/busqueda-figuras';
 import { Lienzo } from '../componentes/comunes/cabecera';
-import { anclaABusqueda } from '../lib/anclas';
+import type { ContextoBusqueda } from '../lib/anclas';
+import { busquedaDeResultado, filtrosDe, GRUPOS, leerVenida, sembrarFragmento } from '../datos/recorrido';
 import { etiquetaCorta, haceCuanto } from '../lib/formato';
 import { useFlip } from '../lib/flip';
 import { AccesoReferencia } from '../componentes/comunes/boton-referencia';
@@ -26,12 +27,6 @@ type Modo = 'buscar' | 'preguntar';
 type Alcance = 'seguidas' | 'todo';
 interface BusquedaBuscar { q?: string; modo?: Modo; grupo?: string; col?: string; doc?: string; cruzada?: boolean; desde?: number; hasta?: number; figuras?: boolean; alcance?: Alcance }
 
-const GRUPOS: Array<{ id: string; nombre: string; tipos: TipoEntrada[] }> = [
-  { id: 'libros', nombre: 'Libros y artículos', tipos: ['pdf', 'epub', 'pdf_escaneado', 'fotos'] },
-  { id: 'medios', nombre: 'Audio y vídeo', tipos: ['audio', 'video'] },
-  { id: 'textos', nombre: 'Textos y web', tipos: ['documento', 'web'] },
-  { id: 'otros', nombre: 'Diapositivas, hojas e imágenes', tipos: ['presentacion', 'hoja', 'imagen'] },
-];
 
 export const Route = createFileRoute('/buscar/')({
   validateSearch: (s: Record<string, unknown>): BusquedaBuscar => ({
@@ -48,11 +43,6 @@ export const Route = createFileRoute('/buscar/')({
   }),
   component: PaginaBuscar,
 });
-
-function filtrosDe(b: BusquedaBuscar): Filtros {
-  const g = GRUPOS.find((x) => x.id === b.grupo);
-  return { ...(g ? { tipos: g.tipos } : {}), ...(b.col ? { bibliotecas: [b.col] } : {}), ...(b.doc ? { documentos: [b.doc] } : {}), ...(b.desde ? { anioDesde: b.desde } : {}), ...(b.hasta ? { anioHasta: b.hasta } : {}) };
-}
 
 function PaginaBuscar() {
   const b = Route.useSearch();
@@ -75,28 +65,35 @@ function PaginaBuscar() {
 
   const consulta = (b.q ?? '').trim();
   const normal = useQuery({ ...q.busqueda(consulta, filtros), enabled: modo === 'buscar' && !b.cruzada && !b.figuras && consulta.length > 1 });
-  const cruzada = useQuery({
-    queryKey: ['multilingue', consulta, filtros],
-    queryFn: () => api().busqueda.multilingue({ consulta, filtros, k: 30 }),
-    enabled: modo === 'buscar' && !!b.cruzada && !b.figuras && consulta.length > 1,
-    placeholderData: keepPreviousData,
-    staleTime: 120_000,
-  });
+  const cruzada = useQuery({ ...q.busquedaCruzada(consulta, filtros), enabled: modo === 'buscar' && !!b.cruzada && !b.figuras && consulta.length > 1 });
   // En lo que sigo (o en todo): la búsqueda conjunta, y cada pasaje dice de dónde sale.
   const seguidas = bibliotecas.filter((x) => x.permiso !== 'propietario');
-  const conjunta = useQuery({
-    queryKey: ['conjunta', consulta, filtros, b.alcance],
-    queryFn: () => api().busqueda.conjunta({ consulta, filtros, k: 30, alcance: b.alcance ?? 'todo' }),
-    enabled: modo === 'buscar' && !!b.alcance && !b.cruzada && !b.figuras && consulta.length > 1,
-    placeholderData: keepPreviousData,
-    staleTime: 60_000,
-  });
+  const conjunta = useQuery({ ...q.busquedaConjunta(consulta, filtros, b.alcance ?? 'todo'), enabled: modo === 'buscar' && !!b.alcance && !b.cruzada && !b.figuras && consulta.length > 1 });
   const datos = b.alcance && !b.cruzada ? conjunta : b.cruzada ? cruzada : normal;
   const resultados = (datos.data?.resultados ?? []) as Array<ResultadoVista & { origen?: OrigenPasaje }>;
   const preliminar = !!(datos.data as { preliminar?: boolean } | undefined)?.preliminar;
   const lista = useRef<HTMLDivElement>(null);
   // Del orden preliminar al definitivo: cada pasaje viaja a su sitio (los nuevos ya entran en cascada solos).
   useFlip(lista, resultados.map((r) => r.fragmento.id).join('|'), { entrada: false });
+
+  // La búsqueda tal como la recorre el lector (anterior y siguiente) y a la que vuelve.
+  const contexto: ContextoBusqueda | undefined = consulta.length > 1 && !b.figuras ? { q: consulta, grupo: b.grupo, col: b.col, doc: b.doc, desde: b.desde, hasta: b.hasta, cruzada: b.cruzada, alcance: b.alcance } : undefined;
+  // Al volver del lector la lista ya está en la caché: se pinta tal cual (sin cascada) y con el resultado del que se vino destacado.
+  const [deVuelta] = useState(() => resultados.length > 0 && !datos.isFetching);
+  const [venida, setVenida] = useState<string | null>(() => (contexto ? leerVenida(contexto) : null));
+  useEffect(() => {
+    if (!deVuelta || !venida) return;
+    // La restauración del desplazamiento va primero; solo si el resultado (al que se llegó recorriendo) queda del todo fuera, se acerca.
+    const h = window.setTimeout(() => {
+      const el = lista.current?.querySelector<HTMLElement>(`[data-resultado="${CSS.escape(venida)}"]`);
+      if (!el) return;
+      const r = el.getBoundingClientRect();
+      if (r.bottom <= 0 || r.top >= window.innerHeight) el.scrollIntoView({ block: 'center' });
+    }, 60);
+    // El destacado se apaga solo al rato.
+    const f = window.setTimeout(() => setVenida(null), 6000);
+    return () => { window.clearTimeout(h); window.clearTimeout(f); };
+  }, [deVuelta]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function enviar() {
     const t = texto.trim();
@@ -128,7 +125,8 @@ function PaginaBuscar() {
             ref={caja}
             tam="g"
             icono={modo === 'buscar' ? 'buscar' : 'chispa'}
-            autoFocus
+            // Con una búsqueda ya hecha (al volver del lector) no se roba el foco: movería el desplazamiento.
+            autoFocus={!b.q}
             value={texto}
             onChange={(e) => setTexto(e.target.value)}
             placeholder={modo === 'buscar' ? 'Una idea, una frase, un nombre…' : '¿Qué dice tu biblioteca sobre…?'}
@@ -185,7 +183,7 @@ function PaginaBuscar() {
               <Boton variante="linea" tam="p" icono="chispa" className="ml-auto" onClick={() => { fijar({ modo: 'preguntar' }); setPregunta(consulta); }}>Preguntar sobre esto</Boton>
             </div>
             <div ref={lista} className={cx('transition-opacity', datos.isPlaceholderData && 'opacity-60')}>
-              {resultados.map((r, i) => <div key={`${r.origen?.biblioteca ?? ''}${r.fragmento.id}`} data-flip={r.fragmento.id}>{r.origen && !r.origen.propia ? <ResultadoAjeno r={r as ResultadoConjunto} /> : <Resultado r={r} consulta={consulta} indice={i} />}</div>)}
+              {resultados.map((r, i) => <div key={`${r.origen?.biblioteca ?? ''}${r.fragmento.id}`} data-flip={r.fragmento.id}>{r.origen && !r.origen.propia ? <ResultadoAjeno r={r as ResultadoConjunto} /> : <Resultado r={r} consulta={consulta} indice={i} {...(contexto ? { contexto } : {})} destacado={venida === r.fragmento.id} sinEntrada={deVuelta} />}</div>)}
             </div>
           </>
         )}
@@ -338,10 +336,10 @@ function Respuesta({ pregunta, filtros }: { pregunta: string; filtros: Filtros }
                 if (!f) return <sup key={i} className="font-mono text-[0.7em] text-apagado">[{n}]</sup>;
                 return (
                   // Cada cita se estampa en el texto cuando llega, como un sello.
-                  <Link key={i} to="/lector/$id" params={{ id: f.documento.id }} search={anclaABusqueda(f.fragmento.ancla, { q: pregunta })}
+                  <Link key={i} to="/lector/$id" params={{ id: f.documento.id }} search={busquedaDeResultado(c?.pasaje ? { ...f, pasaje: c.pasaje } : f, { consulta: pregunta })} onClick={() => sembrarFragmento(qc, f)}
                     className="tactil anim-sello mx-0.5 inline-flex -translate-y-[0.12em] items-baseline gap-1 rounded-md border border-cream-400 bg-cream-100 px-1.5 align-baseline font-mono text-[0.68em] text-coffee-700 no-underline shadow-[var(--relieve)] hover:-translate-y-[0.2em] hover:border-cream-500"
                     title={`${f.documento.metadatos.titulo}, ${c?.etiqueta ?? f.etiqueta}`}>
-                    <span className="font-bold text-azul">{n}</span>{etiquetaCorta(f.fragmento.ancla, c?.etiqueta ?? f.etiqueta)}
+                    <span className="font-bold text-azul">{n}</span>{etiquetaCorta(c?.pasaje?.ancla ?? f.pasaje?.ancla ?? f.fragmento.ancla, c?.etiqueta ?? f.etiqueta)}
                   </Link>
                 );
               })}
@@ -362,17 +360,20 @@ function Respuesta({ pregunta, filtros }: { pregunta: string; filtros: Filtros }
         <Rotulo>Fuentes</Rotulo>
         <ol className="mt-3 flex flex-col gap-3">
           {fuentes.length ? fuentes.slice(0, 8).map((f, i) => {
-            const n = [...citas.values()].find((c) => c.fragmento === f.fragmento.id)?.n;
+            const cita = [...citas.values()].find((c) => c.fragmento === f.fragmento.id);
+            const n = cita?.n;
+            // El pasaje de la nota (lo que sostiene la frase de la respuesta) o, si no lo hay, el de la búsqueda.
+            const pasaje = cita?.pasaje ?? f.pasaje;
             return (
               <li key={f.fragmento.id} className={cx('anim-sube transition-opacity duration-500', !n && estado === 'hecho' && 'opacity-55')} style={{ animationDelay: `calc(${i} * var(--escalon) * 1.6)` }}>
-                <Link to="/lector/$id" params={{ id: f.documento.id }} search={anclaABusqueda(f.fragmento.ancla, { q: pregunta })} className="levanta group block rounded-xl border border-cream-400 bg-cream-50 p-3 shadow-[var(--levantado)]">
+                <Link to="/lector/$id" params={{ id: f.documento.id }} search={busquedaDeResultado(pasaje ? { ...f, pasaje } : f, { consulta: pregunta })} onClick={() => sembrarFragmento(qc, f)} className="levanta group block rounded-xl border border-cream-400 bg-cream-50 p-3 shadow-[var(--levantado)]">
                   <div className="flex items-center gap-2">
                     {n ? <span key={n} className="anim-sello grid h-5 w-5 shrink-0 place-items-center rounded-full bg-azul text-[0.6875rem] font-bold text-cream-50">{n}</span> : null}
                     <span className="min-w-0 flex-1 truncate text-[0.8125rem]">{f.documento.metadatos.titulo}</span>
-                    <Folio className="shrink-0">{etiquetaCorta(f.fragmento.ancla, f.etiqueta)}</Folio>
+                    <Folio className="shrink-0">{etiquetaCorta(pasaje?.ancla ?? f.fragmento.ancla, cita?.etiqueta ?? f.etiqueta)}</Folio>
                     <AccesoReferencia documento={f.documento.id} className="-my-1 -mr-1.5 h-7 px-1.5" />
                   </div>
-                  <p className="mt-2 line-clamp-3 text-[0.8125rem] text-tinta-2"><Resaltado html={f.fragmento.texto} /></p>
+                  <p className="mt-2 line-clamp-3 text-[0.8125rem] text-tinta-2"><Resaltado html={pasaje?.texto || f.fragmento.texto} /></p>
                 </Link>
               </li>
             );

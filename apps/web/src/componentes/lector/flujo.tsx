@@ -43,10 +43,12 @@ function soloTexto(tipo: DetalleDocumento['tipo']) {
 
 export const Flujo = memo(forwardRef<ManejadorFlujo, {
   doc: DetalleDocumento; modo: ModoLectura; inicial: number; resaltar?: string; destacar?: string; leidas?: number;
+  /** El pasaje que abrió el lector (subrayado) y su fragmento entero (en suave). */
+  pasaje?: string; contextoPasaje?: string;
   /** Unidades totales si se conocen antes que el servidor (la imprenta ya las contó). */
   total?: number;
   alVer: (orden: number) => void;
-}>(function Flujo({ doc, modo, inicial, resaltar, destacar, leidas, total: totalConocido, alVer }, ref) {
+}>(function Flujo({ doc, modo, inicial, resaltar, destacar, pasaje, contextoPasaje, leidas, total: totalConocido, alVer }, ref) {
   const total = Math.max(doc.unidades, totalConocido ?? 0);
   const contenedor = useRef<HTMLDivElement>(null);
   const [margen, setMargen] = useState(0);
@@ -116,15 +118,15 @@ export const Flujo = memo(forwardRef<ManejadorFlujo, {
       {v.getVirtualItems().map((it) => (
         // `top` y no `transform`: el folio pegado (sticky) no ve las transformaciones.
         <div key={it.key} data-index={it.index} ref={v.measureElement} className="absolute inset-x-0" style={{ top: it.start - v.options.scrollMargin }}>
-          <Fila docId={doc.id} orden={it.index + 1} modo={modoReal} texto={texto} apaisada={apaisada} resaltar={resaltar} destacar={inicial === it.index + 1 ? destacar : undefined} pendiente={leidas != null && it.index + 1 > leidas} procesando={doc.estado !== 'listo'} titulillo={doc.metadatos.titulo} />
+          <Fila docId={doc.id} orden={it.index + 1} modo={modoReal} texto={texto} apaisada={apaisada} resaltar={resaltar} destacar={inicial === it.index + 1 ? destacar : undefined} pasaje={pasaje} contextoPasaje={contextoPasaje} pendiente={leidas != null && it.index + 1 > leidas} procesando={doc.estado !== 'listo'} titulillo={doc.metadatos.titulo} />
         </div>
       ))}
     </div>
   );
 }));
 
-const Fila = memo(function Fila({ docId, orden, modo, texto, apaisada, resaltar, destacar, pendiente: pendienteServidor, procesando, titulillo }: {
-  docId: string; orden: number; modo: ModoLectura; texto: boolean; apaisada: boolean; resaltar?: string; destacar?: string; pendiente: boolean; procesando: boolean; titulillo: string;
+const Fila = memo(function Fila({ docId, orden, modo, texto, apaisada, resaltar, destacar, pasaje, contextoPasaje, pendiente: pendienteServidor, procesando, titulillo }: {
+  docId: string; orden: number; modo: ModoLectura; texto: boolean; apaisada: boolean; resaltar?: string; destacar?: string; pasaje?: string; contextoPasaje?: string; pendiente: boolean; procesando: boolean; titulillo: string;
 }) {
   const { data } = useQuery({ ...q.bloque(docId, bloqueDe(orden)), enabled: !pendienteServidor });
   usePrevia(docId);
@@ -144,7 +146,7 @@ const Fila = memo(function Fila({ docId, orden, modo, texto, apaisada, resaltar,
     return (
       <section data-orden={orden} className="grid grid-cols-[4.5rem_minmax(0,1fr)] gap-4 py-3 md:grid-cols-[7rem_minmax(0,42rem)] md:gap-8">
         <div className="pt-1 text-right">{u ? <Folio className="justify-end">{etiquetaCorta(u.ancla, u.etiqueta)}</Folio> : <Esqueleto className="ml-auto h-3 w-12" />}</div>
-        <div className="lectura min-w-0">{u ? <Markdown texto={u.texto} q={resaltar} destacar={destacar} /> : <EsqueletoTexto lineas={4} />}</div>
+        <div className="lectura min-w-0">{u ? <Markdown texto={u.texto} q={resaltar} destacar={destacar} pasaje={pasaje} contextoPasaje={contextoPasaje} /> : <EsqueletoTexto lineas={4} />}</div>
       </section>
     );
   }
@@ -181,7 +183,7 @@ const Fila = memo(function Fila({ docId, orden, modo, texto, apaisada, resaltar,
         {folio ? <Rotulo>física {folio.fisica}{folio.origen === 'deducido' ? ' · folio deducido' : ''}</Rotulo> : null}
         {esPrevia ? <Rotulo className="ml-auto text-rojo">Vista previa · aún se está leyendo</Rotulo> : null}
       </div>
-      {pendiente ? <p className="text-[0.875rem] text-apagado">El texto llegará en cuanto se lea esta página.</p> : u && !u.texto.trim() && !esPrevia ? <p className=" text-apagado">Página sin texto: en blanco, guarda o lámina.</p> : u ? <Markdown texto={u.texto} q={resaltar} destacar={destacar} className="lectura" /> : <EsqueletoTexto lineas={9} />}
+      {pendiente ? <p className="text-[0.875rem] text-apagado">El texto llegará en cuanto se lea esta página.</p> : u && !u.texto.trim() && !esPrevia ? <p className=" text-apagado">Página sin texto: en blanco, guarda o lámina.</p> : u ? <Markdown texto={u.texto} q={resaltar} destacar={destacar} pasaje={pasaje} contextoPasaje={contextoPasaje} className="lectura" /> : <EsqueletoTexto lineas={9} />}
     </div>
   );
 

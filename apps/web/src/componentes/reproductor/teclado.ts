@@ -28,6 +28,8 @@ export const ATAJOS: Array<[string[], string]> = [
   [['F'], 'Pantalla completa'],
   [['I'], 'Imagen dentro de imagen'],
   [['0', '9'], 'Ir al 0 %… 90 %'],
+  [['N', 'P'], 'Resultado siguiente o anterior (al venir de una búsqueda)'],
+  [['Esc'], 'Volver a los resultados'],
 ];
 
 const esCampo = (t: EventTarget | null) => {

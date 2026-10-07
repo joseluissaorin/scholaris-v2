@@ -22,6 +22,9 @@ export function htmlSeguro(html: string): string {
   return textoLimpio(t)
     .replace(/[&<>"']/g, (c) => ESC[c]!)
     .replace(/&lt;(\/?)mark&gt;/g, '<$1mark>')
+    // Las oraciones que se citan (el pasaje), y nada más: ni otros atributos ni otros span.
+    .replace(/&lt;span class=&quot;pasaje&quot;&gt;/g, '<span class="pasaje">')
+    .replace(/&lt;\/span&gt;/g, '</span>')
     .replace(/&amp;(amp;|lt;|gt;|quot;|#39;)/g, '&$1')
     .replace(new RegExp(`${ABRE}([^${CIERRA}]*)${CIERRA}\\s*`, 'g'), (_m, n: string) => `<span class="hablante">${n}</span> `);
 }

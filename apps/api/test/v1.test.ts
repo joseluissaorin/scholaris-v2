@@ -209,6 +209,13 @@ describe('API v1: subir, leer, buscar, preguntar, citar, verificar, borrar', () 
     expect(r.estado).toBe(200);
     const p = r.cuerpo.pasajes[0];
     expect(p.texto).toMatch(/apartment of the inspector/);
+    // El pasaje: oraciones enteras del fragmento, más cortas que él, y donde dice su rango.
+    expect(p.pasaje).toMatch(/apartment of the inspector/);
+    expect(p.pasaje.length).toBeLessThanOrEqual(p.texto.length);
+    expect(p.pasaje).toMatch(/^[\p{Lu}¿¡«"“—(\d]/u);
+    expect(p.pasaje).toMatch(/[.?!…»”")]$/);
+    expect(p.texto.slice(p.pasaje_rango[0], p.pasaje_rango[1]).replace(/\s+/g, ' ')).toBe(p.pasaje);
+    expect(p.enlace).toContain(`pd=${p.pasaje_rango[0]}`);
     expect(p.documento.id).toBe(web);
     expect(p.cita).toMatch(/^\(Bentham, .*párr\. \d\)$/);
     expect(p.localizador).toMatch(/párr\. \d/);

@@ -8,7 +8,7 @@ Ajustes → Claves de API, y:
     s = Scholaris("sch_…")                       # o la variable SCHOLARIS_CLAVE
     doc = s.subir("articulo.pdf")                 # también una URL: s.subir("https://…")
     for p in s.buscar("atención escalada", k=3):
-        print(p["cita"], p["texto"][:80], p["enlace"])
+        print(f'«{p["pasaje"]}» {p["cita"]}', p["enlace"])   # el pasaje: las oraciones que se citan
     r = s.preguntar("¿Qué es la atención multicabeza?")
     print(r["respuesta"])                         # Markdown con notas [^n] verificadas
     print(s.citar("La atención sustituye a la recurrencia.")["texto"])
@@ -118,8 +118,18 @@ class Scholaris:
     # -- buscar, preguntar, citar, verificar ---------------------------------
 
     def buscar(self, q: str, k: int = 10, documentos: Optional[Sequence[str]] = None) -> List[dict]:
-        """Pasajes con `cita`, `localizador`, `ancla`, `enlace` y `texto` literal."""
+        """Pasajes de la biblioteca. Cada uno trae `pasaje` (de 1 a 3 oraciones completas y
+        literales que responden a la consulta: lo que se cita), `cita` y `localizador` (con la
+        página o el segundo de esas oraciones), `ancla`, `enlace` (el lector con el pasaje
+        subrayado), `pasaje_rango` ([desde, hasta) dentro de `texto`) y `texto`, el fragmento
+        entero, como contexto. Para citar: `f'«{p["pasaje"]}» {p["cita"]}'` (ver `cita_literal`)."""
         return self._json("GET", "/buscar", params={"q": q, "k": k, "documento": ",".join(documentos) if documentos else None})["pasajes"]
+
+    @staticmethod
+    def cita_literal(p: dict) -> str:
+        """La cita lista para pegar de un pasaje de `buscar` o una fuente de `preguntar`:
+        «pasaje» (Autor, año, p. X). Solo texto literal del documento, nunca del modelo."""
+        return f'«{p.get("pasaje") or p["texto"]}» {p["cita"]}'
 
     def preguntar(self, pregunta: str, k: int = 8, documentos: Optional[Sequence[str]] = None, *, stream: bool = False) -> Any:
         """Respuesta en Markdown con notas [^n] y sus `fuentes`. Con `stream=True`, un iterador de

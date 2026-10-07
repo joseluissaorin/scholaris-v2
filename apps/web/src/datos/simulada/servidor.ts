@@ -4,7 +4,7 @@
  * `@scholaris/contrato` contra la API real o contra esto; nada más cambia.
  * Solo se carga cuando no hay API (desarrollo, demostraciones, capturas).
  */
-import { anclaACita, type Ancla, type MetadatosDocumento, type Progreso, type Resultado, type TipoEntrada } from '@scholaris/nucleo';
+import { anclaACita, elegirPasaje, type Ancla, type MetadatosDocumento, type Progreso, type Resultado, type TipoEntrada } from '@scholaris/nucleo';
 import type {
   Ajustes, Alerta, Biblioteca, Buscar, ClaveApi, ConfigPublica, Cuaderno, DetalleAutocita, DetalleDocumento, EventoBusqueda,
   EventoRespuesta, EventoTiempoReal, GrafoCitas, InstantaneaCorpus, MapaConceptos, PropuestaCita, ResultadoVista, ResumenDocumento,
@@ -236,10 +236,13 @@ function buscarEn(q: string, filtros: Buscar['filtros'] = {}, k = 20): Resultado
   return orden.map(({ p, s }) => {
     const ancla = anclaDe(p.d, p.orden);
     const resaltado = p.texto.replace(/[\p{L}\p{M}]+/gu, (w) => (raices.some((r) => normalizar(w).startsWith(r)) ? `<mark>${w}</mark>` : w));
+    // El pasaje: las oraciones con coincidencias (el mismo criterio que la API, con las raíces de la demostración).
+    const tramos = [...p.texto.matchAll(/[\p{L}\p{M}]+/gu)].filter((m) => raices.some((r) => normalizar(m[0]).startsWith(r))).map((m) => ({ desde: m.index, hasta: m.index + m[0].length, termino: raices.find((r) => normalizar(m[0]).startsWith(r)) ?? m[0] }));
+    const pasaje = elegirPasaje(p.texto, tramos);
     const sec = [...p.d.secciones].reverse().find((x) => x.unidad <= p.orden);
     const r: ResultadoVista = {
       fragmento: { id: `f-${p.d.id}-${p.orden}-${p.parrafo}`, documento: p.d.id, unidad: `u-${p.d.id}-${p.orden}`, orden: p.parrafo, texto: p.texto, contexto: `De «${p.d.meta.titulo}»${sec ? `, ${sec.titulo}` : ''}.`, seccion: sec ? [sec.titulo] : [], ancla },
-      documento: { id: p.d.id, tipo: p.d.tipo, metadatos: p.d.meta }, puntuacion: s / max, vias: s / max > 0.6 ? ['lexica', 'densa'] : ['densa'], resaltado,
+      documento: { id: p.d.id, tipo: p.d.tipo, metadatos: p.d.meta }, puntuacion: s / max, vias: s / max > 0.6 ? ['lexica', 'densa'] : ['densa'], resaltado, ...(pasaje.texto ? { pasaje } : {}),
       etiqueta: anclaACita(ancla), citaCorta: citaCorta(p.d.meta, ancla),
     };
     return r;

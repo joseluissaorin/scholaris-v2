@@ -6,6 +6,8 @@
  * Una cita solo puede imprimir lo que dice un ancla; nunca lo que diga un modelo.
  */
 
+import type { Pasaje } from './pasaje.js';
+
 // ---------------------------------------------------------------------------
 // Tipos de entrada
 // ---------------------------------------------------------------------------
@@ -275,6 +277,12 @@ export interface Resultado {
   vias: Array<'lexica' | 'densa' | 'visual'>;
   /** Fragmento con las coincidencias resaltadas. */
   resaltado?: string;
+  /**
+   * El pasaje relevante: las oraciones completas que responden a la consulta,
+   * con sus desplazamientos en `fragmento.texto` y su propia ancla. Es lo que se
+   * cita y lo que subraya el lector (ver pasaje.ts).
+   */
+  pasaje?: Pasaje;
 }
 
 export type RelacionCita =

@@ -52,7 +52,7 @@ Se puede filtrar por biblioteca, documento, tipo, autor, idioma y año (desde, h
 
 ## Lo que devuelve cada resultado
 
-El pasaje literal, su cita lista para pegar («(Darwin, 1859, p. 81)»), el localizador exacto, el ancla y un enlace que abre el lector en esa página o en ese segundo. La búsqueda nunca escribe una cita: la cita sale del ancla.
+El pasaje que se cita (de una a tres oraciones completas y literales: las que responden a la consulta, nunca el fragmento entero ni una frase a medias), su cita lista para pegar («(Darwin, 1859, p. 81)») con la página o el segundo de esas oraciones, el localizador exacto, el ancla y un enlace que abre el lector en esa página o en ese segundo, con el pasaje subrayado. El fragmento entero viene aparte, como contexto. La búsqueda nunca escribe una cita: la cita sale del ancla.
 
 ## También
 

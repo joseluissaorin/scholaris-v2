@@ -14,7 +14,7 @@ import { obtenerBuscador } from '../compartido/servicios.js';
 import { LIMITES } from '../compartido/planes.js';
 import type { PuertosUsuario } from '../puertos.js';
 import { figuraDeResultado } from './contenido.js';
-import { citaCorta, claveDe, etiquetaAncla, puertos, type Ctx } from './util.js';
+import { anclaDePasaje, citaCorta, claveDe, etiquetaAncla, puertos, type Ctx } from './util.js';
 import { documentosDelAmbito, filtrosEnAmbito } from './ambito.js';
 
 const INTENCION: Record<string, IntencionConsulta> = { conceptual: 'conceptual', visual: 'visual', cita: 'literal', temporal: 'temporal' };
@@ -22,10 +22,12 @@ const INTENCION: Record<string, IntencionConsulta> = { conceptual: 'conceptual',
 const VIAS: Record<string, Via[] | undefined> = { hibrida: undefined, lexica: ['lexica'], densa: ['densa'], visual: ['visual'] };
 
 export async function aVista(p: PuertosUsuario, r: Resultado): Promise<ResultadoVista> {
+  // La etiqueta y la cita son las del pasaje (sus oraciones, su página o su segundo), no las del fragmento entero.
+  const [ancla, fin] = anclaDePasaje(r);
   const v: ResultadoVista = {
     ...r,
-    etiqueta: etiquetaAncla(r.fragmento.ancla, r.fragmento.anclaFin),
-    citaCorta: citaCorta(r.documento.metadatos, r.fragmento.ancla, r.fragmento.anclaFin),
+    etiqueta: etiquetaAncla(ancla, fin),
+    citaCorta: citaCorta(r.documento.metadatos, ancla, fin),
   };
   const [u] = await p.sql.ejecutar<{ m: string | null }>('SELECT COALESCE(miniatura, imagen) AS m FROM unidades WHERE id = ?', r.fragmento.unidad);
   if (u?.m) v.miniaturaUrl = await p.almacen.urlLectura(claveDe(p.usuario.id, r.documento.id, u.m));
@@ -153,6 +155,8 @@ export function rutasBusqueda(app: Hono<Entorno>): void {
             fusionEnviada = true;
             preliminar = (async () => {
               await lexica;
+              // El orden preliminar también cita su pasaje con su página o su segundo (como el definitivo).
+              await buscador.anclarPasajes(rs);
               const vistas = await Promise.all((await soloAmbito(c, rs)).map((x) => aVista(p, x)));
               if (!terminado) await enviar({ tipo: 'preliminar', resultados: vistas, ms: Date.now() - t0, via: 'fusion' });
             })().catch((e) => console.error('preliminar', e));
@@ -193,9 +197,12 @@ export function rutasBusqueda(app: Hono<Entorno>): void {
             await enviar({ tipo: 'texto', delta: ev.delta });
           } else if (ev.tipo === 'fin') {
             for (const f of ev.fuentes) {
+              // La nota cita las oraciones que sostienen su frase (con su página); si no las hay, el fragmento entero.
+              const [ancla, fin] = f.pasajeRelevante?.ancla ? [f.pasajeRelevante.ancla, f.pasajeRelevante.anclaFin] : [f.resultado.fragmento.ancla, f.resultado.fragmento.anclaFin];
               await enviar({
-                tipo: 'cita', n: f.n, fragmento: f.fragmento, documento: f.documento, etiqueta: etiquetaAncla(f.resultado.fragmento.ancla, f.resultado.fragmento.anclaFin),
-                citaCorta: citaCorta(f.resultado.documento.metadatos, f.resultado.fragmento.ancla, f.resultado.fragmento.anclaFin),
+                tipo: 'cita', n: f.n, fragmento: f.fragmento, documento: f.documento, etiqueta: etiquetaAncla(ancla, fin),
+                citaCorta: citaCorta(f.resultado.documento.metadatos, ancla, fin),
+                ...(f.pasajeRelevante ? { pasaje: f.pasajeRelevante } : {}),
               });
             }
             const confianza = ev.fuentes.length === 0 ? 'baja' : confianzaDe(busqueda?.resultados ?? []);

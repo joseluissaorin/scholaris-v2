@@ -8,8 +8,8 @@
  * se toman del fragmento recuperado; el modelo solo elige entre candidatos.
  */
 import type { Buscador } from '@scholaris/busqueda';
-import { contieneLiteral, plegar } from '@scholaris/busqueda';
-import type { CitaVerificada, Filtros, Fragmento, Juez, MetadatosDocumento, PreguntaJuez, Redactor, RelacionCita, Resultado } from '@scholaris/nucleo';
+import { contieneLiteral, pasajeSiResponde, plegar, terminos } from '@scholaris/busqueda';
+import type { Ancla, CitaVerificada, Filtros, Fragmento, Juez, MetadatosDocumento, PreguntaJuez, Redactor, RelacionCita, Resultado } from '@scholaris/nucleo';
 import { anclaACita, enParalelo } from '@scholaris/nucleo';
 import { MotorCitas } from './csl/motor.js';
 import type { DocumentoCitable } from './csl/mapeo.js';
@@ -322,6 +322,24 @@ export function fundirRangos(citas: CitaPropuesta[]): CitaPropuesta[] {
   return citas.filter((c) => !fuera.has(c));
 }
 
+/**
+ * Lo que se cita de un candidato: las oraciones del fragmento que sostienen la
+ * afirmación (la evidencia literal del redactor, si la hay, manda), con la
+ * página o el segundo de esas oraciones. Si ninguna oración casa de verdad, el
+ * fragmento entero con su ancla: mejor largo que señalar la frase equivocada.
+ */
+export async function pasajeDeCita(buscador: Pick<Buscador, 'anclarPasajes'>, r: Resultado, afirmacion: string, evidencia?: string): Promise<{ texto: string; ancla: Ancla; anclaFin?: Ancla }> {
+  const entero = { texto: r.fragmento.texto, ancla: r.fragmento.ancla, ...(r.fragmento.anclaFin ? { anclaFin: r.fragmento.anclaFin } : {}) };
+  const ts = [...new Set([...terminos(evidencia ?? ''), ...terminos(afirmacion)])];
+  const p = ts.length ? pasajeSiResponde(r.fragmento.texto, ts) : null;
+  if (!p) return entero;
+  const x: Resultado = { ...r, pasaje: p };
+  try { await buscador.anclarPasajes([x]); } catch { /* vale el ancla del fragmento */ }
+  const q = x.pasaje!;
+  if (q.ancla) return { texto: q.texto, ancla: q.ancla, ...(q.anclaFin ? { anclaFin: q.anclaFin } : {}) };
+  return { ...entero, texto: q.texto };
+}
+
 const ORDEN_ESTADO: Record<EstadoCita, number> = { aceptada: 0, revisar: 1, descartada: 2 };
 
 /** Autocita completa sobre un texto. */
@@ -379,7 +397,8 @@ export async function autocitar(texto: string, puertos: PuertosAutocita, opcione
     aJuzgar.forEach((x, i) => { const v = r.resultados[i]; if (v) veredictos.set(x, v); });
   } else if (aJuzgar.length) avisos.push('Sin juez: las citas se proponen con la confianza del redactor y quedan para revisar.');
 
-  // 5. Decisión.
+  // 5. Decisión. Lo que se cita es el pasaje de cada candidato (sus oraciones, con su página).
+  const pasajes = new Map(await Promise.all(previas.map(async (x) => [x, await pasajeDeCita(puertos.buscador, x.p.candidato.resultado, x.p.afirmacion.texto, x.evidencia)] as const)));
   const citasPorAfirmacion = new Map<string, CitaPropuesta[]>();
   for (const x of previas) {
     const { p, temporal, motivos } = x;
@@ -410,11 +429,12 @@ export async function autocitar(texto: string, puertos: PuertosAutocita, opcione
     else estado = 'descartada';
     const revisar = estado === 'revisar' || (estado === 'aceptada' && motivos.length > 0);
 
+    const ps = pasajes.get(x)!;
     const cita: CitaPropuesta = {
       id: `${p.afirmacion.id}:${r.fragmento.id}`,
-      fragmento: r.fragmento.id, documento: r.documento.id, ancla: r.fragmento.ancla,
-      ...(r.fragmento.anclaFin ? { anclaFin: r.fragmento.anclaFin } : {}),
-      relacion, respaldo: Math.round(respaldo * 1000) / 1000, pasaje: r.fragmento.texto,
+      fragmento: r.fragmento.id, documento: r.documento.id, ancla: ps.ancla,
+      ...(ps.anclaFin ? { anclaFin: ps.anclaFin } : {}),
+      relacion, respaldo: Math.round(respaldo * 1000) / 1000, pasaje: ps.texto,
       estado, revisar, motivos, relacionPropuesta: p.relacion, confianzaRedactor: p.confianza,
       ...(v ? { relaciones: v.relaciones as Partial<Record<RelacionCita, number>> } : {}),
       ...(x.evidencia ? { evidencia: x.evidencia } : {}),
@@ -522,6 +542,7 @@ export async function verificarAfirmacion(
   const props: Propuesta[] = resultados.map((r, i) => ({ afirmacion: afirm, candidato: { etiqueta: `C${i + 1}`, resultado: r }, relacion: 'APOYO_DIRECTO', confianza: 0.5 }));
   const { resultados: v } = props.length ? await verificarConJuez(puertos.juez, props, 8) : { resultados: [] };
   const anioTexto = opciones.anioTexto ?? new Date().getFullYear();
+  const pasajesV = await Promise.all(resultados.map((r) => pasajeDeCita(puertos.buscador, r, afirmacion)));
   const citas = resultados.map((r, i) => {
     const m = r.documento.metadatos;
     const anio = anioDe(m);
@@ -532,11 +553,12 @@ export async function verificarAfirmacion(
     if (t.imposible || (anio !== undefined && anio > anioTexto)) { relacion = 'IMPOSIBLE_TEMPORAL'; respaldo = 0; }
     else if (t.relacionSugerida === 'APLICACION_DE_MARCO' && relacion === 'APOYO_DIRECTO') relacion = 'APLICACION_DE_MARCO';
     const autores = m.autores.map((a) => a.apellidos).join(', ') || m.titulo;
+    const ps = pasajesV[i]!;
     return {
-      fragmento: r.fragmento.id, documento: r.documento.id, ancla: r.fragmento.ancla, ...(r.fragmento.anclaFin ? { anclaFin: r.fragmento.anclaFin } : {}),
-      relacion, respaldo: Math.round(respaldo * 1000) / 1000, pasaje: r.fragmento.texto,
+      fragmento: r.fragmento.id, documento: r.documento.id, ancla: ps.ancla, ...(ps.anclaFin ? { anclaFin: ps.anclaFin } : {}),
+      relacion, respaldo: Math.round(respaldo * 1000) / 1000, pasaje: ps.texto,
       etiqueta: `${autores}, «${m.titulo}»`,
-      citaCorta: `(${m.autores[0]?.apellidos ?? m.titulo}, ${anio ?? 's. f.'}, ${anclaACita(r.fragmento.ancla, r.fragmento.anclaFin)})`,
+      citaCorta: `(${m.autores[0]?.apellidos ?? m.titulo}, ${anio ?? 's. f.'}, ${anclaACita(ps.ancla, ps.anclaFin)})`,
       relaciones: ver?.relaciones as Partial<Record<RelacionCita, number>> | undefined,
     };
   }).sort((a, b) => b.respaldo - a.respaldo);

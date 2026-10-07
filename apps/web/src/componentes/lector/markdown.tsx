@@ -3,9 +3,10 @@
  * listas, tablas, cursivas y negritas. Se pinta con elementos de React, nunca
  * con innerHTML, y sabe resaltar términos de búsqueda.
  */
-import { Fragment, memo, type ReactNode } from 'react';
+import { Fragment, memo, useRef, type ReactNode } from 'react';
 import { limpiarMarcadoOCR } from '@scholaris/nucleo';
 import { useMarcadorEntidades, type MarcadorEntidades } from './contexto-entidades';
+import { useSubrayado } from './subrayado';
 
 const normal = (s: string) => s.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase();
 
@@ -36,13 +37,19 @@ function enLinea(t: string, raices: string[], clave: string, ent?: MarcadorEntid
   return out;
 }
 
-export const Markdown = memo(function Markdown({ texto, q, className, destacar }: { texto: string; q?: string; className?: string; destacar?: string }) {
+export const Markdown = memo(function Markdown({ texto, q, className, destacar, pasaje, contextoPasaje }: {
+  texto: string; q?: string; className?: string; destacar?: string;
+  /** El pasaje que se cita (subrayado) y el fragmento del que sale (en suave). */
+  pasaje?: string; contextoPasaje?: string;
+}) {
+  const raiz = useRef<HTMLDivElement>(null);
+  useSubrayado(raiz, pasaje, contextoPasaje, `${texto.length}|${q ?? ''}`);
   const raices = raicesDe(q);
   const ent = useMarcadorEntidades();
   const destacado = destacar ? normal(destacar).slice(0, 60) : null;
   const bloques = limpiarMarcadoOCR(texto).split(/\n\s*\n/);
   return (
-    <div className={['prosa', className].filter(Boolean).join(' ')}>
+    <div ref={raiz} className={['prosa', className].filter(Boolean).join(' ')}>
       {bloques.map((b, i) => {
         const t = b.trim();
         if (!t) return null;

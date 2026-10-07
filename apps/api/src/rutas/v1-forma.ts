@@ -3,7 +3,7 @@
  * los enlaces al lector y el Markdown que leen los agentes. Sin lógica de
  * dominio: las citas y los localizadores salen siempre del ancla guardada.
  */
-import { anclaACita, limpiarMarcadoOCR, repararMarcasHablante, type Ancla, type Autor, type MetadatosDocumento } from '@scholaris/nucleo';
+import { anclaACita, limpiarMarcadoOCR, repararMarcasHablante, type Ancla, type Autor, type MetadatosDocumento, type Pasaje } from '@scholaris/nucleo';
 import type {
   CitaV1, DetalleDocumento, DocumentoV1, EstadoV1, FuenteV1, PasajeV1, ResultadoVista, ResumenDocumento, RespuestaBuscarV1,
   RespuestaCitarV1, RespuestaPreguntarV1, RespuestaVerificarV1, TextoV1,
@@ -27,8 +27,8 @@ export function autoresDeTexto(t: string | string[] | undefined): Autor[] | unde
   });
 }
 
-/** Parámetros del lector para abrir un ancla (como `anclaABusqueda` de la web). */
-export function enlaceLector(origen: string, documento: string, a?: Ancla, fragmento?: string): string {
+/** Parámetros del lector para abrir un ancla (como `anclaABusqueda` de la web); con `rango`, el pasaje [desde, hasta) del fragmento, subrayado. */
+export function enlaceLector(origen: string, documento: string, a?: Ancla, fragmento?: string, rango?: [number, number]): string {
   const q = new URLSearchParams();
   if (a) {
     switch (a.tipo) {
@@ -41,6 +41,7 @@ export function enlaceLector(origen: string, documento: string, a?: Ancla, fragm
     }
   }
   if (fragmento) q.set('f', fragmento);
+  if (fragmento && rango && rango[1] > rango[0]) { q.set('pd', String(rango[0])); q.set('ph', String(rango[1])); }
   const s = q.toString();
   return `${origen}/lector/${encodeURIComponent(documento)}${s ? `?${s}` : ''}`;
 }
@@ -91,11 +92,20 @@ export function docBreve(id: string, m: Pick<MetadatosDocumento, 'titulo' | 'aut
   return { id, titulo: m.titulo, autores: (m.autores ?? []).map(autorV1), ...(anio ? { anio } : {}) };
 }
 
-export function pasajeDeVista(origen: string, r: ResultadoVista): PasajeV1 {
+/**
+ * Un resultado en la forma de la v1. `pasaje` (lo que se cita) son las oraciones
+ * relevantes del fragmento; `cita`, `localizador`, `ancla` y `enlace` son los suyos.
+ * `pasaje` puede venir de fuera (la frase de una respuesta que lleva la nota).
+ */
+export function pasajeDeVista(origen: string, r: ResultadoVista, pasaje: Pasaje | undefined = r.pasaje): PasajeV1 {
   const f = r.fragmento;
+  const ancla = pasaje?.ancla ?? f.ancla;
+  const fin = pasaje?.ancla ? pasaje.anclaFin : f.anclaFin;
+  const texto = pasaje?.texto || repararMarcasHablante(limpiarMarcadoOCR(f.texto)).trim();
+  const rango: [number, number] | undefined = pasaje?.texto ? [pasaje.desde, pasaje.hasta] : undefined;
   return {
-    id: f.id, documento: docBreve(r.documento.id, r.documento.metadatos), texto: f.texto, cita: r.citaCorta,
-    localizador: r.etiqueta || localizador(f.ancla, f.anclaFin), ancla: f.ancla, enlace: enlaceLector(origen, r.documento.id, f.ancla, f.id),
+    id: f.id, documento: docBreve(r.documento.id, r.documento.metadatos), texto: f.texto, pasaje: texto, ...(rango ? { pasaje_rango: rango } : {}),
+    cita: r.citaCorta, localizador: r.etiqueta || localizador(ancla, fin), ancla, enlace: enlaceLector(origen, r.documento.id, ancla, f.id, rango),
     puntuacion: Math.round(r.puntuacion * 1000) / 1000,
   };
 }
@@ -124,7 +134,7 @@ export function mdDocumentos(ds: DocumentoV1[], total: number, siguiente?: strin
 
 export function mdPasajes(r: RespuestaBuscarV1): string {
   if (!r.pasajes.length) return `# ${r.consulta}\n\nSin resultados.\n`;
-  const bloques = r.pasajes.map((p, i) => `## ${i + 1}. ${p.cita}\n\n*${p.documento.titulo}* · ${p.localizador} · [abrir](${p.enlace}) · \`${p.id}\`\n\n${cita(p.texto)}`);
+  const bloques = r.pasajes.map((p, i) => `## ${i + 1}. ${p.cita}\n\n*${p.documento.titulo}* · ${p.localizador} · [abrir](${p.enlace}) · \`${p.id}\`\n\n${cita(p.pasaje || p.texto)}`);
   return `# ${r.consulta}\n\n${bloques.join('\n\n')}\n`;
 }
 

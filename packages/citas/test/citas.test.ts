@@ -110,7 +110,11 @@ describe('autocita', () => {
     const a = de('Sancho explica que los galeotes');
     expect(a.citas[0]).toMatchObject({ estado: 'aceptada', relacion: 'APOYO_DIRECTO', fragmento: 'fr-q-07' });
     const p = r.propuestas.find((x) => x.afirmacion === a.texto)!;
-    expect(p.textoCita).toBe('(Cervantes Saavedra, 1605/1999, pp. 199-200)');
+    // El fragmento cruza de la 199 a la 200, pero sus oraciones están en la 199 (en la fixtura,
+    // el texto de fr-q-07 vive en la unidad de la 199): la cita lleva la página del pasaje.
+    expect(p.textoCita).toBe('(Cervantes Saavedra, 1605/1999, p. 199)');
+    expect(p.cita.pasaje.startsWith('— No digo eso —respondió Sancho—, sino que es gente que, por sus delitos')).toBe(true);
+    expect(p.cita.pasaje.length).toBeLessThan(400);
     expect(TEXTO.slice(p.insercion - 6, p.insercion + 1)).toBe('fuerza.');
     expect(de('Don Quijote ve treinta').citas[0]).toMatchObject({ estado: 'aceptada', fragmento: 'fr-q-04' });
   });

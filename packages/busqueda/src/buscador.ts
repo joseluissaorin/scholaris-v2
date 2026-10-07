@@ -14,12 +14,12 @@
  * citas literales van directas a FTS sin modelo ni vectores.
  */
 import type { Embebedor, Filtros, Fragmento, IndiceVectorial, Juez, Redactor, Reordenador, Resultado, SQL } from '@scholaris/nucleo';
-import { bytesAVector } from '@scholaris/nucleo';
+import { anclarPasaje, bytesAVector } from '@scholaris/nucleo';
 import { CacheLRU, conPlazo } from './cache.js';
 import { comprenderConModelo, comprenderSinModelo, unirFiltros } from './comprension.js';
 import { Estanteria, type DocumentoBreve } from './estanteria.js';
 import { fusionar, K_RRF, limpiar, normalizar, PESOS_POR_INTENCION, sinDuplicados, type Candidato, type ListaVia } from './fusion.js';
-import { consultaFts, normalizarConsulta, plegar, resaltar, terminos } from './texto.js';
+import { consultaFts, normalizarConsulta, plegar, resaltarConPasaje, terminos } from './texto.js';
 import type { Comprension, DestinoPagina, Expansion, Intencion, OpcionesBusqueda, RespuestaBusqueda, Via } from './tipos.js';
 
 export interface PuertosBuscador {
@@ -379,7 +379,7 @@ export class Buscador {
         const ts = terminos(comprension.consulta);
         opciones.alPreliminar(candidatos.slice(0, limite).map((c, i) => {
           const f = frags.get(c.id) as Fragmento;
-          return { fragmento: f, documento: docs.get(f.documento) as DocumentoBreve, puntuacion: Math.round((puntuaciones[i] ?? 0) * 1e4) / 1e4, vias: [...c.vias].sort(), resaltado: resaltar(f.texto, ts) };
+          return { fragmento: f, documento: docs.get(f.documento) as DocumentoBreve, puntuacion: Math.round((puntuaciones[i] ?? 0) * 1e4) / 1e4, vias: [...c.vias].sort(), ...resaltarConPasaje(f.texto, ts) };
         }));
       } catch { /* un oyente roto no tumba la búsqueda */ }
     }
@@ -445,10 +445,26 @@ export class Buscador {
         documento: d,
         puntuacion: Math.round(p * 1e4) / 1e4,
         vias: [...c.vias].sort(),
-        resaltado: resaltar(f.texto, terminosResaltado),
+        ...resaltarConPasaje(f.texto, terminosResaltado),
       };
     });
+    await this.anclarPasajes(resultados);
     return { resultados, candidatos: fusionados.length };
+  }
+
+  /**
+   * Pone a cada pasaje el ancla de sus propias oraciones: la página donde están
+   * (si el fragmento cruza páginas) o el segundo de su primera palabra (audio y
+   * vídeo). Los demás se quedan con la del fragmento. Nunca tumba la búsqueda.
+   */
+  async anclarPasajes(resultados: Resultado[]): Promise<void> {
+    await Promise.all(resultados.map(async (r) => {
+      if (!r.pasaje?.texto) return;
+      try {
+        const unidades = await this.estanteria.unidadesDelFragmento(r.fragmento);
+        if (unidades.length) r.pasaje = anclarPasaje(r.pasaje, r.fragmento, unidades);
+      } catch { /* sin unidades: vale el ancla del fragmento */ }
+    }));
   }
 
   // -------------------------------------------------------------------------
@@ -478,9 +494,11 @@ export class Buscador {
     const { porId } = await this.estanteria.documentos();
     const d = porId.get(destino.documento);
     if (!d) return [];
-    return filas.map((f) => frags.get(f.id)).filter((f): f is Fragmento => !!f).map((f, i) => ({
-      fragmento: f, documento: d, puntuacion: 1 - i * 0.01, vias: ['lexica'], resaltado: resaltar(f.texto, terminos(consulta)),
+    const resultados: Resultado[] = filas.map((f) => frags.get(f.id)).filter((f): f is Fragmento => !!f).map((f, i) => ({
+      fragmento: f, documento: d, puntuacion: 1 - i * 0.01, vias: ['lexica'], ...resaltarConPasaje(f.texto, terminos(consulta)),
     }));
+    await this.anclarPasajes(resultados);
+    return resultados;
   }
 
   // -------------------------------------------------------------------------
@@ -550,9 +568,11 @@ export class Buscador {
     }), frags);
     const ps = normalizar(candidatos.map((c) => c.puntos));
     const ts = terminos(base.texto).slice(0, 30);
-    return candidatos.slice(0, limite).map((c, i) => {
+    const resultados: Resultado[] = candidatos.slice(0, limite).map((c, i) => {
       const f = frags.get(c.id) as Fragmento;
-      return { fragmento: f, documento: porId.get(f.documento) as DocumentoBreve, puntuacion: Math.round((ps[i] ?? 0) * 1e4) / 1e4, vias: [...c.vias].sort(), resaltado: resaltar(f.texto, ts) };
+      return { fragmento: f, documento: porId.get(f.documento) as DocumentoBreve, puntuacion: Math.round((ps[i] ?? 0) * 1e4) / 1e4, vias: [...c.vias].sort(), ...resaltarConPasaje(f.texto, ts) };
     });
+    await this.anclarPasajes(resultados);
+    return resultados;
   }
 }

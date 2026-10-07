@@ -15,7 +15,7 @@
 import type { Context, Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { streamSSE } from 'hono/streaming';
-import { sha256, type MetadatosDocumento } from '@scholaris/nucleo';
+import { sha256, type MetadatosDocumento, type Pasaje } from '@scholaris/nucleo';
 import {
   PREFIJO_API, PREFIJO_V1, llmsTxtV1, openapiV1,
   type BuscarV1, type CitarV1, type CodigoError, type CuerpoError, type DetalleAutocita, type DetalleDocumento, type DocumentoV1,
@@ -563,9 +563,10 @@ export function montarV1(app: AppPuerta, pl: Plataforma, autenticar: (r: Request
     const fuentes: FuenteV1[] = [];
     let texto = '';
     let confianza: RespuestaPreguntarV1['confianza'] = 'baja';
-    const fuenteDe = (e: { n: number; fragmento: string; citaCorta: string; etiqueta: string }): FuenteV1 | null => {
+    const fuenteDe = (e: { n: number; fragmento: string; citaCorta: string; etiqueta: string; pasaje?: Pasaje }): FuenteV1 | null => {
       const v = vistas.get(e.fragmento);
-      return v ? { n: e.n, ...pasajeDeVista(o, v), cita: e.citaCorta, localizador: e.etiqueta || localizador(v.fragmento.ancla, v.fragmento.anclaFin) } : null;
+      // El pasaje de la nota es el que sostiene la frase de la respuesta (si lo hay); si no, el de la búsqueda.
+      return v ? { n: e.n, ...pasajeDeVista(o, v, e.pasaje ?? v.pasaje), cita: e.citaCorta, localizador: e.etiqueta || localizador(v.fragmento.ancla, v.fragmento.anclaFin) } : null;
     };
     const final = (): RespuestaPreguntarV1 => {
       let md = texto.replace(/[ \t]+(\[\^\d+\])/g, '$1').replace(/[ \t]{2,}/g, ' ').trim();
@@ -687,7 +688,7 @@ export function montarV1(app: AppPuerta, pl: Plataforma, autenticar: (r: Request
       pasajes: v.citas.map((x) => {
         const f = fichas.get(x.documento);
         return {
-          id: x.fragmento, documento: f ? docBreve(x.documento, f.metadatos) : { id: x.documento, titulo: x.etiqueta, autores: [] }, texto: x.pasaje,
+          id: x.fragmento, documento: f ? docBreve(x.documento, f.metadatos) : { id: x.documento, titulo: x.etiqueta, autores: [] }, texto: x.pasaje, pasaje: x.pasaje,
           cita: x.citaCorta, localizador: localizador(x.ancla, x.anclaFin), ancla: x.ancla, enlace: enlaceLector(o, x.documento, x.ancla, x.fragmento),
           puntuacion: x.respaldo, relacion: x.relacion, respaldo: x.respaldo,
         };

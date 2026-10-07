@@ -1,4 +1,4 @@
-import { memo, useState } from 'react';
+import { memo, useState, type MouseEvent } from 'react';
 import { textoLimpio } from '../../lib/texto';
 import { Link } from '@tanstack/react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -6,7 +6,8 @@ import type { ResultadoVista } from '@scholaris/contrato';
 import { avisar, cx, Folio, Icono, MenuContenido, MenuDisparador, MenuElemento, MenuRaiz, MenuRotulo, Rotulo } from '@scholaris/ui';
 import { api } from '../../datos/api';
 import { q } from '../../datos/consultas';
-import { anclaABusqueda } from '../../lib/anclas';
+import type { ContextoBusqueda } from '../../lib/anclas';
+import { anotarVenida, busquedaDeResultado, precargarResultado, sembrarFragmento } from '../../datos/recorrido';
 import { Resaltado } from '../../lib/resaltado';
 import { AccesoReferencia } from '../comunes/boton-referencia';
 import { autoresCorto, etiquetaCorta, ICONO_TIPO } from '../../lib/formato';
@@ -16,18 +17,33 @@ import { prepararViaje } from '../../movimiento/transiciones';
 const VIA: Record<string, string> = { lexica: 'léxica', densa: 'semántica', visual: 'visual' };
 
 /** Un pasaje encontrado: el texto, de dónde es, su folio, y lo que se puede hacer con él. */
-export const Resultado = memo(function Resultado({ r, consulta, indice, compacto }: { r: ResultadoVista; consulta?: string; indice: number; compacto?: boolean }) {
+export const Resultado = memo(function Resultado({ r, consulta, indice, compacto, contexto, destacado, sinEntrada }: {
+  r: ResultadoVista; consulta?: string; indice: number; compacto?: boolean;
+  /** La búsqueda de la que sale: el lector la recorre y vuelve a ella. */
+  contexto?: ContextoBusqueda;
+  /** El resultado del que se vuelve: se destaca. */
+  destacado?: boolean;
+  /** Al volver del lector, la lista ya estaba: sin la cascada de entrada. */
+  sinEntrada?: boolean;
+}) {
   const qc = useQueryClient();
   const [parecidos, setParecidos] = useState<ResultadoVista[] | null>(null);
   const [cargando, setCargando] = useState(false);
   const [menu, setMenu] = useState(false);
   const { data: cuadernos } = useQuery({ ...q.cuadernos(), enabled: menu });
   const m = r.documento.metadatos;
-  const destino = { to: '/lector/$id' as const, params: { id: r.documento.id }, search: anclaABusqueda(r.fragmento.ancla, { q: consulta }) };
+  const destino = { to: '/lector/$id' as const, params: { id: r.documento.id }, search: busquedaDeResultado(r, { ...(consulta ? { consulta } : {}), ...(contexto ? { contexto, indice } : {}) }), ...(contexto ? { state: { desdeResultados: true } } : {}) };
+  // Lo que se cita es el pasaje (las oraciones que responden, con su página): lo mismo que se ve subrayado.
+  const textoCita = r.pasaje?.texto || textoLimpio(r.fragmento.texto);
 
   async function copiar() {
-    try { await navigator.clipboard.writeText(`«${textoLimpio(r.fragmento.texto)}» ${r.citaCorta}`); avisar(`Cita copiada: ${r.citaCorta}`, { tono: 'exito' }); }
+    try { await navigator.clipboard.writeText(`«${textoCita}» ${r.citaCorta}`); avisar(`Cita copiada: ${r.citaCorta}`, { tono: 'exito' }); }
     catch { avisar('El navegador no dejó copiar.', { tono: 'error' }); }
+  }
+  function abrir(e: MouseEvent<HTMLAnchorElement>) {
+    sembrarFragmento(qc, r);
+    if (contexto) anotarVenida(contexto, r.fragmento.id);
+    prepararViaje(e.currentTarget.closest('article'), 'lectura');
   }
   async function verParecidos() {
     if (parecidos) { setParecidos(null); return; }
@@ -46,15 +62,16 @@ export const Resultado = memo(function Resultado({ r, consulta, indice, compacto
 
   return (
     // Entra en cascada, se levanta al pasar y, al abrirlo, crece hasta ser el lector (View Transitions).
-    <article className={cx('levanta group relative mb-3 grid grid-cols-[minmax(0,1fr)] gap-3 rounded-2xl border border-cream-400 bg-cream-50 p-4 shadow-[var(--levantado)] anim-sube md:grid-cols-[6.5rem_minmax(0,1fr)] md:gap-5 md:p-5', compacto && 'mb-2 shadow-[var(--shadow-soft)] md:p-4')} style={{ animationDelay: `calc(${Math.min(indice, 10)} * var(--escalon))` }}>
+    <article data-resultado={r.fragmento.id} aria-current={destacado ? 'true' : undefined} className={cx('levanta group relative mb-3 grid grid-cols-[minmax(0,1fr)] gap-3 rounded-2xl border border-cream-400 bg-cream-50 p-4 shadow-[var(--levantado)] md:grid-cols-[6.5rem_minmax(0,1fr)] md:gap-5 md:p-5', !sinEntrada && 'anim-sube', compacto && 'mb-2 shadow-[var(--shadow-soft)] md:p-4', destacado && 'resultado-destacado')} style={sinEntrada ? undefined : { animationDelay: `calc(${Math.min(indice, 10)} * var(--escalon))` }}>
+      {destacado ? <span className="sr-only">Vienes de este resultado.</span> : null}
       <div className="flex items-center gap-3 md:flex-col md:items-start md:gap-2">
-        <Folio grande>{etiquetaCorta(r.fragmento.ancla, r.etiqueta)}</Folio>
+        <Folio grande>{etiquetaCorta(r.pasaje?.ancla ?? r.fragmento.ancla, r.etiqueta)}</Folio>
         <span className="hidden text-[0.6875rem] text-coffee-400 md:block">{r.vias.map((v) => VIA[v] ?? v).join(' · ')}</span>
       </div>
       <div className="min-w-0">
-        <Link {...destino} className="block" onClick={(e) => prepararViaje(e.currentTarget.closest('article'), 'lectura')}>
-          {/* Las coincidencias se subrayan con lápiz amarillo, de izquierda a derecha, cuando el pasaje ya está. */}
-          <p className="lectura entra-marca text-coffee-800" style={{ ['--retraso-marca' as string]: `${Math.min(indice, 10) * 48 + 280}ms` }}>
+        <Link {...destino} className="block" onClick={abrir} onMouseEnter={() => void precargarResultado(qc, r)} onFocus={() => void precargarResultado(qc, r)}>
+          {/* Las coincidencias se subrayan con lápiz amarillo, de izquierda a derecha, cuando el pasaje ya está; las oraciones que se citan llevan su raya. */}
+          <p className={cx('lectura text-coffee-800', !sinEntrada && 'entra-marca')} style={sinEntrada ? undefined : { ['--retraso-marca' as string]: `${Math.min(indice, 10) * 48 + 280}ms` }}>
             <Resaltado html={r.resaltado ?? r.fragmento.texto} />
           </p>
         </Link>
@@ -64,7 +81,7 @@ export const Resultado = memo(function Resultado({ r, consulta, indice, compacto
           <span className="min-w-0 truncate"><em>{m.titulo}</em> · {autoresCorto(m)}{m.anio ? `, ${m.anioOriginal && m.anioOriginal !== m.anio ? `${m.anioOriginal}/${m.anio}` : m.anio}` : ''}</span>
           {r.fragmento.seccion.length ? <span className="hidden truncate text-apagado lg:inline">{r.fragmento.seccion.at(-1)}</span> : null}
           <span className="ml-auto flex items-center gap-1 md:opacity-0 md:transition-opacity md:group-focus-within:opacity-100 md:group-hover:opacity-100">
-            <button type="button" onClick={() => void copiar()} className="flex h-8 items-center gap-1.5 rounded-lg px-2.5 font-medium hover:bg-cream-200 hover:text-coffee-800"><Icono nombre="citar" tam={14} />Cita</button>
+            <button type="button" onClick={() => void copiar()} aria-label={`Copiar la cita: «${textoCita.length > 80 ? `${textoCita.slice(0, 80)}…` : textoCita}» ${r.citaCorta}`} className="flex h-8 items-center gap-1.5 rounded-lg px-2.5 font-medium hover:bg-cream-200 hover:text-coffee-800"><Icono nombre="citar" tam={14} />Cita</button>
             <AccesoReferencia documento={r.documento.id} etiqueta />
             <button type="button" onClick={() => void verParecidos()} aria-expanded={!!parecidos} className="flex h-8 items-center gap-1.5 rounded-lg px-2.5 font-medium hover:bg-cream-200 hover:text-coffee-800"><Icono nombre="pila" tam={14} />{cargando ? 'Buscando…' : 'Parecidos'}</button>
             <MenuRaiz onOpenChange={setMenu}>

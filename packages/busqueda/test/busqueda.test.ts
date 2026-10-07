@@ -290,11 +290,16 @@ describe('responder', () => {
     expect(r.avisos.length).toBeGreaterThanOrEqual(2);
   });
 
-  it('las notas de un fragmento que cruza páginas imprimen el rango', async () => {
+  it('la nota de un fragmento que cruza páginas cita la página de las oraciones que la sostienen', async () => {
     const m = await montar();
     const r = await responderCompleto(m.buscador, m.redactor, 'gente condenada por sus delitos a servir al rey en las galeras', { busqueda: { fundirContiguos: false } });
     const nota = r.fuentes.find((f) => f.fragmento === 'fr-q-07');
-    expect(nota?.nota).toBe('Cervantes Saavedra, *Don Quijote* (1605/1999), pp. 199-200.');
+    // El fragmento va de la 199 a la 200, pero la oración de los galeotes está entera en la 199
+    // (en la fixtura, el texto de fr-q-07 está en la unidad de la 199): la nota no estira el rango.
+    expect(nota?.nota).toBe('Cervantes Saavedra, *Don Quijote* (1605/1999), p. 199.');
+    // Las dos oraciones responden (la segunda también habla de «esta gente»): van juntas, enteras.
+    expect(nota?.pasajeRelevante?.texto.startsWith('— No digo eso —respondió Sancho—, sino que es gente que, por sus delitos, va condenada')).toBe(true);
+    expect(nota?.pasajeRelevante?.texto.endsWith('y no de su voluntad.')).toBe(true);
   });
 
   it('en streaming, ningún delta deja ver una marca sin resolver', async () => {

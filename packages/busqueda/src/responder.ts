@@ -9,10 +9,10 @@
  * Es un generador asíncrono: si el redactor sabe emitir por trozos
  * (`generarFlujo`), los deltas salen según llegan, ya con las marcas resueltas.
  */
-import type { Redactor, Resultado } from '@scholaris/nucleo';
+import type { Pasaje, Redactor, Resultado } from '@scholaris/nucleo';
 import { anclaACita } from '@scholaris/nucleo';
 import type { Buscador } from './buscador.js';
-import { contieneLiteral } from './texto.js';
+import { contieneLiteral, pasajeSiResponde, terminos } from './texto.js';
 import type { OpcionesBusqueda, RespuestaBusqueda } from './tipos.js';
 
 /** Un redactor que además sabe emitir texto por trozos. */
@@ -35,6 +35,12 @@ export interface FuenteRespuesta {
   nota: string;
   pasaje: string;
   resultado: Resultado;
+  /**
+   * Las oraciones del fragmento que sostienen lo que dice la respuesta junto a la
+   * nota (con su ancla). Solo si casan con las palabras de esa frase; si no, la
+   * nota se queda con el fragmento entero.
+   */
+  pasajeRelevante?: Pasaje;
 }
 
 export type EventoRespuesta =
@@ -187,6 +193,24 @@ export async function* responder(buscador: Buscador, redactor: Redactor, pregunt
   if (literalesNoVerificados.length) avisos.push(`${literalesNoVerificados.length} cita(s) literal(es) no aparecen en los pasajes: revisar.`);
   if (descartadas.length) avisos.push(`Se quitaron ${descartadas.length} marca(s) que no corresponden a ningún pasaje del contexto.`);
   if (crudo && !fuentes.length) avisos.push('La respuesta no cita ningún pasaje.');
+
+  // El pasaje de cada nota: las oraciones del fragmento que casan con las frases de la respuesta que la llaman.
+  const frasesDe = (n: number) => markdown.split(/(?<=[.?!…])\s+|\n+/).filter((f) => f.includes(`[^${n}]`)).map((f) => f.replace(/\[\^\d+\]/g, ''));
+  await Promise.all(fuentes.map(async (f) => {
+    const ts = [...new Set([...frasesDe(f.n).flatMap((x) => terminos(x)), ...terminos(pregunta)])];
+    const p = pasajeSiResponde(f.resultado.fragmento.texto, ts);
+    if (!p) return;
+    const r: Resultado = { ...f.resultado, pasaje: p };
+    await buscador.anclarPasajes([r]);
+    f.pasajeRelevante = r.pasaje;
+    const a = r.pasaje?.ancla;
+    if (a) {
+      const loc = anclaACita(a, r.pasaje?.anclaFin);
+      const m2 = f.resultado.documento.metadatos;
+      f.etiqueta = `${etiquetaAutor(f.resultado)}, ${loc}`;
+      f.nota = `${autorYAnio(f.resultado).autor}, *${m2.titulo}* (${autorYAnio(f.resultado).anio}), ${loc}.`;
+    }
+  }));
 
   if (fuentes.length) markdown += '\n\n' + fuentes.map((f) => `[^${f.n}]: ${f.nota}`).join('\n');
   yield { tipo: 'fin', markdown, fuentes, descartadas, literalesNoVerificados, avisos };
