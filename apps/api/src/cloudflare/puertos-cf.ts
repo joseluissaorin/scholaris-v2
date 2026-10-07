@@ -8,7 +8,7 @@ import { IndiceVectorialSQL } from '@scholaris/busqueda';
 import type { EventoTiempoReal } from '@scholaris/contrato';
 import { crearInteligencia, type EntornoInteligencia } from '@scholaris/proveedores';
 import type { AlmacenAmpliado, ConfigInstancia } from '../puertos.js';
-import { Cuentas } from '../compartido/cuentas.js';
+import { Cuentas, type EstadoEsquemaCuentas } from '../compartido/cuentas.js';
 import { VERSION } from '../version.js';
 import type { Env } from './env.js';
 import { crearAlmacenR2, TAM_PARTE } from './almacen-r2.js';
@@ -47,8 +47,18 @@ export function almacenDesdeEnv(env: Env, origen: string): AlmacenAmpliado {
   });
 }
 
+/**
+ * El esquema de D1 se comprueba una vez por aislamiento, no en cada petición: cada
+ * petición crea su `Cuentas`, y repetirlo costaba ~700 ms en /auth/yo, /ajustes,
+ * /bibliotecas, /claves o /invitaciones. Por base (el Worker de pruebas y el de
+ * producción son aislamientos distintos, pero así no depende de ello).
+ */
+const esquemasD1 = new WeakMap<D1Database, EstadoEsquemaCuentas>();
+
 export function cuentasDesdeEnv(env: Env): Cuentas {
-  return new Cuentas(new SqlD1(env.DB), env.CLAVE_MAESTRA || env.SECRETO);
+  let esquema = esquemasD1.get(env.DB);
+  if (!esquema) esquemasD1.set(env.DB, (esquema = { listo: null }));
+  return new Cuentas(new SqlD1(env.DB), env.CLAVE_MAESTRA || env.SECRETO, esquema);
 }
 
 /** El entorno de la inteligencia: claves de la instancia + las propias del usuario. */

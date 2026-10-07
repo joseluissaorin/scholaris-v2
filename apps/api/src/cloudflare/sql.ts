@@ -61,6 +61,11 @@ export class SqlD1 implements SQL {
     return (r.results ?? []).map((f) => deFila(f as Record<string, unknown>)) as T[];
   }
 
+  /** Varias sentencias sin parámetros en un solo viaje (el esquema de las cuentas). */
+  async ejecutarVarias(sentencias: string[]): Promise<void> {
+    if (sentencias.length) await this.db.batch(sentencias.map((s) => this.db.prepare(s)));
+  }
+
   /** D1 no tiene transacciones interactivas: se ejecuta tal cual (las cuentas no las necesitan). */
   async transaccion<T>(fn: (sql: SQL) => Promise<T>): Promise<T> {
     return fn(this);

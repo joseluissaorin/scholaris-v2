@@ -160,15 +160,30 @@ export interface AutenticadoClave {
 
 const ahora = () => new Date().toISOString();
 
+/**
+ * Si el esquema ya se comprobó. Se puede compartir entre instancias que hablan con
+ * la misma base: en Cloudflare cada petición crea su `Cuentas`, y sin compartirlo
+ * cada una repetía el esquema entero (~30 viajes a D1, unos 700 ms por petición).
+ */
+export interface EstadoEsquemaCuentas { listo: Promise<void> | null }
+
+/** Una base que sabe mandar varias sentencias sin parámetros en un solo viaje (D1: `batch`). */
+interface SqlConLote extends SQL { ejecutarVarias(sentencias: string[]): Promise<void> }
+const conLote = (s: SQL): s is SqlConLote => typeof (s as Partial<SqlConLote>).ejecutarVarias === 'function';
+
 export class Cuentas {
-  private listo: Promise<void> | null = null;
+  private readonly esquema: EstadoEsquemaCuentas;
 
-  constructor(private readonly sql: SQL, private readonly claveMaestra: string) {}
+  constructor(private readonly sql: SQL, private readonly claveMaestra: string, esquema?: EstadoEsquemaCuentas) {
+    this.esquema = esquema ?? { listo: null };
+  }
 
-  /** Crea las tablas si faltan (una vez por instancia). */
+  /** Crea las tablas si faltan (una vez por instancia, o por aislamiento si se comparte el estado). */
   preparar(): Promise<void> {
-    this.listo ??= (async () => {
-      for (const s of ESQUEMA_CUENTAS) await this.sql.ejecutar(s);
+    const estado = this.esquema;
+    estado.listo ??= (async () => {
+      if (conLote(this.sql)) await this.sql.ejecutarVarias(ESQUEMA_CUENTAS);
+      else for (const s of ESQUEMA_CUENTAS) await this.sql.ejecutar(s);
       // Columnas nuevas de las invitaciones: solo las que falten (una consulta en frío).
       const hay = new Set((await this.sql.ejecutar<{ name: string }>('PRAGMA table_info(comparticiones)')).map((f) => f.name));
       for (const [c, tipo] of COLUMNAS_COMPARTICIONES) {
@@ -181,8 +196,9 @@ export class Cuentas {
       await this.sql.ejecutar('CREATE UNIQUE INDEX IF NOT EXISTS comparticiones_id ON comparticiones(id)');
       await this.sql.ejecutar('CREATE INDEX IF NOT EXISTS comparticiones_token ON comparticiones(token)');
     })();
-    this.listo.catch(() => { this.listo = null; });
-    return this.listo;
+    const listo = estado.listo;
+    listo.catch(() => { if (estado.listo === listo) estado.listo = null; });
+    return listo;
   }
 
   private async q<T = Record<string, ValorSQL>>(consulta: string, ...p: ValorSQL[]): Promise<T[]> {
