@@ -14,6 +14,7 @@ import type { Env } from './env.js';
 import { SqlRemoto } from './sql.js';
 import { almacenDesdeEnv, catalogosDesdeEnv, cuentasDesdeEnv, emisorDesdeEnv, geminiPara, indiceDesdeEnv, inteligenciaPara, origenDe } from './puertos-cf.js';
 import { espacioNombresDe } from './indice-vectorize.js';
+import { recortadorCF } from './conversor.js';
 
 export class Trabajador extends DurableObject<Env> {
   private async contexto(p: ParamsIngesta): Promise<ContextoMotor> {
@@ -33,6 +34,8 @@ export class Trabajador extends DurableObject<Env> {
       ...(env.SIN_VERIFICACION === '1' ? { sinVerificacion: true } : {}),
       ...(env.CORREO_CONTACTO ? { correoContacto: env.CORREO_CONTACTO } : {}),
       catalogos: catalogosDesdeEnv(env, almacenDesdeEnv(env, origenDe(env))),
+      // La consolidación vectoriza las figuras de página por el recorte de su región.
+      ...(recortadorCF(env) ? { recortar: recortadorCF(env)! } : {}),
       alProgreso: async (pr: Progreso) => { await emisor.emitir(`usuario:${p.usuario}`, { tipo: 'progreso', progreso: pr }); },
       alUnidades: async (desde: number, hasta: number) => { await emisor.emitir(`usuario:${p.usuario}`, { tipo: 'unidades', tarea: p.tarea, documento: p.documento, desde, hasta }); },
     };
