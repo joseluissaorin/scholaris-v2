@@ -81,13 +81,15 @@ FCP 1,2 s, LCP 1,6 s, CLS 0, TBT 0 ms. Escritorio: LCP 0,5 s. El HTML pesa
   logo (`/portada/logo-96.webp`, `logo-192.webp`); si `/fuentes/dm-sans-latin.woff2`
   queda estable, se puede apuntar ahí para compartir caché con la aplicación.
 
-## Para José Luis: dos datos que conviene que mires
+## Datos de la portada comprobados (7-10-2026)
 
 - El espécimen del capítulo cuarto cita el *Quijote* de 1605 (Juan de la
-  Cuesta) en **fol. 1r**, con ortografía modernizada. Estoy casi seguro de que
-  el capítulo primero empieza en el folio 1 de la príncipe, pero esta página
-  presume de no inventar citas: compruébalo (o Pepe) antes de darlo por bueno.
-- En la constelación figura *Lo que hay* (2022) de Sara Torres.
+  Cuesta) en **fol. 1r**, con ortografía modernizada. La colación de la príncipe
+  en la BNE es «[12], 312, [8] h.; 4º»: doce hojas de preliminares sin foliar y el
+  texto foliado desde la 1, así que el capítulo primero empieza en el fol. 1r.
+  Fuente: https://www.bne.es/es/colecciones/cervantes/ingenioso-hidalgo-don-quixote-mancha
+- En la constelación figura *Lo que hay* (Reservoir Books, 2022) de Sara Torres,
+  su primer libro de narrativa. Fuente: https://www.lecturalia.com/libro/108465/lo-que-hay
 
 ## Cambiar un dibujo
 
