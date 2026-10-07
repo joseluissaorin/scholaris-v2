@@ -10,6 +10,7 @@ import { aSvg, enLengua, type Lengua } from './dibujo/boceto';
 import { DIBUJOS, type NombreDibujo } from './dibujo/dibujos';
 import { CSS_TINTAS } from './dibujo/tintas';
 import { TEXTOS, type Capitulo, type Textos } from './textos';
+import { TEXTOS_VIDEO, VIDEO, isoSegundos, reloj } from './video';
 
 export const ORIGEN = (typeof process !== 'undefined' && process.env.SCHOLARIS_ORIGEN) || 'https://scholaris.joseluissaorin.com';
 
@@ -71,6 +72,13 @@ const SCRIPT_CABEZA =
 /** La pluma: cada dibujo se dibuja la primera vez que entra en pantalla. */
 const SCRIPT_PIE = `(function(){var d=document.documentElement,n=0,io='IntersectionObserver'in window,todos=function(q,f){[].forEach.call(document.querySelectorAll(q),f)};var dib=d.classList.contains('anima')&&new IntersectionObserver(function(es){es.forEach(function(e){if(e.isIntersecting){e.target.classList.add('visto');dib.unobserve(e.target)}})},{rootMargin:'0px 0px -10% 0px',threshold:0.15});function mirar(s){if(dib)dib.observe(s)}todos('svg.dibujo',mirar);function cargar(el){var u=el.getAttribute('data-lamina');if(!u)return;el.removeAttribute('data-lamina');fetch(u).then(function(r){return r.text()}).then(function(t){var k=++n;el.innerHTML=t.replace(/\\b(m[tc]-[\\w-]+)/g,'$1-'+k);var s=el.querySelector('svg');if(s)mirar(s)})}function luego(){try{[['DM Sans','dm-sans',{weight:'100 1000'}],['Mano','mano',{}]].forEach(function(f){new FontFace(f[0],'url(/portada/'+f[1]+'.woff2)',f[2]).load().then(function(x){document.fonts.add(x)})})}catch(e){}if(io){var lz=new IntersectionObserver(function(es){es.forEach(function(e){if(e.isIntersecting){lz.unobserve(e.target);cargar(e.target)}})},{rootMargin:'700px 0px'});todos('[data-lamina]',function(e){lz.observe(e)})}else todos('[data-lamina]',cargar)}if(document.readyState==='complete')luego();else addEventListener('load',luego);addEventListener('beforeprint',function(){todos('svg.dibujo',function(s){s.classList.add('visto')})})})()`;
 
+/**
+ * El vídeo: los capítulos saltan a su segundo (sin JavaScript, el enlace abre
+ * el MP4 en ese punto) y «?t=68» deja el vídeo preparado en ese segundo. Nunca
+ * arranca solo: solo se reproduce cuando alguien pulsa.
+ */
+const SCRIPT_VIDEO = `;(function(){var v=document.getElementById('video-demo');if(!v)return;[].forEach.call(document.querySelectorAll('[data-t]'),function(a){a.addEventListener('click',function(e){e.preventDefault();v.currentTime=+a.getAttribute('data-t');var p=v.play();if(p&&p.catch)p.catch(function(){});v.scrollIntoView({block:'nearest',behavior:'smooth'})})});var t=+new URLSearchParams(location.search).get('t');if(t>0){v.preload='metadata';v.currentTime=t}})()`;
+
 function cabeza(t: Textos): string {
   const url = `${ORIGEN}${t.ruta}`;
   const tarjeta = `${ORIGEN}/portada/tarjeta-${t.lengua}.png`;
@@ -88,6 +96,34 @@ function cabeza(t: Textos): string {
     offers: { '@type': 'Offer', price: '0', priceCurrency: 'EUR', url: `${ORIGEN}${t.lengua === 'es' ? '/saber/planes' : '/en/knowledge/plans'}` },
     softwareHelp: { '@type': 'CreativeWork', url: `${ORIGEN}${t.lengua === 'es' ? '/saber' : '/en/knowledge'}` },
   };
+  const v = TEXTOS_VIDEO[t.lengua];
+  const video = {
+    '@context': 'https://schema.org',
+    '@type': 'VideoObject',
+    name: v.nombre,
+    description: v.descripcion,
+    thumbnailUrl: [`${ORIGEN}${VIDEO.poster}`],
+    uploadDate: VIDEO.publicado,
+    duration: VIDEO.duracion,
+    contentUrl: `${ORIGEN}${VIDEO.mp4}`,
+    embedUrl: `${url}#demostracion`,
+    encodingFormat: 'video/mp4',
+    width: VIDEO.ancho,
+    height: VIDEO.alto,
+    inLanguage: 'en',
+    isFamilyFriendly: true,
+    caption: { '@type': 'MediaObject', contentUrl: `${ORIGEN}${VIDEO.subtitulos}`, encodingFormat: 'text/vtt', inLanguage: 'en' },
+    author: datos.author,
+    about: { '@type': 'SoftwareApplication', name: 'Scholaris', url },
+    hasPart: VIDEO.capitulos.map((c, i) => ({
+      '@type': 'Clip',
+      name: c[t.lengua],
+      startOffset: Math.floor(c.t),
+      endOffset: Math.floor(VIDEO.capitulos[i + 1]?.t ?? VIDEO.segundos),
+      url: `${url}?t=${Math.floor(c.t)}#demostracion`,
+    })),
+  };
+  const ld = (o: object) => `<script type="application/ld+json">${JSON.stringify(o).replace(/</g, '\\u003c')}</script>`;
   return `<head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
@@ -121,7 +157,8 @@ function cabeza(t: Textos): string {
 <meta name="twitter:image" content="${tarjeta}">
 <script>${SCRIPT_CABEZA}</script>
 <style>:root{${CSS_TINTAS}}${compactar(css)}</style>
-<script type="application/ld+json">${JSON.stringify(datos).replace(/</g, '\\u003c')}</script>
+${ld(datos)}
+${ld(video)}
 </head>`;
 }
 
@@ -136,8 +173,40 @@ function heroe(t: Textos): string {
 <p class="entradilla">${esc(h.entradilla)}</p>
 <div class="acciones"><a class="boton boton-tinta boton-g" href="${ENTRAR}">${esc(h.empezar)} <span class="flecha" aria-hidden="true">→</span></a><a class="boton boton-papel boton-g" href="${DEMOSTRACION}">${esc(h.probar)}</a></div>
 <p class="nota-mano" aria-hidden="true">${esc(h.nota)}</p>
+<a class="ver-video" href="#demostracion"><span class="play" aria-hidden="true"></span>${esc(TEXTOS_VIDEO[t.lengua].ver)}</a>
 <a class="leer" href="#texto">${esc(h.leer)} ↓</a>
 </div>
+</section>`;
+}
+
+/** La lámina en movimiento: la demostración en vídeo, en el verso del primer folio. */
+function demostracion(t: Textos): string {
+  const v = TEXTOS_VIDEO[t.lengua];
+  const l = t.lengua;
+  const capitulos = VIDEO.capitulos
+    .map((c) => `<li><a href="${VIDEO.mp4}#t=${Math.floor(c.t)}" data-t="${c.t}"><span class="minuto">${reloj(c.t)}</span><span class="nombre"${l === 'es' && c.es !== c.en ? ` title="${esc(c.en)}"` : ''}>${esc(c[l])}</span></a></li>`)
+    .join('');
+  return `<section class="folio-hoja hoja-video" id="demostracion" aria-labelledby="h-demostracion">
+<p class="foliacion" aria-hidden="true">${esc(v.folio)}</p>
+<h2 class="rubrica" id="h-demostracion"><span class="num">${esc(v.numero)}</span> ${esc(v.rubrica)}</h2>
+<p class="entradilla-video" id="d-demostracion">${esc(v.entradilla)} <span class="dato">${esc(v.dato)}</span></p>
+<figure class="pantalla">
+${diferido('manecilla', l, { decorativo: true, clase: 'mano-video' })}
+<span class="nota-mano nota-video" aria-hidden="true">${esc(v.nota)}</span>
+<div class="marco"><video id="video-demo" controls preload="none" playsinline width="${VIDEO.ancho}" height="${VIDEO.alto}" poster="${VIDEO.poster}" title="${esc(v.nombre)}" aria-describedby="d-demostracion">
+<source src="${VIDEO.mp4Movil}" type="video/mp4" media="(max-width: 760px)">
+<source src="${VIDEO.mp4}" type="video/mp4">
+<track kind="captions" src="${VIDEO.subtitulos}" srclang="en" label="English">
+<track kind="chapters" src="${VIDEO.capitulosVtt}" srclang="en" label="Chapters">
+<p>${esc(v.sinVideo)} <a href="${VIDEO.mp4}">${esc(v.descargar)}</a></p>
+</video></div>
+<figcaption class="solo-lector">${esc(v.nombre)}. ${esc(v.dato)}.</figcaption>
+</figure>
+<nav class="capitulos-video" aria-label="${esc(v.capitulos)}">
+<p class="rotulo">${esc(v.capitulos)}</p>
+<ol>${capitulos}</ol>
+<p class="descarga"><a href="${VIDEO.mp4}" download>${esc(v.descargar)}</a> <span class="dato">1080p${VIDEO.mb[1080] ? ` · ${VIDEO.mb[1080]} MB` : ''}</span></p>
+</nav>
 </section>`;
 }
 
@@ -236,6 +305,7 @@ ${cabeza(t)}
 </header>
 <main>
 ${heroe(t)}
+${demostracion(t)}
 ${ensayo(t)}
 ${colofon(t)}
 </main>
@@ -243,7 +313,7 @@ ${colofon(t)}
 <span>${esc(t.colofon.pie)} · ${lengua === 'es' ? 'una biblioteca leída y citable' : 'a library, read and citable'}</span>
 <nav aria-label="${lengua === 'es' ? 'Pie' : 'Footer'}"><a href="${ENTRAR}">${esc(t.nav.entrar)}</a><a href="${DEMOSTRACION}">${esc(t.heroe.probar)}</a><a href="${t.otra.ruta}" hreflang="${t.otra.hreflang}" lang="${t.otra.hreflang}">${esc(t.otra.nombre)}</a><a href="${lengua === 'es' ? '/saber' : '/en/knowledge'}">${lengua === 'es' ? 'Cómo funciona' : 'How it works'}</a><a href="${lengua === 'es' ? '/agentes' : '/en/agents'}">${lengua === 'es' ? 'Para agentes' : 'For agents'}</a><a href="https://joseluissaorin.com" rel="author">joseluissaorin.com</a></nav>
 </footer>
-<script>${SCRIPT_PIE}</script>
+<script>${SCRIPT_PIE}${SCRIPT_VIDEO}</script>
 </body>
 </html>
 `;

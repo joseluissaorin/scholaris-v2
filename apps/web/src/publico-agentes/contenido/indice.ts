@@ -1,5 +1,7 @@
 import type { Pagina } from './tipos';
 import { estante } from '../../bocetos/dibujos/estante';
+import { videoMd } from '../../portada/video';
+import { ORIGEN } from '../origen';
 
 export const indice: Pagina = {
   clave: 'indice',
@@ -19,6 +21,10 @@ Cada hoja tiene su gemelo en Markdown (la misma dirección terminada en \`.md\`)
 ## Las hojas {#hojas}
 
 <!-- hojas -->
+
+## La demostración en vídeo {#video}
+
+${videoMd('es', ORIGEN, '/acerca')}
 
 ## Scholaris en tres frases
 
@@ -44,6 +50,10 @@ Every page has a Markdown twin (the same address ending in \`.md\`). There is an
 ## The pages {#hojas}
 
 <!-- hojas -->
+
+## The demo video {#video}
+
+${videoMd('en', ORIGEN, '/en')}
 
 ## Scholaris in three sentences
 

@@ -91,6 +91,24 @@ FCP 1,2 s, LCP 1,6 s, CLS 0, TBT 0 ms. Escritorio: LCP 0,5 s. El HTML pesa
 - En la constelación figura *Lo que hay* (Reservoir Books, 2022) de Sara Torres,
   su primer libro de narrativa. Fuente: https://www.lecturalia.com/libro/108465/lo-que-hay
 
+## La demostración en vídeo (7-10-2026)
+
+- La sección «Lámina en movimiento» (fol. 1v, `#demostracion`) va entre el
+  héroe y el ensayo; el héroe enlaza a ella. Datos, capítulos y textos en
+  `video.ts`, que leen también el gemelo .md, /saber, llms.txt y el sitemap.
+- Los MP4 (1080p de 69 MB y 720p de 46 MB, H.264 + AAC, `+faststart`) están en
+  R2, en `publico/demo/`, de los dos buckets (`scholaris` y
+  `scholaris-produccion`), y los sirve el Worker en `/demo/…` con Range
+  (`apps/api/src/cloudflare/demo.ts`). El póster y los .vtt son estáticos en
+  `public/portada/demo/`. El máster está en
+  `~/Movies/demos/scholaris-2026-10-06/master/`; las versiones web, en `web/`.
+- Para cambiar el vídeo: codificar con otro número de versión, subir a los dos
+  buckets (`CLOUDFLARE_ACCOUNT_ID=… wrangler r2 object put <bucket>/publico/demo/<fichero> --remote`)
+  y cambiar los nombres en `video.ts`. Los nombres versionados permiten la
+  caché inmutable.
+- Ojo: la letra de mano (`mano.woff2`) dibuja la «í» sin tilde; las notas a
+  mano nuevas la evitan.
+
 ## Cambiar un dibujo
 
 ```

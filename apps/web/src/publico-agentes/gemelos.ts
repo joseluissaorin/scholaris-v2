@@ -8,6 +8,7 @@ import { TEXTOS as GUIA } from '../guia-api/textos';
 import { EJEMPLOS } from '../guia-api/pagina';
 import sesion from '../guia-api/sesion.json';
 import { ORIGEN } from './origen';
+import { TEXTOS_VIDEO, videoMd } from '../portada/video';
 import type { Lengua } from './contenido';
 
 /** HTML mínimo de los textos → Markdown. */
@@ -48,6 +49,8 @@ export function portadaMd(l: Lengua, fecha: string): string {
       : `This is Scholaris's front page, written as an essay in eight chapters. The technical details (formats, citations, privacy, API, performance) are in the knowledge base: ${saber}`,
     '',
   ];
+  const v = TEXTOS_VIDEO[l];
+  partes.push(`## ${v.numero} ${v.rubrica}`, '', videoMd(l, ORIGEN, t.ruta), '');
   const capitulo = (numero: string, rubrica: string, parrafos: string[], glosa?: string) => {
     partes.push(`## ${numero} ${rubrica}`, '', ...parrafos.flatMap((p) => [md(p), '']));
     if (glosa) partes.push(`> ${md(glosa)}`, '');

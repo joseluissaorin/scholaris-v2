@@ -9,6 +9,7 @@
  */
 import { AUTOR, ORIGEN, OTRAS_PUBLICAS, PAGINAS, REPOSITORIO, cuerpoMd, enlacesParaMd, ficheroHtml, markdown, pagina, rutaDe, rutaMd, type Lengua, type Pagina } from './sitio';
 import { fichaDe, guiaMd, portadaMd } from './gemelos';
+import { TEXTOS_VIDEO, VIDEO, videoMd } from '../portada/video';
 
 /** Fecha (AAAA-MM-DD) de la última revisión de cada ruta pública. */
 export type Fechas = (ruta: string) => string;
@@ -55,6 +56,10 @@ ${saber.map((p) => hoja(p, 'en')).join('\n')}
 
 ${OTRAS_PUBLICAS.map((o) => { const f = fichaDe(o.ruta); return `- [${f.titulo}](${ORIGEN}${o.ruta}.md): ${f.descripcion}`; }).join('\n')}
 
+## Vídeo de demostración / Demo video
+
+${videoMd('es', ORIGEN, '/acerca')}
+
 ## Optional
 
 - [Todo el texto, en las dos lenguas / Full text, both languages](${ORIGEN}/llms-full.txt)
@@ -96,7 +101,7 @@ function robots(): string {
     '/administracion', '/ajustes', '/buscar', '/compartida', '/documentos', '/escribir', '/explorar',
     '/invitaciones', '/lector', '/lotes', '/recibir', '/binarios', '/tiempo-real',
   ];
-  const abierto = ['/', '/api/v1/openapi.json', '/api/v1/llms.txt'];
+  const abierto = ['/', '/demo/', '/api/v1/openapi.json', '/api/v1/llms.txt'];
   const reglas = [...abierto.map((r) => `Allow: ${r}`), ...privado.map((r) => `Disallow: ${r}`)].join('\n');
   const senal = 'Content-Signal: search=yes, ai-input=yes, ai-train=yes';
   const bloques = [
@@ -114,6 +119,23 @@ ${reglas}`,
   return `${bloques.join('\n\n')}\n\nSitemap: ${ORIGEN}/sitemap.xml\n`;
 }
 
+const xml = (t: string) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+/** La demostración en vídeo, en la entrada de la portada de cada lengua. */
+function videoSitemap(l: Lengua): string {
+  const v = TEXTOS_VIDEO[l];
+  return `
+    <video:video>
+      <video:thumbnail_loc>${ORIGEN}${VIDEO.poster}</video:thumbnail_loc>
+      <video:title>${xml(v.nombre)}</video:title>
+      <video:description>${xml(v.descripcion)}</video:description>
+      <video:content_loc>${ORIGEN}${VIDEO.mp4}</video:content_loc>
+      <video:duration>${VIDEO.segundos}</video:duration>
+      <video:publication_date>${VIDEO.publicado}</video:publication_date>
+      <video:family_friendly>yes</video:family_friendly>
+    </video:video>`;
+}
+
 function sitemap(f: Fechas): string {
   const urls = rutasPublicas().map((r) => {
     const [es, en] = r.lengua === 'es' ? [r.ruta, r.alterna] : [r.alterna, r.ruta];
@@ -125,11 +147,11 @@ function sitemap(f: Fechas): string {
     <priority>${prioridad}</priority>
     <xhtml:link rel="alternate" hreflang="es" href="${ORIGEN}${es}"/>
     <xhtml:link rel="alternate" hreflang="en" href="${ORIGEN}${en}"/>
-    <xhtml:link rel="alternate" hreflang="x-default" href="${ORIGEN}${es}"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="${ORIGEN}${es}"/>${r.ruta === '/acerca' || r.ruta === '/en' ? videoSitemap(r.lengua) : ''}
   </url>`;
   });
   return `<?xml version="1.0" encoding="UTF-8"?>
-<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml" xmlns:video="http://www.google.com/schemas/sitemap-video/1.1">
 ${urls.join('\n')}
 </urlset>
 `;
@@ -232,6 +254,13 @@ ${agente}
 
 /.well-known/security.txt
   Content-Type: text/plain; charset=utf-8
+
+/portada/demo/*
+  Cache-Control: public, max-age=31536000, immutable
+  Access-Control-Allow-Origin: *
+
+/portada/demo/*.vtt
+  Content-Type: text/vtt; charset=utf-8
 `;
 }
 

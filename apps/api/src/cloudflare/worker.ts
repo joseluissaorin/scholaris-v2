@@ -10,6 +10,7 @@
 import type { MensajeCorreo } from '../rutas/social.js';
 import { recordarDemostracion, servirPortadaEnRaiz } from './portada.js';
 import { servirPublica } from '../compartido/markdown-publico.js';
+import { servirDemo } from './demo.js';
 import { prepararMotorWorkers } from '@scholaris/spdf/workers';
 import { PREFIJO_API, PREFIJO_V1 } from '@scholaris/contrato';
 import { crearPuerta, type Plataforma } from '../app.js';
@@ -106,6 +107,9 @@ const normal: ExportedHandler<Env> = {
     if (esApi) {
       return crearPuerta(plataforma(env, peticion)).fetch(peticion, env, ctx);
     }
+    // La demostración en vídeo (R2, con Range y caché): pública, sin sesión.
+    const demo = await servirDemo(peticion, env.BUCKET, { cache: caches.default, esperar: (p) => ctx.waitUntil(p) });
+    if (demo) return demo;
     // La web: estáticos y, para las rutas de la SPA, index.html.
     if (!env.ASSETS) return new Response('Scholaris API', { status: 200 });
     // Páginas públicas: Markdown con «Accept: text/markdown» y cabecera Link en el HTML.

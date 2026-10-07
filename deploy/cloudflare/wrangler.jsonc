@@ -21,7 +21,9 @@
     "run_worker_first": [
       "/", "/api/*", "/mcp", "/oauth/*", "/.well-known/*",
       // Páginas públicas: el Worker negocia el Markdown (Accept: text/markdown) y añade la cabecera Link.
-      "/acerca*", "/en", "/en.md", "/en/api*", "/en/knowledge*", "/en/agents*", "/api", "/api.md", "/saber*", "/agentes*"
+      "/acerca*", "/en", "/en.md", "/en/api*", "/en/knowledge*", "/en/agents*", "/api", "/api.md", "/saber*", "/agentes*",
+      // La demostración en vídeo: MP4 en R2, con Range (apps/api/src/cloudflare/demo.ts).
+      "/demo/*"
     ]
   },
 
