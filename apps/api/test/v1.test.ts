@@ -254,7 +254,7 @@ describe('API v1: subir, leer, buscar, preguntar, citar, verificar, borrar', () 
   it('GET /documentos/{id}/spdf: SPDF 5.0 por defecto, 4.1 con version=4; POST /documentos/importar lo vuelve a meter', async () => {
     const r = await SELF.fetch(`${V1}/documentos/${web}/spdf`, { headers: { authorization: `Bearer ${k}` } });
     expect(r.status).toBe(200);
-    expect(r.headers.get('content-type')).toBe('application/vnd.spdf');
+    expect(r.headers.get('content-type')).toBe('application/vnd.spdf+sqlite3');
     expect(r.headers.get('x-spdf-version')).toBe('5.0');
     expect(r.headers.get('content-disposition')).toMatch(/\.spdf/);
     const bytes = new Uint8Array(await r.arrayBuffer());
@@ -267,7 +267,7 @@ describe('API v1: subir, leer, buscar, preguntar, citar, verificar, borrar', () 
     expect(mal.estado).toBe(400);
     expect(mal.cuerpo.error.message).toMatch(/Unknown SPDF version/);
     // Misma huella: con deduplicar (por defecto) no se copia.
-    const rep = await v1('/documentos/importar', { clave: k, cuerpo: bytes, cabeceras: { 'content-type': 'application/vnd.spdf' } });
+    const rep = await v1('/documentos/importar', { clave: k, cuerpo: bytes, cabeceras: { 'content-type': 'application/vnd.spdf+sqlite3' } });
     expect(rep.estado).toBe(200);
     expect(rep.cuerpo).toMatchObject({ repetido: true, documento: { id: web } });
     const imp = await v1('/documentos/importar?deduplicar=0', { clave: k, cuerpo: bytes, cabeceras: { 'content-type': 'application/vnd.spdf' } });

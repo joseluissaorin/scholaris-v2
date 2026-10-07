@@ -17,7 +17,7 @@ export async function descargarSpdfServidor(id: string, titulo: string, opciones
     const res = await api().bruto('GET', `/documentos/${encodeURIComponent(id)}/spdf`, undefined, v5 ? { version: '5' } : undefined);
     const datos = await res.blob();
     const a = document.createElement('a');
-    a.href = URL.createObjectURL(new Blob([datos], { type: v5 ? 'application/vnd.spdf' : 'application/x-spdf' }));
+    a.href = URL.createObjectURL(new Blob([datos], { type: v5 ? 'application/vnd.spdf+sqlite3' : 'application/x-spdf' }));
     a.download = `${nombreFichero(titulo)}.spdf`;
     a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 4000);

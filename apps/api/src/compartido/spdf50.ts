@@ -26,7 +26,8 @@ import type { PuertosUsuario } from '../puertos.js';
 import { claveDe } from '../rutas/util.js';
 import { prefijoDocumento } from '../rutas/subidas.js';
 
-export const MEDIO_SPDF_50 = 'application/vnd.spdf';
+/** Tipo de medio del SPDF 5.0 (especificación §24; registro en la IANA en preparación). */
+export const MEDIO_SPDF_50 = 'application/vnd.spdf+sqlite3';
 
 let motorSpdf: Promise<SqlEngine> | null = null;
 

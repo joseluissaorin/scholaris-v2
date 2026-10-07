@@ -228,7 +228,7 @@ describe('subida → ingesta → búsqueda', () => {
     // SPDF 5.0, el formato abierto: se exporta, pasa el validador de spdf-format y vuelve a entrar.
     const sp5 = await SELF.fetch(`${BASE}/documentos/${ing.cuerpo.documento}/spdf?version=5`, { headers: { authorization: `Bearer ${t}` } });
     expect(sp5.status).toBe(200);
-    expect(sp5.headers.get('content-type')).toBe('application/vnd.spdf');
+    expect(sp5.headers.get('content-type')).toBe('application/vnd.spdf+sqlite3');
     expect(sp5.headers.get('x-spdf-version')).toBe('5.0');
     const bytes5 = new Uint8Array(await sp5.arrayBuffer());
     expect(new TextDecoder().decode(bytes5.subarray(0, 15))).toBe('SQLite format 3');

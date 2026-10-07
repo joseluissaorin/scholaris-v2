@@ -558,7 +558,7 @@ export function montarV1(app: AppPuerta, pl: Plataforma, autenticar: (r: Request
     const biblioteca = c.req.query('biblioteca');
     if (biblioteca) q.set('biblioteca', biblioteca);
     if (c.req.query('deduplicar') !== '0') q.set('deduplicar', '1');
-    const r = await io.pedir<ImportacionSpdf>('POST', `/documentos/importar${q.size ? `?${q}` : ''}`, { cuerpo: bytes, tipo: 'application/vnd.spdf' });
+    const r = await io.pedir<ImportacionSpdf>('POST', `/documentos/importar${q.size ? `?${q}` : ''}`, { cuerpo: bytes, tipo: 'application/vnd.spdf+sqlite3' });
     const documento = await documentoV1(io, o, r.documento);
     const salida = { documento, version_origen: r.versionOrigen, avisos: r.avisos, ...(r.tarea ? { tarea: r.tarea } : {}), ...(r.repetido ? { repetido: true } : {}) };
     c.header('location', `${o}${V}/documentos/${r.documento}`);

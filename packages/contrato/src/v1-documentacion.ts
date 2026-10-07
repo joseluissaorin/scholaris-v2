@@ -195,7 +195,7 @@ export function openapiV1(origen: string): Record<string, unknown> {
             { name: 'vectores', in: 'query', schema: { type: 'string', enum: ['1', '0'], default: '1' } },
           ],
           responses: {
-            '200': { description: 'El fichero .spdf', content: { 'application/vnd.spdf': { schema: { type: 'string', format: 'binary' } }, 'application/x-spdf': { schema: { type: 'string', format: 'binary' } } } },
+            '200': { description: 'El fichero .spdf', content: { 'application/vnd.spdf+sqlite3': { schema: { type: 'string', format: 'binary' } }, 'application/x-spdf': { schema: { type: 'string', format: 'binary' } } } },
             '409': { description: 'El documento todavía no está listo', content: { 'application/json': { schema: ref('Error') } } },
             ...ERRORES,
           },
@@ -206,7 +206,7 @@ export function openapiV1(origen: string): Record<string, unknown> {
           tags: ['documentos'], operationId: 'importarSpdf', summary: 'Importar un fichero .spdf (5.0, 4.x o 3.x)',
           description: 'El .spdf va como cuerpo crudo. No se vuelve a leer nada: se copian el texto, las anclas, los vectores y los binarios incrustados. Si ya estaba (misma huella), no se copia (`repetido: true`). Si faltan los vectores del espacio de la biblioteca, se calculan en una `tarea`.',
           parameters: [{ name: 'biblioteca', in: 'query', schema: { type: 'string' } }, { name: 'deduplicar', in: 'query', schema: { type: 'string', enum: ['1', '0'], default: '1' } }],
-          requestBody: { required: true, content: { 'application/vnd.spdf': { schema: { type: 'string', format: 'binary' } }, 'application/octet-stream': { schema: { type: 'string', format: 'binary' } } } },
+          requestBody: { required: true, content: { 'application/vnd.spdf+sqlite3': { schema: { type: 'string', format: 'binary' } }, 'application/octet-stream': { schema: { type: 'string', format: 'binary' } } } },
           responses: {
             '201': { description: 'Importado', content: { 'application/json': { schema: obj({ documento: ref('Documento'), version_origen: int('500, 400 o 300.'), avisos: arr(str()), tarea: str(), repetido: { type: 'boolean' } }) } } },
             '200': { description: 'Ya estaba (repetido)', content: { 'application/json': { schema: obj({ documento: ref('Documento'), repetido: { type: 'boolean' } }) } } },

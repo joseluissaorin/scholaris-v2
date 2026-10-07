@@ -128,7 +128,7 @@ export function Entrada() {
     <>
       <input ref={archivos} type="file" multiple hidden onChange={(e) => { entrar([...(e.target.files ?? [])]); e.target.value = ''; }} />
       <input ref={camara} type="file" accept="image/*" capture="environment" multiple hidden onChange={(e) => { entrar([...(e.target.files ?? [])]); e.target.value = ''; }} />
-      <input ref={spdf} type="file" accept=".spdf,application/x-spdf,application/vnd.spdf" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) void importarSpdf(f); e.target.value = ''; }} />
+      <input ref={spdf} type="file" accept=".spdf,application/x-spdf,application/vnd.spdf+sqlite3" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) void importarSpdf(f); e.target.value = ''; }} />
 
       {arrastrando ? (
         // Toda la ventana es la zona de soltar: el papel rojo sube, las formas entran de lado y la manícula, a mano, señala dónde.
