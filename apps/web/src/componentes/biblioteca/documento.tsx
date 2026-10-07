@@ -92,6 +92,7 @@ export function MenuDocumento({ doc, bibliotecas, children }: { doc: ResumenDocu
   const reintentar = () => reintentarDocumento(qc, doc.id, doc.bibliotecas[0]);
 
   const exportarSpdf = () => descargarSpdfServidor(doc.id, doc.titulo);
+  const exportarSpdf5 = () => descargarSpdfServidor(doc.id, doc.titulo, { version: 5 });
 
   async function descargar() {
     try { const { url } = await api().documentos.original(doc.id); if (url) window.open(url, '_blank', 'noopener'); else avisar('En la demostración no hay original que descargar.'); }
@@ -105,6 +106,7 @@ export function MenuDocumento({ doc, bibliotecas, children }: { doc: ResumenDocu
         <MenuElemento icono="citar" atajo="⇧⌘C" alElegir={() => void copiarCita()}>Copiar referencia</MenuElemento>
         <MenuElemento icono="descargar" alElegir={() => void descargar()}>Descargar el original</MenuElemento>
         <MenuElemento icono="pila" alElegir={() => void exportarSpdf()}>Exportar como .spdf</MenuElemento>
+        <MenuElemento icono="pila" alElegir={() => void exportarSpdf5()}>Exportar como SPDF 5.0</MenuElemento>
         {doc.estado === 'error' || doc.estado === 'pendiente' ? <MenuElemento icono="rayo" alElegir={() => void reintentar()}>Reintentar</MenuElemento> : null}
         {doc.estado === 'pendiente' ? <MenuElemento icono="subir" alElegir={() => void subirDeNuevo(qc, doc.id, doc.bibliotecas[0])}>Subir de nuevo</MenuElemento> : null}
         {bibliotecas.length ? (

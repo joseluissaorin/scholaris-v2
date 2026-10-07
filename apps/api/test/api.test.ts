@@ -9,6 +9,8 @@ import { importJWK, SignJWT } from 'jose';
 import type { PaqueteConversion } from '@scholaris/imprenta';
 import { JWK_PRIVADA } from './clave-prueba.js';
 import { SPDF_FOLIOS_B64 } from './spdf-folios.js';
+import { openSpdf as abrirSpdf50, validate as validarSpdf } from 'spdf-format/core';
+import { motorSpdf50 } from '../src/compartido/spdf50.js';
 
 const BASE = 'https://scholaris.prueba/api/v2';
 
@@ -222,6 +224,35 @@ describe('subida → ingesta → búsqueda', () => {
     expect(imp.cuerpo.documento).not.toBe(ing.cuerpo.documento);
     const copia = await api(`/documentos/${imp.cuerpo.documento}`, { token: t });
     expect(copia.cuerpo.cuentas.fragmentos).toBe(doc.cuerpo.cuentas.fragmentos);
+
+    // SPDF 5.0, el formato abierto: se exporta, pasa el validador de spdf-format y vuelve a entrar.
+    const sp5 = await SELF.fetch(`${BASE}/documentos/${ing.cuerpo.documento}/spdf?version=5`, { headers: { authorization: `Bearer ${t}` } });
+    expect(sp5.status).toBe(200);
+    expect(sp5.headers.get('content-type')).toBe('application/vnd.spdf');
+    expect(sp5.headers.get('x-spdf-version')).toBe('5.0');
+    const bytes5 = new Uint8Array(await sp5.arrayBuffer());
+    expect(new TextDecoder().decode(bytes5.subarray(0, 15))).toBe('SQLite format 3');
+    const engine = await motorSpdf50();
+    const informe = await validarSpdf(bytes5, { engine });
+    expect(informe.errors).toEqual([]);
+    expect(informe).toMatchObject({ valid: true, version: '5.0' });
+    const d5 = await abrirSpdf50(bytes5, { engine });
+    expect(d5.document.metadata).toMatchObject({ type: 'book', issued: { 'date-parts': [[1791]] } });
+    expect(d5.document.authors).toMatch(/Bentham/);
+    expect((await d5.fragments()).length).toBe(doc.cuerpo.cuentas.fragmentos);
+    expect((await d5.units())[0]?.ord).toBe(1);
+    const hits = await d5.searchLexical('inspector lodge');
+    expect(hits[0]?.fragment.text).toMatch(/inspector/);
+    expect(d5.cite(hits[0]!.anchor, 'es')).toMatch(/^\(Bentham, 1791/);
+    expect((await d5.blobs()).map((b) => b.key)).toContain('original.md');
+    await d5.close();
+    const imp5 = await api('/documentos/importar', { token: t, cuerpo: bytes5, cabeceras: { 'content-type': 'application/vnd.spdf' } });
+    expect(imp5.estado).toBe(201);
+    expect(imp5.cuerpo.versionOrigen).toBe(500);
+    const copia5 = await api(`/documentos/${imp5.cuerpo.documento}`, { token: t });
+    expect(copia5.cuerpo.cuentas.fragmentos).toBe(doc.cuerpo.cuentas.fragmentos);
+    expect(copia5.cuerpo.metadatos.anio).toBe(1791);
+    expect((await api(`/documentos/${ing.cuerpo.documento}/spdf?version=7`, { token: t })).estado).toBe(400);
 
     // Borrar deja la estantería limpia.
     expect((await api(`/documentos/${ing.cuerpo.documento}`, { token: t, metodo: 'DELETE' })).estado).toBe(200);

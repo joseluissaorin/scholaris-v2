@@ -1,5 +1,5 @@
 /**
- * Meter un .spdf en la estantería: lo usan la importación de un .spdf suelto,
+ * Meter un .spdf (5.0, 4.x o 3.x) en la estantería: lo usan la importación de un .spdf suelto,
  * los paquetes .scholaris y las copias de bibliotecas ajenas. Nada se vuelve a
  * leer: se copian las filas, los binarios incrustados van al almacén y solo se
  * calculan los vectores del espacio de la estantería si faltan.
@@ -16,6 +16,7 @@ import {
   leerDocumento, leerVectores, registrarProcedencia,
 } from '@scholaris/spdf';
 import type { PuertosUsuario } from '../puertos.js';
+import { archivoDesde50, esSpdf50 } from './spdf50.js';
 import { ahora, cambiarBiblioteca, documentoPorHuella, totalesEstanteria } from './estanteria.js';
 import { fallo } from './errores.js';
 import { invalidarBuscador } from './servicios.js';
@@ -54,15 +55,23 @@ const PREFIJO_DOC = /^(u\/[\w-]+\/d\/[\w-]+\/)/;
 export async function importarSpdf(p: PuertosUsuario, bytes: Uint8Array, o: OpcionesImportarSpdf = {}): Promise<ResultadoImportarSpdf> {
   const avisos: string[] = [];
   let a;
+  // SPDF 5.0 (el estándar abierto) entra traducido a 4.1, que es lo que guarda la estantería.
+  const es50 = esSpdf50(bytes);
   try {
-    a = await abrirSpdf(bytes, { migrar: true });
+    if (es50) {
+      const r = await archivoDesde50(bytes, `scholaris-nube/${p.config.version}`);
+      a = r.archivo;
+      avisos.push(...r.avisos);
+    } else {
+      a = await abrirSpdf(bytes, { migrar: true });
+    }
   } catch (e) {
     return fallo('peticion_invalida', `No es un .spdf válido: ${(e as Error).message}`);
   }
   const bibliotecas = o.bibliotecas ?? [];
   const documentos: DocumentoImportado[] = [];
   try {
-    const versionOrigen = Number.parseFloat(await a.version()) >= 4 ? 400 : 300;
+    const versionOrigen = es50 ? 500 : Number.parseFloat(await a.version()) >= 4 ? 400 : 300;
     const docs = await a.documentos();
     if (!docs.length) fallo('peticion_invalida', 'El .spdf no contiene ningún documento.');
     const ia = await p.inteligencia();

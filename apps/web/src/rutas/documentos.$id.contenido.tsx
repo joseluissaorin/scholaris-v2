@@ -61,6 +61,7 @@ function Inspector() {
     <div className="flex shrink-0 flex-wrap gap-2">
       <Boton variante="linea" tam="p" icono="opciones" onClick={() => setJson(true)}>Ver JSON</Boton>
       <Boton variante="tinta" tam="p" icono="descargar" onClick={() => void descargarSpdf(doc)}>Descargar .spdf</Boton>
+      <Boton variante="linea" tam="p" icono="descargar" onClick={() => void descargarSpdf(doc, { version: 5 })}>Descargar SPDF 5.0</Boton>
     </div>
   );
 

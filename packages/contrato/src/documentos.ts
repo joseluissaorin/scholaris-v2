@@ -279,7 +279,7 @@ export interface CompletarPartesImportacion {
 
 export interface ImportacionSpdf {
   documento: string;
-  /** Versión del fichero de origen (300 o 400). */
+  /** Versión del fichero de origen (300, 400 o 500, el SPDF 5.0 abierto). */
   versionOrigen: number;
   /** Si faltaban vectores del espacio base, se lanza una tarea para calcularlos. */
   tarea?: string;

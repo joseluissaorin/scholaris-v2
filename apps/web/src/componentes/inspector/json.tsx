@@ -69,7 +69,7 @@ export function VerJson({ abierto, alCambiar, doc, contenido }: { abierto: boole
   );
 }
 
-/** Descarga el .spdf del documento (lo arma el servidor) y avisa si algo se quedó fuera. */
-export function descargarSpdf(doc: Pick<DetalleDocumento, 'id' | 'metadatos'>) {
-  return descargarSpdfServidor(doc.id, doc.metadatos.titulo);
+/** Descarga el .spdf del documento (lo arma el servidor) y avisa si algo se quedó fuera. Con `version: 5`, el SPDF 5.0 abierto. */
+export function descargarSpdf(doc: Pick<DetalleDocumento, 'id' | 'metadatos'>, opciones: { version?: 4 | 5 } = {}) {
+  return descargarSpdfServidor(doc.id, doc.metadatos.titulo, opciones);
 }

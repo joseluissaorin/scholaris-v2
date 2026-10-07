@@ -40,7 +40,8 @@
     "aws4fetch": "^1.0.20",
     "fflate": "^0.8.3",
     "hono": "^4.9.0",
-    "jose": "^6.2.12"
+    "jose": "^6.2.12",
+    "spdf-format": "file:../../vendor/spdf-format-0.1.0.tgz"
   },
   "license": "EUPL-1.2"
 }

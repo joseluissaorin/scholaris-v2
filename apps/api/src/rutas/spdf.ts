@@ -1,7 +1,8 @@
 /**
  * Exportar e importar .spdf. Lo normal es armarlo en el navegador con el
  * volcado (GET /documentos/:id/volcado); esto es la reserva del servidor y la
- * importación (v3 por el migrador, v4 tal cual).
+ * importación (v3 por el migrador, v4 tal cual, v5 traducido a 4.1).
+ * `?version=5` exporta el SPDF 5.0 abierto (compartido/spdf50.ts).
  */
 import type { Hono } from 'hono';
 import type { Documento } from '@scholaris/nucleo';
@@ -11,6 +12,7 @@ import { leerBiblioteca } from '../compartido/estanteria.js';
 import type { Entorno } from '../entorno.js';
 import { cuerpoJson, exigir, fallo, noEncontrado } from '../compartido/errores.js';
 import { importarSpdf } from '../compartido/importar-spdf.js';
+import { MEDIO_SPDF_50, armarSpdf50 } from '../compartido/spdf50.js';
 import { volcarDocumento } from './documentos.js';
 import { prefijoDocumento, rutaSegura } from './subidas.js';
 import { claveDe, exigirEscritura, prm, puertos, type Ctx } from './util.js';
@@ -80,6 +82,16 @@ export async function armarSpdf(p: PuertosUsuario, d: Documento, o: OpcionesArma
   }
 }
 
+/**
+ * `?version=5` (o `5.0`): el SPDF 5.0 abierto. Sin parámetro, o con `4`/`4.1`: el 4.1 de la
+ * estantería, como siempre (lo usan la web, las copias entre bibliotecas y los paquetes).
+ */
+export function versionPedida(v: string | undefined): 4 | 5 {
+  if (v === undefined || v === '' || v === '4' || v === '4.1') return 4;
+  if (v === '5' || v === '5.0') return 5;
+  return fallo('peticion_invalida', `Versión de SPDF desconocida: «${v}». Usa 5 (SPDF 5.0) o 4 (4.1).`);
+}
+
 export function rutasSpdf(app: Hono<Entorno>): void {
   app.get('/documentos/:id/spdf', async (c: Ctx) => {
     const p = puertos(c);
@@ -88,9 +100,16 @@ export function rutasSpdf(app: Hono<Entorno>): void {
     if (d.estado !== 'listo') fallo('conflicto', 'El documento todavía no está listo para exportar.');
     const q = c.req.query();
     const incrustar = q.incrustar !== '0';
-    const { bytes, omitidos } = await armarSpdf(p, d, { incrustar, originales: q.originales !== '0', vectores: q.vectores !== '0', referencias: q.referencias === '1' });
+    const version = versionPedida(q.version);
+    const { bytes, omitidos } = version === 5
+      ? await armarSpdf50(p, d, { incrustar, originales: q.originales !== '0', vectores: q.vectores !== '0', maxIncrustado: MAX_INCRUSTADO })
+      : await armarSpdf(p, d, { incrustar, originales: q.originales !== '0', vectores: q.vectores !== '0', referencias: q.referencias === '1' });
     const nombre = `${(d.metadatos.titulo || d.id).replace(/[^\p{L}\p{N} _-]+/gu, '').slice(0, 80)}.spdf`;
-    const h = new Headers({ 'content-type': 'application/x-spdf', 'content-disposition': `attachment; filename*=UTF-8''${encodeURIComponent(nombre)}` });
+    const h = new Headers({
+      'content-type': version === 5 ? MEDIO_SPDF_50 : 'application/x-spdf',
+      'content-disposition': `attachment; filename*=UTF-8''${encodeURIComponent(nombre)}`,
+      'x-spdf-version': version === 5 ? '5.0' : '4.1',
+    });
     if (incrustar && omitidos > 0) {
       // Límite claro: el servidor incrusta hasta MAX_INCRUSTADO; el resto se queda fuera del fichero.
       h.set('x-scholaris-omitidos', String(omitidos));

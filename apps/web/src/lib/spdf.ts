@@ -5,17 +5,19 @@ import { api } from '../datos/api';
 export const nombreFichero = (titulo: string) => titulo.replace(/[\\/:*?"<>|]+/g, ' ').trim().slice(0, 80) || 'documento';
 
 /**
- * Descarga el .spdf que arma el servidor. Si algo se quedó fuera, el servidor lo
+ * Descarga el .spdf que arma el servidor: el 4.1 de la estantería o, con
+ * `version: 5`, el SPDF 5.0 abierto. Si algo se quedó fuera, el servidor lo
  * dice en `x-scholaris-aviso` (con encodeURIComponent) junto a
  * `x-scholaris-omitidos: N`; se enseña en un aviso que no bloquea.
  */
-export async function descargarSpdfServidor(id: string, titulo: string) {
-  avisar(`Preparando «${titulo}.spdf»…`);
+export async function descargarSpdfServidor(id: string, titulo: string, opciones: { version?: 4 | 5 } = {}) {
+  const v5 = opciones.version === 5;
+  avisar(v5 ? `Preparando «${titulo}.spdf» en SPDF 5.0…` : `Preparando «${titulo}.spdf»…`);
   try {
-    const res = await api().bruto('GET', `/documentos/${encodeURIComponent(id)}/spdf`);
+    const res = await api().bruto('GET', `/documentos/${encodeURIComponent(id)}/spdf`, undefined, v5 ? { version: '5' } : undefined);
     const datos = await res.blob();
     const a = document.createElement('a');
-    a.href = URL.createObjectURL(new Blob([datos], { type: 'application/x-spdf' }));
+    a.href = URL.createObjectURL(new Blob([datos], { type: v5 ? 'application/vnd.spdf' : 'application/x-spdf' }));
     a.download = `${nombreFichero(titulo)}.spdf`;
     a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 4000);

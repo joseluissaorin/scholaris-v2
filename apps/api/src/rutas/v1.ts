@@ -19,7 +19,7 @@ import { sha256, type MetadatosDocumento, type Pasaje } from '@scholaris/nucleo'
 import {
   PREFIJO_API, PREFIJO_V1, llmsTxtV1, openapiV1,
   type BuscarV1, type CitarV1, type CodigoError, type CuerpoError, type DetalleAutocita, type DetalleDocumento, type DocumentoV1,
-  type FuenteV1, type IngestaIniciada, type ListaDocumentosV1, type MapaFolios, type Pagina, type PreguntarV1, type ResultadoVista,
+  type FuenteV1, type ImportacionSpdf, type IngestaIniciada, type ListaDocumentosV1, type MapaFolios, type Pagina, type PreguntarV1, type ResultadoVista,
   type RespuestaBusqueda, type RespuestaBuscarV1, type RespuestaCitarV1, type RespuestaPreguntarV1, type RespuestaVerificarV1,
   type ResumenDocumento, type SubidaCreada, type SubirUrlV1, type Tarea, type TextoV1, type UnidadTextoV1, type UnidadVista,
   type VerificarV1,
@@ -527,6 +527,42 @@ export function montarV1(app: AppPuerta, pl: Plataforma, autenticar: (r: Request
     const pedidoHasta = qh ? resolverLimite(qh, folios, medio) : folios.length - 1;
     if (hasta < pedidoHasta) salida.siguiente = `[${posicion(folios[hasta + 1]!)}]`;
     return quiereMarkdown(c) ? markdown(c, mdTexto(salida)) : c.json(salida);
+  }));
+
+  // GET /documentos/{id}/spdf?version=5: el documento como fichero SPDF (5.0, el estándar
+  // abierto, por defecto; `version=4` da el 4.1 de la estantería). Pasa tal cual por la v2.
+  app.get(`${V}/documentos/:id/spdf`, conClave(async (c, io) => {
+    const id = encodeURIComponent(c.req.param('id')!);
+    const version = c.req.query('version') ?? '5';
+    if (!['4', '4.1', '5', '5.0'].includes(version)) {
+      falla('peticion_invalida', `Versión de SPDF desconocida: «${version}». Usa 5 (SPDF 5.0) o 4 (4.1).`, `Unknown SPDF version «${version}». Use 5 (SPDF 5.0) or 4 (4.1).`);
+    }
+    const q = new URLSearchParams({ version });
+    for (const k of ['incrustar', 'originales', 'vectores']) { const v = c.req.query(k); if (v !== undefined) q.set(k, v); }
+    const r = await io.llamar('GET', `/documentos/${id}/spdf?${q}`);
+    if (!r.ok) throw await errorDe(r);
+    const h = new Headers();
+    for (const k of ['content-type', 'content-disposition', 'x-spdf-version', 'x-scholaris-aviso', 'x-scholaris-omitidos']) { const v = r.headers.get(k); if (v) h.set(k, v); }
+    return new Response(r.body, { status: 200, headers: h });
+  }));
+
+  // POST /documentos/importar: un fichero .spdf (5.0, 4.x o 3.x) como cuerpo crudo.
+  app.post(`${V}/documentos/importar`, conClave(async (c, io) => {
+    const o = origenDe(c);
+    const largo = Number(c.req.header('content-length') ?? 0);
+    if (pl.config.modo !== 'local' && largo > MAX_CRUDO_NUBE) {
+      falla('demasiado_grande', `Por aquí caben ficheros .spdf de hasta ${MAX_CRUDO_NUBE / 1048576} MB.`, `This endpoint takes .spdf files up to ${MAX_CRUDO_NUBE / 1048576} MB.`);
+    }
+    const bytes = new Uint8Array(await c.req.arrayBuffer());
+    const q = new URLSearchParams();
+    const biblioteca = c.req.query('biblioteca');
+    if (biblioteca) q.set('biblioteca', biblioteca);
+    if (c.req.query('deduplicar') !== '0') q.set('deduplicar', '1');
+    const r = await io.pedir<ImportacionSpdf>('POST', `/documentos/importar${q.size ? `?${q}` : ''}`, { cuerpo: bytes, tipo: 'application/vnd.spdf' });
+    const documento = await documentoV1(io, o, r.documento);
+    const salida = { documento, version_origen: r.versionOrigen, avisos: r.avisos, ...(r.tarea ? { tarea: r.tarea } : {}), ...(r.repetido ? { repetido: true } : {}) };
+    c.header('location', `${o}${V}/documentos/${r.documento}`);
+    return c.json(salida, r.repetido ? 200 : 201);
   }));
 
   // GET /buscar?q=…&k=10&documento=d_… (o POST con JSON)

@@ -74,6 +74,9 @@ importers:
       jose:
         specifier: ^6.2.12
         version: 6.2.12
+      spdf-format:
+        specifier: file:../../vendor/spdf-format-0.1.0.tgz
+        version: file:vendor/spdf-format-0.1.0.tgz(@sqlite.org/sqlite-wasm@3.53.4-build2)
     devDependencies:
       '@cloudflare/vitest-pool-workers':
         specifier: ^0.22.0
@@ -3224,6 +3227,17 @@ packages:
     resolution: {integrity: sha512-KGj/8Y43x35aZVDtt+J4mK1hoLGHULMYfSkODJNQjNDC3oW1PqPoxMwo0pLUsWM/UEGzON/NxeHywEfNXNP3Vw==}
     engines: {node: '>=0.10.0'}
 
+  spdf-format@file:vendor/spdf-format-0.1.0.tgz:
+    resolution: {integrity: sha512-bRy7t0cH2T6hNPawknNTxrzKX791N3Pa3/k37ElQvv/TtiDRsOkWFOakaxBx20TUncKf1d611KTw3q5YQq8j/Q==, tarball: file:vendor/spdf-format-0.1.0.tgz}
+    version: 0.1.0
+    engines: {node: '>=22.5'}
+    hasBin: true
+    peerDependencies:
+      '@sqlite.org/sqlite-wasm': '>=3.50.0-build1'
+    peerDependenciesMeta:
+      '@sqlite.org/sqlite-wasm':
+        optional: true
+
   sprintf-js@1.0.3:
     resolution: {integrity: sha512-D9cPgkvLlV3t3IzL0D0YLvGA9Ahk4PcvVwUbN0dSGr1aP0Nrt4AEnTUbuGvquEC0mA64Gqt1fzirlRs5ibXx8g==}
 
@@ -6213,6 +6227,10 @@ snapshots:
   siginfo@2.0.0: {}
 
   source-map-js@1.2.2: {}
+
+  spdf-format@file:vendor/spdf-format-0.1.0.tgz(@sqlite.org/sqlite-wasm@3.53.4-build2):
+    optionalDependencies:
+      '@sqlite.org/sqlite-wasm': 3.53.4-build2
 
   sprintf-js@1.0.3: {}
 

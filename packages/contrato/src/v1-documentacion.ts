@@ -183,6 +183,37 @@ export function openapiV1(origen: string): Record<string, unknown> {
           responses: { '200': { description: 'El texto, unidad a unidad, con su localizador', content: json(ref('Texto')) }, '409': { description: 'Todavía sin texto', content: { 'application/json': { schema: ref('Error') } } }, ...ERRORES },
         },
       },
+      '/documentos/{id}/spdf': {
+        get: {
+          tags: ['documentos'], operationId: 'spdf', summary: 'El documento como fichero SPDF',
+          description: 'SPDF 5.0 (https://spdf.joseluissaorin.com), el formato abierto de documento leído y citable: una base SQLite sin comprimir con el texto, las anclas (página impresa, segundo…), los fragmentos con su índice de búsqueda, los vectores y la ficha CSL-JSON. Se abre con cualquier SQLite o con las bibliotecas de SPDF. `version=4` da el SPDF 4.1 de la estantería (SQLite en gzip). Los binarios (original, páginas, figuras) se incrustan hasta 24 MB; lo que no cabe se avisa en `X-Scholaris-Aviso`.',
+          parameters: [
+            pId,
+            { name: 'version', in: 'query', schema: { type: 'string', enum: ['5', '4'], default: '5' } },
+            { name: 'incrustar', in: 'query', schema: { type: 'string', enum: ['1', '0'], default: '1' }, description: '`0`: sin binarios (solo texto, anclas y vectores).' },
+            { name: 'originales', in: 'query', schema: { type: 'string', enum: ['1', '0'], default: '1' }, description: '`0`: sin el fichero original.' },
+            { name: 'vectores', in: 'query', schema: { type: 'string', enum: ['1', '0'], default: '1' } },
+          ],
+          responses: {
+            '200': { description: 'El fichero .spdf', content: { 'application/vnd.spdf': { schema: { type: 'string', format: 'binary' } }, 'application/x-spdf': { schema: { type: 'string', format: 'binary' } } } },
+            '409': { description: 'El documento todavía no está listo', content: { 'application/json': { schema: ref('Error') } } },
+            ...ERRORES,
+          },
+        },
+      },
+      '/documentos/importar': {
+        post: {
+          tags: ['documentos'], operationId: 'importarSpdf', summary: 'Importar un fichero .spdf (5.0, 4.x o 3.x)',
+          description: 'El .spdf va como cuerpo crudo. No se vuelve a leer nada: se copian el texto, las anclas, los vectores y los binarios incrustados. Si ya estaba (misma huella), no se copia (`repetido: true`). Si faltan los vectores del espacio de la biblioteca, se calculan en una `tarea`.',
+          parameters: [{ name: 'biblioteca', in: 'query', schema: { type: 'string' } }, { name: 'deduplicar', in: 'query', schema: { type: 'string', enum: ['1', '0'], default: '1' } }],
+          requestBody: { required: true, content: { 'application/vnd.spdf': { schema: { type: 'string', format: 'binary' } }, 'application/octet-stream': { schema: { type: 'string', format: 'binary' } } } },
+          responses: {
+            '201': { description: 'Importado', content: { 'application/json': { schema: obj({ documento: ref('Documento'), version_origen: int('500, 400 o 300.'), avisos: arr(str()), tarea: str(), repetido: { type: 'boolean' } }) } } },
+            '200': { description: 'Ya estaba (repetido)', content: { 'application/json': { schema: obj({ documento: ref('Documento'), repetido: { type: 'boolean' } }) } } },
+            ...ERRORES,
+          },
+        },
+      },
       '/buscar': {
         get: {
           tags: ['buscar'], operationId: 'buscar', summary: 'Buscar pasajes con su cita',
@@ -276,6 +307,7 @@ En español: Scholaris es una biblioteca leída y citable. Subes cualquier cosa,
 - \`GET ${B}/documentos/{id}\`: metadata, \`estado\` (en_cola | procesando | listo | error), \`progreso\` 0-1, APA \`referencia\`. \`?esperar=30\` long-polls until done.
 - \`DELETE ${B}/documentos/{id}\`.
 - \`GET ${B}/documentos/{id}/texto?desde=23&hasta=25\`: read pages by printed folio («23», «xiv») or physical position («[12]»); in audio/video by time (\`desde=1:02:00&hasta=1:05:00\`). Without \`hasta\` returns 20 units and \`siguiente\` (pass it as \`desde\`).
+- \`GET ${B}/documentos/{id}/spdf\`: the document as an SPDF 5.0 file (open format: SQLite with text, anchors, search index, vectors and CSL-JSON metadata; https://spdf.joseluissaorin.com). \`?version=4\` gives the legacy 4.1. \`POST ${B}/documentos/importar\` with a .spdf body (5.0, 4.x or 3.x) adds it to the library without reading it again.
 - \`GET ${B}/buscar?q=…&k=10&documento=ID\`: passages with \`cita\` («(Cortázar, 1977, 1:06:56)»), \`localizador\` («p. 23»), \`ancla\`, \`enlace\` (deep link to the reader at that page or second) and literal \`texto\`. Quote a phrase ("…") for literal search.
 - \`POST ${B}/preguntar {"pregunta": "…"}\`: Markdown answer with footnotes [^n] and \`fuentes\` (each a passage with its citation). \`"stream": true\` for SSE (\`pasajes\`, \`texto\`, \`fuente\`, \`fin\`).
 - \`POST ${B}/citar {"texto": "…", "estilo": "apa"}\`: returns the text with verified citations inserted, the list of \`citas\` (claim, citation, passage, \`respaldo\` 0-1) and the \`bibliografia\`. Any CSL style. A .docx body with \`Accept: application/vnd.openxmlformats-officedocument.wordprocessingml.document\` returns the cited .docx. Slow (often 20-90 s): waits \`?esperar=120\`, then 202 + \`GET ${B}/citar/{id}\`.

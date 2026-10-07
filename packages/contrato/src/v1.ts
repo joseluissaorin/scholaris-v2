@@ -14,6 +14,8 @@
  *   GET    /api/v1/documentos/{id}          ficha, estado y progreso
  *   DELETE /api/v1/documentos/{id}          borrar
  *   GET    /api/v1/documentos/{id}/texto    leer páginas o un tramo de tiempo
+ *   GET    /api/v1/documentos/{id}/spdf     el documento como fichero SPDF 5.0 (?version=4 da el 4.1)
+ *   POST   /api/v1/documentos/importar      importar un .spdf (5.0, 4.x o 3.x)
  *   GET    /api/v1/buscar?q=…               pasajes con su cita
  *   POST   /api/v1/preguntar                respuesta con notas [^n] verificadas
  *   POST   /api/v1/citar                    un texto con sus citas y la bibliografía
