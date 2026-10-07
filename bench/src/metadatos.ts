@@ -209,7 +209,7 @@ async function main() {
       tabla.push({ etiqueta, campo, antes: Boolean(pa[campo]), despues: Boolean(pd[campo]), rehecho: Boolean(pr[campo]) });
       if (pa[campo] && !pr[campo]) empeoran.push(`${etiqueta}.${campo}`);
     }
-    informe[etiqueta] = { ms, antes, despues: r.metadatos, rehecho: rh.metadatos, puntuacion: { antes: pa, despues: pd, rehecho: pr }, procedencia: r.procedencia.filter((p) => p.proveedor === 'enriquecimiento') };
+    informe[etiqueta] = { ms, antes, despues: r.metadatos, rehecho: rh.metadatos, puntuacion: { antes: pa, despues: pd, rehecho: pr }, procedencia: r.procedencia.filter((p) => p.proveedor === 'enriquecimiento' || (p.detalle as { respondieron?: unknown } | undefined)?.respondieron) };
     const ok = (p: Record<string, boolean>) => `${Object.values(p).filter(Boolean).length}/${Object.keys(p).length}`;
     console.error(`[${etiqueta}] ${(ms / 1000).toFixed(1)} s  antes ${ok(pa)}  después ${ok(pd)}  rehecho ${ok(pr)}  ${Object.entries(pd).filter(([, v]) => !v).map(([k]) => `✗${k}`).join(' ')}`);
     cache.volcar();

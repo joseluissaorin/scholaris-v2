@@ -17,8 +17,9 @@ import { autorDe, claveAutor } from '../pasos/metadatos/nombres.js';
 import { aniosDelColofon, leerColofon, tipoTitulo, type Colofon } from './colofon.js';
 import {
   arxivPorId, arxivPorTitulo, autoresCasan, datacite, googleBooksPorIsbn, openAlexOrcid, openLibraryObra, openLibraryPorIsbn,
-  titulosCasan, wikidataObra, wikidataPrograma, wikipediaContenedor, type Hallazgo,
+  titulosCasan, wikidataObra, wikidataPrograma, wikipediaContenedor, type Hallazgo, type ObraLeida,
 } from './fuentes.js';
+import { casaConDoiImpreso, compararAnios, mismoTitulo } from '../pasos/metadatos/identidad.js';
 import { actividadImpresor } from './impresores.js';
 import { presencia, rtveEpisodio, type EvidenciaGrabacion } from './rtve.js';
 import { normalizar } from '../texto.js';
@@ -31,7 +32,7 @@ export { isbnsDelTexto, aIsbn13, isbn10Valido, isbn13Valido } from './isbn.js';
 export { crearConsultor, vaciarCacheConsultas, cacheEnKv, cacheEnAlmacen, huella, CONTACTO, type Consultor, type CacheConsultas, type OpcionesConsultor, type PuertoCatalogos } from './red.js';
 export { actividadImpresor, type ActividadImpresor } from './impresores.js';
 export { rtveEpisodio, fechaRtve, slugRtve, presencia, personasDelTitulo, type EvidenciaGrabacion } from './rtve.js';
-export { titulosCasan, autoresCasan, wikidataBuscar, type EntidadWikidata } from './fuentes.js';
+export { titulosCasan, autoresCasan, wikidataBuscar, type EntidadWikidata, type ObraLeida } from './fuentes.js';
 
 export interface EntradaEnriquecimiento {
   /** Ficha provisional (lectura + verificación). */
@@ -119,15 +120,23 @@ export async function enriquecer(e: EntradaEnriquecimiento, red: Consultor | nul
   // 2. Consultas en paralelo.
   const tareas: Array<Promise<void>> = [];
   const isbn = hc?.datos.isbn ?? base.isbn;
-  const titulo = base.titulo;
+  // Las búsquedas por título solo con un título leído en el documento (no el del nombre del archivo).
+  const pt = base.procedencia?.titulo;
+  const titulo = !pt || pt.fuente === 'usuario' || pt.confianza >= 0.5 ? base.titulo : undefined;
+  if (base.titulo && !titulo) avisos.push(`Sin búsquedas por título: «${base.titulo}» no se leyó en el documento.`);
   const autores = base.autores ?? [];
+  // Lo que el documento dice de sí mismo, para comprobar que cada registro es de esta obra y esta edición.
+  const leida: ObraLeida = {
+    ...(titulo ? { titulo } : {}), ...(base.subtitulo ? { subtitulo: base.subtitulo } : {}), ...(base.tituloOriginal ? { tituloOriginal: base.tituloOriginal } : {}),
+    autores, ...(anioEdicion !== undefined ? { anio: anioEdicion } : {}),
+  };
 
   if (isbn && !medio) {
     tareas.push((async () => {
-      const ol = await openLibraryPorIsbn(isbn, red, idioma);
+      const ol = await openLibraryPorIsbn(isbn, red, idioma, leida);
       if (ol.length) hallazgos.push(...ol);
       else {
-        const gb = await googleBooksPorIsbn(isbn, red, idioma);
+        const gb = await googleBooksPorIsbn(isbn, red, idioma, leida);
         if (gb) hallazgos.push(gb);
       }
     })());
@@ -136,7 +145,7 @@ export async function enriquecer(e: EntradaEnriquecimiento, red: Consultor | nul
   const articulo = /article|paper-conference|report/.test(base.tipoCSL ?? '') || Boolean(colofon?.congreso || colofon?.arxiv);
   if (titulo && !medio && !articulo) {
     tareas.push((async () => {
-      const [wd, ol] = await Promise.all([wikidataObra(titulo, autores, red, idioma), isbn ? Promise.resolve(null) : openLibraryObra(titulo, autores, red, idioma)]);
+      const [wd, ol] = await Promise.all([wikidataObra(titulo, autores, red, idioma, leida), isbn ? Promise.resolve(null) : openLibraryObra(titulo, autores, red, idioma, leida)]);
       if (ol) hallazgos.push(ol);
       if (!wd) return;
       hallazgos.push(wd);
@@ -157,12 +166,18 @@ export async function enriquecer(e: EntradaEnriquecimiento, red: Consultor | nul
 
   if (titulo && !medio && (colofon?.arxiv || (articulo && !base.isbn))) {
     tareas.push((async () => {
-      const id = colofon?.arxiv ?? (await arxivPorTitulo(titulo, red));
+      const impreso = colofon?.arxiv;
+      const id = impreso ?? (await arxivPorTitulo(titulo, red));
       if (!id) return;
       const h = await arxivPorId(id, red);
       if (!h) return;
       // Aunque el identificador venga del propio PDF, el registro tiene que ser la misma obra.
-      if (!titulosCasan(titulo, h.datos.titulo, 0.92) || autoresCasan(autores, h.datos.autores) === false) return;
+      if (!mismoTitulo(leida, h.datos.titulo, 0.92) || autoresCasan(autores, h.datos.autores) === false) return;
+      // Sin sello de arXiv impreso, el DOI de arXiv solo con autor y año de la edición confirmados (frontera de identidad).
+      if (!impreso && (autoresCasan(autores, h.datos.autores) !== true || compararAnios(leida, [h.datos.anio]).casa !== true)) {
+        avisos.push(`arXiv ${id}: el título casa, pero sin autor y año confirmados no se toma su DOI.`);
+        return;
+      }
       // El año de arXiv es el de la primera versión: en un artículo de congreso coincide; si no, es otra cosa.
       const d: Partial<MetadatosDocumento> = { url: h.datos.url as string };
       if (h.datos.contenedor && !colofon?.congreso) { d.contenedor = h.datos.contenedor; d.tipoCSL = 'paper-conference'; }
@@ -183,6 +198,10 @@ export async function enriquecer(e: EntradaEnriquecimiento, red: Consultor | nul
         if (dc && titulosCasan(titulo, dc.datos.titulo, 0.85)) {
           delete dc.datos.titulo;
           hallazgos.push(dc);
+        } else if (dc && !casaConDoiImpreso({ ...(titulo ? { titulo } : {}), autores }, dc.datos).acepta) {
+          // El DOI es de otra cosa (los datos del artículo en Figshare, una referencia): no es el del documento.
+          hallazgos.push({ fuente: 'datacite', confianza: 0.9, anula: ['doi'], datos: {}, ...(dc.id ? { id: dc.id } : {}) });
+          avisos.push(`DataCite: ${doi} es «${String(dc.datos.titulo ?? '?').slice(0, 80)}», no este documento.`);
         }
       }
       orcid = await openAlexOrcid(doi, red);

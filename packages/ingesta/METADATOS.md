@@ -57,6 +57,27 @@ Los autores se limpian siempre: la misma persona aparece una sola vez («Sanders
 
 Además, ni una clave del almacén («original», «paquete») ni un título genérico («Entrevista», «Vídeo») valen como título. La ruta ya no pasa la clave del original como nombre de archivo. Esto salió de regresiones reales en producción (Iconologia titulada «original», Cela como «Entrevista», años y autores perdidos), que están reconstruidas en `test/rehacer.test.ts`. El banco mide también «rehecho sobre antes»: 54/55, y ningún campo empeora.
 
+## Una reseña no es la obra
+
+En producción, el capítulo I del *Quijote* (sin DOI) salió con el DOI 10.2307/3716615, *The Modern Language Review* 44 (4), p. 577, tipo `article-journal` y William J. Entwistle como primer autor. Era una reseña de 1949. En OpenAlex se titula igual que la novela y lleva a Cervantes como autor, detrás del reseñista. La verificación antigua se conformaba con un título casi igual y un apellido en común, y en un libro aceptaba otro año («una reedición»), así que puntuaba 0,93 sobre un umbral de 0,78. Además, la búsqueda de Crossref nunca había funcionado: pedía `language` en `select`, que no existe en `/works`, y Crossref rechazaba la consulta entera con un 400.
+
+Ahora un registro de Crossref u OpenAlex solo entra si pasa todas estas reglas (`src/pasos/metadatos/identidad.ts`):
+
+- **Título.** Similitud normalizada de al menos 0,9. Se rechaza el registro que contiene el título de la obra con algo delante («Notes on…», «Voces de Cervantes en…»), el que sigue sin separador («… y la crítica romántica»), el que añade otro subtítulo, el que lleva palabras de reseña, estudio, nota, edición ajena o fe de erratas que el documento no tiene («review», «reseña», «estudio», «edición de», «al cuidado de»…) y el que nombra al autor dentro del título («Cervantes, Miguel de: Don Quijote…»).
+- **Autor.** El primer autor del registro tiene que estar en el documento y el primero del documento, en el registro. Así cae la reseña de JSTOR, donde el reseñista va primero. Los nombres de pila tienen que ser compatibles: «C. S.» no es «Cynthia» (OpenAlex le atribuye *The Discarded Image* a una Cynthia Lewis). Sin autores en un lado no hay pruebas, y el registro no entra.
+- **Tipo.** Un libro no es un capítulo ni un artículo, y un capítulo no es un artículo de revista. Una obra anterior a 1850 nunca es un artículo, lea lo que lea el modelo. Las reseñas, las entradas de enciclopedia, las fe de erratas, los números de revista y los tipos «other» o «paratext» nunca son el documento.
+- **Año.** Tiene que ser el de la edición que se tiene delante (±1). Sin año de la edición en el documento no hay pruebas, y un registro anterior a la propia obra se descarta.
+- **Edición.** En libros y capítulos, si el documento muestra una editorial o un ISBN, el registro no puede traer otros.
+- **DOI.** Si el documento muestra un DOI, se consulta ese en Crossref. Vale si el título se parece y los autores no chocan, o si casan el autor y el año. Si resuelve a otra obra (una referencia, la obra reseñada), se quita. Un DOI que el modelo dice leer y que no está en el texto ni en la ficha del archivo no cuenta como impreso. El lector de créditos ya no toma el DOI de los datos del artículo («Data Availability Statement: … Figshare»), y DataCite quita el DOI si resuelve a otra cosa.
+
+Si un registro no pasa, no entra nada de él. El DOI, la revista, el volumen, el número y las páginas van en bloque: salen de las fuentes que dan ese mismo DOI (o, sin DOI, de la que da la revista) y solo pueden completarse con lo impreso en el propio documento, nunca con otro registro. La procedencia de la verificación guarda qué catálogos respondieron y los primeros rechazos con su motivo.
+
+Con el mismo criterio se revisan los demás catálogos. Open Library por ISBN descarta el registro si su título no es el del documento (el ISBN del original en una traducción, el de otra obra) y no da años de obra anteriores a 1830. Open Library por título, Wikidata y Google Books piden el mismo título, sin reseñas ni estudios, y una obra que no sea posterior a la edición. Wikidata descarta además los artículos científicos, las reseñas, las ediciones, las tesis y las desambiguaciones. arXiv sin sello impreso solo da su DOI con el autor y el año confirmados. Ningún catálogo se consulta por un título sacado del nombre del archivo.
+
+Al rehacer la ficha, el bloque de la publicación se queda o se va entero. Si la ficha anterior tenía campos de Crossref u OpenAlex y la verificación de ahora, con respuesta de esos catálogos, ya no confirma ese registro, esos campos no se protegen. Así se limpia una ficha estropeada como la del *Quijote*. Un DOI que figura en el texto del documento se respeta siempre. Sin respuesta de los catálogos no se quita nada.
+
+Las pruebas (`test/identidad.test.ts`) usan respuestas reales de Crossref y OpenAlex grabadas el 7 de octubre de 2026 (`test/datos/catalogos-quijote-zipf.json`). Recogen el *Quijote* con cuatro lecturas posibles (capítulo con el año de la obra, libro sin año, sin tipo, libro con un año cualquiera), la ficha estropeada que se limpia al rehacer y un artículo con DOI (Corral, Boleda y Ferrer-i-Cancho, *PLoS ONE*, 2015, CC-BY). El artículo conserva su DOI impreso y lo recupera por búsqueda si no está impreso, pero no si el documento no muestra el año. Con el código anterior, la prueba del *Quijote* reproduce el fallo exacto.
+
 ## Resultados (banco, 6 de octubre de 2026)
 
 ```
@@ -93,6 +114,8 @@ Por documento:
 - **3Blue1Brown.** «Vectors», contenedor «Essence of linear algebra», Grant Sanderson.
 
 Con la red de casa y la caché vacía, cada documento tarda entre 1,1 y 5,9 s. El paso lanza en paralelo de 2 a 5 consultas a catálogos y una sola llamada al Redactor. Las emisiones se midieron cuatro veces seguidas, con el mismo resultado.
+
+El 7 de octubre de 2026, con la frontera de identidad y con Crossref respondiendo por primera vez, el banco da lo mismo: 55/55 después y 54/55 al rehacer, sin ningún campo que empeore. Las búsquedas devuelven ahora muchos registros que tratan de las obras (estudios de *El perseguidor*, ediciones reseñadas de Lope, cinco copias de *Attention* fechadas en 2025, una «Cynthia Lewis» como autora de *The Discarded Image*) y todos se rechazan con su motivo, que queda en `informe.json`. Solo entra uno: el de OpenAlex para *The Discarded Image* (C. S. Lewis, 1964, Cambridge University Press), que confirma los valores que ya había.
 
 ## Límites y notas honestas
 

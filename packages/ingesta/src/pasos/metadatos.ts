@@ -7,7 +7,9 @@
  *    transcripción) y devuelve los campos en JSON.
  * 3. Verificación: Crossref por DOI; si no hay, búsqueda bibliográfica en
  *    Crossref y OpenAlex (gratis, sin clave). Solo se acepta un registro externo
- *    si el título coincide y el autor o el año también.
+ *    si título, primer autor, año de la edición y tipo casan (./metadatos/identidad):
+ *    una reseña o un estudio SOBRE la obra no es la obra. El DOI, la revista, el
+ *    volumen, el número y las páginas van en bloque y de una sola fuente.
  * 4. Enriquecimiento consciente de la edición (../enriquecimiento): créditos y
  *    colofón, ISBN → Open Library, Wikidata y Wikipedia para la obra, arXiv,
  *    DataCite, programas de radio y televisión, impresores de impresos sin fecha.
@@ -22,10 +24,12 @@ import { normalizar, similitud } from '../texto.js';
 import { nombreCompleto, partirAutores, separarNombre } from './autores.js';
 import { conOrcid, crearConsultor, enriquecer, leerColofon, presencia, pruebasNuevas, type CacheConsultas, type Colofon, type Consultor } from '../enriquecimiento/index.js';
 import { autorDe } from './metadatos/nombres.js';
+import { BLOQUE_PUBLICACION, casaConDoiImpreso, doiEnTexto, evaluarCandidato, nombresDePilaCompatibles } from './metadatos/identidad.js';
 import { detectarIdioma } from '@scholaris/spdf';
 
 export * from '../enriquecimiento/index.js';
 export { autorDe, esEntidad, claveAutor, esCanal, limpiarAutores, mismaPersonaNombre } from './metadatos/nombres.js';
+export { BLOQUE_PUBLICACION, casaConDoiImpreso, compararAnios, compararAutores, compararTipos, compararTitulos, doiEnTexto, evaluarCandidato, mismoTitulo, type Evaluacion } from './metadatos/identidad.js';
 import { esCanal, limpiarAutores, mismaPersonaNombre } from './metadatos/nombres.js';
 
 type Fuente = FuenteMetadato;
@@ -252,6 +256,10 @@ export async function leerMetadatos(
 export interface RegistroExterno extends Partial<MetadatosDocumento> {
   fuente: 'crossref' | 'openalex';
   puntuacion?: number;
+  /** Todos los años del registro (impreso, en línea, emitido): basta con que uno case con la edición. */
+  anios?: number[];
+  /** Todos los ISBN del registro. */
+  isbns?: string[];
 }
 
 const ua = (correo?: string) => ({ 'User-Agent': `Scholaris/2 (https://scholaris.joseluissaorin.com; mailto:${correo ?? 'jl@joseluissaorin.com'})` });
@@ -268,24 +276,31 @@ async function pedir(http: Http, url: string, correo?: string): Promise<unknown 
 interface ObraCrossref {
   title?: string[]; subtitle?: string[]; author?: Array<{ given?: string; family?: string; name?: string; ORCID?: string }>;
   editor?: Array<{ given?: string; family?: string }>;
-  issued?: { 'date-parts'?: number[][] }; 'published-print'?: { 'date-parts'?: number[][] };
+  issued?: { 'date-parts'?: number[][] }; 'published-print'?: { 'date-parts'?: number[][] }; 'published-online'?: { 'date-parts'?: number[][] };
   publisher?: string; 'publisher-location'?: string; 'container-title'?: string[]; volume?: string; issue?: string; page?: string;
   DOI?: string; ISBN?: string[]; type?: string; language?: string; URL?: string; score?: number;
 }
 
-const TIPOS_CROSSREF: Record<string, string> = { 'journal-article': 'article-journal', 'book-chapter': 'chapter', 'proceedings-article': 'paper-conference', book: 'book', monograph: 'book', 'edited-book': 'book', dissertation: 'thesis', report: 'report', 'posted-content': 'article' };
+const TIPOS_CROSSREF: Record<string, string> = { 'journal-article': 'article-journal', 'book-chapter': 'chapter', 'book-part': 'chapter', 'book-section': 'chapter', 'proceedings-article': 'paper-conference', book: 'book', monograph: 'book', 'edited-book': 'book', 'reference-book': 'book', dissertation: 'thesis', report: 'report', 'posted-content': 'article' };
+
+/** Quita el marcado que Crossref deja en los títulos («<i>Don Quijote</i>»). */
+const sinMarcado = (s: string) => s.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
 
 function deCrossref(o: ObraCrossref): RegistroExterno {
-  const anio = o['published-print']?.['date-parts']?.[0]?.[0] ?? o.issued?.['date-parts']?.[0]?.[0];
+  const anioDe = (f?: { 'date-parts'?: number[][] }) => f?.['date-parts']?.[0]?.[0] ?? undefined;
+  const anio = anioDe(o['published-print']) ?? anioDe(o.issued);
   const r: RegistroExterno = { fuente: 'crossref' };
-  if (o.title?.[0]) r.titulo = limpiarTitulo(o.title[0]);
-  if (o.subtitle?.[0]) r.subtitulo = o.subtitle[0];
+  const anios = [anioDe(o['published-print']), anioDe(o.issued), anioDe(o['published-online'])].filter((a): a is number => typeof a === 'number' && a > 0);
+  if (anios.length) r.anios = [...new Set(anios)];
+  if (o.ISBN?.length) r.isbns = o.ISBN;
+  if (o.title?.[0]) r.titulo = limpiarTitulo(sinMarcado(o.title[0]));
+  if (o.subtitle?.[0]) r.subtitulo = sinMarcado(o.subtitle[0]);
   if (o.author?.length) r.autores = o.author.map((a) => (a.family ? { nombre: a.given ?? '', apellidos: a.family, ...(a.ORCID ? { orcid: a.ORCID.replace(/^https?:\/\/orcid\.org\//, '') } : {}) } : autorDe(a.name ?? '')));
   if (o.editor?.length) r.editores = o.editor.filter((a) => a.family).map((a) => ({ nombre: a.given ?? '', apellidos: a.family as string }));
   if (anio) r.anio = anio;
   if (o.publisher) r.editorial = o.publisher;
   if (o['publisher-location']) r.lugar = o['publisher-location'];
-  if (o['container-title']?.[0]) r.revista = o['container-title'][0];
+  if (o['container-title']?.[0]) r.revista = sinMarcado(o['container-title'][0]);
   if (o.volume) r.volumen = o.volume;
   if (o.issue) r.numero = o.issue;
   if (o.page) r.paginas = o.page;
@@ -304,7 +319,8 @@ interface ObraOpenAlex {
   relevance_score?: number;
 }
 
-const TIPOS_OPENALEX: Record<string, string> = { article: 'article-journal', 'book-chapter': 'chapter', 'conference-paper': 'paper-conference', preprint: 'article', dissertation: 'thesis', book: 'book', report: 'report', dataset: 'dataset', review: 'review', other: 'document' };
+// «review», «other», «paratext», «erratum», «letter»… se quedan como vienen: nunca son el documento (identidad.ts).
+const TIPOS_OPENALEX: Record<string, string> = { article: 'article-journal', 'book-chapter': 'chapter', 'conference-paper': 'paper-conference', preprint: 'article', dissertation: 'thesis', book: 'book', report: 'report', dataset: 'dataset', review: 'review' };
 
 function deOpenAlex(o: ObraOpenAlex): RegistroExterno {
   const r: RegistroExterno = { fuente: 'openalex' };
@@ -317,7 +333,7 @@ function deOpenAlex(o: ObraOpenAlex): RegistroExterno {
       return orcid ? { ...autor, orcid } : autor;
     }).filter((a) => a.apellidos);
   }
-  if (o.publication_year) r.anio = o.publication_year;
+  if (o.publication_year) { r.anio = o.publication_year; r.anios = [o.publication_year]; }
   if (o.doi) r.doi = o.doi.replace(/^https?:\/\/doi\.org\//, '').toLowerCase();
   if (o.language) r.idioma = o.language;
   if (o.type) r.tipoCSL = TIPOS_OPENALEX[o.type] ?? o.type;
@@ -330,43 +346,19 @@ function deOpenAlex(o: ObraOpenAlex): RegistroExterno {
   return r;
 }
 
-/** ¿Pueden ser la misma persona? Compara iniciales y, si ambos traen nombres enteros, los nombres. */
+/** ¿Pueden ser la misma persona? Compara los nombres de pila («C. S.» ≠ «Cynthia»; «A.» = «Ashish»). */
 export function nombresCompatibles(a: string, b: string): boolean {
-  const fichas = (s: string) => normalizar(s.replace(/\./g, '. ')).split(' ').filter(Boolean);
-  const x = fichas(a), y = fichas(b);
-  if (!x.length || !y.length) return true;
-  if (x.length !== y.length) {
-    // «Ashish» frente a «A.»: vale; «C. S.» frente a «Cynthia»: no.
-    return x.length === 1 && y.length === 1;
-  }
-  return x.every((t, i) => {
-    const u = y[i] as string;
-    if (t[0] !== u[0]) return false;
-    return t.length === 1 || u.length === 1 || similitud(t, u) >= 0.8;
-  });
+  return nombresDePilaCompatibles(a, b);
 }
 
-/** ¿El registro externo es la misma obra? 0-1. Título casi igual y autor o año compatibles. */
-export function coincidencia(lectura: Partial<MetadatosDocumento>, ext: Partial<MetadatosDocumento>): number {
-  if (!lectura.titulo || !ext.titulo) return 0;
-  const tl = normalizar(lectura.titulo), te = normalizar(ext.titulo);
-  // El externo puede traer «Título: subtítulo» en el título.
-  const st = Math.max(similitud(tl, te), te.startsWith(tl) && tl.length > 12 ? 0.95 : 0, tl.startsWith(te) && te.length > 12 ? 0.9 : 0);
-  if (st < 0.8) return 0;
-  const autoresL = lectura.autores ?? [], autoresE = ext.autores ?? [];
-  const ultimo = (a: Autor) => normalizar(a.apellidos).split(' ').at(-1) ?? '';
-  let autor = 0.5;
-  if (autoresL.length && autoresE.length) {
-    // Mismo apellido Y nombres compatibles («C. S.» ≠ «Cynthia»; «A.» = «Ashish»).
-    autor = autoresL.some((a) => autoresE.some((b) => ultimo(a) === ultimo(b) && nombresCompatibles(a.nombre, b.nombre))) ? 1 : 0;
-  }
-  const anio = lectura.anio && ext.anio ? (Math.abs(lectura.anio - ext.anio) <= 1 ? 1 : 0.3) : 0.5;
-  if (autor === 0) return 0;
-  // Un artículo no cambia de año: si el registro dice otro, es otra cosa (o una copia basura
-  // con DOI propio, que las hay a miles). En libros, una reedición sí puede cambiarlo.
-  const libro = lectura.tipoCSL === 'book' || lectura.tipoCSL === 'chapter' || Boolean(lectura.isbn);
-  if (lectura.anio && ext.anio && Math.abs(lectura.anio - ext.anio) > 1 && !libro) return 0;
-  return st * 0.6 + autor * 0.3 + anio * 0.1;
+/**
+ * ¿El registro externo es la misma obra Y la misma publicación? 0-1 (0 = no).
+ * Título casi igual y que no trate de la obra, primer autor en común, año de
+ * la edición (±1) y tipo coherente: ver `evaluarCandidato` (./metadatos/identidad).
+ */
+export function coincidencia(lectura: Partial<MetadatosDocumento>, ext: Partial<MetadatosDocumento> & { anios?: number[]; isbns?: string[] }): number {
+  const e = evaluarCandidato(lectura, ext);
+  return e.acepta ? e.puntuacion : 0;
 }
 
 /** Un consultor con la caché, la clave de OpenAlex y el correo de los puertos (uno por paso: comparte la caché en memoria). */
@@ -374,41 +366,73 @@ function consultorDe(puertos: PuertosMetadatos, http: Http) {
   return crearConsultor({ http, ...(puertos.correo ? { correo: puertos.correo } : {}), ...(puertos.cache ? { cache: puertos.cache } : {}), ...(puertos.claveOpenAlex ? { claveOpenAlex: puertos.claveOpenAlex } : {}) });
 }
 
+export interface Verificacion {
+  registro: RegistroExterno | null;
+  consultas: string[];
+  /** Catálogos que respondieron: sin respuesta, «no encontrado» no prueba nada (red caída, cuota agotada). */
+  respondieron: Array<'crossref' | 'openalex'>;
+  /** El DOI que muestra el documento resuelve a otra obra: no es el suyo. */
+  doiAjeno?: { doi: string; titulo?: string; motivo: string };
+  /** Los primeros candidatos rechazados y por qué (para la procedencia). */
+  rechazados: Array<{ fuente: string; titulo?: string; doi?: string; motivo: string }>;
+}
+
 export async function verificar(
   base: Partial<MetadatosDocumento>,
   http: Http,
   correo?: string,
   consultor?: Consultor,
-): Promise<{ registro: RegistroExterno | null; consultas: string[] }> {
+): Promise<Verificacion> {
   const consultas: string[] = [];
+  const respondieron = new Set<'crossref' | 'openalex'>();
+  const rechazados: Verificacion['rechazados'] = [];
+  const salida = (registro: RegistroExterno | null, extra: Partial<Verificacion> = {}): Verificacion => ({ registro, consultas, respondieron: [...respondieron], rechazados, ...extra });
+  const pedirJson = (url: string) => (consultor ? consultor.json(url) : pedir(http, url, correo));
   const mailto = correo ? `&mailto=${encodeURIComponent(correo)}` : '';
+  let doiAjeno: Verificacion['doiAjeno'];
   if (base.doi) {
     const url = `https://api.crossref.org/works/${encodeURIComponent(base.doi)}`;
     consultas.push(url);
-    const j = (consultor ? await consultor.json(url) : await pedir(http, url, correo)) as { message?: ObraCrossref } | null;
+    const j = (await pedirJson(url)) as { message?: ObraCrossref } | null;
     if (j?.message) {
+      respondieron.add('crossref');
       const r = deCrossref(j.message);
-      // Con DOI, basta con que el título se parezca algo (el DOI manda).
-      if (!base.titulo || similitud(base.titulo, r.titulo ?? '') > 0.5) return { registro: { ...r, puntuacion: 1 }, consultas };
+      // El DOI lo muestra el documento: manda, siempre que el registro no sea claramente de otra obra.
+      const v = casaConDoiImpreso(base, r);
+      if (v.acepta) return salida({ ...r, puntuacion: 1 });
+      doiAjeno = { doi: base.doi, ...(r.titulo ? { titulo: r.titulo } : {}), motivo: v.motivo ?? 'el DOI es de otra obra' };
     }
   }
-  if (!base.titulo) return { registro: null, consultas };
+  if (!base.titulo) return salida(null, doiAjeno ? { doiAjeno } : {});
+  // El DOI del documento descarta a los candidatos con otro DOI, salvo que sea ajeno o solo el primero que aparece
+  // en el texto (la imprenta coge el primero: puede ser el de los datos en Figshare o el de una referencia).
+  const { doi: _otro, ...sinDoi } = base;
+  const doiFirme = Boolean(base.doi) && !doiAjeno && base.procedencia?.doi?.fuente !== 'pdf';
+  const doc = doiFirme ? base : sinDoi;
   const autor = base.autores?.[0]?.apellidos ?? '';
   const q = encodeURIComponent(`${base.titulo} ${autor}`.trim());
-  const urlC = `https://api.crossref.org/works?query.bibliographic=${q}&rows=5&select=title,subtitle,author,editor,issued,published-print,publisher,publisher-location,container-title,volume,issue,page,DOI,ISBN,type,language${mailto}`;
+  // Ojo: «language» no es un campo seleccionable en /works y Crossref rechaza la consulta entera (400).
+  const urlC = `https://api.crossref.org/works?query.bibliographic=${q}&rows=5&select=title,subtitle,author,editor,issued,published-print,published-online,publisher,publisher-location,container-title,volume,issue,page,DOI,ISBN,type${mailto}`;
   const urlO = `https://api.openalex.org/works?search=${encodeURIComponent(base.titulo)}&per-page=5${mailto}`;
   consultas.push(urlC, urlO);
-  const [jc, jo] = await Promise.all(consultor ? [consultor.json(urlC), consultor.json(urlO)] : [pedir(http, urlC, correo), pedir(http, urlO, correo)]);
-  const candidatos: RegistroExterno[] = [
-    ...(((jc as { message?: { items?: ObraCrossref[] } } | null)?.message?.items ?? []).map(deCrossref)),
-    ...(((jo as { results?: ObraOpenAlex[] } | null)?.results ?? []).map(deOpenAlex)),
-  ];
+  const [jc, jo] = await Promise.all([pedirJson(urlC), pedirJson(urlO)]);
+  const itemsC = (jc as { message?: { items?: ObraCrossref[] } } | null)?.message?.items;
+  const itemsO = (jo as { results?: ObraOpenAlex[] } | null)?.results;
+  if (Array.isArray(itemsC)) respondieron.add('crossref');
+  if (Array.isArray(itemsO)) respondieron.add('openalex');
+  const candidatos: RegistroExterno[] = [...(itemsC ?? []).map(deCrossref), ...(itemsO ?? []).map(deOpenAlex)];
   let mejor: RegistroExterno | null = null, puntos = 0;
   for (const c of candidatos) {
-    const p = coincidencia(base, c) + (c.fuente === 'crossref' && c.doi ? 0.01 : 0);
+    const e = evaluarCandidato(doc, c);
+    if (!e.acepta) {
+      if (rechazados.length < 6) rechazados.push({ fuente: c.fuente, ...(c.titulo ? { titulo: c.titulo.slice(0, 120) } : {}), ...(c.doi ? { doi: c.doi } : {}), motivo: e.motivo ?? 'no casa' });
+      continue;
+    }
+    // A igualdad, Crossref (el registro del propio DOI) antes que OpenAlex.
+    const p = e.puntuacion + (c.fuente === 'crossref' && c.doi ? 0.001 : 0);
     if (p > puntos) { puntos = p; mejor = c; }
   }
-  return { registro: mejor && puntos >= 0.78 ? { ...mejor, puntuacion: puntos } : null, consultas };
+  return salida(mejor ? { ...mejor, puntuacion: Math.min(1, puntos) } : null, doiAjeno ? { doiAjeno } : {});
 }
 
 // ---------------------------------------------------------------------------
@@ -473,7 +497,52 @@ export function fusionarMetadatos(candidatos: Candidato[], nombreArchivo: string
   if (salida.titulo) salida.titulo = limpiarTitulo(salida.titulo);
   repararPersonas(salida, procedencia);
   repararContenedor(salida, procedencia);
+  bloqueDeUnaFuente(salida, procedencia, candidatos);
   return { titulo: salida.titulo, autores: salida.autores ?? [], ...salida, procedencia };
+}
+
+const BLOQUE = BLOQUE_PUBLICACION as readonly Campo[];
+/** Lo que sale del propio documento (impreso o en su ficha): describe el mismo objeto. */
+const DEL_DOCUMENTO = new Set<Fuente>(['lectura', 'colofon', 'pdf', 'epub']);
+
+/**
+ * DOI, revista, volumen, número y páginas van en bloque: de la publicación que
+ * identifica el DOI (las fuentes que dan ese mismo DOI) o, sin DOI, de la
+ * fuente que da la revista. Nunca el DOI de un registro y la revista de otro.
+ * Si ninguna de ellas trae algún campo, solo puede completarlo lo impreso en
+ * el propio documento. Lo que puso el usuario se respeta campo a campo.
+ */
+export function bloqueDeUnaFuente(m: Partial<MetadatosDocumento>, procedencia: NonNullable<MetadatosDocumento['procedencia']>, candidatos: Candidato[]): void {
+  const ancla = (['doi', 'revista'] as const).find((c) => !vacio(m[c]));
+  const pa = ancla ? procedencia[ancla] : undefined;
+  if (!ancla || !pa) return;
+  const mismos = ancla === 'doi'
+    ? candidatos.filter((c) => typeof c.datos.doi === 'string' && c.datos.doi.toLowerCase() === String(m.doi).toLowerCase())
+    : candidatos.filter((c) => c.fuente === pa.fuente && c.datos.revista === m.revista);
+  const confianza = (c: Candidato, campo: Campo) => (c.fuente === 'usuario' ? 2 : c.porCampo?.[campo] ?? c.confianza);
+  const redondear = (c: number) => Math.round(Math.max(0, Math.min(1, c)) * 100) / 100;
+  const mejorDe = (cs: Candidato[], campo: Campo) => cs.filter((c) => !vacio(c.datos[campo])).sort((a, b) => confianza(b, campo) - confianza(a, campo))[0];
+  for (const campo of BLOQUE) {
+    if (campo === ancla) continue;
+    const p = procedencia[campo];
+    if (p?.fuente === 'usuario') continue;
+    const propio = mejorDe(mismos, campo);
+    if (propio) {
+      (m as Record<string, unknown>)[campo] = propio.datos[campo];
+      procedencia[campo] = { fuente: propio.fuente, confianza: redondear(confianza(propio, campo)) };
+      continue;
+    }
+    if (!p || DEL_DOCUMENTO.has(p.fuente)) continue;
+    // Viene de otro registro: fuera, salvo que el propio documento lo traiga.
+    const impreso = mejorDe(candidatos.filter((c) => DEL_DOCUMENTO.has(c.fuente)), campo);
+    if (impreso) {
+      (m as Record<string, unknown>)[campo] = impreso.datos[campo];
+      procedencia[campo] = { fuente: impreso.fuente, confianza: redondear(confianza(impreso, campo)) };
+    } else {
+      delete (m as Record<string, unknown>)[campo];
+      delete procedencia[campo];
+    }
+  }
 }
 
 const PLATAFORMAS = /^(youtube|vimeo|dailymotion|twitch|tiktok|instagram|facebook|spotify|apple podcasts|ivoox|soundcloud)$/i;
@@ -574,6 +643,15 @@ export function idiomaDelTexto(unidades: UnidadLeida[], maxCaracteres = 30000): 
   return r && r.confianza >= 0.5 ? r.idioma : undefined;
 }
 
+/** Todo el texto del documento que se tiene a mano (para comprobar que un DOI está impreso). */
+function textosDelDocumento(entrada: EntradaMetadatos): string[] {
+  const f = entrada.ficha;
+  return [
+    ...[...entrada.unidades, ...(entrada.ultimas ?? [])].flatMap((u) => [u.texto, u.cabecera, u.pie, ...(u.notas ?? [])]),
+    f.doi, f.doiEnTexto, ...(f.identificadores ?? []),
+  ].filter((x): x is string => typeof x === 'string' && x.length > 0);
+}
+
 export async function pasoMetadatos(
   entrada: EntradaMetadatos,
   puertos: PuertosMetadatos,
@@ -592,7 +670,10 @@ export async function pasoMetadatos(
       if (conHablantes.hablantes?.length) hablantes = Object.fromEntries(conHablantes.hablantes.filter((h) => h.etiqueta && h.nombre?.trim()).map((h) => [h.etiqueta.trim(), h.nombre.trim()]));
       delete conHablantes.hablantes;
       lectura = normalizarLectura(lectura);
-      procedencia.push({ fase: 'metadatos', proveedor: puertos.redactor.nombre, ms: reloj() - t, detalle: { campos: Object.keys(lectura) } });
+      // Un DOI que el modelo «lee» y no está en el texto ni en la ficha del archivo no es un DOI impreso: fuera.
+      const doiLeido = lectura.doi;
+      if (doiLeido && !doiEnTexto(doiLeido, textosDelDocumento(entrada))) delete lectura.doi;
+      procedencia.push({ fase: 'metadatos', proveedor: puertos.redactor.nombre, ms: reloj() - t, detalle: { campos: Object.keys(lectura), ...(doiLeido && !lectura.doi ? { aviso: `DOI de la lectura que no figura en el documento: ${doiLeido}` } : {}) } });
     } catch (e) {
       procedencia.push({ fase: 'metadatos', proveedor: puertos.redactor.nombre, ms: reloj() - t, detalle: { error: String((e as Error)?.message ?? e).slice(0, 200) } });
     }
@@ -610,10 +691,24 @@ export async function pasoMetadatos(
   const http: Http = puertos.http ?? ((url, init) => fetch(url, init as RequestInit));
   if (!opciones.sinVerificacion && !medio) {
     const t = reloj();
-    const { registro, consultas } = await verificar(provisional, http, puertos.correo, consultorDe(puertos, http));
-    procedencia.push({ fase: 'metadatos', proveedor: registro?.fuente ?? 'verificacion', ms: reloj() - t, detalle: { consultas: consultas.length, encontrado: Boolean(registro), puntuacion: registro?.puntuacion ?? 0, titulo: registro?.titulo } });
+    // Solo se busca por un título leído en el documento, nunca por uno sacado del nombre del archivo.
+    const pt = provisional.procedencia?.titulo;
+    const tituloFiable = Boolean(provisional.titulo) && (pt?.fuente === 'usuario' || (pt?.confianza ?? 0) >= 0.5) && !esTituloBasura(provisional.titulo);
+    const { titulo: _sinTitulo, ...sinTitulo } = provisional;
+    const v = await verificar(tituloFiable ? provisional : sinTitulo, http, puertos.correo, consultorDe(puertos, http));
+    const { registro } = v;
+    procedencia.push({
+      fase: 'metadatos', proveedor: registro?.fuente ?? 'verificacion', ms: reloj() - t,
+      detalle: {
+        consultas: v.consultas.length, respondieron: v.respondieron, encontrado: Boolean(registro), puntuacion: registro?.puntuacion ?? 0, titulo: registro?.titulo,
+        ...(registro?.doi ? { doi: registro.doi } : {}), ...(tituloFiable ? {} : { aviso: 'sin búsqueda: el título no se leyó en el documento' }),
+        ...(v.rechazados.length ? { rechazados: v.rechazados } : {}), ...(v.doiAjeno ? { doiAjeno: v.doiAjeno } : {}),
+      },
+    });
+    // El DOI que muestra el documento resuelve a otra obra (una referencia, la obra reseñada): no es el suyo.
+    if (v.doiAjeno) candidatos.push({ fuente: 'crossref', confianza: 0.9, anula: ['doi'], datos: {} });
     if (registro) {
-      const { fuente, puntuacion, ...datos } = registro;
+      const { fuente, puntuacion, anios: _anios, isbns: _isbns, ...datos } = registro;
       // El registro externo no sabe del libro concreto: su año es el de la obra; si la lectura ve otra edición, manda la lectura.
       if (datos.anio && provisional.anio && Math.abs(datos.anio - provisional.anio) > 1 && provisional.tipoCSL === 'book') {
         if (!provisional.anioOriginal && datos.anio < provisional.anio) datos.anioOriginal = datos.anio;
@@ -753,10 +848,26 @@ export async function rehacerFicha(
   const otraIdentidad = Boolean(pt && ['rtve', 'wikidata', 'crossref', 'datacite', 'arxiv'].includes(pt.fuente) && pt.confianza >= 0.9
     && normalizar(r.metadatos.titulo) !== normalizar(previa.titulo)
     && !previa.autores.some((a) => r.metadatos.autores.some((b) => mismaPersonaNombre(a, b))));
-  const final = noEmpeorar(base, r.metadatos, { otraIdentidad });
+  const final = noEmpeorar(base, r.metadatos, { otraIdentidad, desconfiar: registrosQueYaNoCasan(previa, r, documento.unidades) });
   // «No empeorar» podría devolver un contenedor viejo igual al título: la misma regla al final.
   repararContenedor(final, (final.procedencia ??= {}));
   return { ...r, metadatos: final };
+}
+
+/**
+ * Crossref u OpenAlex dieron campos a la ficha anterior y la verificación de
+ * ahora, que sí respondió, ya no acepta ese registro (no devuelve el mismo
+ * DOI): eran de otra obra (la reseña de 1949 del Quijote). Esos campos no se
+ * protegen al rehacer. Un DOI que figura en el texto del documento sí se
+ * respeta: es impreso, no de una búsqueda.
+ */
+function registrosQueYaNoCasan(previa: MetadatosDocumento, r: ResultadoMetadatos, unidades: UnidadLeida[]): Fuente[] {
+  const fuentes = new Set(Object.values(previa.procedencia ?? {}).map((p) => p.fuente));
+  const respondieron = new Set(r.procedencia.flatMap((p) => ((p.detalle as { respondieron?: string[] } | undefined)?.respondieron ?? [])));
+  if (previa.doi && doiEnTexto(previa.doi, unidades.flatMap((u) => [u.texto, u.cabecera, u.pie, ...(u.notas ?? [])]))) return [];
+  const nuevas = Object.values(r.metadatos.procedencia ?? {});
+  return (['crossref', 'openalex'] as const).filter((f) => fuentes.has(f) && respondieron.has(f)
+    && !(nuevas.some((p) => p.fuente === f) && (!previa.doi || previa.doi === r.metadatos.doi)));
 }
 
 /** Campos que dependen de qué obra o qué episodio es: si cambia la identidad con pruebas, cambian juntos. */
@@ -773,14 +884,19 @@ const MARGEN = 0.05;
  * nunca borra uno lleno; un título basura nunca sustituye a nada; lo del
  * usuario no se toca. Los campos que se conservan guardan su procedencia.
  */
-export function noEmpeorar(previa: MetadatosDocumento, nueva: MetadatosDocumento, opciones: { otraIdentidad?: boolean } = {}): MetadatosDocumento {
+export function noEmpeorar(previa: MetadatosDocumento, nueva: MetadatosDocumento, opciones: { otraIdentidad?: boolean; desconfiar?: Fuente[] } = {}): MetadatosDocumento {
   const salida: MetadatosDocumento = { ...nueva, autores: nueva.autores ?? [] };
   const procedencia: NonNullable<MetadatosDocumento['procedencia']> = { ...(nueva.procedencia ?? {}) };
   const sustituidos = new Set<Campo>();
+  const desconfiada = (f?: Fuente) => Boolean(f && opciones.desconfiar?.includes(f));
   for (const campo of CAMPOS) {
+    // El bloque de la publicación se decide entero, más abajo.
+    if (BLOQUE.includes(campo)) continue;
     const viejo = previa[campo];
     if (vacio(viejo)) continue;
     const pv = previa.procedencia?.[campo];
+    // Un campo que salió de un registro que la verificación de ahora ya no acepta no se protege.
+    if (desconfiada(pv?.fuente)) continue;
     // Otra identidad con pruebas fuertes: los campos de identidad son los nuevos (o ninguno), salvo los del usuario.
     if (opciones.otraIdentidad && IDENTIDAD.includes(campo) && pv?.fuente !== 'usuario') continue;
     // Un tipo genérico («document») no es un dato: cualquier tipo concreto con pruebas lo mejora.
@@ -797,6 +913,7 @@ export function noEmpeorar(previa: MetadatosDocumento, nueva: MetadatosDocumento
     (salida as unknown as Record<string, unknown>)[campo] = viejo;
     if (pv) procedencia[campo] = pv; else delete procedencia[campo];
   }
+  noEmpeorarBloque(previa, nueva, salida, procedencia, desconfiada);
   // El subtítulo va con su título: si el título cambió por uno más fiable y no trae subtítulo, el viejo sobra.
   if (sustituidos.has('titulo') && vacio(nueva.subtitulo) && previa.procedencia?.subtitulo?.fuente !== 'usuario') { delete salida.subtitulo; delete procedencia.subtitulo; }
   repararPersonas(salida, procedencia);
@@ -807,6 +924,32 @@ export function noEmpeorar(previa: MetadatosDocumento, nueva: MetadatosDocumento
     if (procedencia.anioOriginal?.fuente !== 'usuario' && (procedencia.anio?.fuente === 'usuario' || co <= ca)) { delete salida.anioOriginal; delete procedencia.anioOriginal; } else { delete salida.anio; delete procedencia.anio; }
   }
   return { ...salida, procedencia };
+}
+
+/**
+ * El bloque de la publicación al rehacer: se queda entero el viejo o entra
+ * entero el nuevo (nunca el DOI de uno con la revista del otro). Gana el nuevo
+ * si trae más confianza (con el margen) o si el viejo salió de un registro que
+ * ya no se acepta; en ese caso el viejo se va aunque no haya nuevo. Lo del
+ * usuario se queda campo a campo.
+ */
+function noEmpeorarBloque(previa: MetadatosDocumento, nueva: MetadatosDocumento, salida: MetadatosDocumento, procedencia: NonNullable<MetadatosDocumento['procedencia']>, desconfiada: (f?: Fuente) => boolean): void {
+  const ancla = (m: MetadatosDocumento) => (['doi', 'revista', 'volumen', 'numero', 'paginas'] as const).find((c) => !vacio(m[c]));
+  const av = ancla(previa), an = ancla(nueva);
+  const pv = av ? previa.procedencia?.[av] : undefined, pn = an ? nueva.procedencia?.[an] : undefined;
+  const viejoFuera = av !== undefined && desconfiada(pv?.fuente);
+  const cv = pv?.fuente === 'usuario' ? Infinity : pv?.confianza ?? CONFIANZA_PREVIA;
+  const ganaNuevo = an !== undefined && (av === undefined || viejoFuera || (pn?.confianza ?? 0) >= cv + MARGEN);
+  const quedaViejo = av !== undefined && !ganaNuevo && !viejoFuera;
+  for (const campo of BLOQUE) {
+    const delUsuario = previa.procedencia?.[campo]?.fuente === 'usuario' && !vacio(previa[campo]);
+    const origen = delUsuario || quedaViejo ? previa : ganaNuevo ? nueva : null;
+    const v = origen ? origen[campo] : undefined;
+    const p = origen?.procedencia?.[campo];
+    if (vacio(v)) { delete (salida as unknown as Record<string, unknown>)[campo]; delete procedencia[campo]; continue; }
+    (salida as unknown as Record<string, unknown>)[campo] = v;
+    if (p) procedencia[campo] = p; else delete procedencia[campo];
+  }
 }
 
 const procedenciaLectura = (m: MetadatosDocumento, campo: string) => m.procedencia?.[campo]?.fuente === 'lectura';

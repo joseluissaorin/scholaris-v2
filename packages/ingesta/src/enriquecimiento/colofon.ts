@@ -174,8 +174,14 @@ export function leerColofon(texto: string): Colofon {
   if (col) c.coleccion = (col[1] as string).replace(/[\s,.;]+$/, '').trim();
 
   // Solo un DOI rotulado («DOI: 10…», «https://doi.org/10…») y al principio: los de la bibliografía son de otras obras.
-  const doi = /\b(?:doi\s*[:.]?\s*|doi\.org\/)(10\.\d{4,9}\/[-._;()/:A-Z0-9]{1,120})\b/i.exec(t.slice(0, 4000));
-  if (doi) c.doi = (doi[1] as string).replace(/[.,;)\]]+$/, '').toLowerCase();
+  // Tampoco el de los datos o el código del artículo («Data Availability Statement: … via Figshare (http://dx.doi.org/10.6084/…)»).
+  const principio = t.slice(0, 4000);
+  for (const m of principio.matchAll(/\b(?:doi\s*[:.]?\s*|doi\.org\/)(10\.\d{4,9}\/[-._;()/:A-Z0-9]{1,120})\b/gi)) {
+    const antes = principio.slice(Math.max(0, (m.index ?? 0) - 120), m.index ?? 0);
+    if (/\bdata\s+(availability|are|is|set|deposited|available)|\bdatos\s+(disponibles|est[áa]n|depositados)|dataset|figshare|zenodo|dryad|dataverse|osf\.io|repositor|supporting information|supplementary|material suplementario|\bcode\s+(is|are|available)|c[óo]digo\s+(est[áa]|disponible)|software/i.test(antes)) continue;
+    c.doi = (m[1] as string).replace(/[.,;)\]]+$/, '').toLowerCase();
+    break;
+  }
   // El sello de arXiv en el margen («arXiv:1706.03762v7 [cs.CL] 2 Aug 2023»), no una referencia («arXiv:1607.06450, 2016»).
   const ax = /\barXiv\s*:\s*(\d{4}\.\d{4,5}|[a-z-]+(?:\.[A-Z]{2})?\/\d{7})v\d+\s*\[[a-z-]+(?:\.[A-Za-z]{2})?\]/i.exec(t);
   if (ax) c.arxiv = ax[1] as string;

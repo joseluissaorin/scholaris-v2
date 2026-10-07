@@ -1,0 +1,876 @@
+{
+ "_fuente": "Respuestas reales de api.crossref.org y api.openalex.org consultadas el 7-10-2026, recortadas a los campos que se usan.",
+ "crossrefQuijote": {
+  "message": {
+   "items": [
+    {
+     "title": [
+      "EL INGENIOSO HIDALGO DON QUIJOTE DE LA MANCHA"
+     ],
+     "issued": {
+      "date-parts": [
+       [
+        2020,
+        12,
+        3
+       ]
+      ]
+     },
+     "published-print": {
+      "date-parts": [
+       [
+        2020,
+        12,
+        3
+       ]
+      ]
+     },
+     "publisher": "UNIVERSIDAD DE CALDAS",
+     "container-title": [
+      "La sabiduría de Don Miguel de Cervantes Saavedra"
+     ],
+     "page": "301-338",
+     "DOI": "10.2307/j.ctv2d7x4vb.28",
+     "type": "book-chapter"
+    },
+    {
+     "title": [
+      "Miguel de Cervantes Saavedra · El Ingenioso Hidalgo Don Quijote de la Mancha"
+     ],
+     "author": [
+      {
+       "given": "Heinrich",
+       "family": "Bihler"
+      }
+     ],
+     "issued": {
+      "date-parts": [
+       [
+        1995
+       ]
+      ]
+     },
+     "published-print": {
+      "date-parts": [
+       [
+        1995
+       ]
+      ]
+     },
+     "publisher": "J.B. Metzler",
+     "container-title": [
+      "Der spanische Roman"
+     ],
+     "page": "86-115",
+     "DOI": "10.1007/978-3-476-03605-6_6",
+     "ISBN": [
+      "9783476013163",
+      "9783476036056"
+     ],
+     "type": "book-chapter"
+    },
+    {
+     "title": [
+      "El Ingenioso Hidalgo Don Quijote de la Mancha"
+     ],
+     "author": [
+      {
+       "given": "Donald D.",
+       "family": "Walsh"
+      },
+      {
+       "given": "Miguel",
+       "family": "de Cervantes Saavedra"
+      }
+     ],
+     "issued": {
+      "date-parts": [
+       [
+        1949,
+        8
+       ]
+      ]
+     },
+     "published-print": {
+      "date-parts": [
+       [
+        1949,
+        8
+       ]
+      ]
+     },
+     "publisher": "JSTOR",
+     "container-title": [
+      "Hispania"
+     ],
+     "volume": "32",
+     "issue": "3",
+     "page": "393",
+     "DOI": "10.2307/334345",
+     "type": "journal-article"
+    },
+    {
+     "title": [
+      "El ingenioso hidalgo Don Quijote de la Mancha"
+     ],
+     "author": [
+      {
+       "given": "James",
+       "family": "Ryan"
+      },
+      {
+       "given": "Miguel",
+       "family": "de Cervantes Saavedra"
+      },
+      {
+       "given": "Juan",
+       "family": "Cano"
+      }
+     ],
+     "issued": {
+      "date-parts": [
+       [
+        1962,
+        3
+       ]
+      ]
+     },
+     "published-print": {
+      "date-parts": [
+       [
+        1962,
+        3
+       ]
+      ]
+     },
+     "publisher": "JSTOR",
+     "container-title": [
+      "Hispania"
+     ],
+     "volume": "45",
+     "issue": "1",
+     "page": "172",
+     "DOI": "10.2307/337565",
+     "type": "journal-article"
+    },
+    {
+     "title": [
+      "Don Quixote, Primera Parte, El ingenioso hidalgo don Quijote de la Mancha | Don Quixote, Segunda Parte, El ingenioso caballero don Quijote de la Mancha"
+     ],
+     "issued": {
+      "date-parts": [
+       [
+        null
+       ]
+      ]
+     },
+     "publisher": "Walter de Gruyter GmbH",
+     "container-title": [
+      "Christian-Muslim Relations 1500 - 1900"
+     ],
+     "DOI": "10.1163/2451-9537_cmrii_com_31001",
+     "type": "dataset"
+    }
+   ]
+  }
+ },
+ "openalexQuijote": {
+  "results": [
+   {
+    "title": "El ingenioso hidalgo Don Quijote de la Mancha",
+    "publication_year": 1949,
+    "doi": "https://doi.org/10.2307/3716615",
+    "language": "es",
+    "type": "article",
+    "authorships": [
+     {
+      "author": {
+       "display_name": "William J. Entwistle"
+      }
+     },
+     {
+      "author": {
+       "display_name": "Miguel de Cervantes Saavedra"
+      }
+     },
+     {
+      "author": {
+       "display_name": "Francisco Rodríguez Marín"
+      }
+     },
+     {
+      "author": {
+       "display_name": "Martin de Riquier"
+      }
+     },
+     {
+      "author": {
+       "display_name": "Francisco Rodríguez Marín"
+      }
+     },
+     {
+      "author": {
+       "display_name": "E. Caballero Calderón"
+      }
+     },
+     {
+      "author": {
+       "display_name": "William L. Fichter"
+      }
+     },
+     {
+      "author": {
+       "display_name": "Juan Givanel Mas"
+      }
+     }
+    ],
+    "primary_location": {
+     "source": {
+      "display_name": "The Modern Language Review",
+      "host_organization_name": "Modern Humanities Research Association"
+     }
+    },
+    "biblio": {
+     "volume": "44",
+     "issue": "4",
+     "first_page": "577",
+     "last_page": "577"
+    }
+   },
+   {
+    "title": "El ingenioso hidalgo Don Quijote de la Mancha",
+    "publication_year": 1962,
+    "doi": "https://doi.org/10.2307/337565",
+    "language": "es",
+    "type": "article",
+    "authorships": [
+     {
+      "author": {
+       "display_name": "James Ryan"
+      }
+     },
+     {
+      "author": {
+       "display_name": "Miguel de Cervantes Saavedra"
+      }
+     },
+     {
+      "author": {
+       "display_name": "Juan‐Carlos Cano"
+      }
+     }
+    ],
+    "primary_location": {
+     "source": {
+      "display_name": "Hispania",
+      "host_organization_name": "American Association of Teachers of Spanish and Portuguese"
+     }
+    },
+    "biblio": {
+     "volume": "45",
+     "issue": "1",
+     "first_page": "172",
+     "last_page": "172"
+    }
+   },
+   {
+    "title": "El Ingenioso Hidalgo Don Quijote de la Mancha",
+    "publication_year": 1979,
+    "doi": "https://doi.org/10.2307/340160",
+    "language": "es",
+    "type": "article",
+    "authorships": [
+     {
+      "author": {
+       "display_name": "Stephen H. Ackerman"
+      }
+     },
+     {
+      "author": {
+       "display_name": "Miguel de Cervantès"
+      }
+     },
+     {
+      "author": {
+       "display_name": "John J. Allen"
+      }
+     }
+    ],
+    "primary_location": {
+     "source": {
+      "display_name": "Hispania",
+      "host_organization_name": "American Association of Teachers of Spanish and Portuguese"
+     }
+    },
+    "biblio": {
+     "volume": "62",
+     "issue": "4",
+     "first_page": "727",
+     "last_page": "727"
+    }
+   },
+   {
+    "title": "El ingenioso hidalgo don Quijote de la Mancha",
+    "publication_year": 2002,
+    "doi": "https://doi.org/10.2307/3246918",
+    "language": "es",
+    "type": "article",
+    "authorships": [
+     {
+      "author": {
+       "display_name": "Juan Bautista Avalle-Arce"
+      }
+     },
+     {
+      "author": {
+       "display_name": "Miguel de Cervantes Saavedra"
+      }
+     },
+     {
+      "author": {
+       "display_name": "Salvador J. Fajardo"
+      }
+     },
+     {
+      "author": {
+       "display_name": "James A. Parr"
+      }
+     }
+    ],
+    "primary_location": {
+     "source": {
+      "display_name": "Hispanic Review",
+      "host_organization_name": "University of Pennsylvania Press"
+     }
+    },
+    "biblio": {
+     "volume": "70",
+     "issue": "2",
+     "first_page": "281",
+     "last_page": "281"
+    }
+   },
+   {
+    "title": "El ingenioso hidalgo don Quijote de la Mancha",
+    "publication_year": 1933,
+    "doi": "https://doi.org/10.2307/314420",
+    "language": "es",
+    "type": "article",
+    "authorships": [
+     {
+      "author": {
+       "display_name": "A. Marinoni"
+      }
+     },
+     {
+      "author": {
+       "display_name": "Miguel de Cervantes Saavedra"
+      }
+     },
+     {
+      "author": {
+       "display_name": "Juan Cano"
+      }
+     }
+    ],
+    "primary_location": {
+     "source": {
+      "display_name": "Modern Language Journal",
+      "host_organization_name": "Wiley"
+     }
+    },
+    "biblio": {
+     "volume": "18",
+     "issue": "1",
+     "first_page": "68",
+     "last_page": "68"
+    }
+   }
+  ]
+ },
+ "crossrefZipfDoi": {
+  "message": {
+   "title": [
+    "Zipf’s Law for Word Frequencies: Word Forms versus Lemmas in Long Texts"
+   ],
+   "author": [
+    {
+     "given": "Álvaro",
+     "family": "Corral"
+    },
+    {
+     "given": "Gemma",
+     "family": "Boleda"
+    },
+    {
+     "given": "Ramon",
+     "family": "Ferrer-i-Cancho"
+    }
+   ],
+   "issued": {
+    "date-parts": [
+     [
+      2015,
+      7,
+      9
+     ]
+    ]
+   },
+   "published-online": {
+    "date-parts": [
+     [
+      2015,
+      7,
+      9
+     ]
+    ]
+   },
+   "publisher": "Public Library of Science (PLoS)",
+   "container-title": [
+    "PLOS ONE"
+   ],
+   "volume": "10",
+   "issue": "7",
+   "page": "e0129031",
+   "DOI": "10.1371/journal.pone.0129031",
+   "type": "journal-article"
+  }
+ },
+ "crossrefZipf": {
+  "message": {
+   "items": [
+    {
+     "title": [
+      "Zipf’s Law for Word Frequencies: Word Forms versus Lemmas in Long Texts"
+     ],
+     "author": [
+      {
+       "given": "Álvaro",
+       "family": "Corral"
+      },
+      {
+       "given": "Gemma",
+       "family": "Boleda"
+      },
+      {
+       "given": "Ramon",
+       "family": "Ferrer-i-Cancho"
+      }
+     ],
+     "issued": {
+      "date-parts": [
+       [
+        2015,
+        7,
+        9
+       ]
+      ]
+     },
+     "published-online": {
+      "date-parts": [
+       [
+        2015,
+        7,
+        9
+       ]
+      ]
+     },
+     "publisher": "Public Library of Science (PLoS)",
+     "container-title": [
+      "PLOS ONE"
+     ],
+     "volume": "10",
+     "issue": "7",
+     "page": "e0129031",
+     "DOI": "10.1371/journal.pone.0129031",
+     "type": "journal-article"
+    },
+    {
+     "title": [
+      "The Brevity Law as a Scaling Law, and a Possible Origin of Zipf’s Law for Word Frequencies"
+     ],
+     "author": [
+      {
+       "given": "Álvaro",
+       "family": "Corral"
+      },
+      {
+       "given": "Isabel",
+       "family": "Serra"
+      }
+     ],
+     "issued": {
+      "date-parts": [
+       [
+        2020,
+        2,
+        17
+       ]
+      ]
+     },
+     "published-online": {
+      "date-parts": [
+       [
+        2020,
+        2,
+        17
+       ]
+      ]
+     },
+     "publisher": "MDPI AG",
+     "container-title": [
+      "Entropy"
+     ],
+     "volume": "22",
+     "issue": "2",
+     "page": "224",
+     "DOI": "10.3390/e22020224",
+     "type": "journal-article"
+    },
+    {
+     "title": [
+      "Zipf's Law Applied to Word and Letter Frequencies"
+     ],
+     "issued": {
+      "date-parts": [
+       [
+        2007,
+        8,
+        15
+       ]
+      ]
+     },
+     "publisher": "Wolfram Research, Inc.",
+     "container-title": [
+      "Wolfram Demonstrations Project"
+     ],
+     "DOI": "10.3840/07001420",
+     "type": "dataset"
+    },
+    {
+     "title": [
+      "Zipf's Law Applied to Word and Letter Frequencies"
+     ],
+     "issued": {
+      "date-parts": [
+       [
+        2007,
+        8,
+        15
+       ]
+      ]
+     },
+     "publisher": "Wolfram Research, Inc.",
+     "container-title": [
+      "Wolfram Demonstrations Project"
+     ],
+     "DOI": "10.3840/001420",
+     "type": "dataset"
+    },
+    {
+     "title": [
+      "Chapter 2: Types, lemmas, word families"
+     ],
+     "issued": {
+      "date-parts": [
+       [
+        2016,
+        9,
+        5
+       ]
+      ]
+     },
+     "published-print": {
+      "date-parts": [
+       [
+        2016,
+        9,
+        8
+       ]
+      ]
+     },
+     "published-online": {
+      "date-parts": [
+       [
+        2016,
+        9,
+        5
+       ]
+      ]
+     },
+     "publisher": "John Benjamins Publishing Company",
+     "container-title": [
+      "Making and Using Word Lists for Language Learning and Testing"
+     ],
+     "page": "23-39",
+     "DOI": "10.1075/z.208.c2",
+     "ISBN": [
+      "9789027212443",
+      "9789027212450",
+      "9789027266279"
+     ],
+     "type": "book-chapter"
+    }
+   ]
+  }
+ },
+ "openalexZipf": {
+  "results": [
+   {
+    "title": "Zipf’s Law for Word Frequencies: Word Forms versus Lemmas in Long Texts",
+    "publication_year": 2015,
+    "doi": "https://doi.org/10.1371/journal.pone.0129031",
+    "language": "en",
+    "type": "article",
+    "authorships": [
+     {
+      "author": {
+       "display_name": "√Ålvaro Corral"
+      }
+     },
+     {
+      "author": {
+       "display_name": "Gemma Boleda"
+      }
+     },
+     {
+      "author": {
+       "display_name": "Ramon Ferrer‐i‐Cancho"
+      }
+     }
+    ],
+    "primary_location": {
+     "source": {
+      "display_name": "PLoS ONE",
+      "host_organization_name": "Public Library of Science"
+     }
+    },
+    "biblio": {
+     "volume": "10",
+     "issue": "7",
+     "first_page": "e0129031",
+     "last_page": "e0129031"
+    }
+   },
+   {
+    "title": "A scaling law beyond Zipf's law and its relation to Heaps' law",
+    "publication_year": 2013,
+    "doi": "https://doi.org/10.1088/1367-2630/15/9/093033",
+    "language": "en",
+    "type": "article",
+    "authorships": [
+     {
+      "author": {
+       "display_name": "Francesc Font-Clos"
+      }
+     },
+     {
+      "author": {
+       "display_name": "Gemma Boleda"
+      }
+     },
+     {
+      "author": {
+       "display_name": "√Ålvaro Corral"
+      }
+     }
+    ],
+    "primary_location": {
+     "source": {
+      "display_name": "New Journal of Physics",
+      "host_organization_name": "IOP Publishing"
+     }
+    },
+    "biblio": {
+     "volume": "15",
+     "issue": "9",
+     "first_page": "093033",
+     "last_page": "093033"
+    }
+   },
+   {
+    "title": "The Brevity Law as a Scaling Law, and a Possible Origin of Zipf’s Law for Word Frequencies",
+    "publication_year": 2020,
+    "doi": "https://doi.org/10.3390/e22020224",
+    "language": "en",
+    "type": "article",
+    "authorships": [
+     {
+      "author": {
+       "display_name": "Álvaro Corral"
+      }
+     },
+     {
+      "author": {
+       "display_name": "Isabel Serra"
+      }
+     }
+    ],
+    "primary_location": {
+     "source": {
+      "display_name": "Entropy",
+      "host_organization_name": "Multidisciplinary Digital Publishing Institute"
+     }
+    },
+    "biblio": {
+     "volume": "22",
+     "issue": "2",
+     "first_page": "224",
+     "last_page": "224"
+    }
+   },
+   {
+    "title": "Large-Scale Analysis of Zipf’s Law in English Texts",
+    "publication_year": 2016,
+    "doi": "https://doi.org/10.1371/journal.pone.0147073",
+    "language": "en",
+    "type": "article",
+    "authorships": [
+     {
+      "author": {
+       "display_name": "Isabel Moreno-Sánchez"
+      }
+     },
+     {
+      "author": {
+       "display_name": "Francesc Font-Clos"
+      }
+     },
+     {
+      "author": {
+       "display_name": "√Ålvaro Corral"
+      }
+     }
+    ],
+    "primary_location": {
+     "source": {
+      "display_name": "PLoS ONE",
+      "host_organization_name": "Public Library of Science"
+     }
+    },
+    "biblio": {
+     "volume": "11",
+     "issue": "1",
+     "first_page": "e0147073",
+     "last_page": "e0147073"
+    }
+   },
+   {
+    "title": "Big Data and Large Numbers. Interpreting Zipf's Law",
+    "publication_year": 2023,
+    "doi": "https://doi.org/10.48550/arxiv.2305.02687",
+    "language": "en",
+    "type": "preprint",
+    "authorships": [
+     {
+      "author": {
+       "display_name": "Horia-Nicolai Teodorescu"
+      }
+     }
+    ],
+    "primary_location": {
+     "source": {
+      "display_name": "arXiv (Cornell University)",
+      "host_organization_name": "Cornell University"
+     }
+    },
+    "biblio": {}
+   }
+  ]
+ },
+ "openalexDiscarded": {
+  "results": [
+   {
+    "title": "Discarding Images",
+    "publication_year": 1993,
+    "doi": "https://doi.org/10.1093/oso/9780198163466.001.0001",
+    "language": "en",
+    "type": "book",
+    "authorships": [
+     {
+      "author": {
+       "display_name": "Christopher L. Page"
+      }
+     }
+    ],
+    "primary_location": {
+     "source": {}
+    }
+   },
+   {
+    "title": "The Discarded Image",
+    "publication_year": 1964,
+    "doi": null,
+    "language": "en",
+    "type": "book",
+    "authorships": [
+     {
+      "author": {
+       "display_name": "Cynthia Lewis"
+      }
+     }
+    ],
+    "primary_location": {
+     "source": {}
+    }
+   },
+   {
+    "title": "The discarded image : an introduction to medieval and Renaissance literature",
+    "publication_year": 1964,
+    "doi": null,
+    "language": "en",
+    "type": "book",
+    "authorships": [
+     {
+      "author": {
+       "display_name": "C. S. Lewis"
+      }
+     }
+    ],
+    "primary_location": {
+     "source": {
+      "display_name": "Cambridge University Press eBooks",
+      "host_organization_name": "Cambridge University Press"
+     }
+    }
+   },
+   {
+    "title": "The Discarded Image",
+    "publication_year": 2026,
+    "doi": "https://doi.org/10.1093/oso/9780198982791.003.0003",
+    "language": "en",
+    "type": "book-chapter",
+    "authorships": [
+     {
+      "author": {
+       "display_name": "Alister E. McGrath"
+      }
+     }
+    ],
+    "primary_location": {
+     "source": {}
+    }
+   },
+   {
+    "title": "The Discarded Image",
+    "publication_year": 2019,
+    "doi": null,
+    "language": "en",
+    "type": "dissertation",
+    "authorships": [
+     {
+      "author": {
+       "display_name": "Gillian Kayrooz"
+      }
+     }
+    ],
+    "primary_location": {
+     "source": {
+      "display_name": "The Sydney eScholarship Repository (The University of Sydney)",
+      "host_organization_name": "The University of Sydney"
+     }
+    }
+   }
+  ]
+ }
+}

@@ -12,7 +12,18 @@
 import type { Autor, FuenteMetadato, MetadatosDocumento } from '@scholaris/nucleo';
 import { normalizar, similitud } from '../texto.js';
 import { autorDe, claveAutor } from '../pasos/metadatos/nombres.js';
+import { mismoTitulo } from '../pasos/metadatos/identidad.js';
 import type { Consultor } from './red.js';
+
+/** Lo que el documento dice de sí mismo, para comprobar que un registro de catálogo es de esta obra y esta edición. */
+export interface ObraLeida {
+  titulo?: string;
+  subtitulo?: string;
+  tituloOriginal?: string;
+  autores?: Autor[];
+  /** Año de la edición que se tiene delante. */
+  anio?: number;
+}
 
 export type CampoMeta = Exclude<keyof MetadatosDocumento, 'procedencia'>;
 
@@ -67,13 +78,26 @@ interface EdicionOL {
 
 const MARC_A_BCP: Record<string, string> = { eng: 'en', spa: 'es', fre: 'fr', fra: 'fr', ger: 'de', deu: 'de', ita: 'it', por: 'pt', lat: 'la', cat: 'ca', rus: 'ru', grc: 'grc', gre: 'el', dut: 'nl', jpn: 'ja', chi: 'zh' };
 
-/** Open Library por ISBN: la edición (año, editorial, lugar) y la obra (primer año). */
-export async function openLibraryPorIsbn(isbn: string, red: Consultor, idioma?: string): Promise<Hallazgo[]> {
+/**
+ * ¿El registro de un ISBN es de esta obra? Un ISBN impreso puede ser el del
+ * original (en una traducción), el de otro volumen de la colección o el de otra
+ * obra: si el título del registro no es el del documento, no se usa nada de él.
+ */
+function esLaMismaEdicion(doc: ObraLeida | undefined, titulo: string | undefined, subtitulo?: string): boolean {
+  if (!doc?.titulo || !titulo) return true;
+  const completo = subtitulo ? `${titulo}: ${subtitulo}` : titulo;
+  return mismoTitulo(doc, titulo, 0.85) || mismoTitulo(doc, completo, 0.85);
+}
+
+/** Open Library por ISBN: la edición (año, editorial, lugar) y la obra (primer año), si son de este documento. */
+export async function openLibraryPorIsbn(isbn: string, red: Consultor, idioma?: string, doc?: ObraLeida): Promise<Hallazgo[]> {
   const salida: Hallazgo[] = [];
   const [ed, busca] = await Promise.all([
     red.json<EdicionOL>(`https://openlibrary.org/isbn/${isbn}.json`),
     red.json<{ docs?: DocOL[] }>(`https://openlibrary.org/search.json?isbn=${isbn}&fields=key,title,subtitle,author_name,first_publish_year,language&limit=1`),
   ]);
+  // El ISBN es de otra obra (o del original de una traducción): nada de este registro.
+  if (ed?.title && !esLaMismaEdicion(doc, ed.title, ed.subtitle)) return [];
   if (ed && (ed.title || ed.publishers)) {
     const d: Partial<MetadatosDocumento> = { isbn };
     const anio = anioDeFecha(ed.publish_date?.match(/\d{4}/)?.[0]);
@@ -90,9 +114,11 @@ export async function openLibraryPorIsbn(isbn: string, red: Consultor, idioma?: 
     salida.push({ fuente: 'openlibrary', confianza: 0.85, porCampo: { editorial: 0.8, lugar: 0.75, coleccion: 0.7 }, datos: d, id: `https://openlibrary.org${ed.key ?? `/isbn/${isbn}`}` });
   }
   const obra = busca?.docs?.[0];
-  if (obra?.first_publish_year) {
+  const autoresObra = (obra?.author_name ?? []).map((n) => autorDe(n, idioma));
+  // La obra tiene que ser la misma (título y autor) y, antes del XIX, Open Library cataloga ediciones sueltas, no la primera.
+  if (obra?.first_publish_year && esLaMismaEdicion(doc, obra.title, obra.subtitle) && autoresCasan(doc?.autores, autoresObra) !== false && obra.first_publish_year >= 1830) {
     const d: Partial<MetadatosDocumento> = { anioOriginal: obra.first_publish_year };
-    if (obra.author_name?.length) d.autores = obra.author_name.map((n) => autorDe(n, idioma));
+    if (autoresObra.length) d.autores = autoresObra;
     if (obra.title) d.titulo = obra.title;
     // first_publish_year es el mínimo de las ediciones que tiene catalogadas: bueno, no infalible.
     salida.push({ fuente: 'openlibrary', confianza: 0.7, datos: d, id: `https://openlibrary.org${obra.key ?? ''}` });
@@ -101,17 +127,21 @@ export async function openLibraryPorIsbn(isbn: string, red: Consultor, idioma?: 
 }
 
 /** Open Library por título y autor: solo el año de la obra. */
-export async function openLibraryObra(titulo: string, autores: Autor[], red: Consultor, idioma?: string): Promise<Hallazgo | null> {
+export async function openLibraryObra(titulo: string, autores: Autor[], red: Consultor, idioma?: string, leida: ObraLeida = {}): Promise<Hallazgo | null> {
   const autor = autores[0]?.apellidos ?? '';
   const url = `https://openlibrary.org/search.json?title=${encodeURIComponent(titulo)}${autor ? `&author=${encodeURIComponent(autor)}` : ''}&fields=key,title,subtitle,author_name,first_publish_year,language&limit=5`;
   const j = await red.json<{ docs?: DocOL[] }>(url);
   for (const doc of j?.docs ?? []) {
-    if (!doc.first_publish_year || !titulosCasan(titulo, doc.title)) continue;
+    // El mismo título, no uno que trata de la obra o la contiene («Notes on…», «… y la crítica»).
+    if (!doc.first_publish_year || !mismoTitulo({ ...leida, titulo, autores }, doc.title, 0.85)) continue;
     // Antes del XIX, Open Library cataloga ediciones concretas (una suelta de 1700), no la primera de la obra.
     if (doc.first_publish_year < 1830) continue;
+    // La obra no puede ser posterior a la edición que se tiene delante.
+    if (leida.anio !== undefined && doc.first_publish_year > leida.anio + 1) continue;
     const ext = (doc.author_name ?? []).map((n) => autorDe(n, idioma));
-    if (autoresCasan(autores, ext) === false) continue;
-    return { fuente: 'openlibrary', confianza: autores.length ? 0.72 : 0.55, datos: { anioOriginal: doc.first_publish_year }, id: `https://openlibrary.org${doc.key ?? ''}` };
+    const casa = autoresCasan(autores, ext);
+    if (casa === false) continue;
+    return { fuente: 'openlibrary', confianza: casa ? 0.72 : 0.55, datos: { anioOriginal: doc.first_publish_year }, id: `https://openlibrary.org${doc.key ?? ''}` };
   }
   return null;
 }
@@ -120,10 +150,10 @@ export async function openLibraryObra(titulo: string, autores: Autor[], red: Con
 // Google Books (sin clave; con frecuencia sin cuota: es solo el último recurso)
 // ---------------------------------------------------------------------------
 
-export async function googleBooksPorIsbn(isbn: string, red: Consultor, idioma?: string): Promise<Hallazgo | null> {
+export async function googleBooksPorIsbn(isbn: string, red: Consultor, idioma?: string, doc?: ObraLeida): Promise<Hallazgo | null> {
   const j = await red.json<{ items?: Array<{ id?: string; volumeInfo?: { title?: string; subtitle?: string; authors?: string[]; publisher?: string; publishedDate?: string; language?: string } }> }>(`https://www.googleapis.com/books/v1/volumes?q=isbn:${isbn}&maxResults=1`);
   const v = j?.items?.[0]?.volumeInfo;
-  if (!v) return null;
+  if (!v || !esLaMismaEdicion(doc, v.title, v.subtitle)) return null;
   const d: Partial<MetadatosDocumento> = { isbn };
   const a = anioDeFecha(v.publishedDate);
   if (a) d.anio = a;
@@ -222,13 +252,19 @@ export async function wikidataBuscar(texto: string, red: Consultor, idioma = 'es
 }
 
 const ES_PROGRAMA = /programa|television|televisi[óo]n|tv |serie de televisi|talk show|radio|podcast|p[óo]dcast|show/i;
+/** Lo que no es la obra aunque se llame igual: artículos y reseñas sobre ella, ediciones, tesis, desambiguaciones. */
+const NO_ES_LA_OBRA = /scholarly (article|work)|journal article|art[íi]culo (cient[íi]fico|acad[ée]mico|de revista)|\breview\b|rese[ñn]a|version, edition|versi[óo]n, edici[óo]n|\bedition\b|\bedici[óo]n\b|doctoral thesis|\bthesis\b|\btesis\b|disambiguation|desambiguaci[óo]n|encyclopedi[ac] (article|entry)|art[íi]culo de enciclopedia/i;
 
 /** La obra en Wikidata: año de la primera publicación, lengua original, contenedor. */
-export async function wikidataObra(titulo: string, autores: Autor[], red: Consultor, idioma?: string): Promise<Hallazgo | null> {
+export async function wikidataObra(titulo: string, autores: Autor[], red: Consultor, idioma?: string, leida: ObraLeida = {}): Promise<Hallazgo | null> {
   const ents = await wikidataBuscar(titulo, red, idioma ?? 'es');
   for (const e of ents) {
-    if (!titulosCasan(titulo, e.etiqueta)) continue;
+    // El mismo título, no uno que trata de la obra o la contiene.
+    if (!mismoTitulo({ ...leida, titulo, autores }, e.etiqueta, 0.85)) continue;
     if (ES_PROGRAMA.test(`${e.clase ?? ''} ${e.descripcion ?? ''}`)) continue;
+    if (NO_ES_LA_OBRA.test(`${e.clase ?? ''} ${e.descripcion ?? ''}`)) continue;
+    // La obra no puede ser posterior a la edición que se tiene delante.
+    if (e.anio !== undefined && leida.anio !== undefined && e.anio > leida.anio + 1) continue;
     const ext = e.autores.map((a) => autorDe(a.nombre, idioma));
     const casa = autoresCasan(autores, ext);
     if (casa === false || (casa === null && !ext.length)) continue;
