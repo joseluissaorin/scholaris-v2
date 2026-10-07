@@ -84,7 +84,8 @@ export const q = {
   }, staleTime: 5 * 60_000 }),
   secciones: (id: string) => queryOptions({ queryKey: ['secciones', id], queryFn: async () => { const r = await api().documentos.secciones(id); const b = baseDe(id); return r.map((s) => ({ ...s, unidadDesde: s.unidadDesde - b + 1, ...(s.unidadHasta != null ? { unidadHasta: s.unidadHasta - b + 1 } : {}) })); }, staleTime: 5 * 60_000 }),
   figuras: (id: string) => queryOptions({ queryKey: ['figuras', id], queryFn: async () => { const r = await api().documentos.figuras(id); const b = baseDe(id); return r.map((f) => ({ ...f, unidad: f.unidad - b + 1 })); }, staleTime: 5 * 60_000 }),
-  original: (id: string) => queryOptions({ queryKey: ['original', id], queryFn: () => api().documentos.original(id), staleTime: 50 * 60_000 }),
+  // Sin original (vídeos de YouTube, subidas a medias) el 404 es la respuesta: no se reintenta.
+  original: (id: string) => queryOptions({ queryKey: ['original', id], queryFn: () => api().documentos.original(id), staleTime: 50 * 60_000, retry: (n, e) => (e as { estado?: number })?.estado !== 404 && n < 3 }),
   bibliotecas: () => queryOptions({ queryKey: ['bibliotecas'], queryFn: () => api().bibliotecas.listar() }),
   /*
    * Búsqueda en dos tiempos: el orden preliminar (~350 ms) se escribe en la caché
@@ -150,7 +151,8 @@ export function precargarLector(c: QueryClient, id: string, u = 1, pedirOriginal
   void c.prefetchQuery(q.bloque(id, Math.floor((u - 1) / BLOQUE)));
   const tipoSabido = c.getQueryData(q.documento(id).queryKey)?.tipo
     ?? c.getQueriesData<{ elementos?: Array<{ id: string; tipo: string }> }>({ queryKey: ['documentos'] }).flatMap(([, v]) => v?.elementos ?? []).find((x) => x.id === id)?.tipo;
-  const original = pedirOriginal || (tipoSabido && esMedio(tipoSabido as never)) ? c.prefetchQuery(q.original(id)) : null;
+  const deYoutube = c.getQueryData(q.documento(id).queryKey)?.mime === 'application/x-youtube';
+  const original = !deYoutube && (pedirOriginal || (tipoSabido && esMedio(tipoSabido as never))) ? c.prefetchQuery(q.original(id)) : null;
   const documento = c.ensureQueryData(q.documento(id));
   // Los de YouTube no tienen original: se ven con su reproductor insertado.
   return documento.then(async (d) => { if (esMedio(d.tipo) && d.mime !== 'application/x-youtube') await (original ?? c.prefetchQuery(q.original(id))); return d; });
