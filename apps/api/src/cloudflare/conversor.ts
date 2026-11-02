@@ -22,6 +22,15 @@ export class Conversor extends Container<Env> {
     return super.fetch(peticion);
   }
 
+  /**
+   * `stop()` manda SIGTERM, y Node como proceso principal del contenedor lo
+   * ignora si no tiene manejador: la instancia seguía encendida y facturando.
+   * Aquí ya no hay peticiones en curso, así que se puede matar sin más.
+   */
+  override async onActivityExpired(): Promise<void> {
+    await this.destroy();
+  }
+
   /** Sin peticiones en curso. El contador es privado en la librería y no da otra forma de leerlo. */
   libre(): boolean {
     return !(this as unknown as { inflightRequests?: number }).inflightRequests;
@@ -36,7 +45,7 @@ export class Conversor extends Container<Env> {
   override async alarm(props?: AlarmInvocationInfo): Promise<void> {
     if (this.ctx.container?.running && Date.now() - this.ultimaPeticion > MAX_SIN_PETICIONES_MS) {
       console.warn('Conversor: sin peticiones nuevas y aún «en curso»; se para la instancia');
-      await this.stop();
+      await this.destroy();
       this.ctx.abort('Conversor: contador de peticiones atascado');
     }
     return super.alarm(props);

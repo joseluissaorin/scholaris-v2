@@ -37,11 +37,13 @@ En local o en Docker Compose se usa con `SCHOLARIS_CONVERSOR_URL=http://converso
 ## Coste
 
 Cada instancia `standard-4` reserva 12 GiB y se paga mientras está encendida:
-unos 0,11 $ por hora, 2,70 $ al día. En octubre de 2026 esto costó 200 $ por dejar
-sin cerrar la respuesta tras la trama `fin`: la librería daba la petición por no
-terminada y no dormía la instancia. Por eso:
+unos 0,11 $ por hora, 2,70 $ al día. En octubre de 2026 esto costó 200 $ porque las
+instancias no se apagaban tras una ingesta. Por eso:
 
-- `leerTramas` y el cliente del conversor cierran siempre la respuesta.
+- `Conversor.onActivityExpired` usa `destroy()`: `stop()` manda SIGTERM, que Node
+  ignora como proceso principal del contenedor si no tiene manejador.
+- `leerTramas` y el cliente del conversor cierran siempre la respuesta, para que la
+  librería no dé la petición por no terminada.
 - `sleepAfter` es de 3 minutos.
 - Las instancias se despiertan de una en una (`instanciaLibre`); la segunda solo si
   la primera está trabajando.
