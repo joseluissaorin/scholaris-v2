@@ -15,7 +15,7 @@ export function recortadorRemoto(llamar: (peticion: Request) => Promise<Response
   return async (imagen, region) => {
     const q = new URLSearchParams({ x: String(region.x), y: String(region.y), w: String(region.w), h: String(region.h) });
     const r = await llamar(new Request(`http://conversor/recortar?${q}`, { method: 'POST', body: imagen.bytes as unknown as BodyInit, headers: { 'content-type': imagen.mime } }));
-    if (!r.ok) return null;
+    if (!r.ok) { await r.body?.cancel(); return null; }
     return { bytes: new Uint8Array(await r.arrayBuffer()), mime: r.headers.get('content-type') ?? 'image/jpeg' };
   };
 }
@@ -24,7 +24,7 @@ export function conversorRemoto(llamar: (peticion: Request) => Promise<Response>
   return async (a: ArchivoConvertir, guardar: (id: string, datos: Uint8Array, mime: string) => Promise<void>): Promise<PaqueteConversion> => {
     const q = new URLSearchParams({ nombre: a.nombre, mime: a.mime, ...(a.tipo ? { tipo: a.tipo } : {}) });
     const r = await llamar(new Request(`http://conversor/convertir?${q}`, { method: 'POST', body: await a.flujo(), duplex: 'half' } as RequestInit));
-    if (!r.ok || !r.body) throw new Error(`El conversor respondió ${r.status}`);
+    if (!r.ok || !r.body) { await r.body?.cancel(); throw new Error(`El conversor respondió ${r.status}`); }
     for await (const { cabecera, datos } of leerTramas(r.body)) {
       if (cabecera.tipo === 'parte' && cabecera.id) await guardar(cabecera.id, datos, cabecera.mime ?? 'application/octet-stream');
       else if (cabecera.tipo === 'fin') return cabecera.paquete as PaqueteConversion;

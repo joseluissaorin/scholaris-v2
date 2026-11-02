@@ -16,7 +16,7 @@ export function codificarTrama(cabecera: CabeceraTrama, datos: Uint8Array = new 
   return out;
 }
 
-/** Lee tramas de un flujo según llegan. */
+/** Lee tramas de un flujo según llegan. Al dejar de leer cierra el flujo: sin eso, el Container da la petición por no terminada y no se duerme. */
 export async function* leerTramas(flujo: ReadableStream<Uint8Array>): AsyncGenerator<{ cabecera: CabeceraTrama; datos: Uint8Array }> {
   const lector = flujo.getReader();
   let buf = new Uint8Array(0);
@@ -31,13 +31,17 @@ export async function* leerTramas(flujo: ReadableStream<Uint8Array>): AsyncGener
     return true;
   };
   const tomar = (n: number) => { const x = buf.slice(0, n); buf = buf.slice(n); return x; };
-  for (;;) {
-    if (!(await pedir(4))) return;
-    const lc = new DataView(buf.buffer, buf.byteOffset).getUint32(0); tomar(4);
-    if (!(await pedir(lc + 4))) throw new Error('Trama cortada');
-    const cabecera = JSON.parse(new TextDecoder().decode(tomar(lc))) as CabeceraTrama;
-    const ld = new DataView(buf.buffer, buf.byteOffset).getUint32(0); tomar(4);
-    if (!(await pedir(ld))) throw new Error('Trama cortada');
-    yield { cabecera, datos: tomar(ld) };
+  try {
+    for (;;) {
+      if (!(await pedir(4))) return;
+      const lc = new DataView(buf.buffer, buf.byteOffset).getUint32(0); tomar(4);
+      if (!(await pedir(lc + 4))) throw new Error('Trama cortada');
+      const cabecera = JSON.parse(new TextDecoder().decode(tomar(lc))) as CabeceraTrama;
+      const ld = new DataView(buf.buffer, buf.byteOffset).getUint32(0); tomar(4);
+      if (!(await pedir(ld))) throw new Error('Trama cortada');
+      yield { cabecera, datos: tomar(ld) };
+    }
+  } finally {
+    await lector.cancel().catch(() => undefined);
   }
 }

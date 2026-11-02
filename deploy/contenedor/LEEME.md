@@ -33,3 +33,19 @@ Durable Object `CONVERSOR` (clase `Conversor`, migración v2) y la variable
 (PDF por visión, audio de una pieza).
 
 En local o en Docker Compose se usa con `SCHOLARIS_CONVERSOR_URL=http://conversor:8080`.
+
+## Coste
+
+Cada instancia `standard-4` reserva 12 GiB y se paga mientras está encendida:
+unos 0,11 $ por hora, 2,70 $ al día. En octubre de 2026 esto costó 200 $ por dejar
+sin cerrar la respuesta tras la trama `fin`: la librería daba la petición por no
+terminada y no dormía la instancia. Por eso:
+
+- `leerTramas` y el cliente del conversor cierran siempre la respuesta.
+- `sleepAfter` es de 3 minutos.
+- Las instancias se despiertan de una en una (`instanciaLibre`); la segunda solo si
+  la primera está trabajando.
+- `Conversor.alarm` para la instancia si lleva 45 minutos sin peticiones nuevas.
+
+Para comprobar que duerme: `npx wrangler containers instances <id de la aplicación>`
+(el id sale de `npx wrangler containers list`) unos minutos después de una ingesta.
