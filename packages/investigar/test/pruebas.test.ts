@@ -124,6 +124,10 @@ describe('frases y verificación', () => {
     ]);
   });
 
+  it('no corta ante el localizador entre paréntesis que sigue a una cita', () => {
+    expect(oracionesDe('Replica: «¿Está bien?» (11:30-12:01) [E34]. Luego se va.')).toEqual(['Replica: «¿Está bien?» (11:30-12:01) [E34].', 'Luego se va.']);
+  });
+
   it('saca las frases sin encabezados ni la lista de pruebas, con sus marcas y las filas de tabla', () => {
     const md = '### Apartado\n\nUna frase con su cita bien larga [E1]. Otra frase sin ninguna cita en absoluto.\n\n| A | B |\n|---|---|\n| celda con una cita bastante larga | sí [E2] |\n\n## Pruebas\n\n- [E1] algo';
     const fs = frasesDe(md);

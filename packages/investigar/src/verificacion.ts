@@ -48,7 +48,8 @@ export function oracionesDe(parrafo: string): string[] {
       j += m[0].length;
     }
     const resto = parrafo.slice(j);
-    if (/^\s+[«“"¿¡(\p{Lu}]/u.test(resto)) {
+    // No se corta ante un paréntesis: tras una cita suele venir su localizador («…» (11:30-12:01) [E34]).
+    if (/^\s+[«“"¿¡\p{Lu}]/u.test(resto)) {
       salida.push(parrafo.slice(inicio, j).trim());
       inicio = j;
       i = j - 1;
