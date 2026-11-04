@@ -3,7 +3,7 @@ import { Resaltado } from '../lib/resaltado';
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { Filtros } from '@scholaris/nucleo';
-import type { EventoRespuesta, OrigenPasaje, ResultadoConjunto, ResultadoVista } from '@scholaris/contrato';
+import type { EventoRespuesta, OrigenPasaje, ProfundidadInvestigacion, ResultadoConjunto, ResultadoVista } from '@scholaris/contrato';
 import { avisar, Boton, Campo, Chip, Composicion, cx, EsqueletoTexto, Folio, Icono, MenuContenido, MenuDisparador, MenuElemento, MenuRaiz, Rotulo, Teclas, Vacio } from '@scholaris/ui';
 import { api } from '../datos/api';
 import { q } from '../datos/consultas';
@@ -21,17 +21,33 @@ import { Boceto } from '../bocetos/boceto';
 import { Cifra } from '../movimiento/cifra';
 import { NotaMargen } from '../bocetos/nota-margen';
 import { nombreIdioma } from '../lib/nombres';
+import { Investigacion } from '../componentes/busqueda/investigacion';
+import { claveInvestigacion, investigacionGuardada, lanzarInvestigacion, olvidarInvestigacion, useInvestigacion } from '../datos/investigacion';
 
-type Modo = 'buscar' | 'preguntar';
+type Modo = 'buscar' | 'preguntar' | 'investigar';
 /** Dónde: lo mío (por defecto), las colecciones que sigo, o todo a la vez. */
 type Alcance = 'seguidas' | 'todo';
-interface BusquedaBuscar { q?: string; modo?: Modo; grupo?: string; col?: string; doc?: string; cruzada?: boolean; desde?: number; hasta?: number; figuras?: boolean; alcance?: Alcance }
+/** Cuánto se investiga (en la URL solo las que no son la normal). */
+type Profundidad = Exclude<ProfundidadInvestigacion, 'normal'>;
+interface BusquedaBuscar { q?: string; modo?: Modo; grupo?: string; col?: string; doc?: string; cruzada?: boolean; desde?: number; hasta?: number; figuras?: boolean; alcance?: Alcance; prof?: Profundidad }
+
+const MODOS: Array<{ id: Modo; nombre: string; icono: 'buscar' | 'chispa' | 'lector' }> = [
+  { id: 'buscar', nombre: 'Buscar pasajes', icono: 'buscar' },
+  { id: 'preguntar', nombre: 'Preguntar', icono: 'chispa' },
+  { id: 'investigar', nombre: 'Investigar', icono: 'lector' },
+];
+
+const PROFUNDIDADES: Array<{ id: ProfundidadInvestigacion; nombre: string; detalle: string }> = [
+  { id: 'rapida', nombre: 'Rápida', detalle: 'Pocos pasos: para comprobar algo concreto en una o dos obras.' },
+  { id: 'normal', nombre: 'Normal', detalle: 'Lo equilibrado: planifica, lee y mira lo necesario para la mayoría de las preguntas.' },
+  { id: 'exhaustiva', nombre: 'Exhaustiva', detalle: 'Más pasos, más tiempo y más coste: para preguntas que cruzan varias obras, medios o lenguas.' },
+];
 
 
 export const Route = createFileRoute('/buscar/')({
   validateSearch: (s: Record<string, unknown>): BusquedaBuscar => ({
     q: typeof s.q === 'string' && s.q ? s.q : undefined,
-    modo: s.modo === 'preguntar' ? 'preguntar' : undefined,
+    modo: s.modo === 'preguntar' || s.modo === 'investigar' ? s.modo : undefined,
     grupo: typeof s.grupo === 'string' ? s.grupo : undefined,
     col: typeof s.col === 'string' ? s.col : undefined,
     doc: typeof s.doc === 'string' ? s.doc : undefined,
@@ -40,6 +56,7 @@ export const Route = createFileRoute('/buscar/')({
     hasta: Number.isFinite(Number(s.hasta)) && s.hasta ? Number(s.hasta) : undefined,
     figuras: s.figuras === true || s.figuras === 'true' ? true : undefined,
     alcance: s.alcance === 'seguidas' || s.alcance === 'todo' ? s.alcance : undefined,
+    prof: s.prof === 'rapida' || s.prof === 'exhaustiva' ? s.prof : undefined,
   }),
   component: PaginaBuscar,
 });
@@ -55,6 +72,23 @@ function PaginaBuscar() {
   const { data: bibliotecas = [] } = useQuery(q.bibliotecas());
   const { data: documentoFiltrado } = useQuery({ ...q.documento(b.doc ?? ''), enabled: !!b.doc });
   const fijar = (c: Partial<BusquedaBuscar>) => void navegar({ search: (s) => ({ ...s, ...c }), replace: true });
+  const qc = useQueryClient();
+
+  // Investigar: nunca se lanza sola (tarda y cuesta); la que corresponde a la URL se enseña si ya existe.
+  const profundidad: ProfundidadInvestigacion = b.prof ?? 'normal';
+  const pedidoInvestigar = (pregunta: string) => ({ pregunta, profundidad, ...(Object.keys(filtros).length ? { filtros } : {}) });
+  const claveActual = modo === 'investigar' && b.q ? claveInvestigacion(pedidoInvestigar(b.q)) : null;
+  const investigacion = useInvestigacion(claveActual);
+  /** Lanza la investigación; la misma pregunta ya investigada (con la misma profundidad y filtros) solo se repite a propósito. */
+  function investigar(pregunta: string, repetir = false) {
+    const p = pedidoInvestigar(pregunta);
+    const hecha = investigacionGuardada(claveInvestigacion(p));
+    if (repetir || !hecha || hecha.fase === 'error') {
+      if (repetir) olvidarInvestigacion(claveInvestigacion(p));
+      lanzarInvestigacion(p, qc);
+    }
+    fijar({ q: pregunta });
+  }
 
   // Resultados mientras se escribe: 180 ms de calma bastan.
   useEffect(() => {
@@ -99,6 +133,7 @@ function PaginaBuscar() {
     const t = texto.trim();
     if (!t) return;
     if (modo === 'preguntar') { fijar({ q: t }); setPregunta(t); }
+    else if (modo === 'investigar') investigar(t);
     else fijar({ q: t });
   }
 
@@ -111,10 +146,10 @@ function PaginaBuscar() {
         {/* La primera vez, «¡ojo!» junto a Preguntar: aquí se responde con citas. */}
         <NotaMargen id="buscar-preguntar" nombre="nota-ojo" className="-right-32 -top-3 hidden w-28 md:block" espera={1500} />
         <div role="radiogroup" aria-label="Modo" className="mb-3 inline-flex rounded-xl border border-cream-400 bg-cream-200/70 p-1 shadow-[var(--hundido)]">
-          {(['buscar', 'preguntar'] as const).map((m) => (
-            <button key={m} type="button" role="radio" aria-checked={modo === m} onClick={() => { fijar({ modo: m === 'buscar' ? undefined : m }); caja.current?.focus(); }}
-              className={cx('tactil flex h-9 items-center gap-2 rounded-md px-3.5 text-[0.8125rem] active:scale-[0.97]', modo === m ? 'bg-cream-50 font-semibold text-coffee-800 shadow-[var(--relieve)]' : 'font-medium text-coffee-500 hover:text-coffee-800')}>
-              <Icono nombre={m === 'buscar' ? 'buscar' : 'chispa'} tam={15} />{m === 'buscar' ? 'Buscar pasajes' : 'Preguntar'}
+          {MODOS.map((m) => (
+            <button key={m.id} type="button" role="radio" aria-checked={modo === m.id} onClick={() => { fijar({ modo: m.id === 'buscar' ? undefined : m.id }); caja.current?.focus(); }}
+              className={cx('tactil flex h-9 items-center gap-2 whitespace-nowrap rounded-md px-2.5 text-[0.8125rem] active:scale-[0.97] sm:px-3.5', modo === m.id ? 'bg-cream-50 font-semibold text-coffee-800 shadow-[var(--relieve)]' : 'font-medium text-coffee-500 hover:text-coffee-800')}>
+              <Icono nombre={m.icono} tam={15} />{m.id === 'buscar' ? <>Buscar<span className="hidden sm:inline"> pasajes</span></> : m.nombre}
             </button>
           ))}
         </div>
@@ -124,17 +159,19 @@ function PaginaBuscar() {
             id="caja-busqueda"
             ref={caja}
             tam="g"
-            icono={modo === 'buscar' ? 'buscar' : 'chispa'}
+            icono={MODOS.find((m) => m.id === modo)!.icono}
             // Con una búsqueda ya hecha (al volver del lector) no se roba el foco: movería el desplazamiento.
             autoFocus={!b.q}
             value={texto}
             onChange={(e) => setTexto(e.target.value)}
-            placeholder={modo === 'buscar' ? 'Una idea, una frase, un nombre…' : '¿Qué dice tu biblioteca sobre…?'}
-            aria-label={modo === 'buscar' ? 'Buscar en la biblioteca' : 'Pregunta a la biblioteca'}
+            placeholder={modo === 'buscar' ? 'Una idea, una frase, un nombre…' : modo === 'preguntar' ? '¿Qué dice tu biblioteca sobre…?' : '¿Qué quieres investigar a fondo, entre obras, páginas y escenas?'}
+            aria-label={modo === 'buscar' ? 'Buscar en la biblioteca' : modo === 'preguntar' ? 'Pregunta a la biblioteca' : 'Pregunta para investigar'}
             enterKeyHint={modo === 'buscar' ? 'search' : 'send'}
-            sufijo={modo === 'preguntar' ? <Boton type="submit" variante="rojo" tam="p" disabled={!texto.trim()}>Preguntar</Boton> : datos.isFetching ? <span className="mr-3 h-2 w-2 rounded-full bg-rojo anim-pulso" aria-label="Buscando" /> : texto ? <button type="button" aria-label="Borrar" onClick={() => { setTexto(''); fijar({ q: undefined }); caja.current?.focus(); }} className="mr-1 grid h-9 w-9 place-items-center rounded-s text-apagado hover:text-tinta"><Icono nombre="cerrar" tam={16} /></button> : <Teclas className="mr-2">/</Teclas>}
+            sufijo={modo === 'preguntar' ? <Boton type="submit" variante="rojo" tam="p" disabled={!texto.trim()}>Preguntar</Boton> : modo === 'investigar' ? <Boton type="submit" variante="rojo" tam="p" disabled={!texto.trim() || investigacion?.fase === 'empezando'}>Investigar</Boton> : datos.isFetching ? <span className="mr-3 h-2 w-2 rounded-full bg-rojo anim-pulso" aria-label="Buscando" /> : texto ? <button type="button" aria-label="Borrar" onClick={() => { setTexto(''); fijar({ q: undefined }); caja.current?.focus(); }} className="mr-1 grid h-9 w-9 place-items-center rounded-s text-apagado hover:text-tinta"><Icono nombre="cerrar" tam={16} /></button> : <Teclas className="mr-2">/</Teclas>}
           />
         </form>
+
+        {modo === 'investigar' ? <SelectorProfundidad valor={profundidad} alCambiar={(p) => fijar({ prof: p === 'normal' ? undefined : p })} /> : null}
 
         {/* Filtros como chips */}
         <div className="sin-barra -mx-5 mt-4 flex items-center gap-2 overflow-x-auto px-5 md:mx-0 md:flex-wrap md:px-0">
@@ -148,7 +185,7 @@ function PaginaBuscar() {
             </MenuContenido>
           </MenuRaiz>
           <Anios desde={b.desde} hasta={b.hasta} alCambiar={(d, h) => fijar({ desde: d, hasta: h })} />
-          {seguidas.length ? (
+          {seguidas.length && modo !== 'investigar' ? (
             <div role="radiogroup" aria-label="Dónde buscar" className="flex shrink-0 rounded-full border border-cream-400 bg-cream-200/70 p-0.5 shadow-[var(--hundido)]">
               {([[undefined, 'Lo mío'], ['seguidas', 'Lo que sigo'], ['todo', 'Todo']] as const).map(([v, t]) => (
                 <button key={t} type="button" role="radio" aria-checked={b.alcance === v} onClick={() => fijar({ alcance: v, cruzada: undefined })}
@@ -156,13 +193,31 @@ function PaginaBuscar() {
               ))}
             </div>
           ) : null}
-          <Chip icono="idiomas" activo={!!b.cruzada} onClick={() => fijar({ cruzada: b.cruzada ? undefined : true })}>En todas las lenguas</Chip>
-          <Chip icono="imagen" activo={!!b.figuras} onClick={() => fijar({ figuras: b.figuras ? undefined : true })}>Figuras e imágenes</Chip>
+          {modo !== 'investigar' ? (
+            <>
+              <Chip icono="idiomas" activo={!!b.cruzada} onClick={() => fijar({ cruzada: b.cruzada ? undefined : true })}>En todas las lenguas</Chip>
+              <Chip icono="imagen" activo={!!b.figuras} onClick={() => fijar({ figuras: b.figuras ? undefined : true })}>Figuras e imágenes</Chip>
+            </>
+          ) : null}
         </div>
       </div>
 
       <div className="mt-8 max-w-5xl">
-        {modo === 'preguntar' ? (
+        {modo === 'investigar' ? (
+          investigacion && claveActual ? (
+            <Investigacion key={claveActual} clave={claveActual} alRepetir={() => investigar(b.q ?? texto.trim(), true)} />
+          ) : (
+            <>
+              {b.q ? (
+                <div className="anim-sube mb-10 flex flex-wrap items-center gap-4 rounded-2xl border border-dashed border-cream-500 bg-cream-100/60 px-5 py-4 shadow-[var(--hundido)]">
+                  <p className="min-w-0 flex-1 text-[0.9375rem] text-coffee-700">Lista para investigar «{b.q}». Revisa la pregunta, la profundidad y los filtros, y empieza cuando quieras.</p>
+                  <Boton variante="rojo" icono="lector" disabled={!texto.trim()} onClick={() => investigar(texto.trim() || b.q!)}>Investigar</Boton>
+                </div>
+              ) : null}
+              <Inicio modo="investigar" alElegir={(t) => { setTexto(t); caja.current?.focus(); }} />
+            </>
+          )
+        ) : modo === 'preguntar' ? (
           pregunta ? <Respuesta key={`${pregunta}|${JSON.stringify(filtros)}`} pregunta={pregunta} filtros={filtros} /> : <Inicio modo="preguntar" alElegir={(t) => { setTexto(t); setPregunta(t); fijar({ q: t }); }} />
         ) : b.figuras ? (
           <ResultadosFiguras consulta={consulta} {...(b.doc ? { documento: b.doc } : {})} {...(b.grupo === 'medios' ? { tipo: 'fotogramas' as const } : b.grupo === 'libros' ? { tipo: 'figuras' as const } : {})} />
@@ -217,13 +272,31 @@ function Anios({ desde, hasta, alCambiar }: { desde?: number; hasta?: number; al
   );
 }
 
+/** Cuánto se investiga: rápida, normal o exhaustiva (pasos, tiempo y coste crecen de una a otra). */
+function SelectorProfundidad({ valor, alCambiar }: { valor: ProfundidadInvestigacion; alCambiar: (p: ProfundidadInvestigacion) => void }) {
+  const actual = PROFUNDIDADES.find((p) => p.id === valor)!;
+  return (
+    <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2">
+      <span id="rotulo-profundidad" className="rotulo text-apagado">Profundidad</span>
+      <div role="radiogroup" aria-labelledby="rotulo-profundidad" aria-describedby="detalle-profundidad" className="flex shrink-0 rounded-full border border-cream-400 bg-cream-200/70 p-0.5 shadow-[var(--hundido)]">
+        {PROFUNDIDADES.map((p) => (
+          <button key={p.id} type="button" role="radio" aria-checked={valor === p.id} onClick={() => alCambiar(p.id)}
+            className={cx('rounded-full px-3 py-1 text-[0.75rem] font-medium transition-colors', valor === p.id ? 'bg-cream-50 text-coffee-800 shadow-[var(--relieve)]' : 'text-coffee-500 hover:text-coffee-800')}>{p.nombre}</button>
+        ))}
+      </div>
+      <p id="detalle-profundidad" className="min-w-[15rem] flex-1 text-[0.8125rem] text-apagado">{actual.detalle}</p>
+    </div>
+  );
+}
+
 /** Antes de escribir: lo que buscaste hace poco y ejemplos que enseñan qué se puede hacer. */
 function Inicio({ modo, alElegir }: { modo: Modo; alElegir: (t: string) => void }) {
   const { data } = useQuery(q.historial());
   // Sin repetidos: la misma consulta tres veces es una sola entrada (la más reciente).
   const vistas = new Set<string>();
   const recientes = (data?.elementos ?? []).filter((e) => {
-    if ((modo === 'preguntar') !== (e.tipo === 'respuesta')) return false;
+    // Cada modo, lo suyo: las preguntas en Preguntar, las investigaciones en Investigar y el resto en Buscar.
+    if ((e.tipo === 'respuesta' ? 'preguntar' : e.tipo === 'investigacion' ? 'investigar' : 'buscar') !== modo) return false;
     const clave = e.consulta.trim().toLocaleLowerCase('es');
     if (vistas.has(clave)) return false;
     vistas.add(clave);
@@ -231,15 +304,21 @@ function Inicio({ modo, alElegir }: { modo: Modo; alElegir: (t: string) => void 
   }).slice(0, 6);
   const ejemplos = modo === 'preguntar'
     ? ['¿Qué delito cometió Segismundo al nacer?', '¿Cómo presenta Cervantes su libro en el prólogo?', 'What does Bentham mean by the inspection principle?']
-    : ['la cárcel y la torre', 'oscuras golondrinas', 'vuelva usted mañana', 'seeing without being seen'];
+    : modo === 'investigar'
+      ? [
+        '¿Cómo cambia la función de Coppelia entre el cuento y la película, cómo está filmada la primera escena y cómo resignifica la película el helado al final?',
+        '¿Cómo se construye la vigilancia en el panóptico de Bentham y qué ecos tiene en la torre donde encierran a Segismundo?',
+        '¿Qué papel tiene la cárcel como lugar de escritura en Boecio, Cervantes y Calderón?',
+      ]
+      : ['la cárcel y la torre', 'oscuras golondrinas', 'vuelva usted mañana', 'seeing without being seen'];
   return (
     <div className="grid gap-10 md:grid-cols-2">
       <div>
-        <Rotulo>{modo === 'preguntar' ? 'Preguntas de ejemplo' : 'Prueba con'}</Rotulo>
+        <Rotulo>{modo === 'buscar' ? 'Prueba con' : 'Preguntas de ejemplo'}</Rotulo>
         <ul className="mt-3 flex flex-col gap-1">
           {ejemplos.map((e) => (
             <li key={e}><button type="button" onClick={() => alElegir(e)} className="group flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-[0.9375rem] text-coffee-700 transition-[background,box-shadow] hover:bg-cream-50 hover:shadow-[var(--relieve)]">
-              <Icono nombre={modo === 'preguntar' ? 'chispa' : 'buscar'} tam={16} className="shrink-0 text-apagado" />
+              <Icono nombre={modo === 'preguntar' ? 'chispa' : modo === 'investigar' ? 'lector' : 'buscar'} tam={16} className="shrink-0 text-apagado" />
               <span className="">{e}</span>
               <Icono nombre="derecha" tam={15} className="ml-auto opacity-0 group-hover:opacity-60" />
             </button></li>
@@ -248,7 +327,9 @@ function Inicio({ modo, alElegir }: { modo: Modo; alElegir: (t: string) => void 
         <p className="mt-6 max-w-md text-[0.9375rem] text-tinta-2">
           {modo === 'preguntar'
             ? 'La respuesta solo puede citar pasajes que existen en tu biblioteca. Cada cita lleva su página impresa o su minuto, y abre el lector justo ahí.'
-            : 'Busca por ideas, no solo por palabras: la búsqueda combina el texto exacto, el sentido y, en los escaneos, la imagen de la página.'}
+            : modo === 'investigar'
+              ? 'Investigar planifica, busca, lee y mira las obras paso a paso, y responde con pruebas: cada afirmación lleva su página, su segundo o la región de la imagen, y abre el lector justo ahí. Tarda unos minutos; mientras tanto puedes seguir leyendo.'
+              : 'Busca por ideas, no solo por palabras: la búsqueda combina el texto exacto, el sentido y, en los escaneos, la imagen de la página.'}
         </p>
       </div>
       {recientes.length ? (

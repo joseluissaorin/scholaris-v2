@@ -9,7 +9,7 @@ import type {
   Ajustes, Alerta, Biblioteca, Buscar, ClaveApi, ConfigPublica, Cuaderno, DetalleAutocita, DetalleDocumento, EventoBusqueda,
   EventoRespuesta, EventoTiempoReal, GrafoCitas, InstantaneaCorpus, MapaConceptos, PropuestaCita, ResultadoVista, ResumenDocumento,
   SeccionVista, Tarea, Tarjeta, UnidadVista, Vigilante, Concepto, Yo, EstiloCsl, MiembrosGrupo, Responder,
-  Entidad, MencionEntidad, TipoEntidad,
+  Entidad, MencionEntidad, TipoEntidad, EventoInvestigacion, EvidenciaInvestigacion, FraseVerificada, FuenteInvestigacion, Investigar,
 } from '@scholaris/contrato';
 import { anclaDe, BIBLIOTECAS, DOCUMENTOS, LIBRO_EN_CURSO, textoDe, type DocDemo } from './corpus';
 
@@ -298,6 +298,210 @@ async function* responder(p: Responder): AsyncGenerator<EventoRespuesta> {
   yield { tipo: 'fin', ms: Date.now() - t0, confianza: usados.length > 2 ? 'alta' : 'media', evento: `h-${Date.now()}` };
 }
 
+// ---------------------------------------------------------------------------
+// Investigar (demostración): plan, pasos, pruebas con su ancla material, texto, verificación y fin
+// ---------------------------------------------------------------------------
+
+/** Puntos de código NFC hasta la posición `i` (UTF-16) de un texto: lo que cuentan los `caracteres` del ancla. */
+const puntosHasta = (t: string, i: number) => Array.from(t.slice(0, i).normalize('NFC')).length;
+
+/** Una página impresa de mentira (para el recorte de la demostración): papel y renglones. */
+function paginaSvg(semilla: number): string {
+  const renglones = Array.from({ length: 30 }, (_, i) => `<rect x="66" y="${96 + i * 22}" width="${430 + ((semilla * 7 + i * 13) % 40)}" height="7" rx="2" fill="#cdbfaa"/>`).join('');
+  return `data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 848" width="600" height="848"><rect width="600" height="848" fill="#fdfaf3"/><rect x="230" y="44" width="140" height="9" rx="2" fill="#b9a993"/>${renglones}<rect x="286" y="790" width="28" height="8" rx="2" fill="#b9a993"/></svg>`)}`;
+}
+
+/** Un fotograma de mentira (el vídeo de la demostración no tiene imágenes): el orador en el atril. */
+function fotogramaSvg(): string {
+  return `data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 360" width="640" height="360"><rect width="640" height="360" fill="#2B4C7E"/><circle cx="540" cy="300" r="150" fill="#E8A838"/><rect x="40" y="40" width="150" height="96" fill="#22160f"/><ellipse cx="326" cy="104" rx="30" ry="36" fill="#4A2E1A"/><path d="M262 300 Q268 170 326 150 Q384 170 390 300 Z" fill="#2C1810"/><rect x="270" y="236" width="112" height="124" fill="#5C3D2E"/></svg>')}`;
+}
+
+async function* investigar(p: Investigar): AsyncGenerator<EventoInvestigacion> {
+  const t0 = Date.now();
+  const f = p.profundidad === 'rapida' ? 0.55 : p.profundidad === 'exhaustiva' ? 1.5 : 1;
+  const presupuesto = p.profundidad === 'rapida' ? { pasos: 8, segundos: 90, usd: 0.1 } : p.profundidad === 'exhaustiva' ? { pasos: 48, segundos: 900, usd: 2 } : { pasos: 20, segundos: 300, usd: 0.5 };
+  yield { tipo: 'inicio', id: `inv-${t0}`, modelo: 'demostración', presupuesto };
+  await espera(500 * f);
+
+  // Las obras: las que mejor responden a la pregunta (y, si hace falta, las de la cárcel y la vigilancia).
+  let res = buscarEn(p.pregunta, p.filtros, 16).filter((r) => r.documento.tipo !== 'video');
+  if (new Set(res.map((r) => r.documento.id)).size < 2) res = [...res, ...buscarEn('cárcel prisión torre inspection inspector', p.filtros, 16)].filter((r) => r.documento.tipo !== 'video');
+  const porDoc = new Map<string, ResultadoVista>();
+  for (const r of res) if (!porDoc.has(r.documento.id)) porDoc.set(r.documento.id, r);
+  const elegidos = [...porDoc.values()].slice(0, 3);
+  const video = docs.get('d-rice');
+  const conVideo = !!video && !video.borrado && (!p.filtros?.documentos?.length || p.filtros.documentos.includes('d-rice')) && (!p.filtros?.tipos?.length || p.filtros.tipos.includes('video'));
+  if (!elegidos.length && !conVideo) {
+    yield { tipo: 'error', mensaje: 'No hay en tu biblioteca obras con las que investigar esa pregunta. Prueba a quitar filtros.' };
+    return;
+  }
+  const corta = p.pregunta.length > 70 ? `${p.pregunta.slice(0, 68).replace(/\s+\S*$/, '')}…` : p.pregunta;
+
+  yield {
+    tipo: 'plan',
+    plan: {
+      enfoque: `Leer lo que dicen las obras sobre «${corta}», comparar sus pasajes y comprobar en las páginas${conVideo ? ' y en el vídeo' : ''} cada cosa que se afirme.`,
+      documentos: [
+        ...elegidos.map((r, i) => ({ id: r.documento.id, titulo: r.documento.metadatos.titulo, papel: i === 0 ? 'la obra central de la pregunta' : 'el contraste' })),
+        ...(conVideo ? [{ id: 'd-rice', titulo: video!.meta.titulo, papel: 'lo que se ve: cómo está filmado' }] : []),
+      ],
+      subpreguntas: [
+        { pregunta: '¿Qué dicen literalmente las obras sobre esto?', pruebas: ['literal'], documentos: elegidos.map((r) => r.documento.id) },
+        { pregunta: '¿En qué se parecen y en qué se separan?', pruebas: ['comparativa', 'estructural'] },
+        ...(conVideo ? [{ pregunta: '¿Qué se ve en el plano que acompaña al pasaje?', pruebas: ['visual' as const], documentos: ['d-rice'] }] : []),
+      ],
+      idiomas: [...new Set(elegidos.map((r) => r.documento.metadatos.idioma ?? 'es'))],
+      idiomaRespuesta: 'es',
+    },
+  };
+  await espera(700 * f);
+
+  // Las pruebas, cada una con su ancla material: caracteres en la unidad y, en los escaneos, la región.
+  const pruebas: EvidenciaInvestigacion[] = [];
+  const prueba = (r: ResultadoVista, herramienta: string): EvidenciaInvestigacion => {
+    const d = docs.get(r.documento.id)!;
+    const orden = Number(/-(\d+)-\d+$/.exec(r.fragmento.id)?.[1] ?? 1);
+    const unidad = textoDe(d, orden);
+    const enUnidad = Math.max(0, unidad.indexOf(r.fragmento.texto));
+    const desde = enUnidad + (r.pasaje?.desde ?? 0), hasta = enUnidad + (r.pasaje?.hasta ?? r.fragmento.texto.length);
+    const base = anclaDe(d, orden);
+    const escaneo = d.tipo === 'pdf_escaneado' || d.tipo === 'fotos';
+    const y = 0.11 + 0.76 * (desde / Math.max(1, unidad.length));
+    const region = escaneo ? { x: 0.09, y: Math.min(0.86, y), w: 0.82, h: Math.min(0.9 - Math.min(0.86, y), 0.05 + 0.76 * ((hasta - desde) / Math.max(1, unidad.length))) } : undefined;
+    const id = `P${pruebas.length + 1}`;
+    const { quien, texto } = extracto(r.fragmento.texto, p.pregunta);
+    return {
+      id, documento: d.id, titulo: d.meta.titulo, ancla: { ...base, caracteres: [puntosHasta(unidad, desde), puntosHasta(unidad, hasta)], ...(region ? { region } : {}) },
+      cita: r.pasaje?.texto || texto, modo: d.tipo === 'audio' ? 'audio' : 'texto', unidad: `u-${d.id}-${orden}`, fragmento: r.fragmento.id,
+      capa: 'literal', herramienta, etiqueta: anclaACita(base), citaCorta: citaCorta(d.meta, base), orden: orden - 1,
+      ...(d.meta.idioma && d.meta.idioma !== 'es' ? { idioma: d.meta.idioma } : {}),
+      ...(escaneo ? { imagenUrl: paginaSvg(orden) } : {}),
+      nota: quien ? `Habla ${quien}.` : notaDePrueba(pruebas.length),
+    };
+  };
+  function notaDePrueba(n: number) { return n === 0 ? 'El pasaje que más se acerca a la pregunta.' : 'Sirve de contraste con la primera obra.'; }
+
+  let n = 0;
+  const paso = (herramienta: string, entrada: Record<string, unknown>, resumen: string, evidencias: string[] = [], ms = 300): EventoInvestigacion => ({ tipo: 'paso', n: ++n, herramienta, entrada, resumen, ms: Math.round(ms * (0.7 + Math.random() * 0.6)), evidencias });
+
+  if (elegidos[0]) {
+    const d = docs.get(elegidos[0].documento.id)!;
+    yield paso('mapa', { documento: d.id }, `${d.secciones.length} ${d.secciones.length === 1 ? 'sección' : 'secciones'} y la ficha global de la obra`, [], 420);
+    await espera(600 * f);
+    const nuevas = elegidos.slice(0, 2).map((r) => prueba(r, 'buscar'));
+    yield paso('buscar', { consulta: p.pregunta, capa: 'literal' }, `${res.length} pasajes en ${porDoc.size} ${porDoc.size === 1 ? 'obra' : 'obras'}`, nuevas.map((x) => x.id), 380);
+    for (const x of nuevas) { pruebas.push(x); await espera(260 * f); yield { tipo: 'evidencia', evidencia: x }; }
+    await espera(700 * f);
+  }
+  if (elegidos[2]) {
+    const r = elegidos[2];
+    const orden = Number(/-(\d+)-\d+$/.exec(r.fragmento.id)?.[1] ?? 1);
+    const x = prueba(r, 'leer');
+    yield paso('leer', { documento: r.documento.id, desde: orden, hasta: orden + 1 }, `Dos páginas de «${r.documento.metadatos.titulo}»`, [x.id], 510);
+    pruebas.push(x);
+    await espera(260 * f);
+    yield { tipo: 'evidencia', evidencia: x };
+    await espera(600 * f);
+  }
+  if (elegidos.length > 1) {
+    yield paso('citas', { documentos: elegidos.map((r) => r.documento.id) }, 'Ninguna de estas obras cita a las otras.', [], 140);
+    await espera(500 * f);
+  }
+  if (conVideo) {
+    const d = video!;
+    const a = anclaDe(d, 9);
+    const t = a.tipo === 'tiempo' ? a : { t0: 0, t1: 30 };
+    const instante = Math.round((t.t0 + 6) * 10) / 10;
+    const x: EvidenciaInvestigacion = {
+      id: `P${pruebas.length + 1}`, documento: d.id, titulo: d.meta.titulo,
+      ancla: { tipo: 'tiempo', t0: t.t0, t1: t.t1, region: { x: 0.37, y: 0.17, w: 0.27, h: 0.66 }, instante },
+      cita: 'Plano medio del orador en el atril, de frente, con el público detrás (demostración: el vídeo no se ha mirado).',
+      modo: 'video', unidad: `u-${d.id}-9`, capa: 'percepcion', herramienta: 'ver', etiqueta: `${anclaACita({ tipo: 'tiempo', t0: t.t0, t1: t.t1 })}`, citaCorta: citaCorta(d.meta, { tipo: 'tiempo', t0: t.t0, t1: t.t1 }),
+      idioma: 'en', orden: 8, imagenUrl: fotogramaSvg(), nota: 'El fotograma en que empieza el pasaje del discurso.',
+    };
+    yield paso('ver', { documento: d.id, t0: t.t0, t1: t.t1, pregunta: '¿Cómo está filmado este momento?' }, 'Un plano fijo del orador; la región marca dónde está.', [x.id], 2400);
+    pruebas.push(x);
+    await espera(400 * f);
+    yield { tipo: 'evidencia', evidencia: x };
+    await espera(600 * f);
+  }
+  yield paso('recordar', { consulta: p.pregunta }, 'Nada parecido en tu historial ni en tus cuadernos.', [], 90);
+  await espera(400 * f);
+
+  // La respuesta: marcas [E1]… por orden de aparición, cada una con su prueba («marcas» del texto).
+  const textos = pruebas.filter((x) => x.modo !== 'video');
+  const imagen = pruebas.find((x) => x.modo === 'video');
+  const orden: EvidenciaInvestigacion[] = [];
+  const marca = (x: EvidenciaInvestigacion) => { let i = orden.indexOf(x); if (i < 0) { orden.push(x); i = orden.length - 1; } return `[E${i + 1}]`; };
+  const titulo = (x: EvidenciaInvestigacion) => `*${x.titulo}*`;
+  const recorta = (c = '') => (c.length > 220 ? `${c.slice(0, 210).replace(/\s+\S*$/, '')} […]` : c);
+  // Cada frase con sus marcas y lo que dirá de ella la verificación (la demostración sabe lo que escribe).
+  const frases: FraseVerificada[] = [];
+  const decir = (texto: string, veredicto: FraseVerificada['veredicto'] = 'respaldada', nota?: string) => {
+    frases.push({ frase: texto, evidencias: [...texto.matchAll(/\[(E\d+)\]/g)].map((m) => m[1]!), veredicto, ...(nota ? { nota } : {}), ...(veredicto === 'parcial' ? { revisada: true } : {}) });
+    return texto;
+  };
+  const partes: string[] = [];
+  partes.push('## Lo que dicen las obras');
+  if (textos[0]) partes.push(decir(`En ${titulo(textos[0])}, el pasaje más cercano a la pregunta dice: «${recorta(textos[0].cita)}» ${marca(textos[0])}.`));
+  if (textos[1]) partes.push(decir(`${titulo(textos[1])} ofrece el contraste: «${recorta(textos[1].cita)}» ${marca(textos[1])}.`));
+  if (textos.length > 1) {
+    partes.push('## Comparación');
+    partes.push(['| Obra | Qué aporta | Prueba |', '|:--|:--|:-:|', ...textos.map((x, i) => `| ${titulo(x)} | ${i === 0 ? 'el pasaje central' : 'el contraste'} | ${marca(x)} |`), ...(imagen ? [`| ${titulo(imagen)} | lo que se ve | ${marca(imagen)} |`] : [])].join('\n'));
+  }
+  if (imagen) {
+    partes.push('## Lo que se ve');
+    partes.push(decir(`En el vídeo, el momento del pasaje se filma con un plano fijo del orador en el atril ${marca(imagen)}.`, 'parcial', 'El plano se ve, pero en la demostración no se ha comprobado de verdad.'));
+  }
+  if (textos[2]) partes.push(`> ${decir(`${recorta(textos[2].cita)} ${marca(textos[2])}`)}`);
+  const sinProbar = decir('Ninguna de las obras afirma que dependa de las otras, y esa relación no se puede dar por probada.', 'sin_prueba', 'Afirma algo de las obras sin citar ninguna prueba.');
+  partes.push(sinProbar);
+  const markdown = partes.join('\n\n');
+
+  const vistas = new Set<string>();
+  for (const trozo of markdown.match(/\S+\s*/g) ?? []) {
+    await espera((14 + Math.random() * 26) * f);
+    const nuevas: Record<string, string> = {};
+    for (const m of trozo.matchAll(/\[E(\d+)\]/g)) { const id = `E${m[1]}`; if (!vistas.has(id)) { vistas.add(id); nuevas[id] = orden[Number(m[1]) - 1]!.id; } }
+    yield { tipo: 'texto', delta: trozo, ...(Object.keys(nuevas).length ? { marcas: nuevas } : {}) };
+  }
+  await espera(700 * f);
+
+  // La verificación: lo citado, respaldado; lo del vídeo, solo en parte; la relación entre obras, sin prueba.
+  const respaldadas = frases.filter((x) => x.veredicto === 'respaldada').length;
+  yield { tipo: 'verificacion', frases, respaldadas, total: frases.length };
+  await espera(300 * f);
+
+  // El final: la respuesta con «[sin prueba]», las pruebas citadas (E1…, con su P) y la lista de pruebas.
+  const evidencias = orden.map((x, i) => ({ ...x, id: `E${i + 1}`, prueba: x.id }));
+  const finalMd = `${markdown.replace(sinProbar, `${sinProbar} [sin prueba]`)}\n\n## Pruebas\n\n${evidencias.map((x) => `- [${x.id}] ${x.modo === 'video' ? x.cita : `«${recorta(x.cita)}»`} ${x.citaCorta}`).join('\n')}`;
+  const fuentes: FuenteInvestigacion[] = [...new Set(evidencias.map((x) => x.documento))].map((id) => {
+    const d = docs.get(id)!;
+    return { documento: id, titulo: d.meta.titulo, autores: autoresCorto(d.meta), ...(d.meta.anio ? { anio: d.meta.anio } : {}), tipo: d.meta.tipoCSL ?? d.tipo, evidencias: evidencias.filter((x) => x.documento === id).map((x) => x.id) };
+  });
+  // El cuaderno de la investigación: las pruebas de texto como tarjetas y la respuesta como nota.
+  const cuaderno: Cuaderno = { id: `c-inv-${t0}`, titulo: corta, cuerpo: '', tarjetas: 0, creado: ahora(), actualizado: ahora() };
+  cuadernos.unshift(cuaderno);
+  tarjetas.set(cuaderno.id, [
+    ...evidencias.filter((x) => x.fragmento).map((x, i): Tarjeta => ({ id: `t-${cuaderno.id}-${i}`, tipo: 'fragmento', documento: x.documento, objetivo: x.fragmento!, contenido: {}, cita: { texto: x.cita ?? '', etiqueta: x.etiqueta, citaCorta: x.citaCorta }, posicion: i, huerfana: false, creada: ahora() })),
+    { id: `t-${cuaderno.id}-r`, tipo: 'nota', contenido: { texto: markdownConCitasDemo(finalMd, evidencias) }, posicion: 99, huerfana: false, creada: ahora() },
+  ]);
+  const ms = Date.now() - t0;
+  const evento = `h-${t0}`;
+  historial.unshift({ id: evento, consulta: p.pregunta, tipo: 'investigacion', intencion: 'conceptual', resultados: evidencias.length, confianza: respaldadas === frases.length ? 'alta' : 'media', estado: 'ok', ms, fijado: false, oculto: false, cuando: ahora() });
+  yield {
+    tipo: 'fin', markdown: finalMd, evidencias, fuentes, cuaderno: cuaderno.id, evento, confianza: 'media',
+    coste: { usd: Math.round(0.042 * f * 1000) / 1000, tokensEntrada: Math.round(48_000 * f), tokensSalida: Math.round(2_900 * f), llamadas: n + 2, pasos: n, ms, modelo: 'demostración' },
+    avisos: ['Demostración: las pruebas salen del corpus de ejemplo y el vídeo no se ha mirado de verdad.'],
+    ms,
+  };
+}
+
+/** La respuesta de la demostración con las citas cortas en lugar de las marcas (para la nota del cuaderno). */
+function markdownConCitasDemo(md: string, evidencias: EvidenciaInvestigacion[]): string {
+  return md.replace(/\s?\[(E\d+)\]/g, (_, id: string) => { const x = evidencias.find((e) => e.id === id); return x ? ` ${x.citaCorta}` : ''; });
+}
+
 /**
  * Un trozo literal del pasaje: la frase que contiene algún término de la consulta (o la
  * primera), sin tocar una letra; «[…]» marca lo que se omite. En las transcripciones de
@@ -495,6 +699,7 @@ ruta('POST', '/busqueda/similares', (_m, c) => {
   return json({ resultados: buscarEn(base, c.filtros, 10).filter((r) => r.fragmento.id !== c.fragmento), ms: 140 });
 });
 ruta('POST', '/busqueda/responder', (_m, c) => sse(responder(c)));
+ruta('POST', '/busqueda/investigar', (_m, c) => sse(investigar(c)));
 
 ruta('POST', '/citas/autocita', async (_m, c) => { const det = autocitar(c.texto ?? '', c.estilo ?? 'apa'); autocitas.set(det.id, det); await espera(500); return json({ tarea: `t-${det.id}`, autocita: det.id }, 0); });
 ruta('GET', '/citas/autocita/:id', (m) => json(autocitas.get(m[1]!)));

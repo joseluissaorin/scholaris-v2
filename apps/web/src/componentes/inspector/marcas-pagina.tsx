@@ -14,7 +14,7 @@ export function useFigurasDePagina(documento: string, orden: number): FiguraViso
 }
 
 /** La capa de las marcas: exactamente donde se pinta la imagen dentro de su caja. */
-function capa(a?: { imagen: number; caja: number }): React.CSSProperties {
+export function capa(a?: { imagen: number; caja: number }): React.CSSProperties {
   if (!a || Math.abs(a.imagen - a.caja) < 0.005) return { inset: 0 };
   if (a.imagen > a.caja) { const h = (a.caja / a.imagen) * 100; return { left: 0, right: 0, top: `${(100 - h) / 2}%`, height: `${h}%` }; }
   const w = (a.imagen / a.caja) * 100;

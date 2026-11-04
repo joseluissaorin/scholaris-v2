@@ -11,6 +11,7 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as PE, type ReactNode } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { DetalleDocumento } from '@scholaris/contrato';
+import type { Region } from '@scholaris/nucleo';
 import { avisar, Boton, cx, Dialogo, Icono, MenuContenido, MenuDisparador, MenuElemento, MenuRaiz, MenuRotulo, Teclas, Consejo } from '@scholaris/ui';
 import { api } from '../../datos/api';
 import { q } from '../../datos/consultas';
@@ -29,6 +30,8 @@ import { IconoR } from './iconos';
 import { ATAJOS, useTeclado } from './teclado';
 import { enlaceAlMinuto, useSeleccionTranscripcion } from './citar';
 import { TiraFotogramas, useEscenas } from '../inspector/fotogramas';
+import { textoDeCaracteres } from '../../lib/anclas';
+import { RecuadroMano } from '../comunes/recuadro-mano';
 
 export interface ManejadorMedio { irA: (t: number) => void }
 
@@ -40,6 +43,11 @@ interface Props {
   resaltar?: string;
   /** El pasaje que abrió el lector: se marca y el medio salta a su primera palabra (con el karaoke en ella). */
   pasaje?: string;
+  /**
+   * La prueba que abrió el lector (Investigar): sus caracteres en el tramo del segundo de llegada se marcan
+   * como un pasaje; en vídeo, la región se rodea sobre el fotograma mientras se está a dos segundos de su instante.
+   */
+  material?: { caracteres?: [number, number]; region?: Region; instante?: number; /** El segundo de llegada (?t=). */ t?: number };
   alVer: (orden: number, t: number) => void;
   /** Tramos que faltan por leer (ingesta en curso). */
   pendientes?: number;
@@ -68,12 +76,25 @@ function useFuente(doc: DetalleDocumento): FuenteMedio {
   } satisfies FuenteMedio), [doc.id]); // eslint-disable-line react-hooks/exhaustive-deps
 }
 
-export const Reproductor = forwardRef<ManejadorMedio, Props>(function Reproductor({ doc, inicial, resaltar, pasaje, alVer, pendientes }, ref) {
+export const Reproductor = forwardRef<ManejadorMedio, Props>(function Reproductor({ doc, inicial, resaltar, pasaje: pasajeLlegada, material, alVer, pendientes }, ref) {
   const m = motor();
   const inst = useMotor();
   const fuente = useFuente(doc);
   const esVideo = doc.tipo === 'video';
   const { transcripcion: tr, unidades } = useTranscripcion(doc);
+  // Los caracteres de la prueba, en el tramo que suena en el segundo de llegada: se marcan como el pasaje.
+  const pasajeMaterial = useMemo(() => {
+    if (!material?.caracteres || !unidades?.length) return undefined;
+    // El segundo de llegada, no el de la URL (que sigue a la voz).
+    const t = material.instante ?? material.t ?? 0;
+    // El tramo que contiene ese segundo (y, si cae justo en un hueco, el más cercano que empieza después).
+    const u = unidades.find((x) => x.ancla.tipo === 'tiempo' && t >= x.ancla.t0 && t < x.ancla.t1)
+      ?? unidades.find((x) => x.ancla.tipo === 'tiempo' && x.ancla.t0 >= t - 0.5 && x.ancla.t0 <= t + 0.5);
+    return u ? textoDeCaracteres(u.texto, material.caracteres) || undefined : undefined;
+  }, [material?.caracteres, material?.instante, material?.t, unidades]);
+  const pasaje = pasajeLlegada ?? pasajeMaterial;
+  // Con región en un fotograma, el medio se queda en ese instante (no salta a la primera palabra).
+  const enFotograma = !!material?.region && material.instante != null;
   const trRef = useRef<Transcripcion | null>(null);
   trRef.current = tr;
   const fotogramas = useFotogramas(doc);
@@ -146,10 +167,10 @@ export const Reproductor = forwardRef<ManejadorMedio, Props>(function Reproducto
     if (t0 == null) return;
     // El karaoke va un cuarto de segundo por delante de la voz: se salta a ese punto, y la palabra encendida es la primera del pasaje.
     const destino = Math.max(0, t0 - ADELANTO + 0.02);
-    if (Math.abs(m.tiempo() - destino) > 0.01) m.irA(destino);
+    if (!enFotograma && Math.abs(m.tiempo() - destino) > 0.01) m.irA(destino);
     setSeguir(true);
     requestAnimationFrame(() => vista.current?.verPalabra(rangoPasaje.desde));
-  }, [tr, rangoPasaje, pasaje, propio, m]);
+  }, [tr, rangoPasaje, pasaje, propio, m, enFotograma]);
 
   const columnaEscenario = useRef<HTMLDivElement>(null);
   const columnaTexto = useRef<HTMLDivElement>(null);
@@ -182,7 +203,7 @@ export const Reproductor = forwardRef<ManejadorMedio, Props>(function Reproducto
       <div ref={columnaEscenario} className="sticky top-[7.75rem] z-20 border-b border-cream-300 bg-cream-50 px-3 pb-2 pt-2 shadow-[var(--shadow-soft)] sm:px-5 lg:top-[4.25rem] lg:h-[calc(100dvh-4.25rem)] lg:self-start lg:overflow-y-auto lg:overscroll-contain lg:border-b-0 lg:border-r lg:bg-cream-100/60 lg:px-8 lg:pb-8 lg:pt-6 lg:shadow-none lg:backdrop-blur-none">
         <div ref={pantalla} className={cx('reproductor-pantalla', inst.pantallaCompleta && propio && 'en-pantalla')}>
           {esVideo ? (
-            <EscenarioVideo hueco={hueco} inst={inst} propio={propio} pantalla={pantalla} />
+            <EscenarioVideo hueco={hueco} inst={inst} propio={propio} pantalla={pantalla} {...(material?.region ? { region: material.region, instante: material.instante ?? material.t ?? 0 } : {})} />
           ) : (
             <EscenarioAudio hueco={hueco} doc={doc} inst={inst} propio={propio} transcripcion={tr} duracion={duracion} />
           )}
@@ -256,13 +277,28 @@ function useCapitulos(doc: DetalleDocumento): Capitulo[] {
 // Escenarios
 // ---------------------------------------------------------------------------
 
-function EscenarioVideo({ hueco, inst, propio, pantalla }: { hueco: React.RefObject<HTMLDivElement | null>; inst: Instantanea; propio: boolean; pantalla: React.RefObject<HTMLDivElement | null> }) {
+function EscenarioVideo({ hueco, inst, propio, pantalla, region, instante }: { hueco: React.RefObject<HTMLDivElement | null>; inst: Instantanea; propio: boolean; pantalla: React.RefObject<HTMLDivElement | null>; region?: Region; instante?: number }) {
   const aspecto = (propio && inst.aspecto) || 16 / 9;
   return (
     <div className="escenario relative mx-auto w-full max-w-[calc(var(--alto-escenario)*var(--aspecto))] overflow-hidden rounded-xl bg-coffee-900 shadow-[var(--levantado)] ring-1 ring-[#1a0f0a]/60 [--alto-escenario:27dvh] lg:[--alto-escenario:52dvh]" style={{ aspectRatio: String(aspecto), ['--aspecto' as string]: String(aspecto) }}>
       <div ref={hueco} className="absolute inset-0" />
       {propio && inst.virtual ? <LaminaVirtual /> : null}
+      {propio && region && instante != null ? <RegionEnFotograma region={region} instante={instante} /> : null}
       <Superposicion inst={inst} propio={propio} pantalla={pantalla} />
+    </div>
+  );
+}
+
+/**
+ * La región de la prueba sobre el fotograma: rodeada a mano mientras el medio está a dos segundos de su
+ * instante; al seguir (o al irse a otro sitio) se aparta, y vuelve si se regresa a ese instante.
+ */
+function RegionEnFotograma({ region, instante }: { region: Region; instante: number }) {
+  const [cerca, setCerca] = useState(true);
+  useEffect(() => motor().escucharTiempo((t) => setCerca(Math.abs(t - instante) <= 2)), [instante]);
+  return (
+    <div className="pointer-events-none absolute inset-0">
+      <RecuadroMano region={region} visible={cerca} clave={`fotograma|${instante}`} etiqueta={`La región del fotograma de ${tiempoACadena(instante)} que señala la prueba`} />
     </div>
   );
 }

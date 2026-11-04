@@ -14,7 +14,7 @@ export const Route = createFileRoute('/buscar/historial')({
   component: Historial,
 });
 
-const TIPO: Record<EventoBusqueda['tipo'], string> = { busqueda: 'Búsqueda', respuesta: 'Pregunta', multilingue: 'Multilingüe', verificacion: 'Verificación', similares: 'Parecidos' };
+const TIPO: Record<EventoBusqueda['tipo'], string> = { busqueda: 'Búsqueda', respuesta: 'Pregunta', multilingue: 'Multilingüe', verificacion: 'Verificación', similares: 'Parecidos', investigacion: 'Investigación' };
 
 function grupoFecha(iso: string) {
   const d = new Date(iso), hoy = new Date();
@@ -60,8 +60,9 @@ function Historial() {
             <ul className="mt-2 border-t border-cream-400">
               {es.map((e) => (
                 <li key={e.id} className="group flex items-center gap-3 border-b border-filete py-3">
-                  <Icono nombre={e.tipo === 'respuesta' ? 'chispa' : 'buscar'} tam={16} className="shrink-0 text-apagado" />
-                  <Link to="/buscar" search={{ q: e.consulta, ...(e.tipo === 'respuesta' ? { modo: 'preguntar' as const } : {}) }} className="min-w-0 flex-1">
+                  <Icono nombre={e.tipo === 'respuesta' ? 'chispa' : e.tipo === 'investigacion' ? 'lector' : 'buscar'} tam={16} className="shrink-0 text-apagado" />
+                  {/* Una investigación no se repite sola al abrirla: la pregunta queda lista en la caja. */}
+                  <Link to="/buscar" search={{ q: e.consulta, ...(e.tipo === 'respuesta' ? { modo: 'preguntar' as const } : e.tipo === 'investigacion' ? { modo: 'investigar' as const } : {}) }} className="min-w-0 flex-1">
                     <p className="truncate text-[1rem] group-hover:underline group-hover:underline-offset-4">{e.consulta}</p>
                     <Rotulo>{TIPO[e.tipo]} · {e.resultados} resultados{e.confianza ? ` · confianza ${e.confianza}` : ''} · {haceCuanto(e.cuando)}</Rotulo>
                   </Link>
