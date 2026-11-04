@@ -501,7 +501,10 @@ describe('OAuth del servidor MCP', () => {
     const llamar = (bearer: string) => SELF.fetch(`${O}/mcp`, { method: 'POST', headers: { authorization: `Bearer ${bearer}`, 'content-type': 'application/json', accept: 'application/json, text/event-stream' }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list' }) });
     const r = await llamar(tok.access_token);
     expect(r.status).toBe(200);
-    expect(((await r.json()) as { result: { tools: unknown[] } }).result.tools).toHaveLength(4);
+    const herramientas = ((await r.json()) as { result: { tools: Array<{ name: string }> } }).result.tools;
+    // search, cite, open_page, verify_claim e investigate (el modo Investigar).
+    expect(herramientas.map((h) => h.name)).toContain('investigate');
+    expect(herramientas).toHaveLength(5);
     expect((await llamar('token-inventado')).status).toBe(401);
     // Sin token: 401 con la pista del recurso protegido (descubrimiento del cliente MCP).
     const sin = await SELF.fetch(`${O}/mcp`, { method: 'POST', body: '{}' });
