@@ -182,7 +182,7 @@ CREATE INDEX IF NOT EXISTS procedencia_doc ON procedencia(documento);
 -- («caracteres» [inicio, fin) en puntos de código NFC, «region» {x,y,w,h} en
 -- fracciones de la imagen de la unidad, «instante» en vídeo). Las evidencias son
 -- listas JSON de {documento, ancla, anclaFin?, cita?, modo, unidad?, fragmento?, figura?}.
--- En SPDF 5.0 viaja como extensión opcional «x_scholaris_comprension».
+-- En SPDF 5.0 viaja como extensión opcional «scholaris_comprension».
 -- ===========================================================================
 
 -- Estructura: partes, capítulos, escenas, planos, poemas, temas… en árbol.

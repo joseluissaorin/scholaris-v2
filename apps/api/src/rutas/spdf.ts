@@ -13,6 +13,8 @@ import type { Entorno } from '../entorno.js';
 import { cuerpoJson, exigir, fallo, noEncontrado } from '../compartido/errores.js';
 import { importarSpdf } from '../compartido/importar-spdf.js';
 import { MEDIO_SPDF_50, armarSpdf50 } from '../compartido/spdf50.js';
+import { capaVacia, escribirCapaEnArchivo, leerCapaComprension } from '../compartido/comprension-spdf.js';
+import { cuadernoComoAnotaciones } from '../compartido/anotaciones-spdf.js';
 import { volcarDocumento } from './documentos.js';
 import { prefijoDocumento, rutaSegura } from './subidas.js';
 import { claveDe, exigirEscritura, prm, puertos, type Ctx } from './util.js';
@@ -75,6 +77,9 @@ export async function armarSpdf(p: PuertosUsuario, d: Documento, o: OpcionesArma
       for (const e of v.espacios) await a.escribirVectores((await leerVectores(p.sql, { espacio: e.id, documento: d.id })).map((x) => ({ ...x, documento: d.id })));
     }
     for (const e of v.procedencia) await a.registrarProcedencia({ documento: d.id, fase: e.fase, proveedor: e.proveedor ?? null, detalle: e.detalle, ms: e.ms ?? null, cuando: e.cuando });
+    // La comprensión (4.2) con las entidades del grafo que aparecen; los vectores de las fichas ya van arriba.
+    const capa = await leerCapaComprension(p.sql, d.id, { entidades: 'grafo', vectores: false });
+    if (capa && !capaVacia(capa)) await escribirCapaEnArchivo(a.sql, capa);
     await a.optimizarIndice();
     return { bytes: a.exportar(), sinOriginal, omitidos: Object.keys(v.binarios).length - blobs.size - (o.originales === false && d.original && v.binarios[d.original] ? 1 : 0) };
   } finally {
@@ -116,6 +121,22 @@ export function rutasSpdf(app: Hono<Entorno>): void {
       h.set('x-scholaris-aviso', encodeURIComponent(`Este .spdf lleva el texto, los vectores y los primeros ${Math.round(MAX_INCRUSTADO / 1048576)} MB de imágenes y del original; ${omitidos} ficheros más pesaban demasiado para armarlo en el servidor. Para el .spdf completo, descárgalo desde la aplicación, que lo arma en tu navegador.`));
     }
     return new Response(bytes as Uint8Array<ArrayBuffer>, { headers: h });
+  });
+
+  // La memoria de una investigación (un cuaderno) como anotaciones W3C con anclas SPDF (5.0 §17.1).
+  app.get('/cuadernos/:id/anotaciones', async (c: Ctx) => {
+    const p = puertos(c);
+    const coleccion = await cuadernoComoAnotaciones(p.sql, prm(c, 'id')).catch((e: unknown) => {
+      if ((e as { codigo?: string }).codigo === 'no_encontrado') noEncontrado('El cuaderno');
+      throw e;
+    });
+    const nombre = `${coleccion.label.replace(/[^\p{L}\p{N} _-]+/gu, '').trim().slice(0, 80) || 'cuaderno'}.spdfa.json`;
+    return new Response(JSON.stringify(coleccion, null, 1), {
+      headers: {
+        'content-type': 'application/ld+json; profile="http://www.w3.org/ns/anno.jsonld"; charset=utf-8',
+        'content-disposition': `attachment; filename*=UTF-8''${encodeURIComponent(nombre)}`,
+      },
+    });
   });
 
   // Importación por el almacén: los binarios de un .spdf grande se suben directos

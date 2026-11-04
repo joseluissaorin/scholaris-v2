@@ -2,7 +2,9 @@
  * Meter un .spdf (5.0, 4.x o 3.x) en la estantería: lo usan la importación de un .spdf suelto,
  * los paquetes .scholaris y las copias de bibliotecas ajenas. Nada se vuelve a
  * leer: se copian las filas, los binarios incrustados van al almacén y solo se
- * calculan los vectores del espacio de la estantería si faltan.
+ * calculan los vectores del espacio de la estantería si faltan. La comprensión que
+ * traiga el fichero (4.2, o la extensión `scholaris_comprension` de un 5.0) entra
+ * también, con sus entidades resueltas contra el grafo de la biblioteca.
  *
  * Copias (`ajeno`): el .spdf lo arma el servidor desde la estantería de otro
  * usuario con las claves completas de sus binarios («u/<dueño>/d/<doc>/…»), y
@@ -17,6 +19,7 @@ import {
 } from '@scholaris/spdf';
 import type { PuertosUsuario } from '../puertos.js';
 import { archivoDesde50, esSpdf50 } from './spdf50.js';
+import { capaVacia, leerCapaComprension, restaurarComprension } from './comprension-spdf.js';
 import { ahora, cambiarBiblioteca, documentoPorHuella, totalesEstanteria } from './estanteria.js';
 import { fallo } from './errores.js';
 import { invalidarBuscador } from './servicios.js';
@@ -128,10 +131,13 @@ export async function importarSpdf(p: PuertosUsuario, bytes: Uint8Array, o: Opci
         await escribirFiguras(tx, figuras.map((g) => ({ ...remap(g), documento: id, unidad: mapaUnidad.get(g.unidad) ?? g.unidad, imagen: k(g.imagen) ?? g.imagen })));
         for (const e of espacios) await escribirEspacio(tx, e);
       });
-      // Vectores: se guardan los de todos los espacios; al índice va solo el de la estantería.
+      // Vectores de la capa literal: se guardan los de todos los espacios; al índice va solo el de la
+      // estantería. Los de las fichas entran con la comprensión, más abajo.
       let tieneBase = false;
       for (const e of espacios) {
-        const vs = (await leerVectores(a.sql, { espacio: e.id, documento: d0.id })).map((v) => ({ ...v, documento: id, id: v.objetivo === 'fragmento' ? mapaFrag.get(v.id) ?? v.id : v.objetivo === 'unidad' ? mapaUnidad.get(v.id) ?? v.id : v.id }));
+        const vs = (await leerVectores(a.sql, { espacio: e.id, documento: d0.id }))
+          .filter((v) => v.objetivo === 'fragmento' || v.objetivo === 'unidad' || v.objetivo === 'figura')
+          .map((v) => ({ ...v, documento: id, id: v.objetivo === 'fragmento' ? mapaFrag.get(v.id) ?? v.id : v.objetivo === 'unidad' ? mapaUnidad.get(v.id) ?? v.id : existe ? `${v.id}_${id.slice(-6)}` : v.id }));
         for (let i = 0; i < vs.length; i += 500) await escribirVectores(p.sql, vs.slice(i, i + 500));
         if (e.id === ia.embebedor.espacio.id && vs.length) {
           tieneBase = true;
@@ -140,6 +146,19 @@ export async function importarSpdf(p: PuertosUsuario, bytes: Uint8Array, o: Opci
             for (let i = 0; i < vs.length; i += 500) {
               await p.indice.insertar(p.config.espacioNombres(p.usuario.id), vs.slice(i, i + 500).map((v) => ({ id: v.id, valores: v.valores, metadatos: meta(v.objetivo) })));
             }
+          }
+        }
+      }
+      // La comprensión (SPDF 4.2, o la extensión scholaris_comprension de un 5.0 ya traducida).
+      const capa = await leerCapaComprension(a.sql, d0.id, { entidades: 'archivo' });
+      if (capa && !capaVacia(capa)) {
+        const r = await restaurarComprension(p.sql, capa, { documento: id, ...(existe ? { sufijo: id.slice(-6) } : {}), mapaUnidad, mapaFragmento: mapaFrag });
+        avisos.push(...r.avisos);
+        const base = r.vectores.filter((v) => v.espacio === ia.embebedor.espacio.id);
+        if (p.indice && base.length) {
+          const meta = { objetivo: 'ficha', documento: id, tipo: d0.tipo, ...(d0.metadatos.anio ? { anio: d0.metadatos.anio } : {}), ...(d0.metadatos.idioma ? { idioma: d0.metadatos.idioma } : {}) };
+          for (let i = 0; i < base.length; i += 500) {
+            await p.indice.insertar(p.config.espacioNombres(p.usuario.id), base.slice(i, i + 500).map((v) => ({ id: v.id, valores: v.valores, metadatos: meta })));
           }
         }
       }
