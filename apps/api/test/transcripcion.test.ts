@@ -143,6 +143,15 @@ describe('transcripción completa de los medios', () => {
     expect(per.estado).toBe(200);
     expect(per.cuerpo.documentos[0]).toMatchObject({ documento: id, hara: expect.arrayContaining(['proxy', 'percepcion']) });
     expect(per.cuerpo.usd).toBeGreaterThan(0);
+    // Con «confirmar», se encola y sale la tarea (dos a la vez como mucho); al cerrar, el documento sigue listo.
+    const lanz = await api('/transcripcion/revisar', { token: t, cuerpo: { confirmar: true, rehacer: true, documentos: [id] } });
+    expect(lanz.estado).toBe(202);
+    expect(lanz.cuerpo.lanzados).toHaveLength(1);
+    expect((await esperarTarea(t, lanz.cuerpo.lanzados[0].tarea)).estado).toBe('listo');
+    expect((await api(`/documentos/${id}`, { token: t })).cuerpo.estado).toBe('listo');
+    // Un tope por debajo de la estimación no lanza nada.
+    const caro = await api('/medios/percibir', { token: t, cuerpo: { confirmar: true, documentos: [id], presupuestoUsd: 0.01 } });
+    expect(caro.estado).toBe(409);
   });
 });
 
