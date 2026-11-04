@@ -9,49 +9,16 @@
  */
 import { anclaACita, tiempoACadena } from '@scholaris/nucleo';
 import type {
-  Alineacion, AnclaMaterial, Ficha, LadoAlineacion, Lente, Region, Relacion, RolAparicion, Segmento, TipoCorrespondencia, TipoEntrada, TipoRelacion, TipoSegmento,
+  Alineacion, AnclaMaterial, Ficha, LadoAlineacion, Lente, Region, RolAparicion, Segmento, TipoCorrespondencia, TipoRelacion, TipoSegmento,
 } from '@scholaris/nucleo';
-import type { AparicionVista, EstadoComprensionValorVista, EstadoComprensionVista } from '@scholaris/contrato';
+import type { AparicionVista, EstadoAlineacionVista, EstadoComprensionValorVista, EstadoComprensionVista } from '@scholaris/contrato';
 
 // ---------------------------------------------------------------------------
 // Relaciones entre obras (el contrato de transmedia, ola 2)
 // ---------------------------------------------------------------------------
 
-/** La otra obra de una relación, lo justo para nombrarla. */
-export interface ObraRelacionada {
-  id: string;
-  titulo: string;
-  /** Nombres para mostrar. */
-  autores: string[];
-  anio?: number;
-  tipo: TipoEntrada;
-}
-
-/** Cómo va la alineación de una relación (el Workflow de transmedia). */
-export interface EstadoAlineacionVista {
-  estado: 'en_marcha' | 'hecho' | 'error';
-  alineaciones: number;
-  usd: number;
-  avisos: string[];
-  error?: string;
-  actualizado: string;
-}
-
-/**
- * GET /documentos/:id/relaciones → RelacionVista[]. Copia del tipo de
- * `@scholaris/contrato` (transmedia.ts, ola 2); al integrar, se importa de allí.
- */
-export type RelacionVista = Relacion & {
-  otro: ObraRelacionada;
-  /** El lado del documento que se pide: `origen` adapta, traduce o edita a `destino`. */
-  sentido: 'origen' | 'destino';
-  alineaciones: number;
-  /** La ficha de la relación (objetivo «relacion»). */
-  ficha?: Ficha;
-  /** La puso o la confirmó el usuario. */
-  confirmada: boolean;
-  estadoAlineacion?: EstadoAlineacionVista;
-};
+// Los tipos de las relaciones son los del contrato (packages/contrato/src/transmedia.ts).
+export type { EstadoAlineacionVista, ObraRelacionada, RelacionVista } from '@scholaris/contrato';
 
 /** Un cambio de la ficha de una relación: qué cambia de B (destino) a A (origen), con sus pruebas (índices en `ficha.evidencias`). */
 export interface CambioRelacion { aspecto: string; afirmacion: string; pruebas: { a: number[]; b: number[] }; inferido?: boolean }
@@ -313,10 +280,48 @@ export function resumenDe(s: Segmento, ficha?: Ficha): string | undefined {
 /** Lo que dice el tiempo real mientras trabaja (evento «comprension»). */
 export interface AvanceVivo { paso: string; avance: number; mensaje: string; estado?: 'en_marcha' | 'hecho' | 'error' }
 
+/** Los pasos del flujo de comprensión, en orden (los de `procedencia`: «estructura», «fichas:0»…, «entidades», «personajes», «global», «indexado»). */
+export const PASOS_COMPRENSION = ['estructura', 'fichas', 'entidades', 'personajes', 'global', 'indexado'] as const;
+export type PasoVisible = (typeof PASOS_COMPRENSION)[number];
+
+export const NOMBRE_PASO: Record<PasoVisible, string> = {
+  estructura: 'Estructura', fichas: 'Fichas de cada parte', entidades: 'Personas, lugares y obras', personajes: 'Personajes y motivos', global: 'Ficha global', indexado: 'Índice de búsqueda',
+};
+
+export interface EstadoPaso { paso: PasoVisible; estado: 'hecho' | 'en_marcha' | 'pendiente'; detalle?: string; usd?: number; ms?: number }
+
+/**
+ * Cada paso con su estado: hecho (con su coste y su tiempo), en marcha (el del último aviso
+ * en vivo o, si no lo hay, el primero sin hacer) o pendiente. Las fichas van por tandas.
+ */
+export function pasosDeComprension(e: Pick<EstadoComprensionVista, 'estado' | 'pasos'> | null, vivo?: AvanceVivo | null): EstadoPaso[] {
+  const pasos = e?.pasos ?? {};
+  const lotes = Number(pasos.estructura?.detalle?.lotes ?? 0);
+  const tandas = Object.entries(pasos).filter(([k]) => k.startsWith('fichas:'));
+  const enMarcha = e?.estado === 'en_marcha' || vivo?.estado === 'en_marcha';
+  const lista: EstadoPaso[] = PASOS_COMPRENSION.map((paso) => {
+    if (paso === 'fichas') {
+      const hecho = !!lotes && tandas.length >= lotes;
+      const usd = tandas.reduce((s, [, x]) => s + x.usd, 0), ms = tandas.reduce((s, [, x]) => s + x.ms, 0);
+      return { paso, estado: hecho ? 'hecho' : 'pendiente', ...(lotes ? { detalle: `${Math.min(tandas.length, lotes)} de ${lotes} ${lotes === 1 ? 'tanda' : 'tandas'}` } : {}), ...(tandas.length ? { usd, ms } : {}) };
+    }
+    const x = pasos[paso];
+    return x ? { paso, estado: 'hecho', usd: x.usd, ms: x.ms } : { paso, estado: 'pendiente' };
+  });
+  if (e?.estado === 'hecho') return lista.map((p) => ({ ...p, estado: 'hecho' }));
+  if (enMarcha) {
+    // El paso del aviso en vivo, si es uno de estos; si no, el primero sin hacer (las entidades y los personajes corren junto a las fichas).
+    const deVivo = lista.find((p) => p.paso === vivo?.paso && p.estado !== 'hecho');
+    const primero = deVivo ?? lista.find((p) => p.estado !== 'hecho');
+    if (primero) primero.estado = 'en_marcha';
+  }
+  return lista;
+}
+
 /**
  * Cuánto falta, de 0 a 1, y en qué está: por los pasos terminados (estructura,
- * tandas de fichas, entidades, ficha global, indexado) o por el último aviso en
- * vivo, lo que vaya más adelantado.
+ * tandas de fichas, entidades, personajes, ficha global, indexado) o por el
+ * último aviso en vivo, lo que vaya más adelantado.
  */
 export function avanceComprension(e: Pick<EstadoComprensionVista, 'estado' | 'pasos'> | null, vivo?: AvanceVivo | null): { valor: number; texto: string } {
   if (e?.estado === 'hecho') return { valor: 1, texto: 'Terminada' };
@@ -325,8 +330,9 @@ export function avanceComprension(e: Pick<EstadoComprensionVista, 'estado' | 'pa
   const tandas = Object.keys(pasos).filter((k) => k.startsWith('fichas:')).length;
   let valor = 0, texto = 'En cola';
   if (pasos.estructura) { valor = 0.15; texto = 'Escribiendo las fichas'; }
-  if (lotes && tandas) { valor = 0.15 + 0.5 * Math.min(1, tandas / lotes); texto = `Escribiendo las fichas: ${tandas} de ${lotes} tandas`; }
-  if (pasos.entidades && (!lotes || tandas >= lotes)) { valor = Math.max(valor, 0.7); texto = 'Escribiendo la ficha global'; }
+  if (lotes && tandas) { valor = 0.15 + 0.45 * Math.min(1, tandas / lotes); texto = `Escribiendo las fichas: ${tandas} de ${lotes} tandas`; }
+  if (pasos.entidades && (!lotes || tandas >= lotes)) { valor = Math.max(valor, 0.62); texto = pasos.personajes ? 'Escribiendo la ficha global' : 'Analizando los personajes y los motivos principales'; }
+  if (pasos.personajes && pasos.entidades && (!lotes || tandas >= lotes)) { valor = Math.max(valor, 0.72); texto = 'Escribiendo la ficha global'; }
   if (pasos.global) { valor = 0.9; texto = 'Indexando para la búsqueda'; }
   if (pasos.indexado) { valor = 0.97; texto = 'Terminando'; }
   if (!pasos.estructura && e?.estado === 'en_marcha') texto = 'Leyendo la estructura de la obra';
@@ -590,4 +596,34 @@ export function segmentoEn(segmentos: readonly Segmento[], sitio: { u?: number; 
     if (dentro && (!mejor || s.nivel > mejor.nivel || (s.nivel === mejor.nivel && s.orden > mejor.orden))) mejor = s;
   }
   return mejor;
+}
+
+// ---------------------------------------------------------------------------
+// El estado de la alineación de una relación
+// ---------------------------------------------------------------------------
+
+/** En qué va la alineación: «Alineando 3 de 9 grupos», el error o nada (si está hecha y no hay que decir nada). */
+export function textoAlineacion(e: EstadoAlineacionVista | undefined): { texto: string; valor?: number; tono: 'marcha' | 'error' | 'hecho' } | null {
+  if (!e) return null;
+  if (e.estado === 'error') return { texto: e.error?.trim() || 'La alineación se detuvo con un error.', tono: 'error' };
+  if (e.estado === 'en_marcha') {
+    const total = e.total ?? 0, hechos = Math.min(e.hechos ?? 0, total || Infinity);
+    return total > 0
+      ? { texto: `Alineando ${hechos} de ${total} ${total === 1 ? 'grupo' : 'grupos'}`, valor: hechos / total, tono: 'marcha' }
+      : { texto: 'Alineando las dos obras', tono: 'marcha' };
+  }
+  return { texto: `${e.alineaciones} ${e.alineaciones === 1 ? 'correspondencia' : 'correspondencias'}`, tono: 'hecho' };
+}
+
+/** Los tipos de relación que se pueden poner a mano, con la frase desde la obra que se está viendo. */
+export const TIPOS_RELACION_MANUAL: TipoRelacion[] = ['adaptacion_de', 'traduccion_de', 'edicion_de', 'version_de', 'comenta_a', 'responde_a', 'cita_a', 'parte_de', 'misma_obra', 'relacionado'];
+
+/**
+ * Una relación puesta a mano desde una obra: si esta obra es la que adapta (traduce, edita…), es el
+ * origen; si es la adaptada, el destino. Las simétricas (la misma obra, relacionadas) van de esta a la otra.
+ */
+export function pedidoRelacion(esta: string, otra: string, tipo: TipoRelacion, sentido: 'origen' | 'destino', nota?: string): { origen: string; destino: string; tipo: TipoRelacion; nota?: string } {
+  const simetrica = tipo === 'misma_obra' || tipo === 'relacionado';
+  const [origen, destino] = simetrica || sentido === 'origen' ? [esta, otra] : [otra, esta];
+  return { origen, destino, tipo, ...(nota?.trim() ? { nota: nota.trim() } : {}) };
 }

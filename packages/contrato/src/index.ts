@@ -8,6 +8,7 @@ export * from './subidas.js';
 export * from './documentos.js';
 export * from './comprension.js';
 export * from './transmedia.js';
+export * from './medios.js';
 export * from './contenido.js';
 export * from './bibliotecas.js';
 export * from './busqueda.js';

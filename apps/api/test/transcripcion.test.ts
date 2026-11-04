@@ -97,6 +97,9 @@ describe('transcripción completa de los medios', () => {
     expect(rev.cuerpo.aplicada).toBeTruthy();
     expect(rev.cuerpo.correcciones.huecos).toBeGreaterThan(0);
     expect(rev.cuerpo.cobertura.despues.segundosSinTexto).toBeLessThan(rev.cuerpo.cobertura.antes.segundosSinTexto);
+    // Dónde están los huecos (la web los marca en la línea del tiempo).
+    expect(rev.cuerpo.cobertura.antes.lista.length).toBe(Math.min(400, rev.cuerpo.cobertura.antes.huecos));
+    for (const h of rev.cuerpo.cobertura.antes.lista) expect(h.t1).toBeGreaterThanOrEqual(h.t0);
     // Aplicarla otra vez no hace nada.
     const otra = await api(`/documentos/${id}/transcripcion/revisar`, { token: t, cuerpo: {} });
     expect(otra.estado).toBe(202);

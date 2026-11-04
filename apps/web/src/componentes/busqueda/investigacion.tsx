@@ -123,8 +123,21 @@ function Vista({ e, alRepetir }: { e: EstadoInvestigacion; alRepetir: () => void
         {enVivo && e.plan ? <Plan plan={e.plan} /> : null}
         {enVivo && e.pasos.length ? <Pasos pasos={e.pasos} titulos={titulos} vivo /> : null}
 
+        {e.fase === 'error' && markdown.trim() ? (
+          <p className="relative mt-5 flex items-start gap-2 rounded-xl border border-dashed border-coffee-400 px-3 py-2 text-[0.8125rem] text-coffee-700">
+            <Icono nombre="aviso" tam={14} className="mt-0.5 shrink-0 text-ocre" />
+            Lo que sigue es la respuesta a medias: se cortó antes de terminar y de comprobar sus frases contra las pruebas. No la cites; vuelve a investigar.
+          </p>
+        ) : null}
+        {hecho && e.fin && !e.fin.markdown.trim() ? (
+          <div role="alert" className="relative mt-5 flex flex-wrap items-center gap-3 rounded-xl border border-rojo/30 bg-rojo-suave/50 px-4 py-3 text-[0.875rem] text-coffee-800">
+            <span aria-hidden className="h-2.5 w-2.5 shrink-0 bg-rojo" />
+            <span className="min-w-0 flex-1">La investigación terminó sin respuesta.</span>
+            <Boton variante="linea" tam="p" icono="rayo" className="bg-papel" onClick={alRepetir}>Volver a investigar</Boton>
+          </div>
+        ) : null}
         {markdown ? (
-          <div className="relative mt-6">
+          <div className={cx('relative mt-6', e.fase === 'error' && 'opacity-60')}>
             {/* La respuesta se anuncia entera al terminar (aria-busy mientras se escribe). */}
             <div ref={respuesta} aria-live="polite" aria-busy={!hecho} className="lectura text-[1.0625rem] leading-[1.65] text-coffee-900">
               <MarkdownRespuesta bloques={cuerpo} cita={cita} final={e.fase === 'escribiendo' ? <span className="gota-tinta" aria-hidden /> : null} />
@@ -162,7 +175,7 @@ function Vista({ e, alRepetir }: { e: EstadoInvestigacion; alRepetir: () => void
             </ol>
           ) : trabajando ? (
             <ol className="mt-3 flex flex-col gap-3" aria-hidden>{[0, 1, 2].map((i) => <li key={i} className="esqueleto h-28 rounded-xl" />)}</ol>
-          ) : <p className="mt-3 text-[0.875rem] text-apagado">No se reunió ninguna prueba.</p>}
+          ) : <p className="mt-3 text-[0.875rem] text-apagado">{e.fin && sinCitar.length ? 'La respuesta no cita ninguna de las pruebas reunidas: lo que afirma va sin prueba.' : 'No se reunió ninguna prueba.'}</p>}
           {sinCitar.length ? (
             <Plegable titulo={`Otras pruebas reunidas: ${sinCitar.length}`} className="mt-4">
               <ol className="flex flex-col gap-3 opacity-80">

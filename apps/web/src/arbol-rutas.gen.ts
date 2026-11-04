@@ -20,6 +20,7 @@ import { Route as AdministracionIndexRouteImport } from './rutas/administracion.
 import { Route as AdministracionCuponesRouteImport } from './rutas/administracion.cupones'
 import { Route as AjustesIndexRouteImport } from './rutas/ajustes.index'
 import { Route as AjustesAparienciaRouteImport } from './rutas/ajustes.apariencia'
+import { Route as AjustesBibliotecaRouteImport } from './rutas/ajustes.biblioteca'
 import { Route as AjustesClavesRouteImport } from './rutas/ajustes.claves'
 import { Route as AjustesPrivacidadRouteImport } from './rutas/ajustes.privacidad'
 import { Route as BuscarIndexRouteImport } from './rutas/buscar.index'
@@ -94,6 +95,11 @@ const AjustesIndexRoute = AjustesIndexRouteImport.update({
 const AjustesAparienciaRoute = AjustesAparienciaRouteImport.update({
   id: '/apariencia',
   path: '/apariencia',
+  getParentRoute: () => AjustesRoute,
+} as any)
+const AjustesBibliotecaRoute = AjustesBibliotecaRouteImport.update({
+  id: '/biblioteca',
+  path: '/biblioteca',
   getParentRoute: () => AjustesRoute,
 } as any)
 const AjustesClavesRoute = AjustesClavesRouteImport.update({
@@ -207,6 +213,7 @@ export interface FileRoutesByFullPath {
   '/invitaciones': typeof InvitacionesRoute
   '/administracion/cupones': typeof AdministracionCuponesRoute
   '/ajustes/apariencia': typeof AjustesAparienciaRoute
+  '/ajustes/biblioteca': typeof AjustesBibliotecaRoute
   '/ajustes/claves': typeof AjustesClavesRoute
   '/ajustes/privacidad': typeof AjustesPrivacidadRoute
   '/buscar/historial': typeof BuscarHistorialRoute
@@ -235,6 +242,7 @@ export interface FileRoutesByTo {
   '/invitaciones': typeof InvitacionesRoute
   '/administracion/cupones': typeof AdministracionCuponesRoute
   '/ajustes/apariencia': typeof AjustesAparienciaRoute
+  '/ajustes/biblioteca': typeof AjustesBibliotecaRoute
   '/ajustes/claves': typeof AjustesClavesRoute
   '/ajustes/privacidad': typeof AjustesPrivacidadRoute
   '/buscar/historial': typeof BuscarHistorialRoute
@@ -269,6 +277,7 @@ export interface FileRoutesById {
   '/invitaciones': typeof InvitacionesRoute
   '/administracion/cupones': typeof AdministracionCuponesRoute
   '/ajustes/apariencia': typeof AjustesAparienciaRoute
+  '/ajustes/biblioteca': typeof AjustesBibliotecaRoute
   '/ajustes/claves': typeof AjustesClavesRoute
   '/ajustes/privacidad': typeof AjustesPrivacidadRoute
   '/buscar/historial': typeof BuscarHistorialRoute
@@ -304,6 +313,7 @@ export interface FileRouteTypes {
     | '/invitaciones'
     | '/administracion/cupones'
     | '/ajustes/apariencia'
+    | '/ajustes/biblioteca'
     | '/ajustes/claves'
     | '/ajustes/privacidad'
     | '/buscar/historial'
@@ -332,6 +342,7 @@ export interface FileRouteTypes {
     | '/invitaciones'
     | '/administracion/cupones'
     | '/ajustes/apariencia'
+    | '/ajustes/biblioteca'
     | '/ajustes/claves'
     | '/ajustes/privacidad'
     | '/buscar/historial'
@@ -365,6 +376,7 @@ export interface FileRouteTypes {
     | '/invitaciones'
     | '/administracion/cupones'
     | '/ajustes/apariencia'
+    | '/ajustes/biblioteca'
     | '/ajustes/claves'
     | '/ajustes/privacidad'
     | '/buscar/historial'
@@ -483,6 +495,13 @@ declare module '@tanstack/react-router' {
       path: '/apariencia'
       fullPath: '/ajustes/apariencia'
       preLoaderRoute: typeof AjustesAparienciaRouteImport
+      parentRoute: typeof AjustesRoute
+    }
+    '/ajustes/biblioteca': {
+      id: '/ajustes/biblioteca'
+      path: '/biblioteca'
+      fullPath: '/ajustes/biblioteca'
+      preLoaderRoute: typeof AjustesBibliotecaRouteImport
       parentRoute: typeof AjustesRoute
     }
     '/ajustes/claves': {
@@ -644,6 +663,7 @@ const AdministracionRouteWithChildren = AdministracionRoute._addFileChildren(
 
 interface AjustesRouteChildren {
   AjustesAparienciaRoute: typeof AjustesAparienciaRoute
+  AjustesBibliotecaRoute: typeof AjustesBibliotecaRoute
   AjustesClavesRoute: typeof AjustesClavesRoute
   AjustesPrivacidadRoute: typeof AjustesPrivacidadRoute
   AjustesIndexRoute: typeof AjustesIndexRoute
@@ -651,6 +671,7 @@ interface AjustesRouteChildren {
 
 const AjustesRouteChildren: AjustesRouteChildren = {
   AjustesAparienciaRoute: AjustesAparienciaRoute,
+  AjustesBibliotecaRoute: AjustesBibliotecaRoute,
   AjustesClavesRoute: AjustesClavesRoute,
   AjustesPrivacidadRoute: AjustesPrivacidadRoute,
   AjustesIndexRoute: AjustesIndexRoute,
