@@ -69,13 +69,15 @@ const r2 = (x: number) => Math.round(x * 100) / 100;
 
 /** Plazos de cada paso según el tamaño (segundos): lo que puede tardar el modelo con margen. */
 export function plazosDe(tokens: number, largo: boolean): PlanComprension['plazos'] {
+  // Medido el 4-11-2026 con gemini-4-argon: una tanda de seis escenas de una película con la obra
+  // entera delante tarda de 3 a 6 minutos; la ficha global de un cuento de 15 000 tokens, unos 4.
   const k = tokens / 1000;
   const acotar = (s: number) => Math.round(Math.min(3600, Math.max(300, s)));
   return {
-    estructura: acotar(180 + k * (largo ? 1.5 : 3)),
-    fichas: acotar(240 + k * (largo ? 0.8 : 0.3)),
-    entidades: acotar(240 + k * 2.5),
-    global: acotar(300 + k * 2),
+    estructura: acotar(300 + k * (largo ? 3 : 5)),
+    fichas: acotar(600 + k * (largo ? 2 : 0.5)),
+    entidades: acotar(400 + k * 3),
+    global: acotar(600 + k * 3),
     indexado: acotar(120 + k * 0.3),
   };
 }
