@@ -96,7 +96,8 @@ export function evidenciaDeResultado(r: Resultado): Evidencia {
   // Un acierto de la vía visual sin texto es una figura (o un fotograma) con su pie: orden -1.
   if (r.fragmento.orden === -1) {
     const a = r.fragmento.ancla as AnclaMaterial;
-    const ancla: AnclaMaterial = a.tipo === 'tiempo' && a.instante === undefined ? { ...a, instante: a.t0 } : a;
+    // Un fotograma no habla: el hablante que arrastra su ancla es el del tramo de transcripción.
+    const ancla: AnclaMaterial = a.tipo === 'tiempo' ? { tipo: 'tiempo', t0: a.t0, t1: a.t1, instante: a.instante ?? a.t0, ...(a.region ? { region: a.region } : {}) } : a;
     return { documento: r.documento.id, ancla, cita: r.fragmento.texto, modo: 'imagen', unidad: r.fragmento.unidad, figura: r.fragmento.id };
   }
   const ancla = (r.pasaje?.ancla ?? r.fragmento.ancla) as AnclaMaterial;

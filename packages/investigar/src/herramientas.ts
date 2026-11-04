@@ -220,7 +220,7 @@ const leer: Herramienta = {
         const a = JSON.parse(g.ancla) as Ancla;
         const desc = [g.pie, g.descripcion].filter(Boolean).join('. ');
         if (!desc || a.tipo !== 'tiempo') continue;
-        const p = apuntar(ctx, { documento: doc, ancla: { ...a, instante: a.t0 }, cita: desc, modo: 'imagen', unidad: g.unidad, figura: g.id }, { capa: 'literal', herramienta: 'leer', imagen: g.imagen, nota: 'Fotograma descrito en la ingesta' });
+        const p = apuntar(ctx, { documento: doc, ancla: { tipo: 'tiempo', t0: a.t0, t1: a.t1, instante: a.t0 }, cita: desc, modo: 'imagen', unidad: g.unidad, figura: g.id }, { capa: 'literal', herramienta: 'leer', imagen: g.imagen, nota: 'Fotograma descrito en la ingesta' });
         nuevas.push(p.id);
         lineas.push(`[${p.id}] fotograma ${tiempoACadena(a.t0)}: ${recortar(desc, 300)}`);
       }
