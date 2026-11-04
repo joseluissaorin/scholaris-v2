@@ -338,7 +338,9 @@ como `.spdfa.json` (SPDF 5.0 §17.1). Cada tarjeta verificada es una anotación 
 URI de ancla de su prueba (`SpdfAnchorSelector`, con caracteres, región e instante), la
 cita literal con su contexto (`TextQuoteSelector`) y, en vídeo y audio, un
 `FragmentSelector` de Media Fragments. Las notas y las síntesis apuntan a las pruebas
-que citan, así que su `target` es una lista.
+que citan, así que su `target` es una lista; como eso no cabe en las anotaciones 1.0 de
+SPDF 5.0, la colección se declara 1.1 (la versión que propone la RFC 0004) solo cuando
+lleva alguna.
 
 En el repositorio de SPDF, la RFC 0004 propone un perfil `understanding` para la 5.1 con
 estas mismas tablas sin el prefijo del fabricante.

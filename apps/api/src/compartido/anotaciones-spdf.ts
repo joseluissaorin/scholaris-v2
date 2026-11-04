@@ -8,8 +8,9 @@
  * Media Fragments, para las herramientas que no conocen SPDF.
  *
  * Las notas (hallazgos, hipótesis) y las síntesis no tienen un único sitio: apuntan a las
- * pruebas que citan, así que su `target` es una lista (lo admite el modelo W3C; el perfil
- * `understanding` propuesto para SPDF 5.1 lo hace explícito).
+ * pruebas que citan, así que su `target` es una lista. Lo admite el modelo W3C, pero no el
+ * esquema de las anotaciones 1.0 de SPDF 5.0; la RFC 0004 lo propone como versión 1.1, y
+ * la colección dice 1.1 solo cuando lleva alguna lista (si no, sigue siendo 1.0).
  */
 import type { AnclaMaterial, SQL } from '@scholaris/nucleo';
 import { enLista } from '@scholaris/nucleo';
@@ -41,7 +42,7 @@ export interface ColeccionAnotaciones {
   '@context': string;
   id: string;
   type: 'AnnotationCollection';
-  spdf_annotations: '1.0';
+  spdf_annotations: '1.0' | '1.1';
   label: string;
   created: string;
   modified: string;
@@ -181,7 +182,8 @@ export async function cuadernoComoAnotaciones(sql: SQL, cuadernoId: string): Pro
   }
 
   return {
-    '@context': CONTEXTO, id: `${TAG}:cuaderno/${cuaderno.id}`, type: 'AnnotationCollection', spdf_annotations: '1.0',
+    '@context': CONTEXTO, id: `${TAG}:cuaderno/${cuaderno.id}`, type: 'AnnotationCollection',
+    spdf_annotations: items.some((x) => Array.isArray(x.target)) ? '1.1' : '1.0',
     label: cuaderno.titulo, created: cuaderno.creado, modified: cuaderno.actualizado, total: items.length,
     first: { type: 'AnnotationPage', items },
   };

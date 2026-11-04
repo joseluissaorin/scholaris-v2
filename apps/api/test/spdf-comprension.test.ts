@@ -82,8 +82,8 @@ async function ponerComprension(sql: SQL): Promise<{ farera: string; faro: strin
   const faro = await obtenerEntidad(sql, 'lugar', 'Faro de la Punta', [], false);
   await sql.ejecutar("UPDATE entidades SET wikidata = 'Q99999901', descripcion = 'faro inventado para la prueba' WHERE id = ?", faro);
   const segmentos: Segmento[] = [
-    { id: 'd_peli:seg:e1', documento: 'd_peli', padre: null, nivel: 0, orden: 0, tipo: 'escena', titulo: 'La subida al faro', ancla: { tipo: 'tiempo', t0: 0, t1: 30 }, unidadDesde: 'd_peli_u0', unidadHasta: 'd_peli_u0', resumen: 'La farera enciende el faro.', origen: 'modelo', confianza: 0.9 },
-    { id: 'd_peli:seg:p1', documento: 'd_peli', padre: 'd_peli:seg:e1', nivel: 1, orden: 1, tipo: 'plano', titulo: 'Plano 1', ancla: { tipo: 'tiempo', t0: 0, t1: 12 }, unidadDesde: 'd_peli_u0', unidadHasta: 'd_peli_u0', origen: 'modelo', confianza: 0.8 },
+    { id: 'd_peli:seg:e1', documento: 'd_peli', padre: null, nivel: 1, orden: 0, tipo: 'escena', titulo: 'La subida al faro', ancla: { tipo: 'tiempo', t0: 0, t1: 30 }, unidadDesde: 'd_peli_u0', unidadHasta: 'd_peli_u0', resumen: 'La farera enciende el faro.', origen: 'modelo', confianza: 0.9 },
+    { id: 'd_peli:seg:p1', documento: 'd_peli', padre: 'd_peli:seg:e1', nivel: 2, orden: 1, tipo: 'plano', titulo: 'Plano 1', ancla: { tipo: 'tiempo', t0: 0, t1: 12 }, unidadDesde: 'd_peli_u0', unidadHasta: 'd_peli_u0', origen: 'modelo', confianza: 0.8 },
   ];
   await escribirSegmentos(sql, segmentos);
   const fichas: Ficha[] = [
@@ -437,7 +437,7 @@ describe('la memoria de una investigación como .spdfa.json', () => {
       JSON.stringify([{ n: 1, tarjeta: 't1', etiqueta: '(Prueba, 2020, p. 5)' }, { n: 2, tarjeta: 't2', etiqueta: '(Prueba, 2020, 0:00-0:12)' }]), t);
 
     const col = await cuadernoComoAnotaciones(a.sql, 'c1');
-    expect(col).toMatchObject({ '@context': 'http://www.w3.org/ns/anno.jsonld', type: 'AnnotationCollection', spdf_annotations: '1.0', label: 'Investigación: el faro sin barcos', total: 4 });
+    expect(col).toMatchObject({ '@context': 'http://www.w3.org/ns/anno.jsonld', type: 'AnnotationCollection', spdf_annotations: '1.1', label: 'Investigación: el faro sin barcos', total: 4 });
     const [a1, a2, nota, sintesis] = col.first.items;
     expect(a1).toMatchObject({ type: 'Annotation', motivation: 'commenting', target: { source: `spdf:sha256-${HUELLA_CUENTO}` } });
     const sel1 = (a1!.target as { selector: Array<Record<string, unknown>> }).selector;
@@ -458,6 +458,10 @@ describe('la memoria de una investigación como .spdfa.json', () => {
     expect(sintesis!.target).toEqual([a1!.target, a2!.target]);
     // Todas las URI se leen con el analizador de spdf-format.
     for (const it of col.first.items) for (const d of [it.target].flat()) expect(() => parseAnchorUri(String(d.selector[0]!.value))).not.toThrow();
+    // Sin notas ni síntesis, cada anotación tiene un solo destino: la colección es 1.0.
+    await a.sql.ejecutar("DELETE FROM cuadernos_tarjetas WHERE id = 't3'");
+    await a.sql.ejecutar("DELETE FROM cuadernos_sintesis WHERE id = 's1'");
+    expect((await cuadernoComoAnotaciones(a.sql, 'c1')).spdf_annotations).toBe('1.0');
     a.cerrar();
   });
 });
