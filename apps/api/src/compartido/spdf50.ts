@@ -10,7 +10,7 @@
  * - Importar: un .spdf 5.0 → un SPDF 4.1 en memoria, que después sigue el camino de
  *   siempre (`importarSpdf`).
  * - La comprensión (segmentos, fichas, entidades, apariciones, relaciones y alineaciones)
- *   viaja como extensión opcional `x_scholaris_comprension` (compartido/comprension-spdf.ts);
+ *   viaja como extensión opcional `scholaris_comprension` (compartido/comprension-spdf.ts);
  *   al importar pasa a las tablas 4.2 del fichero en memoria.
  *
  * `spdf-format` aún no está en npm: va como tarball versionado en `vendor/` (ver

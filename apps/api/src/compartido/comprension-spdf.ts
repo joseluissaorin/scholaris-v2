@@ -5,7 +5,7 @@
  *   tablas que la estantería (`segmentos`, `fichas`, `apariciones`, `relaciones`,
  *   `alineaciones` y los vectores de las fichas) más `comprension_entidades`, las
  *   entidades del grafo que aparecen en el documento (en un .spdf no está el grafo).
- * - **SPDF 5.0** (el estándar abierto): la extensión opcional `x_scholaris_comprension`
+ * - **SPDF 5.0** (el estándar abierto): la extensión opcional `scholaris_comprension`
  *   (fila en `extensions` con `required = 0`): tablas `x_scholaris_segments`,
  *   `x_scholaris_cards`, `x_scholaris_entities`, `x_scholaris_appearances`,
  *   `x_scholaris_relations`, `x_scholaris_alignments` y `x_scholaris_vectors`, con
@@ -32,7 +32,7 @@ import { decodeVector, mapLegacyAnchor, type Anchor, type SpdfDocument, type Spd
 import { anclaDe50 } from './spdf50.js';
 
 /** Nombre y versión de la extensión en `extensions` (SPDF 5.0 §11). */
-export const EXTENSION_COMPRENSION = 'x_scholaris_comprension';
+export const EXTENSION_COMPRENSION = 'scholaris_comprension';
 export const VERSION_EXTENSION_COMPRENSION = '1.0';
 
 /**
@@ -542,13 +542,14 @@ function evidenciasDe50(v: SqlValue | undefined, deDocref: (r: string) => string
 }
 
 /**
- * La extensión `x_scholaris_comprension` de un SPDF 5.0 abierto, como capa de
+ * La extensión `scholaris_comprension` de un SPDF 5.0 abierto, como capa de
  * comprensión con los ids del fichero. Sin la extensión, `capa` es null y no hay avisos.
  * Las filas mal formadas se saltan (con un aviso): el fichero puede venir de cualquiera.
  */
 export async function leerExtensionComprension(doc: SpdfDocument): Promise<ExtensionLeida> {
   const avisos: string[] = [];
-  const ext = (await doc.extensions()).find((e) => e.name === EXTENSION_COMPRENSION);
+  // «x_scholaris_comprension» fue el nombre de los primeros ficheros de prueba; la especificación pide «<proveedor>_<nombre>».
+  const ext = (await doc.extensions()).find((e) => e.name === EXTENSION_COMPRENSION || e.name === 'x_scholaris_comprension');
   if (!ext) return { capa: null, avisos };
   if (ext.version.split('.')[0] !== VERSION_EXTENSION_COMPRENSION.split('.')[0]) {
     avisos.push(`La comprensión del fichero viene en una versión que esta instancia no entiende (${ext.version}): se importa solo el texto.`);

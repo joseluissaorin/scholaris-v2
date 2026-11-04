@@ -300,7 +300,7 @@ frontera está en `apps/api/src/compartido/comprension-spdf.ts` (la capa) y
 tablas que la estantería, más `comprension_entidades` con las entidades del grafo que
 aparecen en el documento, porque el grafo no viaja.
 
-**SPDF 5.0**: la comprensión va como extensión opcional `x_scholaris_comprension`
+**SPDF 5.0**: la comprensión va como extensión opcional `scholaris_comprension`
 (versión 1.0, `required = 0`), así que un lector que no la conoce la ignora. Nombres y
 valores en inglés, como en el núcleo:
 

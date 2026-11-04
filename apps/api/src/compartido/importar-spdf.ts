@@ -3,7 +3,7 @@
  * los paquetes .scholaris y las copias de bibliotecas ajenas. Nada se vuelve a
  * leer: se copian las filas, los binarios incrustados van al almacén y solo se
  * calculan los vectores del espacio de la estantería si faltan. La comprensión que
- * traiga el fichero (4.2, o la extensión `x_scholaris_comprension` de un 5.0) entra
+ * traiga el fichero (4.2, o la extensión `scholaris_comprension` de un 5.0) entra
  * también, con sus entidades resueltas contra el grafo de la biblioteca.
  *
  * Copias (`ajeno`): el .spdf lo arma el servidor desde la estantería de otro
@@ -149,7 +149,7 @@ export async function importarSpdf(p: PuertosUsuario, bytes: Uint8Array, o: Opci
           }
         }
       }
-      // La comprensión (SPDF 4.2, o la extensión x_scholaris_comprension de un 5.0 ya traducida).
+      // La comprensión (SPDF 4.2, o la extensión scholaris_comprension de un 5.0 ya traducida).
       const capa = await leerCapaComprension(a.sql, d0.id, { entidades: 'archivo' });
       if (capa && !capaVacia(capa)) {
         const r = await restaurarComprension(p.sql, capa, { documento: id, ...(existe ? { sufijo: id.slice(-6) } : {}), mapaUnidad, mapaFragmento: mapaFrag });

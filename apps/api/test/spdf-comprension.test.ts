@@ -1,5 +1,5 @@
 /**
- * La comprensión fuera de la estantería: la extensión opcional `x_scholaris_comprension`
+ * La comprensión fuera de la estantería: la extensión opcional `scholaris_comprension`
  * del SPDF 5.0, el .spdf 4.2 interno, la importación (en otra estantería y como copia)
  * y la memoria de una investigación como anotaciones W3C (.spdfa.json).
  *
