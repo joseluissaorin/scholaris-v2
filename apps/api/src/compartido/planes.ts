@@ -11,14 +11,21 @@ export interface LimitesPlan {
   porMinuto: number;
   /** Tamaño máximo de un original. */
   bytesSubida: number;
+  /** Investigaciones (modo Investigar) al día. */
+  investigacionesDia: number | null;
+  /**
+   * Tope del presupuesto de cada investigación (pasos, segundos y dólares); null, el de
+   * la profundidad pedida (hasta «exhaustiva»).
+   */
+  presupuestoInvestigar: { pasos: number; segundos: number; usd: number } | null;
 }
 
 const MB = 1024 * 1024;
 
 export const LIMITES: Record<Plan | 'local', LimitesPlan> = {
-  gratis: { documentos: 25, paginasMes: 1500, busquedasDia: 100, autocitasMes: 5, bytes: 1024 * MB, porMinuto: 120, bytesSubida: 200 * MB },
-  pro: { documentos: 5000, paginasMes: 60000, busquedasDia: 5000, autocitasMes: 500, bytes: 100 * 1024 * MB, porMinuto: 600, bytesSubida: 4 * 1024 * MB },
-  local: { documentos: null, paginasMes: null, busquedasDia: null, autocitasMes: null, bytes: null, porMinuto: 100000, bytesSubida: 16 * 1024 * MB },
+  gratis: { documentos: 25, paginasMes: 1500, busquedasDia: 100, autocitasMes: 5, bytes: 1024 * MB, porMinuto: 120, bytesSubida: 200 * MB, investigacionesDia: 5, presupuestoInvestigar: { pasos: 10, segundos: 150, usd: 0.4 } },
+  pro: { documentos: 5000, paginasMes: 60000, busquedasDia: 5000, autocitasMes: 500, bytes: 100 * 1024 * MB, porMinuto: 600, bytesSubida: 4 * 1024 * MB, investigacionesDia: 150, presupuestoInvestigar: null },
+  local: { documentos: null, paginasMes: null, busquedasDia: null, autocitasMes: null, bytes: null, porMinuto: 100000, bytesSubida: 16 * 1024 * MB, investigacionesDia: null, presupuestoInvestigar: null },
 };
 
 export type Metrica = 'paginasMes' | 'busquedasDia' | 'autocitasMes';

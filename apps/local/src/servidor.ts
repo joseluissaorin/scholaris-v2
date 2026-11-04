@@ -188,6 +188,12 @@ export async function crearServidorLocal(o: OpcionesServidor): Promise<ServidorL
       },
       ...(o.convertir ? { convertir: o.convertir } : {}),
       ...(o.recortar ? { recortar: o.recortar } : {}),
+      gemini: async () => {
+        if (sinConexion) return undefined;
+        const propias = await cuentas.clavesPropias(usuario.id).catch(() => ({} as Record<string, string>));
+        const clave = propias.gemini ?? env.GEMINI_API_KEY;
+        return clave ? { clave, ...(env.GEMINI_BASE_URL ? { baseUrl: env.GEMINI_BASE_URL } : {}) } : undefined;
+      },
     };
   };
 

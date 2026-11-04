@@ -280,3 +280,49 @@ html[data-transicion] .backdrop-blur, html[data-transicion] .backdrop-blur-sm { 
 .controles button:active { scale: 0.92; transition-duration: var(--dur-instante); }
 .escena { transition: translate var(--dur-levantar) var(--muelle-levantar), box-shadow var(--dur-breve) ease-out; }
 @media (hover: hover) { .escena:hover { translate: 0 -2px; } }
+
+/*
+ * Investigar · la respuesta en Markdown: títulos, listas, tablas, citas en bloque.
+ * La cita en bloque va en una caja entera y hundida (nunca una raya de color a un lado).
+ */
+.respuesta-md > * + * { margin-top: 0.85em; }
+.respuesta-md h3, .respuesta-md h4 { font-family: var(--font-sans); color: var(--s-coffee-800); letter-spacing: -0.01em; line-height: 1.25; }
+.respuesta-md h3 { font-size: 1.02em; font-weight: 650; margin-top: 1.5em; }
+.respuesta-md h4 { font-size: 0.92em; font-weight: 600; margin-top: 1.2em; }
+.respuesta-md > :first-child { margin-top: 0; }
+.respuesta-md ul, .respuesta-md ol { padding-left: 1.25em; }
+.respuesta-md ul > li { position: relative; list-style: none; }
+.respuesta-md ul > li::before { content: ''; position: absolute; left: -1em; top: 0.62em; width: 0.38em; height: 0.38em; border-radius: 1px; background: var(--s-rojo); }
+.respuesta-md ol { list-style: decimal; }
+.respuesta-md ol > li::marker { font-family: var(--font-mono); font-size: 0.78em; color: var(--s-apagado); }
+.respuesta-md li + li { margin-top: 0.35em; }
+.respuesta-md li > ul, .respuesta-md li > ol, .respuesta-md li > p + * { margin-top: 0.35em; }
+.respuesta-md blockquote { padding: 0.7em 1em; border: 1px solid var(--s-cream-400); border-radius: 12px; background: var(--s-cream-100); box-shadow: var(--hundido); font-size: 0.96em; }
+.respuesta-md blockquote > * + * { margin-top: 0.6em; }
+.respuesta-md code { font-family: var(--font-mono); font-size: 0.82em; background: var(--s-cream-200); border-radius: 4px; padding: 0.05em 0.3em; }
+.respuesta-md pre { overflow-x: auto; padding: 0.8em 1em; border-radius: 12px; background: var(--s-cream-200); box-shadow: var(--hundido); }
+.respuesta-md pre code { background: none; padding: 0; }
+.respuesta-md hr { border: 0; border-top: 1px solid var(--s-cream-300); margin: 1.5em 0; }
+.respuesta-md a { text-decoration: underline; text-decoration-color: var(--s-cream-500); text-underline-offset: 3px; }
+.respuesta-md a:hover { text-decoration-color: currentColor; }
+.tabla-respuesta { overflow-x: auto; border-radius: 12px; border: 1px solid var(--s-cream-300); background: var(--s-cream-50); }
+.tabla-respuesta:focus-visible { outline: 2px solid var(--s-coffee-400); outline-offset: 2px; }
+.tabla-respuesta table { width: 100%; border-collapse: collapse; font-size: 0.84em; line-height: 1.45; font-variant-numeric: tabular-nums lining-nums; }
+.tabla-respuesta th, .tabla-respuesta td { padding: 0.5em 0.75em; border-bottom: 1px solid var(--s-cream-300); text-align: left; vertical-align: top; }
+.tabla-respuesta tbody tr:last-child td { border-bottom: 0; }
+.tabla-respuesta th { font-family: var(--font-sans); font-size: 0.78em; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--s-apagado); background: var(--s-cream-100); }
+
+/* Investigar · lo que la verificación no pudo sostener: un subrayado a puntos, discreto, y la marca «sin prueba». */
+::highlight(frase-dudosa) { text-decoration: underline dotted rgb(184 62 51 / 0.75); text-decoration-thickness: 1.5px; text-underline-offset: 0.25em; }
+.sin-prueba {
+  display: inline-block; margin-left: 0.3em; padding: 0 0.35em; vertical-align: 0.12em;
+  font-family: var(--font-sans); font-size: 0.6em; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; line-height: 1.6;
+  color: var(--s-rojo); border: 1px dashed rgb(184 62 51 / 0.55); border-radius: 4px;
+}
+
+/* Investigar · el recuadro a mano: la pluma roja rodea la región de la prueba, una vez. */
+.recuadro-trazo { stroke-dasharray: 1; stroke-dashoffset: 0; }
+@keyframes s-rodea { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
+@media (prefers-reduced-motion: no-preference) {
+  .recuadro-trazo { animation: s-rodea 0.75s var(--ease-tinta) 0.15s both; }
+}

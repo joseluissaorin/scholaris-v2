@@ -87,7 +87,17 @@ Reglas obligatorias:
 3. Si citas literalmente, copia el texto exacto del pasaje entre comillas latinas «…».
 4. Escribe en Markdown sencillo, en el idioma indicado, con ortografía cuidada. Sé conciso: de uno a tres párrafos.`;
 
-const MARCA = /\[((?:F\d+|fr[a-z0-9]+|\d+)(?:\s*[,;]\s*(?:F\d+|fr[a-z0-9]+|\d+))*)\]/gi;
+/**
+ * Marcas de cita: [F2], [F1, F3], [3] o un id de fragmento. El modelo a veces añade el
+ * localizador dentro de los corchetes («[F1, p. 10]», «[F2: 12:04]»): la marca vale igual y
+ * el localizador se quita (el de la nota sale siempre del ancla, nunca del modelo).
+ */
+const MARCA = /\[((?:F\d+|fr[a-z0-9]+|\d+)(?:\s*[,;]\s*(?:F\d+|fr[a-z0-9]+|\d+))*)\]|\[\s*((?:F\d+|fr[a-z0-9]+)\b[^[\]\n]{0,80}?)\]/gi;
+
+/** Las claves de una marca con localizador: solo los F#/ids (los números sueltos serían páginas). */
+export function clavesDeMarca(contenido: string): string {
+  return (contenido.match(/\bF\d+\b|\bfr[a-z0-9]+\b/gi) ?? []).join(', ');
+}
 
 /** Respuesta con citas, en streaming. */
 export async function* responder(buscador: Buscador, redactor: Redactor, pregunta: string, opciones: OpcionesRespuesta = {}): AsyncGenerator<EventoRespuesta> {
@@ -146,7 +156,7 @@ export async function* responder(buscador: Buscador, redactor: Redactor, pregunt
     }
     return notas.map((n) => `[^${n}]`).join('');
   };
-  const sustituir = (texto: string) => texto.replace(MARCA, (_, c: string) => resolver(c));
+  const sustituir = (texto: string) => texto.replace(MARCA, (_, c: string | undefined, conLocalizador: string | undefined) => resolver(c ?? clavesDeMarca(conLocalizador ?? '')));
 
   let crudo = '';
   let salida = '';

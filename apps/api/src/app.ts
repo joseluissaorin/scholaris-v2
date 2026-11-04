@@ -36,6 +36,7 @@ import { rutasLotes } from './rutas/lotes.js';
 import { rutasTareas } from './rutas/tareas.js';
 import { rutasCuenta } from './rutas/cuenta.js';
 import { rutasBusqueda } from './rutas/busqueda.js';
+import { rutasInvestigar } from './rutas/investigar.js';
 import { rutasCitas } from './rutas/citas.js';
 import { rutasSpdf } from './rutas/spdf.js';
 import { rutasMedios } from './rutas/medios.js';
@@ -78,6 +79,7 @@ export function crearAppUsuario() {
   rutasLotes(sub);
   rutasTareas(sub);
   rutasBusqueda(sub);
+  rutasInvestigar(sub);
   rutasCitas(sub);
   montarFunciones(sub);
   rutasMcp(sub);

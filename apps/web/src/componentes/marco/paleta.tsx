@@ -86,6 +86,7 @@ export default function Paleta({ abierta, alCambiar }: { abierta: boolean; alCam
       if (t.length > 2) {
         for (const r of (pasajes.data?.resultados ?? []).slice(0, 6)) out.push(opcionPasaje(r, ir, navegar));
         out.push({ id: 'preguntar', grupo: 'Preguntar', icono: 'chispa', titulo: <>Preguntar a la biblioteca: <em>«{diferido.trim()}»</em></>, hacer: ir(() => void navegar({ to: '/buscar', search: { q: diferido.trim(), modo: 'preguntar' } })) });
+        out.push({ id: 'investigar', grupo: 'Preguntar', icono: 'lector', titulo: <>Investigar a fondo: <em>«{diferido.trim()}»</em></>, hacer: ir(() => void navegar({ to: '/buscar', search: { q: diferido.trim(), modo: 'investigar' } })) });
         out.push({ id: 'buscar', grupo: 'Preguntar', icono: 'buscar', titulo: <>Ver todos los resultados de <em>«{diferido.trim()}»</em></>, hacer: ir(() => void navegar({ to: '/buscar', search: { q: diferido.trim() } })) });
       }
     }

@@ -11,12 +11,12 @@ import {
 import { BLOQUE, precargarLector, q } from '../datos/consultas';
 import { api } from '../datos/api';
 import { useIngestas } from '../datos/ingesta';
-import { validarBusquedaLector, type BusquedaLector, type ContextoBusqueda } from '../lib/anclas';
+import { materialDeBusqueda, validarBusquedaLector, type BusquedaLector, type ContextoBusqueda, type MaterialLector } from '../lib/anclas';
 import { anotarVenida, busquedaDeResultado, contextoLimpio, opcionesDeContexto, precargarResultado, sembrarFragmento } from '../datos/recorrido';
 import { claveDePasaje, pedirDesplazamiento } from '../componentes/lector/subrayado';
 import { anotarReciente, ponerPreferencia, preferencia } from '../lib/acciones';
 import { anioVisible, contenedorVisible, autores, ESTILOS_RAPIDOS, esMedio, tiempoACadena, NOMBRE_TIPO } from '../lib/formato';
-import { Flujo, useUnidadEnCache, type ManejadorFlujo, type ModoLectura } from '../componentes/lector/flujo';
+import { Flujo, useUnidadEnCache, type ManejadorFlujo, type MaterialEnUnidad, type ModoLectura } from '../componentes/lector/flujo';
 import { Reproductor, type ManejadorMedio } from '../componentes/reproductor/reproductor';
 import { Ficha } from '../componentes/lector/ficha';
 import { ProveedorEntidades } from '../componentes/lector/entidades';
@@ -99,6 +99,18 @@ function Lector() {
   const pasajePedido = useRef<string | null>(null);
   if (pasaje && !medio && pasajePedido.current !== pasaje.texto) { pasajePedido.current = pasaje.texto; pedirDesplazamiento(claveDePasaje(pasaje.texto)); }
 
+  // La prueba que abrió el lector (?cr=&rg=&it=, desde Investigar): sus caracteres se subrayan y su región
+  // se rodea, en la unidad de llegada (?u=) o en el segundo de llegada (?t=). Se recuerda aunque la URL siga
+  // a la lectura y suelte esos parámetros al alejarse.
+  const [material, setMaterial] = useState<(MaterialLector & { u?: number; t?: number; llegada: number }) | null>(() => {
+    const m = materialDeBusqueda(busqueda);
+    return m ? { ...m, u: busqueda.u, t: busqueda.t, llegada: Date.now() } : null;
+  });
+  useEffect(() => {
+    const m = materialDeBusqueda(busqueda);
+    if (m) setMaterial((x) => (x && x.u === busqueda.u && x.t === busqueda.t && JSON.stringify([x.caracteres, x.region, x.instante]) === JSON.stringify([m.caracteres, m.region, m.instante]) ? x : { ...m, u: busqueda.u, t: busqueda.t, llegada: Date.now() }));
+  }, [busqueda.cr, busqueda.rg, busqueda.it]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Recorrido de los resultados de la búsqueda de la que se vino (de la caché: no se busca otra vez).
   const rb = busqueda.rb;
   const router = useRouter();
@@ -164,11 +176,14 @@ function Lector() {
   // entonces (y al pasar a otro resultado del mismo documento) se va a esa unidad.
   const destinoSeccion = busqueda.u == null && busqueda.sec && secciones ? inicial : null;
   const seccionSituada = useRef<string | null>(null);
+  // La unidad de llegada de un enlace por sección (para la prueba que no trae ?u=).
+  const [unidadSeccion, setUnidadSeccion] = useState<number | null>(null);
   useEffect(() => {
     if (destinoSeccion == null) return;
     const clave = `${busqueda.sec}|${busqueda.par ?? ''}|${busqueda.f ?? ''}`;
     if (seccionSituada.current === clave) return;
     seccionSituada.current = clave;
+    setUnidadSeccion(destinoSeccion);
     const h = window.setTimeout(() => flujo.current?.irA(destinoSeccion), 30);
     return () => window.clearTimeout(h);
   }, [destinoSeccion]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -185,10 +200,19 @@ function Lector() {
     void api().perspectivas.abierto(id, busqueda.u).catch(() => undefined);
   }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // La unidad de la prueba (en libros): la de llegada.
+  const ordenMaterial = material ? material.u ?? unidadSeccion ?? (busqueda.sec ? null : 1) : null;
+  const materialFlujo = useMemo<MaterialEnUnidad | undefined>(() => (material && !medio && ordenMaterial != null
+    ? { orden: ordenMaterial, llegada: material.llegada, ...(material.caracteres ? { caracteres: material.caracteres } : {}), ...(material.region ? { region: material.region } : {}) }
+    : undefined), [material, medio, ordenMaterial]);
+
   // La URL sigue a la lectura (sin recolocar): el enlace se puede copiar en cualquier momento.
+  // Lejos de la prueba, la URL suelta su ancla material: el enlace copiado dice dónde se está, no de dónde se vino.
   useEffect(() => {
     const h = setTimeout(() => {
-      void navegar({ search: (s) => (medio ? { ...s, t: Math.floor(tiempo), u: undefined } : { ...s, u: actual > 1 ? actual : undefined, sec: undefined, par: undefined }), replace: true, resetScroll: false });
+      const lejos = !!material && (medio ? Math.abs(tiempo - (material.instante ?? material.t ?? 0)) > 8 : ordenMaterial != null && actual !== ordenMaterial);
+      const sinMaterial = lejos ? { cr: undefined, rg: undefined, it: undefined } : {};
+      void navegar({ search: (s) => (medio ? { ...s, t: Math.floor(tiempo), u: undefined, ...sinMaterial } : { ...s, u: actual > 1 ? actual : undefined, sec: undefined, par: undefined, ...sinMaterial }), replace: true, resetScroll: false });
     }, 600);
     return () => clearTimeout(h);
   }, [actual, Math.floor(tiempo / 5)]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -299,10 +323,10 @@ function Lector() {
       <div className="flex">
         <div ref={medio ? undefined : zona} data-compartido="lectura" className={cx('min-w-0 flex-1 px-5 md:px-12', !medio && 'pb-24')}>
           {medio ? (
-            <Reproductor ref={reproductor} doc={doc} inicial={busqueda.t} resaltar={busqueda.q} {...(pasaje ? { pasaje: pasaje.texto } : {})} alVer={alVerMedio} {...(ingesta?.unidades ? { pendientes: Math.max(0, ingesta.unidades - (ingesta.leidas ?? 0)) } : {})} />
+            <Reproductor ref={reproductor} doc={doc} inicial={busqueda.t} resaltar={busqueda.q} {...(pasaje ? { pasaje: pasaje.texto } : {})} {...(material ? { material } : {})} alVer={alVerMedio} {...(ingesta?.unidades ? { pendientes: Math.max(0, ingesta.unidades - (ingesta.leidas ?? 0)) } : {})} />
           ) : (
             <ProveedorEntidades documento={doc.id}>
-              <Flujo ref={flujo} doc={doc} modo={modo} inicial={inicial} resaltar={busqueda.q} {...(pasaje ? { pasaje: pasaje.texto, contextoPasaje: pasaje.contexto } : {})} leidas={ingesta ? ingesta.leidas : undefined} total={ingesta?.unidades ?? undefined} alVer={alVer} />
+              <Flujo ref={flujo} doc={doc} modo={modo} inicial={inicial} resaltar={busqueda.q} {...(pasaje ? { pasaje: pasaje.texto, contextoPasaje: pasaje.contexto } : {})} {...(materialFlujo ? { material: materialFlujo } : {})} leidas={ingesta ? ingesta.leidas : undefined} total={ingesta?.unidades ?? undefined} alVer={alVer} />
             </ProveedorEntidades>
           )}
         </div>

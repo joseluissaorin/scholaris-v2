@@ -233,6 +233,80 @@ class Scholaris:
                 raise ErrorApi(500, "respuesta", e["mensaje"])
         return {"texto": "".join(texto), "citas": citas, "resultados": resultados}
 
+    def investigar(self, pregunta: str, *, documentos: Optional[List[str]] = None, biblioteca: Optional[str] = None,
+                   profundidad: str = "normal", idioma: Optional[str] = None, cuaderno: Any = None,
+                   sin_historial: bool = False, flujo: bool = True, **opciones: Any) -> Any:
+        """El agente de investigación (modo Investigar).
+
+        Con ``flujo=True`` (por defecto) devuelve un iterador de eventos: «inicio», «plan»,
+        «paso» (cada herramienta), «evidencia» (cada prueba, P1, P2…), «texto» (la respuesta
+        por trozos), «verificacion» y «fin» (markdown, evidencias E1…, fuentes, cuaderno,
+        confianza, coste, avisos). Con ``flujo=False`` espera y devuelve el «fin».
+
+        ``profundidad``: «rapida», «normal» o «exhaustiva». ``cuaderno``: el id de un cuaderno
+        para seguirlo, o False para no guardar nada en cuadernos.
+
+            for e in s.investigar("¿Cómo cambia Coppelia entre el cuento y la película?"):
+                if e["tipo"] == "paso": print(e["herramienta"], e["resumen"])
+            r = s.investigar("…", flujo=False); print(r["markdown"])
+        """
+        filtros = dict(opciones.pop("filtros", None) or {})
+        if documentos:
+            filtros["documentos"] = documentos
+        if biblioteca:
+            filtros["bibliotecas"] = [biblioteca]
+        cuerpo: Dict[str, Any] = {"pregunta": pregunta, "profundidad": profundidad, **opciones}
+        if filtros:
+            cuerpo["filtros"] = filtros
+        if idioma:
+            cuerpo["idioma"] = idioma
+        if cuaderno is not None:
+            cuerpo["cuaderno"] = cuaderno
+        if sin_historial:
+            cuerpo["sinHistorial"] = True
+        eventos = self._eventos("/busqueda/investigar", cuerpo)
+        if flujo:
+            return eventos
+        return self.investigacion_de(eventos)
+
+    def investigacion(self, pregunta: str, **opciones: Any) -> dict:
+        """Lo mismo que ``investigar(..., flujo=False)``: espera y devuelve el evento «fin»."""
+        return self.investigar(pregunta, flujo=False, **opciones)
+
+    @staticmethod
+    def investigacion_de(eventos: Iterator[dict]) -> dict:
+        """El «fin» de un flujo de eventos de investigación (con el plan y los pasos)."""
+        plan, pasos = None, []
+        for e in eventos:
+            if e["tipo"] == "plan":
+                plan = e["plan"]
+            elif e["tipo"] == "paso":
+                pasos.append(e)
+            elif e["tipo"] == "error":
+                raise ErrorApi(500, "investigacion", e["mensaje"])
+            elif e["tipo"] == "fin":
+                return {**e, "plan": plan, "pasos": pasos}
+        raise ErrorApi(500, "investigacion", "La investigación terminó sin resultado.")
+
+    def _eventos(self, ruta: str, cuerpo: dict) -> Iterator[dict]:
+        """Eventos SSE de la API (cada uno, el JSON de su «data»)."""
+        tiempo, self.tiempo = self.tiempo, max(self.tiempo, 900)
+        try:
+            r = self.pedir("POST", ruta, json_=cuerpo, stream=True, cabeceras={"accept": "text/event-stream"})
+        finally:
+            self.tiempo = tiempo
+        datos: List[str] = []
+        for linea in r.iter_lines(decode_unicode=True):
+            if linea is None:
+                continue
+            if linea.startswith("data:"):
+                datos.append(linea[5:].lstrip())
+            elif linea == "" and datos:
+                yield json.loads("\n".join(datos))
+                datos = []
+        if datos:
+            yield json.loads("\n".join(datos))
+
     def verificar(self, afirmacion: str, **opciones: Any) -> dict:
         return self.pedir("POST", "/citas/verificar", json_={"afirmacion": afirmacion, **opciones})
 

@@ -150,6 +150,20 @@ export interface RespuestaPreguntarV1 {
   ms: number;
 }
 
+/** POST /api/v1/investigar: el agente de investigación (docs/COMPRENSION.md). */
+export interface InvestigarV1 {
+  pregunta: string;
+  documentos?: string[];
+  biblioteca?: string;
+  /** «rapida», «normal» (por defecto) o «exhaustiva». */
+  profundidad?: 'rapida' | 'normal' | 'exhaustiva';
+  idioma?: string;
+  /** Dejar las pruebas y la respuesta en un cuaderno (sí por defecto, si la clave puede escribir). */
+  cuaderno?: boolean;
+  /** Eventos SSE de la v2: `inicio`, `plan`, `paso`, `evidencia`, `texto`, `verificacion`, `fin`, `error`. */
+  stream?: boolean;
+}
+
 export interface CitarV1 {
   /** El texto que hay que citar (Markdown o texto plano, hasta 200 000 caracteres). */
   texto: string;

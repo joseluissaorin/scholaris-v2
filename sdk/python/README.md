@@ -72,6 +72,12 @@ s.subir_url("https://www.youtube.com/watch?v=…")
 for r in s.buscar("atención escalada", k=5):
     print(r["pasaje"]["texto"], r["citaCorta"])     # el pasaje (sus oraciones) y su cita, con su página
 print(s.respuesta("¿Qué es la atención multicabeza?")["texto"])
+# Investigar: un agente que planifica, busca, lee, mira los vídeos y verifica.
+for e in s.investigar("¿Cómo cambia Coppelia entre el cuento y la película?", profundidad="normal"):
+    if e["tipo"] == "paso":
+        print(e["herramienta"], e["resumen"])         # cada herramienta, según trabaja
+fin = s.investigacion("¿Cómo cambia Coppelia entre el cuento y la película?")
+print(fin["markdown"])                             # citas [E1]… a pruebas con ancla exacta (página y caracteres, o segundos)
 s.descargar_spdf(doc["id"], "articulo.spdf")
 autocita = s.autocitar("mi-trabajo.docx", estilo="apa")
 s.exportar_autocita(autocita["id"], "mi-trabajo-citado.docx")

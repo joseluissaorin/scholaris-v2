@@ -112,7 +112,7 @@ export interface FiltrosHistorial extends ParamsPagina {
 export interface EventoBusqueda {
   id: string;
   consulta: string;
-  tipo: 'busqueda' | 'respuesta' | 'multilingue' | 'verificacion' | 'similares';
+  tipo: 'busqueda' | 'respuesta' | 'multilingue' | 'verificacion' | 'similares' | 'investigacion';
   intencion?: IntencionConsulta;
   filtros?: Filtros;
   resultados: number;

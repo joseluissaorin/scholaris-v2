@@ -50,6 +50,9 @@ importers:
       '@scholaris/ingesta':
         specifier: workspace:^
         version: link:../../packages/ingesta
+      '@scholaris/investigar':
+        specifier: workspace:^
+        version: link:../../packages/investigar
       '@scholaris/nucleo':
         specifier: workspace:^
         version: link:../../packages/nucleo
@@ -433,6 +436,27 @@ importers:
         version: link:../nucleo
       '@scholaris/spdf':
         specifier: workspace:^
+        version: link:../spdf
+
+  packages/investigar:
+    dependencies:
+      '@scholaris/busqueda':
+        specifier: workspace:*
+        version: link:../busqueda
+      '@scholaris/contrato':
+        specifier: workspace:*
+        version: link:../contrato
+      '@scholaris/funciones':
+        specifier: workspace:*
+        version: link:../funciones
+      '@scholaris/nucleo':
+        specifier: workspace:*
+        version: link:../nucleo
+      '@scholaris/proveedores':
+        specifier: workspace:*
+        version: link:../proveedores
+      '@scholaris/spdf':
+        specifier: workspace:*
         version: link:../spdf
 
   packages/normalizacion:

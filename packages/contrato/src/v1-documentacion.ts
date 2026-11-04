@@ -241,6 +241,15 @@ export function openapiV1(origen: string): Record<string, unknown> {
           responses: { '200': { description: 'Respuesta', content: { ...json(ref('Respuesta')), 'text/event-stream': { schema: { type: 'string' } } } }, ...ERRORES },
         },
       },
+      '/investigar': {
+        post: {
+          tags: ['preguntar'], operationId: 'investigar', summary: 'Investigar: una respuesta larga con pruebas materiales',
+          description: 'Un agente planifica, busca en las capas literal y de comprensión, lee, mira los vídeos y las páginas, sigue entidades y relaciones entre obras, y escribe una respuesta académica en la que cada afirmación cita una prueba [E1]… con su ancla exacta (página y caracteres, o segundos, región e instante). Cada frase se verifica contra sus pruebas. Devuelve el evento `fin` de la v2: `markdown`, `evidencias`, `fuentes`, `cuaderno`, `confianza`, `coste`, `avisos`. Con `stream: true`, los eventos SSE de la v2 tal cual. Tarda de uno a varios minutos.',
+          parameters: [pFormato],
+          requestBody: { required: true, content: { 'application/json': { schema: obj({ pregunta: str(), documentos: arr(str()), biblioteca: str(), profundidad: str('rapida, normal o exhaustiva.', { default: 'normal' }), idioma: str(), cuaderno: { type: 'boolean' }, stream: { type: 'boolean' } }, ['pregunta']) } } },
+          responses: { '200': { description: 'La investigación terminada', content: { 'application/json': { schema: { type: 'object' } }, 'text/event-stream': { schema: { type: 'string' } } } }, ...ERRORES },
+        },
+      },
       '/citar': {
         post: {
           tags: ['citar'], operationId: 'citar', summary: 'Citar un texto con la biblioteca',
@@ -310,6 +319,7 @@ En español: Scholaris es una biblioteca leída y citable. Subes cualquier cosa,
 - \`GET ${B}/documentos/{id}/spdf\`: the document as an SPDF 5.0 file (open format: SQLite with text, anchors, search index, vectors and CSL-JSON metadata; https://spdf.joseluissaorin.com). \`?version=4\` gives the legacy 4.1. \`POST ${B}/documentos/importar\` with a .spdf body (5.0, 4.x or 3.x) adds it to the library without reading it again.
 - \`GET ${B}/buscar?q=…&k=10&documento=ID\`: passages with \`cita\` («(Cortázar, 1977, 1:06:56)»), \`localizador\` («p. 23»), \`ancla\`, \`enlace\` (deep link to the reader at that page or second) and literal \`texto\`. Quote a phrase ("…") for literal search.
 - \`POST ${B}/preguntar {"pregunta": "…"}\`: Markdown answer with footnotes [^n] and \`fuentes\` (each a passage with its citation). \`"stream": true\` for SSE (\`pasajes\`, \`texto\`, \`fuente\`, \`fin\`).
+- \`POST ${B}/investigar {"pregunta": "…", "profundidad": "normal"}\`: research agent (plan, tools, video and page reading, verification). Long academic Markdown answer citing evidence [E1]… with exact material anchors (\`evidencias\`: page and characters, or seconds, region and instant), plus \`fuentes\`, \`cuaderno\`, \`confianza\`, \`coste\`. Takes minutes; \`"stream": true\` for SSE (\`plan\`, \`paso\`, \`evidencia\`, \`texto\`, \`verificacion\`, \`fin\`).
 - \`POST ${B}/citar {"texto": "…", "estilo": "apa"}\`: returns the text with verified citations inserted, the list of \`citas\` (claim, citation, passage, \`respaldo\` 0-1) and the \`bibliografia\`. Any CSL style. A .docx body with \`Accept: application/vnd.openxmlformats-officedocument.wordprocessingml.document\` returns the cited .docx. Slow (often 20-90 s): waits \`?esperar=120\`, then 202 + \`GET ${B}/citar/{id}\`.
 - \`POST ${B}/verificar {"afirmacion": "…"}\`: \`veredicto\` (respaldada | parcial | sin_respaldo | contradicha), \`probabilidad\` and the supporting or contradicting passages.
 
@@ -334,7 +344,7 @@ curl -s ${B}/preguntar -H "Authorization: Bearer $SCHOLARIS" -H "Content-Type: a
 
 - [Human guide (Spanish and English)](${origen}/api): copy-paste examples in curl, JavaScript and Python.
 - [OpenAPI 3.1](${B}/openapi.json)
-- [MCP server](${origen}/mcp): Streamable HTTP with OAuth or a key with the \`mcp\` scope. Tools: search, cite, open_page, verify_claim.
+- [MCP server](${origen}/mcp): Streamable HTTP with OAuth or a key with the \`mcp\` scope. Tools: search, cite, open_page, verify_claim, investigate.
 - [Python](${origen}/api#python): \`pip install scholaris-sdk\` (import name \`scholaris\`), then \`from scholaris.api import Scholaris; Scholaris("sch_…").buscar("…")\`.
 `;
 }

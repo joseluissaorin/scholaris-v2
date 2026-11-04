@@ -4,16 +4,17 @@ import { DatabaseSync } from 'node:sqlite';
 import { fileURLToPath } from 'node:url';
 import { sqlConLimite, type SQL, type ValorSQL } from '@scholaris/nucleo';
 
-const ESQUEMA = fileURLToPath(new URL('../../../spdf/esquema/v4.1.sql', import.meta.url));
+const esquema = (version: string) => fileURLToPath(new URL(`../../../spdf/esquema/v${version}.sql`, import.meta.url));
 
 export interface SQLMedido extends SQL {
   consultas: number;
   bd: DatabaseSync;
 }
 
-export function crearSQL(): SQLMedido {
+/** Por defecto con el esquema 4.1 (sin la capa de comprensión); `'4.2'` la trae. */
+export function crearSQL(version: '4.1' | '4.2' = '4.1'): SQLMedido {
   const bd = new DatabaseSync(':memory:');
-  bd.exec(readFileSync(ESQUEMA, 'utf8'));
+  bd.exec(readFileSync(esquema(version), 'utf8'));
   const sql: SQLMedido = {
     consultas: 0,
     bd,

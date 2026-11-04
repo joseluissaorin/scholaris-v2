@@ -3,18 +3,22 @@
  * desplazamiento va sincronizado por construcción. Virtualizado: solo existen
  * en el DOM (y solo se descargan) las páginas que se ven y las de al lado.
  */
-import { forwardRef, memo, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState } from 'react';
+import { forwardRef, memo, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useWindowVirtualizer } from '@tanstack/react-virtual';
 import type { DetalleDocumento, UnidadVista } from '@scholaris/contrato';
+import type { Region } from '@scholaris/nucleo';
 import { cx, EsqueletoTexto, Esqueleto, Folio, Rotulo } from '@scholaris/ui';
 import { BLOQUE, q } from '../../datos/consultas';
 import { Markdown } from './markdown';
 import { Facsimil } from './facsimil';
 import { etiquetaCorta } from '../../lib/formato';
 import { paginaPrevia, usePrevia, type PaginaPrevia } from '../../datos/previa';
-import { altPagina, MarcasFiguras, useFigurasDePagina } from '../inspector/marcas-pagina';
+import { altPagina, capa, MarcasFiguras, useFigurasDePagina } from '../inspector/marcas-pagina';
 import { useFigurasDocumento } from '../inspector/figuras';
+import { textoDeCaracteres } from '../../lib/anclas';
+import { RecuadroMano } from '../comunes/recuadro-mano';
+import { claveDePasaje, pedirDesplazamiento } from './subrayado';
 
 function unidadDePrevia(p: PaginaPrevia): UnidadVista {
   return {
@@ -28,6 +32,21 @@ function unidadDePrevia(p: PaginaPrevia): UnidadVista {
 export type ModoLectura = 'ambas' | 'pagina' | 'texto';
 
 export interface ManejadorFlujo { irA: (orden: number, suave?: boolean) => void }
+
+/**
+ * La prueba que abrió el lector, en su unidad: los caracteres se subrayan como un
+ * pasaje y la región se rodea sobre la imagen de la página. `llegada` distingue
+ * una llegada de otra (cada una se pone a la vista una sola vez).
+ */
+export interface MaterialEnUnidad {
+  orden: number;
+  caracteres?: [number, number];
+  region?: Region;
+  llegada: number;
+}
+
+// La última llegada que ya pidió ponerse a la vista.
+let llegadaSituada: number | null = null;
 
 const bloqueDe = (orden: number) => Math.floor((orden - 1) / BLOQUE);
 
@@ -45,10 +64,12 @@ export const Flujo = memo(forwardRef<ManejadorFlujo, {
   doc: DetalleDocumento; modo: ModoLectura; inicial: number; resaltar?: string; destacar?: string; leidas?: number;
   /** El pasaje que abrió el lector (subrayado) y su fragmento entero (en suave). */
   pasaje?: string; contextoPasaje?: string;
+  /** El ancla material de una prueba (caracteres y región de una unidad). */
+  material?: MaterialEnUnidad;
   /** Unidades totales si se conocen antes que el servidor (la imprenta ya las contó). */
   total?: number;
   alVer: (orden: number) => void;
-}>(function Flujo({ doc, modo, inicial, resaltar, destacar, pasaje, contextoPasaje, leidas, total: totalConocido, alVer }, ref) {
+}>(function Flujo({ doc, modo, inicial, resaltar, destacar, pasaje, contextoPasaje, material, leidas, total: totalConocido, alVer }, ref) {
   const total = Math.max(doc.unidades, totalConocido ?? 0);
   const contenedor = useRef<HTMLDivElement>(null);
   const [margen, setMargen] = useState(0);
@@ -118,15 +139,15 @@ export const Flujo = memo(forwardRef<ManejadorFlujo, {
       {v.getVirtualItems().map((it) => (
         // `top` y no `transform`: el folio pegado (sticky) no ve las transformaciones.
         <div key={it.key} data-index={it.index} ref={v.measureElement} className="absolute inset-x-0" style={{ top: it.start - v.options.scrollMargin }}>
-          <Fila docId={doc.id} orden={it.index + 1} modo={modoReal} texto={texto} apaisada={apaisada} resaltar={resaltar} destacar={inicial === it.index + 1 ? destacar : undefined} pasaje={pasaje} contextoPasaje={contextoPasaje} pendiente={leidas != null && it.index + 1 > leidas} procesando={doc.estado !== 'listo'} titulillo={doc.metadatos.titulo} />
+          <Fila docId={doc.id} orden={it.index + 1} modo={modoReal} texto={texto} apaisada={apaisada} resaltar={resaltar} destacar={inicial === it.index + 1 ? destacar : undefined} pasaje={pasaje} contextoPasaje={contextoPasaje} material={material?.orden === it.index + 1 ? material : undefined} pendiente={leidas != null && it.index + 1 > leidas} procesando={doc.estado !== 'listo'} titulillo={doc.metadatos.titulo} />
         </div>
       ))}
     </div>
   );
 }));
 
-const Fila = memo(function Fila({ docId, orden, modo, texto, apaisada, resaltar, destacar, pasaje, contextoPasaje, pendiente: pendienteServidor, procesando, titulillo }: {
-  docId: string; orden: number; modo: ModoLectura; texto: boolean; apaisada: boolean; resaltar?: string; destacar?: string; pasaje?: string; contextoPasaje?: string; pendiente: boolean; procesando: boolean; titulillo: string;
+const Fila = memo(function Fila({ docId, orden, modo, texto, apaisada, resaltar, destacar, pasaje: pasajeLlegada, contextoPasaje: contextoLlegada, material, pendiente: pendienteServidor, procesando, titulillo }: {
+  docId: string; orden: number; modo: ModoLectura; texto: boolean; apaisada: boolean; resaltar?: string; destacar?: string; pasaje?: string; contextoPasaje?: string; material?: MaterialEnUnidad; pendiente: boolean; procesando: boolean; titulillo: string;
 }) {
   const { data } = useQuery({ ...q.bloque(docId, bloqueDe(orden)), enabled: !pendienteServidor });
   usePrevia(docId);
@@ -141,6 +162,14 @@ const Fila = memo(function Fila({ docId, orden, modo, texto, apaisada, resaltar,
   const figuras = useFigurasDePagina(docId, orden);
   const { figuras: todas } = useFigurasDocumento(docId, figuras.length > 0);
   const [aspectoImagen, setAspectoImagen] = useState<number | null>(null);
+
+  // Los caracteres de la prueba: su texto, que se subraya como cualquier pasaje (y se pone a la vista una vez).
+  const textoMaterial = useMemo(() => (material?.caracteres && u?.texto ? textoDeCaracteres(u.texto, material.caracteres) || undefined : undefined), [material?.caracteres, u?.texto]);
+  if (textoMaterial && !pasajeLlegada && material && llegadaSituada !== material.llegada) { llegadaSituada = material.llegada; pedirDesplazamiento(claveDePasaje(textoMaterial)); }
+  const pasaje = pasajeLlegada ?? textoMaterial;
+  const contextoPasaje = pasajeLlegada ? contextoLlegada : undefined;
+  // La región de la prueba, rodeada a mano sobre la página (con el texto subrayado al lado, solo se acerca si no hay texto que lo haga).
+  const recuadro = material?.region ? <RecuadroMano region={material.region} clave={`${docId}|${orden}|${material.llegada}`} aLaVista={!textoMaterial || modo === 'pagina'} /> : null;
 
   if (texto) {
     return (
@@ -164,9 +193,13 @@ const Fila = memo(function Fila({ docId, orden, modo, texto, apaisada, resaltar,
         <div className="relative">
           <img src={imagenPagina} alt={altPagina(u?.etiqueta ?? '', figuras)} loading="lazy" decoding="async" onError={() => setImagenRota(true)} onLoad={(e) => setAspectoImagen(e.currentTarget.naturalWidth / e.currentTarget.naturalHeight)} className={cx('w-full rounded-md bg-white object-contain shadow-hoja', apaisada ? 'aspect-[16/9]' : 'aspect-[1/1.414]')} />
           <MarcasFiguras documento={docId} figuras={figuras} aspecto={aspectoImagen ? { imagen: aspectoImagen, caja: apaisada ? 16 / 9 : 1 / 1.414 } : undefined} todas={todas.filter((f) => f.ancla.tipo !== 'tiempo')} alIr={() => undefined} />
+          {recuadro ? <div className="pointer-events-none absolute" style={capa(aspectoImagen ? { imagen: aspectoImagen, caja: apaisada ? 16 / 9 : 1 / 1.414 } : undefined)}>{recuadro}</div> : null}
         </div>
       ) : u ? (
-        <Facsimil texto={u.texto} folio={folio?.impresa} titulillo={orden % 2 ? titulillo : undefined} apaisada={apaisada} />
+        <div className="relative">
+          <Facsimil texto={u.texto} folio={folio?.impresa} titulillo={orden % 2 ? titulillo : undefined} apaisada={apaisada} />
+          {recuadro ? <div className="pointer-events-none absolute inset-0">{recuadro}</div> : null}
+        </div>
       ) : (
         <Esqueleto className={cx('w-full', apaisada ? 'aspect-[16/9]' : 'aspect-[1/1.414]')} />
       )}

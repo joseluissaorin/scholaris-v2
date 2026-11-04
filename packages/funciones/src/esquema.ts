@@ -129,6 +129,41 @@ export const SENTENCIAS_FUNCIONES: readonly string[] = [
     creada      TEXT NOT NULL
   )`,
   `CREATE INDEX IF NOT EXISTS cuadernos_sintesis_cuaderno ON cuadernos_sintesis(cuaderno)`,
+  // Índice de búsqueda de la memoria (Investigar → «recordar»): títulos y cuerpos de los
+  // cuadernos, pasajes y notas de sus tarjetas y síntesis. Tabla FTS propia (no de
+  // contenido externo) porque junta tres tablas; los disparadores la mantienen.
+  `CREATE VIRTUAL TABLE IF NOT EXISTS cuadernos_fts USING fts5(
+    texto, cuaderno UNINDEXED, objeto UNINDEXED, clase UNINDEXED,
+    tokenize='unicode61 remove_diacritics 2'
+  )`,
+  `CREATE TRIGGER IF NOT EXISTS cuadernos_fts_cuaderno_ai AFTER INSERT ON cuadernos BEGIN
+    INSERT INTO cuadernos_fts(texto, cuaderno, objeto, clase) VALUES (new.titulo || ' ' || coalesce(new.cuerpo, ''), new.id, new.id, 'cuaderno');
+  END`,
+  `CREATE TRIGGER IF NOT EXISTS cuadernos_fts_cuaderno_au AFTER UPDATE ON cuadernos WHEN old.titulo IS NOT new.titulo OR old.cuerpo IS NOT new.cuerpo BEGIN
+    DELETE FROM cuadernos_fts WHERE objeto = old.id;
+    INSERT INTO cuadernos_fts(texto, cuaderno, objeto, clase) VALUES (new.titulo || ' ' || coalesce(new.cuerpo, ''), new.id, new.id, 'cuaderno');
+  END`,
+  `CREATE TRIGGER IF NOT EXISTS cuadernos_fts_cuaderno_ad AFTER DELETE ON cuadernos BEGIN
+    DELETE FROM cuadernos_fts WHERE objeto = old.id;
+  END`,
+  `CREATE TRIGGER IF NOT EXISTS cuadernos_fts_tarjeta_ai AFTER INSERT ON cuadernos_tarjetas BEGIN
+    INSERT INTO cuadernos_fts(texto, cuaderno, objeto, clase)
+    VALUES (coalesce(new.pasaje, '') || ' ' || coalesce(new.afirmacion, '') || ' ' || coalesce(new.contenido, ''), new.cuaderno, new.id, 'tarjeta');
+  END`,
+  `CREATE TRIGGER IF NOT EXISTS cuadernos_fts_tarjeta_au AFTER UPDATE ON cuadernos_tarjetas WHEN old.pasaje IS NOT new.pasaje OR old.afirmacion IS NOT new.afirmacion OR old.contenido IS NOT new.contenido BEGIN
+    DELETE FROM cuadernos_fts WHERE objeto = old.id;
+    INSERT INTO cuadernos_fts(texto, cuaderno, objeto, clase)
+    VALUES (coalesce(new.pasaje, '') || ' ' || coalesce(new.afirmacion, '') || ' ' || coalesce(new.contenido, ''), new.cuaderno, new.id, 'tarjeta');
+  END`,
+  `CREATE TRIGGER IF NOT EXISTS cuadernos_fts_tarjeta_ad AFTER DELETE ON cuadernos_tarjetas BEGIN
+    DELETE FROM cuadernos_fts WHERE objeto = old.id;
+  END`,
+  `CREATE TRIGGER IF NOT EXISTS cuadernos_fts_sintesis_ai AFTER INSERT ON cuadernos_sintesis BEGIN
+    INSERT INTO cuadernos_fts(texto, cuaderno, objeto, clase) VALUES (new.peticion || ' ' || new.cuerpo, coalesce(new.cuaderno, ''), new.id, 'sintesis');
+  END`,
+  `CREATE TRIGGER IF NOT EXISTS cuadernos_fts_sintesis_ad AFTER DELETE ON cuadernos_sintesis BEGIN
+    DELETE FROM cuadernos_fts WHERE objeto = old.id;
+  END`,
 
   // --- Vigilantes y alertas -----------------------------------------------
   `CREATE TABLE IF NOT EXISTS vigilantes (
@@ -506,6 +541,8 @@ export async function aplicarEsquemaFunciones(sql: SQL): Promise<void> {
   }
   // 4. El resto (índices, disparadores).
   for (const s of SENTENCIAS_FUNCIONES) if (!tablas.includes(s)) await intentar(s);
+  // 5. El índice de la memoria nace vacío: se llena una vez con lo que ya había.
+  if (!existentes.has('cuadernos_fts')) await intentar(RELLENAR_CUADERNOS_FTS);
   if (errores.length) throw new Error(`Esquema de funciones incompleto: ${errores.join(' · ')}`);
   await sql.ejecutar(
     `INSERT INTO funciones_ajustes (clave, valor) VALUES ('esquema_funciones', ?)
@@ -513,6 +550,14 @@ export async function aplicarEsquemaFunciones(sql: SQL): Promise<void> {
     String(VERSION_ESQUEMA_FUNCIONES),
   );
 }
+
+/** Llena `cuadernos_fts` con los cuadernos, tarjetas y síntesis que ya existían. */
+const RELLENAR_CUADERNOS_FTS = `INSERT INTO cuadernos_fts(texto, cuaderno, objeto, clase)
+  SELECT titulo || ' ' || coalesce(cuerpo, ''), id, id, 'cuaderno' FROM cuadernos
+  UNION ALL
+  SELECT coalesce(pasaje, '') || ' ' || coalesce(afirmacion, '') || ' ' || coalesce(contenido, ''), cuaderno, id, 'tarjeta' FROM cuadernos_tarjetas
+  UNION ALL
+  SELECT peticion || ' ' || cuerpo, coalesce(cuaderno, ''), id, 'sintesis' FROM cuadernos_sintesis`;
 
 /** Tablas de las funciones, en orden de borrado seguro (hijos primero). */
 export const TABLAS_FUNCIONES = [

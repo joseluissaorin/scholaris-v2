@@ -37,7 +37,7 @@ export async function aVista(p: PuertosUsuario, r: Resultado): Promise<Resultado
 }
 
 /** Comprueba y consume la cuota diaria de búsquedas. */
-async function consumirBusqueda(p: PuertosUsuario): Promise<void> {
+export async function consumirBusqueda(p: PuertosUsuario): Promise<void> {
   const plan = p.config.modo === 'local' ? 'local' : p.usuario.plan;
   const limite = LIMITES[plan].busquedasDia;
   if (limite === null) return;

@@ -272,6 +272,19 @@ describe('caché y plazos', () => {
 });
 
 describe('responder', () => {
+  it('acepta marcas con el localizador dentro de los corchetes y lo quita («[F1, p. 10]»)', async () => {
+    const m = await montar();
+    m.redactor.manejadores.push({
+      si: /asistente de una biblioteca/,
+      responder: () => ({ texto: 'Ve gigantes [F1, p. 10]. Sancho ve molinos [F2: pp. 139-140; F1]. Y sigue [F1 p. 3].' }),
+    });
+    const r = await responderCompleto(m.buscador, m.redactor, '¿Qué ve don Quijote en los molinos de viento?');
+    expect(r.markdown).not.toMatch(/\[F\d|p\. 10\]|pp\. 139/);
+    expect(r.markdown).toMatch(/^Ve gigantes\[\^1\]\. Sancho ve molinos\[\^2\]\[\^1\]\. Y sigue\[\^1\]\./);
+    expect(r.descartadas).toEqual([]);
+    expect(r.fuentes.map((f) => f.n)).toEqual([1, 2]);
+  });
+
   it('solo deja citar pasajes del contexto y resuelve las notas por el ancla', async () => {
     const m = await montar();
     const r = await responderCompleto(m.buscador, m.redactor, '¿Qué ve don Quijote en los molinos de viento?');
