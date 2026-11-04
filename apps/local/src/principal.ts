@@ -70,6 +70,7 @@ export async function proxyNode(): Promise<HacerProxy> {
       try {
         const claves = clavesProxy(prefijo);
         if (p.cortes) await almacen.poner(claves.cortes, JSON.stringify(p.cortes), 'application/json');
+        if (p.voz) await almacen.poner(claves.voz, JSON.stringify(p.voz), 'application/json');
         const f = await open(p.ruta, 'r');
         try {
           async function* trozos() {

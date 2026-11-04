@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { argumentosProxy, cortesDe, interpretarEscenasFfmpeg } from '../src/index.js';
+import { argumentosProxy, cortesDe, interpretarEscenasFfmpeg, interpretarSilencios } from '../src/index.js';
 import { crearProxy } from '../src/node/index.js';
 
 const hayFfmpeg = (() => { try { execFileSync('ffmpeg', ['-version']); return true; } catch { return false; } })();
@@ -23,6 +23,12 @@ describe('proxy de un medio', () => {
     expect(cortesDe(r.candidatos!, 0.05)).toEqual([2, 5.5]);
   });
 
+  it('los silencios de la voz se convierten en tramos con sonido', () => {
+    const salida = 'frame:1 pts:1 pts_time:0\nlavfi.silence_start=0\nframe:2\nlavfi.silence_end=1.5\nlavfi.silence_duration=1.5\nframe:3\nlavfi.silence_start=4.25\nframe:4\nlavfi.silence_end=6\nframe:5\nlavfi.silence_start=9\n';
+    expect(interpretarSilencios(salida, 10).tramos).toEqual([[1.5, 4.25], [6, 9]]);
+    expect(interpretarSilencios('', 3).tramos).toEqual([[0, 3]]);
+  });
+
   it.skipIf(!hayFfmpeg)('hace un proxy de 360p con audio mono y encuentra el corte', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'proxy-prueba-'));
     try {
@@ -39,6 +45,9 @@ describe('proxy de un medio', () => {
         expect(s.find((x) => x.codec_type === 'audio')?.channels).toBe(1);
         expect(p.cortes?.cortes.length).toBe(1);
         expect(p.cortes!.cortes[0]).toBeCloseTo(2, 0);
+        // El tono suena entero: un solo tramo con sonido, de principio a fin.
+        expect(p.voz?.tramos.length).toBe(1);
+        expect(p.voz!.tramos[0]![1] - p.voz!.tramos[0]![0]).toBeGreaterThan(3.5);
       } finally {
         await p.borrar();
       }

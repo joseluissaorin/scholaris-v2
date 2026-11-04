@@ -74,6 +74,7 @@ export function proxyRemoto(llamar: (peticion: Request) => Promise<Response>): H
     async function* trozos(): AsyncGenerator<Uint8Array> {
       for await (const { cabecera, datos } of tramas) {
         if (cabecera.tipo === 'trozo') { if (cabecera.mime) mime = String(cabecera.mime); yield datos; }
+        else if (cabecera.tipo === 'parte' && cabecera.id === 'proxy.voz.json') await almacen.poner(claves.voz, datos, 'application/json');
         else if (cabecera.tipo === 'parte' && cabecera.id === 'proxy.cortes.json') {
           await almacen.poner(claves.cortes, datos, 'application/json');
           try { cortes = (JSON.parse(new TextDecoder().decode(datos)) as { cortes?: unknown[] }).cortes?.length ?? 0; } catch { /* sin recuento */ }

@@ -8,6 +8,11 @@ export { esquemaVentana, instruccionesSistema, textoVentana, VERSION_PERCEPCION,
 export { normalizarVentana, fusionar, fusionarPlanos, fusionarEscenas, fusionarSonidos, fusionarDialogos, componerEscenas, regionDeCaja, corteCercano, type VentanaNormalizada, type EscenaPlana, type DialogoPlano } from './fusion.js';
 export { Unificador, fusionarReparto, repartoInicial, repartoDeWikidata, separarInterpretes, normalNombre } from './reparto.js';
 export { percibirMedio, mirarVentana, ErrorPresupuesto, type VentanaGrabada, type OpcionesVentana } from './percibir.js';
-export { PROXY, clavesProxy, PARAMETROS_PROXY, interpretarEscenasFfmpeg, cortesDe, type CortesProxy } from './proxy.js';
+export { PROXY, clavesProxy, PARAMETROS_PROXY, interpretarEscenasFfmpeg, cortesDe, interpretarSilencios, type CortesProxy, type ActividadAudio } from './proxy.js';
 export { fuenteGemini, ErrorSinProxy, type PuertoFicheros, type FicheroRemoto, type AlmacenProxy, type CacheGemini, type PuertosFuenteGemini } from './fuente-gemini.js';
 export { anclarMaterial, buscarCita, textoEn, esqueleto, regionPorLineas, regionPorVision, unirRegiones, type PuertosAnclaje, type UnidadAnclable, type LineaPagina, type AnclajeResultado } from './anclaje.js';
+export {
+  revisarTranscripcionConVideo, coberturaTranscripcion, transcribirConVideo, revisarHablantesVentana, aplicarCorrecciones, palabrasDeUnidad, palabrasDeUnidades, frasesUbicadas, subventanasDe, segmentosDePalabras, esRota,
+  VERSION_REVISION, ESQUEMA_OIDO, ESQUEMA_HABLANTES,
+  type CorreccionTranscripcion, type RevisionTranscripcion, type CoberturaTranscripcion, type Hueco, type SegmentoOido, type PalabraUbicada, type FraseUbicada, type PuertosRevision, type OpcionesRevisionTranscripcion, type Tramo,
+} from './revision.js';

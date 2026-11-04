@@ -12,6 +12,7 @@
  *     → image/jpeg con la región (0-1) recortada: el recorte de una figura para su vector.
  *   POST /proxy?tipo=video|audio&nombre=…   cuerpo: el original (va a disco, no a memoria)
  *     → tramas: {tipo:'parte', id:'proxy.cortes.json'} con los cortes de plano,
+ *       {tipo:'parte', id:'proxy.voz.json'} con los tramos con sonido de la voz,
  *       {tipo:'trozo', id:'proxy.mp4', desde, total} con el proxy en pedazos de 8 MiB
  *       y {tipo:'fin', bytes}. Lo que ven los modelos (percepción e Investigar).
  *   GET  /salud
@@ -90,6 +91,7 @@ async function servirProxy(req: IncomingMessage, res: ServerResponse, url: URL):
     const p = await crearProxy(entrada, tipo);
     try {
       if (p.cortes) res.write(codificarTrama({ tipo: 'parte', id: 'proxy.cortes.json', mime: 'application/json' }, new TextEncoder().encode(JSON.stringify(p.cortes))));
+      if (p.voz) res.write(codificarTrama({ tipo: 'parte', id: 'proxy.voz.json', mime: 'application/json' }, new TextEncoder().encode(JSON.stringify(p.voz))));
       const f = await open(p.ruta, 'r');
       try {
         for (let desde = 0; desde < p.bytes; desde += TROZO) {

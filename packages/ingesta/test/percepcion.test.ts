@@ -184,7 +184,7 @@ describe('cortes de ffmpeg', () => {
   });
 
   it('las claves del proxy cuelgan del prefijo del documento', () => {
-    expect(clavesProxy('u/x/d/y/')).toEqual({ proxy: 'u/x/d/y/proxy.mp4', cortes: 'u/x/d/y/proxy.cortes.json', gemini: 'u/x/d/y/proxy.gemini.json' });
+    expect(clavesProxy('u/x/d/y/')).toEqual({ proxy: 'u/x/d/y/proxy.mp4', cortes: 'u/x/d/y/proxy.cortes.json', voz: 'u/x/d/y/proxy.voz.json', gemini: 'u/x/d/y/proxy.gemini.json' });
   });
 });
 
@@ -290,6 +290,35 @@ describe('percibirMedio', () => {
     const trabajo = trabajoEnMemoria();
     await expect(percibirMedio({ vidente: videnteFalso(), trabajo, fuente: async () => ({ uri: 'f', mime: 'video/mp4' }) }, { ...opcionesBase, duracion: 2000, presupuestoUsd: 0.05, concurrencia: 1 })).rejects.toBeInstanceOf(ErrorPresupuesto);
     expect(trabajo.datos.size).toBe(1);
+  });
+
+  it('marca quién habla en cada ventana y da los intérpretes sin papel aparte', async () => {
+    const v = videnteFalso();
+    await percibirMedio({ vidente: v, trabajo: trabajoEnMemoria(), fuente: async () => ({ uri: 'f', mime: 'video/mp4' }) }, {
+      ...opcionesBase, unidades: [{ texto: '**Diego:** Me encanta la fresa.', t0: 10, t1: 12 }, { texto: '**Nancy:** Ay, Diego.', t0: 700, t1: 702 }],
+      reparto: [{ nombre: 'Jorge Perugorría', actor: 'Jorge Perugorría' }, { nombre: 'David', ficticia: true, actor: 'Vladimir Cruz' }],
+    });
+    expect(v.llamadas[0]!.texto).toContain('- Diego (habla en este fragmento)');
+    expect(v.llamadas[0]!.texto).toContain('- Nancy\n');
+    expect(v.llamadas[0]!.texto).toContain('- David: personaje; interpretado por Vladimir Cruz');
+    expect(v.llamadas[0]!.texto).toContain('Intérpretes de la obra (sin papel asignado): Jorge Perugorría.');
+    expect(v.llamadas[0]!.texto).not.toContain('- Jorge Perugorría');
+    expect(v.llamadas[1]!.texto).toContain('- Nancy (habla en este fragmento)');
+  });
+
+  it('lleva al personaje a quien el modelo nombra por su actor', async () => {
+    const v: Vidente = {
+      nombre: 'falso:m', async mirar(p) {
+        const a = p.desde ?? 0, b = p.hasta ?? 0;
+        return { texto: '', modelo: 'm', tokensEntrada: 1, tokensSalida: 1, ms: 1, json: {
+          escenas: [{ inicio: marca(a), fin: marca(b), titulo: 'E', personas: [a === 0 ? 'Diego' : 'Jorge Perugorría'], accion: '' }],
+          planos: [], sonidos: [], dialogos: [], reparto: a === 0 ? [{ nombre: 'Diego', actor: 'Jorge Perugorría' }] : [],
+        } };
+      },
+    };
+    const r = await percibirMedio({ vidente: v, trabajo: trabajoEnMemoria(), fuente: async () => ({ uri: 'f', mime: 'video/mp4' }) }, opcionesBase);
+    expect(r.escenas.flatMap((e) => e.personas)).toEqual(['Diego']);
+    expect(r.reparto).toEqual([{ nombre: 'Diego', actor: 'Jorge Perugorría' }]);
   });
 
   it('en audio no pide planos', async () => {

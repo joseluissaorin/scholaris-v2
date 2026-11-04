@@ -66,6 +66,8 @@ export interface AlmacenTrabajo {
 
 /** Una unidad de tiempo del documento (lo que hay en `unidades`): texto con «**Nombre:**» y palabras con su instante. */
 export interface UnidadMedio {
+  /** Orden de la unidad en el documento (por defecto, su posición en la lista). */
+  orden?: number;
   texto: string;
   t0: number;
   t1: number;

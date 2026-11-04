@@ -8,13 +8,15 @@
  *   percepcion.json          el PercepcionMedio de la obra (lo lee la comprensión)
  *   percepcion/<huella>/…    lo que devolvió cada ventana (no se paga dos veces)
  *   percepcion/anclaje/…     las localizaciones de citas en imágenes de página
+ *   transcripcion.revision.json   la revisión de la transcripción (huecos, hablantes, desfases)
+ *   percepcion/revision/…    lo que devolvió cada llamada de la revisión
  */
 import {
-  anclarMaterial, clavesProxy, fuenteGemini, percibirMedio,
-  type AlmacenTrabajo, type AnclajeResultado, type CortesProxy, type LineaPagina, type PercepcionConCoste, type ProgresoPercepcion, type UnidadAnclable, type UnidadMedio,
+  anclarMaterial, clavesProxy, fuenteGemini, percibirMedio, revisarTranscripcionConVideo,
+  type ActividadAudio, type AlmacenTrabajo, type AnclajeResultado, type CortesProxy, type LineaPagina, type PercepcionConCoste, type ProgresoPercepcion, type RevisionTranscripcion, type UnidadAnclable, type UnidadMedio,
 } from '@scholaris/ingesta';
 import type { PaqueteConversion } from '@scholaris/imprenta';
-import type { Ancla, Lente, PersonaPercibida, Redactor, SQL } from '@scholaris/nucleo';
+import type { Ancla, Lente, PersonaPercibida, Redactor, SQL, Transcriptor } from '@scholaris/nucleo';
 import { crearGemini, MODELOS_GEMINI, videnteGemini, type ClienteGemini, type ConfigGemini, type ContadorUso } from '@scholaris/proveedores';
 import { leerDocumento } from '@scholaris/spdf';
 import type { AlmacenAmpliado } from '../puertos.js';
@@ -71,6 +73,17 @@ export interface DocumentoPercibible {
   nombre?: string;
 }
 
+/** Las unidades de un medio con su transcripción, su orden y el instante de cada palabra. */
+export async function unidadesDeMedio(sql: SQL, documento: string): Promise<UnidadMedio[]> {
+  const filas = await sql.ejecutar<FilaUnidad>('SELECT orden, ancla, texto, t0, t1, palabras, imagen FROM unidades WHERE documento = ? ORDER BY orden', documento);
+  return filas.flatMap((f) => {
+    const a = JSON.parse(f.ancla) as Ancla;
+    const t0 = f.t0 ?? (a.tipo === 'tiempo' ? a.t0 : null), t1 = f.t1 ?? (a.tipo === 'tiempo' ? a.t1 : null);
+    if (t0 === null || t1 === null) return [];
+    return [{ orden: Number(f.orden), texto: f.texto, t0, t1, ...(a.tipo === 'tiempo' && a.hablante ? { hablante: a.hablante } : {}), ...(f.palabras ? { palabras: JSON.parse(f.palabras) } : {}) }];
+  });
+}
+
 /** La lente por defecto si no la da quien llama (la comprensión elige la suya). */
 function lentePorDefecto(tipo: string, tipoCSL?: string): Lente {
   if (tipo === 'audio') return tipoCSL === 'interview' ? 'entrevista' : 'podcast';
@@ -99,13 +112,7 @@ export async function percibirDocumento(
   await asegurarProxy({ almacen: ctx.almacen, ...(ctx.hacerProxy ? { hacerProxy: ctx.hacerProxy } : {}) }, {
     prefijo: doc.prefijo, original: doc.original ?? d.original ?? '', mime: doc.mime ?? d.mime, tipo: doc.tipo, ...(doc.nombre ? { nombre: doc.nombre } : {}),
   });
-  const filas = await ctx.sql.ejecutar<FilaUnidad>('SELECT orden, ancla, texto, t0, t1, palabras, imagen FROM unidades WHERE documento = ? ORDER BY orden', doc.documento);
-  const unidades: UnidadMedio[] = filas.flatMap((f) => {
-    const a = JSON.parse(f.ancla) as Ancla;
-    const t0 = f.t0 ?? (a.tipo === 'tiempo' ? a.t0 : null), t1 = f.t1 ?? (a.tipo === 'tiempo' ? a.t1 : null);
-    if (t0 === null || t1 === null) return [];
-    return [{ texto: f.texto, t0, t1, ...(a.tipo === 'tiempo' && a.hablante ? { hablante: a.hablante } : {}), ...(f.palabras ? { palabras: JSON.parse(f.palabras) } : {}) }];
-  });
+  const unidades = await unidadesDeMedio(ctx.sql, doc.documento);
   const cortes = await ctx.almacen.bytes(clavesProxy(doc.prefijo).cortes).then((b) => (b ? (JSON.parse(new TextDecoder().decode(b)) as CortesProxy).cortes : undefined)).catch(() => undefined);
   const m = d.metadatos;
   const autores = (m.autores ?? []).map((x) => `${x.nombre} ${x.apellidos}`.trim()).filter(Boolean);
@@ -166,4 +173,59 @@ export function crearAnclador(ctx: { almacen: AlmacenAmpliado; sql: SQL; redacto
     const unidad: UnidadAnclable = { orden: f.orden, texto: f.texto, ancla: JSON.parse(f.ancla) as Ancla, imagen: f.imagen };
     return anclarMaterial(puertos, unidad, o);
   };
+}
+
+export const claveRevision = (prefijo: string) => `${prefijo}transcripcion.revision.json`;
+
+/**
+ * Revisa la transcripción de un documento de audio o vídeo con el proxy: los
+ * huecos se vuelven a transcribir (Flash, en subventanas cortas; si falla, el
+ * transcriptor de reserva con el tramo de audio del paquete) y cada frase se
+ * atribuye a quien la dice de verdad (Argon, por ventanas). Guarda el resultado
+ * en `transcripcion.revision.json`; la ingesta lo aplica con `aplicarCorrecciones`.
+ */
+export async function revisarTranscripcionDocumento(
+  ctx: ContextoPercepcion & { transcriptor?: Transcriptor },
+  doc: DocumentoPercibible,
+  opciones: { reparto?: PersonaPercibida[]; modelo?: string; modeloHablantes?: string; hablantes?: boolean; huecos?: boolean } = {},
+): Promise<RevisionTranscripcion> {
+  const d = await leerDocumento(ctx.sql, doc.documento);
+  if (!d) throw new Error(`No encuentro el documento ${doc.documento}`);
+  const unidades = await unidadesDeMedio(ctx.sql, doc.documento);
+  const claves = clavesProxy(doc.prefijo);
+  const voz = await ctx.almacen.bytes(claves.voz).then((b) => (b ? (JSON.parse(new TextDecoder().decode(b)) as ActividadAudio) : null)).catch(() => null);
+  // El reparto que ya vio la percepción, si la hay: con descripciones de cara y de voz.
+  const percepcion = await leerPercepcion(ctx.almacen, doc.prefijo);
+  const reparto = opciones.reparto ?? percepcion?.reparto;
+  const m = d.metadatos;
+  const autores = (m.autores ?? []).map((x) => `${x.nombre} ${x.apellidos}`.trim()).filter(Boolean);
+  const g = cliente(ctx.gemini, ctx.contador);
+  // Reserva: el tramo de audio del paquete que contiene el hueco (el transcriptor se queda con lo del hueco).
+  const paquete = await ctx.almacen.bytes(`${doc.prefijo}paquete.json`).then((b) => (b ? (JSON.parse(new TextDecoder().decode(b)) as PaqueteConversion) : null)).catch(() => null);
+  const tramos = paquete?.contenido.clase === 'medio' ? paquete.contenido.audio?.tramos ?? [] : [];
+  const transcriptor = ctx.transcriptor;
+  const reserva = transcriptor && tramos.length ? {
+    transcriptor,
+    async audio(t0: number, t1: number) {
+      const solape = (x: { t0: number; t1: number }) => Math.max(0, Math.min(t1, x.t1) - Math.max(t0, x.t0));
+      const tramo = [...tramos].sort((a, b) => solape(b) - solape(a))[0];
+      if (!tramo || !solape(tramo)) return null;
+      const b = await ctx.almacen.bytes(`${doc.prefijo}${tramo.parte}`);
+      return b ? { bytes: b, mime: paquete!.contenido.clase === 'medio' ? paquete!.contenido.audio?.mime ?? 'audio/ogg' : 'audio/ogg', desplazamiento: tramo.t0 } : null;
+    },
+  } : undefined;
+  const r = await revisarTranscripcionConVideo({
+    vidente: videnteGemini(g, { modelo: opciones.modelo ?? MODELOS_GEMINI.percepcionRapida }),
+    fuente: (o) => fuenteGemini({ almacen: ctx.almacen, ficheros: g }, { prefijo: doc.prefijo, ...(o?.renovar ? { renovar: true } : {}) }),
+    trabajo: trabajoEnAlmacen(ctx.almacen, `${doc.prefijo}percepcion/`),
+    ...(reserva ? { reserva } : {}),
+  }, {
+    documento: doc.documento, duracion: (d as { duracion?: number }).duracion ?? Math.max(0, ...unidades.map((u) => u.t1)), unidades,
+    ...(voz ? { actividad: voz.tramos } : {}), ...(reparto ? { reparto } : {}),
+    ficha: `«${m.titulo}»${m.anio ? ` (${m.anio})` : ''}${autores.length ? `, de ${autores.join(' y ')}` : ''}`, idioma: m.idioma ?? 'es',
+    modelo: opciones.modelo ?? MODELOS_GEMINI.percepcionRapida, modeloHablantes: opciones.modeloHablantes ?? MODELOS_GEMINI.percepcion,
+    ...(opciones.hablantes === false ? { hablantes: false } : {}), ...(opciones.huecos === false ? { huecos: false } : {}), prefijoTrabajo: 'revision/',
+  });
+  await ctx.almacen.poner(claveRevision(doc.prefijo), JSON.stringify(r), 'application/json');
+  return r;
 }

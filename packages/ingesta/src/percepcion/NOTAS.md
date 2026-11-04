@@ -79,7 +79,8 @@ Variantes:
 - **Ventana real de 8 min** (9:00-17:00, puntuada sobre el oro de B):
   - Argon: escala exacta 0,86, IoU 0,79 (el 96 % ≥ 0,5), 0,326 $ y 203 s.
   - Flash: escala 0,81, IoU 0,59, 0,128 $ y 182 s.
-  - La ventana larga no empeora el resultado. Los dos llamaron «Germán» al chico de la camisa de cuadros, que no habla: es la presión del reparto conocido (ver «Pendiente»).
+  - La ventana larga no empeora el resultado. Con el prompt 1, los dos llamaron «Germán» al chico de la camisa de cuadros, que no habla: era la presión del reparto conocido.
+  - El prompt 2 marca en el reparto quién habla en cada fragmento y pide no nombrar a nadie solo por estar en la lista. Con él, Argon llega a personas 1,00, escala exacta 0,90 e IoU 0,80, por 0,353 $ y 231 s. Es el que se usa (`VERSION_PERCEPCION = 'percepcion-2'`).
 
 **Por defecto.**
 
@@ -112,8 +113,51 @@ Probado sobre el cuento escaneado (`dmw21xdj01a6v8dkc`, pliegos de dos páginas)
 
 `describirFiguras` separa los fotogramas de un vídeo de las figuras de página. Los describe en calidad «alta» con lenguaje de cine (escala, angulación, quién y dónde en el cuadro, quién domina, luz y color, objetos, texto en pantalla). A cada uno le da lo que se dice 20 s antes y 20 s después y los hablantes de la obra. El esquema SPDF no cambia: sigue siendo la `descripcion` de la figura.
 
+## La transcripción: por qué tiene huecos y cómo se arregla
+
+### Qué pasa
+
+La transcripción de la película en producción (`dmw21xnomjseg07mi`) tiene huecos largos, frases mal colocadas y hablantes cambiados. Comparada con un Whisper local completo (`~/tmp/scholaris-fresa/banco/whisper/`), le faltan 146 segmentos de Whisper, unos 261 s de habla. Casi todo está en dos tramos de 10 min: el 5 (40:14-44:36) y el 10 (1:33:32-1:39:31). Además:
+
+- **Tiempos rotos.** 542 de 7522 palabras (7,2 %) duran 0,02 s o menos y se amontonan en un mismo instante. Por ejemplo, en la unidad de 6:58 a 7:46 todas acaban en 7:46,9.
+- **Frases mal colocadas.** La primera frase («¿No había otro lugar?») está en 0:01 y se dice en 1:40,3.
+- **Hablantes cambiados.** En 101 frases comprobadas a mano (Coppelia, Miguel en la universidad, Germán y la exposición, «Son mías»), la etiqueta acierta solo en el 52 %. Las frases de Miguel van a nombre de Diego; las de Germán, a nombre de Vivian, David o Diego, y las de Diego a nombre de David.
+
+### Por qué
+
+1. **El transcriptor se salta trozos largos de un tramo de 10 minutos, y no siempre los mismos.** La ingesta manda tramos de 600 s (Opus a 24 kbps) a `gemini-3.5-transcribe` con marcas por palabra y diarización. Al repetir el tramo 10 igual que en producción, faltaron 71 de 128 segmentos de Whisper (136 s). En trozos de 2 min faltaron 23 (45 s, casi todos letra de canciones en la fiesta). El tramo 5 repetido salió entero (1 de 138): el fallo es aleatorio. Una de las dos repeticiones de 10 min falló además con un HTTP 400 («invalid argument»).
+2. **No es la música.** El clasificador de sonido de macOS da poca música (de 0,07 a 0,12) y mucha voz (de 0,32 a 0,53) en los minutos perdidos del tramo 5.
+3. **Nada lo comprueba.** `transcribirTramo` acepta lo que llegue. El transcriptor enrutado solo pasa a Whisper si hay un error, no si la salida viene incompleta. El solape entre tramos es de 2 s y no hay ninguna comparación con el audio.
+4. **Los tiempos de palabra salen del propio modelo.** Cuando pierde la alineación, amontona palabras o las coloca en otro sitio. Es lo que pasa tras los 80 s de créditos del principio.
+5. **Los hablantes se ponen solo por el texto.** Cada tramo se diariza por separado; después se casan las etiquetas por el solape y un modelo de texto pone nombres (`atribuirHablantes`). Nadie ve quién habla. Con personajes que salen poco (Miguel, Germán), los grupos de voces acaban con los nombres de los protagonistas.
+
+### Cómo se arregla (`revision.ts`)
+
+- **Actividad de la voz.** El conversor la calcula en la misma pasada del proxy: `silencedetect` a -35 dB en la banda de 150 a 4000 Hz, guardado en `proxy.voz.json`. Cubre el 97 % de lo que habla Whisper (a -38 dB, el 99 %, pero marca como activo el 88 % de la película). Para un proxy antiguo está `actividadDeAudio` (Node).
+- **Cobertura** (`coberturaTranscripcion`). Un hueco es un tramo con sonido sin palabras válidas a menos de 1,2 s, de 3 s o más. Las unidades con un cuarto o más de palabras rotas cuentan como huecos de `tiempos_rotos`. Sin mapa de actividad, solo se ven los silencios de transcripción de más de 25 s. En la película salen 124 huecos (2551 s) en 96 subventanas.
+- **Huecos** (`revisarTranscripcionConVideo`). Cada subventana, de 75 s como mucho, se transcribe con Flash mirando el proxy. Con las mismas marcas absolutas de `videoMetadata`, el hablante sale por la voz y por la imagen, y el modelo recibe lo transcrito alrededor para orientarse. Si la llamada falla, entra la reserva: Whisper de Workers AI con el tramo de audio del paquete, o en local `mlx_whisper` con large-v3-turbo. Lo que ya estaba no se repite, y las unidades con el tiempo roto se sustituyen por lo que se oye en su tramo (`reemplaza`).
+- **Hablantes y tiempos.** Argon ve cada ventana de 8 min con sus frases numeradas y dice quién dice cada una, si se le ve decirla y, si su marca está a más de 2 s, cuándo empieza de verdad.
+  - Sobre las 101 frases del oro: del 52 % de aciertos al **99 %**, con 47 cambios buenos y ninguno malo, por 0,128 $ por ventana.
+  - Flash llega al 96 %, con 3 cambios malos, por 0,069 $.
+  - En esas cuatro ventanas también encuentra 6 desfases. Uno es la primera frase, que se mueve de 0:01 a 1:40.
+- **Salida.** `RevisionTranscripcion`, con la cobertura, las correcciones (`hueco`, `hablante`, `desfase`), los avisos y el coste. Se guarda en `transcripcion.revision.json`.
+- **Aplicación.** La ingesta aplica las correcciones con `aplicarCorrecciones(unidades, correcciones, { minConfianza: 0.7 })`, que devuelve las unidades nuevas:
+  - cambia las marcas «**Nombre:**»;
+  - mueve las palabras desfasadas;
+  - convierte cada hueco en una unidad nueva;
+  - sustituye las unidades rotas;
+  - no duplica lo que ya está.
+
+  Después hay que reescribir `unidades`, trocear de nuevo y revectorizar lo que cambie (como un reproceso de la tanda de medios). Esa parte no está hecha, porque es de la ingesta.
+
+### Recomendación para la ingesta
+
+Esto no está en esta rama.
+
+- Con `gemini-3.5-transcribe`, tramos de 2 o 3 min y no de 10. Whisper sí aguanta 10 min.
+- Ejecutar `coberturaTranscripcion` nada más consolidar y volver a transcribir los huecos sin esperar a la comprensión.
+
 ## Pendiente
 
-- Presión del reparto: un figurante que no habla puede recibir el nombre de un personaje conocido. Hay que marcar en el prompt quién habla en cada ventana.
 - Los créditos con fundidos no dan cortes de ffmpeg; el modelo los trata como un plano por rótulo.
 - En el contenedor (`standard-4`), el proxy de una película de 2 h debería tardar de 20 a 35 min, pero no se ha medido.

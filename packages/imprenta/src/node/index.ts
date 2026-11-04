@@ -45,4 +45,4 @@ export async function recortarImagen(bytes: Uint8Array, region: { x: number; y: 
   return { bytes: await plataformaNode.aJpeg(lienzo, 0.85), mime: 'image/jpeg' };
 }
 
-export { crearProxy, type ResultadoProxy } from './proxy.js';
+export { crearProxy, actividadDeAudio, type ResultadoProxy } from './proxy.js';
