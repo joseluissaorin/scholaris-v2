@@ -1,7 +1,7 @@
 /**
- * Exportar e importar .spdf. Lo normal es armarlo en el navegador con el
- * volcado (GET /documentos/:id/volcado); esto es la reserva del servidor y la
- * importación (v3 por el migrador, v4 tal cual, v5 traducido a 4.1).
+ * Exportar e importar .spdf: toda exportación sale de aquí, con la capa de
+ * comprensión (4.2 interno, o la extensión scholaris_comprension del 5.0), y la
+ * importación (v3 por el migrador, v4 tal cual, v5 traducido a 4.2).
  * `?version=5` exporta el SPDF 5.0 abierto (compartido/spdf50.ts).
  */
 import type { Hono } from 'hono';
@@ -118,7 +118,7 @@ export function rutasSpdf(app: Hono<Entorno>): void {
     if (incrustar && omitidos > 0) {
       // Límite claro: el servidor incrusta hasta MAX_INCRUSTADO; el resto se queda fuera del fichero.
       h.set('x-scholaris-omitidos', String(omitidos));
-      h.set('x-scholaris-aviso', encodeURIComponent(`Este .spdf lleva el texto, los vectores y los primeros ${Math.round(MAX_INCRUSTADO / 1048576)} MB de imágenes y del original; ${omitidos} ficheros más pesaban demasiado para armarlo en el servidor. Para el .spdf completo, descárgalo desde la aplicación, que lo arma en tu navegador.`));
+      h.set('x-scholaris-aviso', encodeURIComponent(`Este .spdf lleva el texto, los vectores y los primeros ${Math.round(MAX_INCRUSTADO / 1048576)} MB de imágenes y del original; ${omitidos} ficheros más pesaban demasiado para incrustarlos. El .spdf los nombra; el original se descarga aparte desde la aplicación.`));
     }
     return new Response(bytes as Uint8Array<ArrayBuffer>, { headers: h });
   });
