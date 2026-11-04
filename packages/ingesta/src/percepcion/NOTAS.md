@@ -1,0 +1,119 @@
+# Percepción y anclaje material: cómo funciona y qué se midió
+
+La percepción es el paso 1 de la comprensión (docs/COMPRENSION.md, «Ingesta»): un modelo multimodal ve u oye la obra entera y devuelve un `PercepcionMedio` (packages/nucleo/src/comprension.ts) con escenas, planos, sonido, frases clave, reparto y regiones. El anclaje material lleva una cita de una página a sus `caracteres` y a su `region`.
+
+## El proxy
+
+El conversor hace, junto al original, una copia ligera para los modelos y para «ver» de Investigar. Va bajo el prefijo del documento (`u/<usuario>/d/<documento>/`):
+
+| Clave | Qué es |
+|---|---|
+| `proxy.mp4` | 360p H.264 a 300 kbps (máximo 15 fps) y audio mono AAC a 48 kbps. En los audios, solo el audio (`audio/mp4`). |
+| `proxy.cortes.json` | Cortes de plano de ffmpeg (`select='gt(scene,0.08)'` sobre una copia de 192 px), con `{ cortes, umbral, candidatos }`. |
+| `proxy.gemini.json` | El fichero en la Files API: `{ uri, nombre, mime, bytes, etag, subido, expira }`. |
+| `percepcion.json` | El `PercepcionMedio` de la obra (lo lee la comprensión), con `coste` y `ventanas` de más. |
+| `percepcion/<huella>/<t0>-<t1>.json` | Lo que devolvió cada ventana. |
+| `percepcion/anclaje/…` | Las localizaciones de citas en imágenes de página. |
+
+Se hace en una sola pasada de ffmpeg (`crearProxy` en `@scholaris/imprenta/node`), que lo divide en dos ramas: el proxy y las puntuaciones de cambio de escena. La película entera (1 h 50 min, 1080p, 2 GB) tardó 7 min en el Mac y dio 293 MB.
+
+- En Cloudflare lo hace el contenedor (`POST /proxy`). El original va a disco y el proxy vuelve en tramas de 8 MiB, que el Worker escribe en R2 por partes (`guardarPorTrozos`). El Workflow de ingesta lo hace en el paso `proxy`, después de `medio-rapido`, con un plazo de 60 min. Si falla, el documento sigue valiendo.
+- En local lo hace ffmpeg en la propia máquina, o el contenedor si hay `SCHOLARIS_CONVERSOR_URL`.
+- Para los documentos que ya existen: `asegurarProxy` (apps/api/src/compartido/proxy.ts). `percibirDocumento` lo llama antes de mirar, así que la comprensión lo crea si falta.
+
+El umbral de corte 0,3 está medido sobre *Fresa y chocolate*: en los cuatro clips de prueba, todos los candidatos con 0,3 o más eran cortes de verdad, y no faltaba ninguno (revisado fotograma a fotograma). Los de menos de 0,3 eran cambios de luz o el mismo corte repetido. Lo que no detecta son los fundidos lentos entre rótulos de crédito.
+
+## Ficheros de Gemini
+
+`fuenteGemini` (y su versión de plataforma, `fuenteGeminiDocumento`) sube el proxy por trozos de 16 MiB leídos del almacén con la subida reanudable. Nunca tiene el fichero entero en memoria, y si se corta pregunta cuánto llegó (`X-Goog-Upload-Command: query`). Después espera a `ACTIVE`. Los 293 MB tardaron 133 s, procesado incluido. El fichero se reaprovecha mientras le queden más de 6 h de vida, el proxy no cambie (bytes y etag) y el servidor lo tenga. Si el modelo responde 403 o 404 con un fichero caducado, `percibirMedio` lo vuelve a subir y repite la ventana.
+
+## Ventanas
+
+- Las ventanas son de 8 min con 30 s de solape (`ventanasDe`). Un resto final de menos de 2,5 min se suma a la última. Cada ventana es dueña de su tramo hasta la mitad de los solapes, y los tramos propios tilan la obra.
+- Cada llamada lleva el fichero con `videoMetadata` (`startOffset`/`endOffset`, `fps`), la transcripción de la ventana con sus hablantes (de `unidades` y el instante de cada palabra), el reparto conocido, los cortes detectados y la lente. Devuelve listas planas por esquema JSON: escenas, planos, sonidos, frases clave y reparto.
+- Las marcas que da Gemini con `videoMetadata` son absolutas, contadas desde el inicio del vídeo, en los cuatro modelos. Si alguna ventana las diera relativas, `normalizarVentana` lo detecta y las desplaza.
+- La primera ventana va sola, porque su descripción de cada persona guía a las demás. Las otras van de 4 en 4.
+- Fusión (`fusionar`):
+  - Cada elemento se queda en la ventana dueña de su punto medio, y los planos y escenas repetidos en los solapes se funden.
+  - Los planos quedan contiguos y ajustados a los cortes detectados a menos de 1 s.
+  - Las escenas tilan la obra. Un hueco de más de 20 s sin escena se rellena y se avisa.
+  - Una música que cruza ventanas es una sola.
+  - Cada nombre se lleva a su forma canónica (`Unificador`): por el nombre, por el actor o por el nombre de pila sin ambigüedad.
+- El reparto de Wikidata sale de P161, con P453 o P4633 si los tiene. Cuando falta el papel (como en esta película), los intérpretes van aparte y el modelo dice a quién hace cada uno. Los hablantes de la transcripción entran como reparto conocido.
+- `percibirMedio` es idempotente y reanudable: cada ventana se graba en cuanto llega, con una huella que incluye la versión del prompt, el modelo, la lente, el medio, los fps y la resolución. Si la salida no cabe (`MAX_TOKENS`), la ventana se parte en dos. Lleva un presupuesto (`presupuestoUsd`, que para y deja lo hecho), el progreso y el coste.
+- En audio se usa el mismo esquema sin planos. En las notas van el tono, la prosodia, las risas, las pausas y los solapamientos.
+
+## Elección del modelo (4-11-2026)
+
+**Oro.** Cuatro clips de 3 min de *Fresa y chocolate*, 80 planos en total:
+
+- A: créditos y la posada, 0:00-3:00.
+- B: Coppelia, 9:30-12:30, plano y contraplano rápido.
+- C: la guarida, con un plano secuencia de 76 s y la foto de Lezama, 37:00-40:00.
+- D: Coppelia al final y el abrazo, 1:45:00-1:48:00.
+
+Los cortes se comprobaron fotograma a fotograma con hojas de contacto. Cada plano lleva su escala y quién está, anotados a mano en su fotograma central. Las regiones se comparan con las personas que detecta Vision de macOS (cuerpo entero y torso) en el instante que da el modelo: IoU con la mejor y proporción de cajas que contienen una cara. La música se comprueba contra el clasificador de sonido de macOS (SoundAnalysis, música > 0,5, por medios segundos).
+
+**Métricas.**
+
+- Cortes: F1 con 1 s de tolerancia, con y sin los cortes de ffmpeg en el prompt.
+- Escala: acierto exacto y a un paso.
+- Personas: TP / (TP + FN + FP) por plano.
+- Regiones: IoU y proporción de cajas con IoU ≥ 0,5.
+- Coste y latencia: por clip de 3 min.
+
+| Modelo (fps 1, resolución media) | Cortes sin ayuda | Escala (exacta / ±1) | Personas | IoU (≥ 0,5) | Caras | Música F1 | $ por 3 min | s por 3 min |
+|---|---|---|---|---|---|---|---|---|
+| **gemini-4-argon** | **0,97** | 0,66 / **0,97** | **1,00** | **0,73 (0,88)** | 0,81 | **0,80** | 0,134 | 97 |
+| gemini-3.8-flash | 0,86 | 0,67 / 0,95 | 0,99 | 0,54 (0,69) | 0,76 | 0,74 | **0,051** | **75** |
+| gemini-3.1-pro-preview | 0,90 | 0,65 / 0,94 | 0,94 | 0,55 (0,69) | 0,84 | 0,76 | 0,205 | 87 |
+| gemini-pro-latest | 0,91 | 0,61 / 0,92 | 0,95 | 0,59 (0,89) | 0,84 | 0,80 | 0,178 | 81 |
+| gemini-omni-1.1-flash | no se puede usar: solo admite la Interactions API, sin recorte por tiempo (`video_metadata`) ni modo JSON, y su contexto es de 131 072 tokens | | | | | | | |
+
+Variantes:
+
+- Con los cortes de ffmpeg en el prompt, los cuatro llegan a F1 0,99 en cortes, y el ajuste posterior a los cortes deja los límites al fotograma.
+- Argon con resolución alta: IoU 0,75, pero 2,7 veces más tokens (0,212 $ por clip). No compensa.
+- Argon con fps 2: lo mismo que con fps 1, por 0,168 $.
+- Flash con resolución alta: IoU 0,68 por 0,080 $. Es la mejor opción barata si importan las cajas.
+- **Ventana real de 8 min** (9:00-17:00, puntuada sobre el oro de B):
+  - Argon: escala exacta 0,86, IoU 0,79 (el 96 % ≥ 0,5), 0,326 $ y 203 s.
+  - Flash: escala 0,81, IoU 0,59, 0,128 $ y 182 s.
+  - La ventana larga no empeora el resultado. Los dos llamaron «Germán» al chico de la camisa de cuadros, que no habla: es la presión del reparto conocido (ver «Pendiente»).
+
+**Por defecto.**
+
+- `MODELOS_GEMINI.percepcion = 'gemini-4-argon'`: resolución media, fps 1, cortes de ffmpeg en el prompt y ajuste de los planos a ellos.
+- `percepcionRapida = 'gemini-3.8-flash'`.
+
+**Coste por hora de vídeo.** Unas 8 ventanas por hora:
+
+- Argon: 2,6 $ hasta el 30-11-2026. Desde el 1-12-2026 su precio se dobla (4 $ y 20 $ por millón), y la hora pasa a unos 5,2 $.
+- Flash: 1,0 $.
+- Una ventana de 8 min tiene unos 56 000 tokens de entrada (unos 117 por segundo) y de 15 000 a 25 000 de salida.
+
+Argon admite como mucho 32 768 de salida. Una ventana muy cortada (más de unos 120 planos) se parte sola.
+
+## Película completa
+
+`~/tmp/scholaris-fresa/percepcion/fresa-y-chocolate.json` (fuera del repositorio), hecho con `scripts/pelicula.ts`. La medición y el oro están en `~/tmp/scholaris-fresa/percepcion/` (`oro/`, `resultados/`, `scripts/`).
+
+## Anclaje material
+
+`anclarMaterial(puertos, unidad, { cita | caracteres })`:
+
+- **Caracteres.** Son puntos de código NFC del texto de la unidad. Primero se busca la cita exacta (confianza 1). Después por su esqueleto, sin mayúsculas, tildes, puntuación, guiones de corte ni Markdown (0,95). Por último por el principio y el final de la cita, si trae erratas (0,75).
+- **PDF digital.** Con las líneas de la capa de texto (`paquete.json`, solo las páginas de origen digital), se calcula la unión de las líneas que ocupa la cita. La primera y la última se recortan en proporción a sus letras. No cuesta ninguna llamada. La imprenta da cajas por línea, no por palabra, y con eso basta.
+- **Escaneado o foto.** Gemini 3.8 Flash («alta») devuelve una caja por línea (`box_2d` en 0-1000) y se unen. El resultado se guarda en caché.
+
+Probado sobre el cuento escaneado (`dmw21xdj01a6v8dkc`, pliegos de dos páginas) con 7 citas: las 7 en la página y las líneas correctas, unos 3,5 s y 0,001 $ por cita. Sobre un PDF digital de la biblioteca (`dmuxsagujsmaagbja`), 8 de 8, sin modelo. En la plataforma, `crearAnclador(ctx, doc)` (apps/api/src/compartido/percepcion.ts) carga una vez las líneas del paquete y devuelve `anclarMaterial` atado al documento.
+
+## Descripción de fotogramas
+
+`describirFiguras` separa los fotogramas de un vídeo de las figuras de página. Los describe en calidad «alta» con lenguaje de cine (escala, angulación, quién y dónde en el cuadro, quién domina, luz y color, objetos, texto en pantalla). A cada uno le da lo que se dice 20 s antes y 20 s después y los hablantes de la obra. El esquema SPDF no cambia: sigue siendo la `descripcion` de la figura.
+
+## Pendiente
+
+- Presión del reparto: un figurante que no habla puede recibir el nombre de un personaje conocido. Hay que marcar en el prompt quién habla en cada ventana.
+- Los créditos con fundidos no dan cortes de ffmpeg; el modelo los trata como un plano por rótulo.
+- En el contenedor (`standard-4`), el proxy de una película de 2 h debería tardar de 20 a 35 min, pero no se ha medido.

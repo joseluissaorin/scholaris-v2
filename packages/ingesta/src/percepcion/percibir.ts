@@ -66,6 +66,7 @@ export async function mirarVentana(vidente: PuertosPercepcion['vidente'], fuente
     texto: textoVentana({
       medio: o.medio, lente: o.lente, ...(o.ficha ? { ficha: o.ficha } : {}), ...(o.idioma ? { idioma: o.idioma } : {}),
       t0: v.t0, t1: v.t1, n: o.n, total: o.total, reparto: o.reparto, ...(o.interpretes?.length ? { interpretes: o.interpretes } : {}), transcripcion: transcripcionDeVentana(o.turnos, v.t0, v.t1),
+      hablanAqui: hablantesDe(o.turnos.filter((t) => t.t1 >= v.t0 && t.t0 <= v.t1)),
       ...(o.cortes ? { cortes: o.cortes } : {}),
     }),
     esquema: esquemaVentana(o.medio),

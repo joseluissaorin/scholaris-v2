@@ -7,7 +7,7 @@ import type { Lente, PersonaPercibida } from '@scholaris/nucleo';
 import { marca } from './ventanas.js';
 
 /** Versión del prompt y del esquema: entra en la clave de lo grabado. */
-export const VERSION_PERCEPCION = 'percepcion-1';
+export const VERSION_PERCEPCION = 'percepcion-2';
 
 export const ESCALAS = ['gran plano general', 'plano general', 'plano entero', 'plano americano', 'plano medio', 'plano medio corto', 'primer plano', 'primerísimo primer plano', 'plano detalle'] as const;
 export const ANGULACIONES = ['normal', 'picado', 'contrapicado', 'cenital', 'nadir', 'aberrante'] as const;
@@ -122,6 +122,8 @@ export interface ContextoVentana {
   n: number;
   total: number;
   reparto: PersonaPercibida[];
+  /** Quién habla en este fragmento según la transcripción. */
+  hablanAqui?: string[];
   /** Intérpretes de la obra sin papel conocido (Wikidata sin P453). */
   interpretes?: string[];
   transcripcion: string;
@@ -136,6 +138,7 @@ export function instruccionesSistema(medio: 'video' | 'audio', lente: Lente, idi
     `Escribe ${lengua}, con precisión y sin adornos. Describe solo lo que se ve y se oye; si algo no se distingue, no lo inventes.`,
     'Todas las marcas de tiempo, en H:MM:SS.s contadas desde el principio de la obra completa (no desde el principio del fragmento).',
     'Usa exactamente los nombres del reparto conocido. Si aparece alguien que no está, dale un nombre si la obra lo dice y, si no, una descripción breve y estable («camarero de Coppelia»).',
+    'No le des a nadie un nombre del reparto solo porque esté en la lista: hazlo cuando lo reconozcas por su aspecto o por su voz, o cuando la transcripción lo nombre o le dé la palabra en ese momento. Un figurante que no habla y no reconoces se describe.',
     'La transcripción es fiable para lo que se dice: las frases de «dialogos» se copian literalmente de ella, con su hablante.',
     'Las escenas cubren todo el fragmento, sin huecos ni solapes: cambia de escena con el lugar, el tiempo o la acción.',
     'Sonido: separa música (incidental o de la escena), canciones, silencios significativos, ambiente y efectos; di si es diegético.',
@@ -153,16 +156,17 @@ export function instruccionesSistema(medio: 'video' | 'audio', lente: Lente, idi
   return comun.join('\n');
 }
 
-function lineaPersona(p: PersonaPercibida): string {
+function lineaPersona(p: PersonaPercibida, habla = false): string {
   const extra = [p.ficticia === false ? 'persona real' : p.ficticia ? 'personaje' : '', p.actor ? `interpretado por ${p.actor}` : '', p.descripcionVisual ?? '', p.voz ? `voz: ${p.voz}` : ''].filter(Boolean);
-  return `- ${p.nombre}${extra.length ? `: ${extra.join('; ')}` : ''}`;
+  return `- ${p.nombre}${habla ? ' (habla en este fragmento)' : ''}${extra.length ? `: ${extra.join('; ')}` : ''}`;
 }
 
 export function textoVentana(c: ContextoVentana): string {
   const partes: string[] = [];
   if (c.ficha) partes.push(`Obra: ${c.ficha}. Lente: ${c.lente}.`);
   partes.push(`Fragmento ${c.n} de ${c.total}: de ${marca(c.t0)} a ${marca(c.t1)}. Analiza SOLO este fragmento y da las marcas contadas desde el principio de la obra.`);
-  if (c.reparto.length) partes.push(`Reparto conocido:\n${c.reparto.map(lineaPersona).join('\n')}`);
+  const hablan = new Set(c.hablanAqui ?? []);
+  if (c.reparto.length) partes.push(`Reparto conocido:\n${c.reparto.map((p) => lineaPersona(p, hablan.has(p.nombre))).join('\n')}`);
   if (c.interpretes?.length) partes.push(`Intérpretes de la obra (sin papel asignado): ${c.interpretes.join(', ')}. No son personajes: si reconoces a quién interpreta cada uno, ponlo en «actor» del personaje.`);
   if (c.cortes?.length) {
     const dentro = c.cortes.filter((x) => x >= c.t0 - 0.5 && x <= c.t1 + 0.5).map((x) => marca(x));
