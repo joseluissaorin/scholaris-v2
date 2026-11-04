@@ -99,14 +99,20 @@ export async function lanzarComprension(
     ...(o.economico || p.usuario.plan === 'gratis' ? { economico: true } : {}),
   };
   const t = ahora();
+  // Una comprensión hecha no se da por perdida al relanzarla sin «forzar» (al cerrar otra vez la
+  // ingesta, por ejemplo): el plan comprueba la versión y la huella del material y, si no han
+  // cambiado, no hace nada. Solo lo que hay que hacer de verdad pasa a «pendiente».
+  const conserva = previo?.estado === 'hecho' && !o.forzar;
+  const estado: EstadoComprension['estado'] = conserva ? 'hecho' : 'pendiente';
   await actualizarEstado(p.sql, documento, {
-    estado: 'pendiente', instancia, params: params as unknown as Record<string, unknown>, relanzamientos: 0, error: undefined,
+    estado, instancia, params: params as unknown as Record<string, unknown>, relanzamientos: 0, lanzada: false,
+    ...(conserva ? {} : { error: undefined }),
     ...(previo ? {} : { lentes: o.lentes ?? [], version: '', iniciado: t }),
   }, t);
-  if (o.soloEncolar || !p.orquestador.lanzarComprension) return { instancia, estado: 'pendiente' };
+  if (o.soloEncolar || !p.orquestador.lanzarComprension) return { instancia, estado };
   await actualizarEstado(p.sql, documento, { lanzada: true }, ahora());
   await p.orquestador.lanzarComprension(params);
-  return { instancia, estado: 'pendiente' };
+  return { instancia, estado };
 }
 
 /** Documentos con la comprensión pendiente (sin lanzar) o en marcha. */
