@@ -422,6 +422,9 @@ importers:
       '@scholaris/folios':
         specifier: workspace:^
         version: link:../folios
+      '@scholaris/funciones':
+        specifier: workspace:*
+        version: link:../funciones
       '@scholaris/imprenta':
         specifier: workspace:^
         version: link:../imprenta
