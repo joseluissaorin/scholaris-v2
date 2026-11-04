@@ -493,8 +493,62 @@ async function corregir(ctx: ContextoHerramientas, numerador: Numerador, markdow
   return { markdown: salida, cambiadas };
 }
 
+const SISTEMA_TABLAS = `Revisas las tablas de una respuesta académica. El TEXTO de la respuesta ya se ha comprobado frase a frase contra sus pruebas; las tablas no llevan marcas y solo pueden resumir lo que ese texto dice.
+Para cada fila: si alguna celda afirma algo que el texto no dice, lo amplía con un dato nuevo o lo contradice, devuelve la fila corregida: quita o cambia solo lo que sobra, y si a una celda no le queda nada que el texto diga, pon «—». No añadas nada que no esté en el texto. Conserva el mismo número de celdas y el formato Markdown de la fila (empieza y termina con «|»). Las filas que estén bien no las devuelvas.`;
+
+const ESQUEMA_TABLAS = {
+  type: 'object',
+  properties: { filas: { type: 'array', items: { type: 'object', properties: { i: { type: 'integer' }, texto: { type: 'string' } }, required: ['i', 'texto'] } } },
+  required: ['filas'],
+};
+
+const celdas = (fila: string) => fila.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').length;
+
+/**
+ * Las tablas van sin marcas y no se juzgan contra las pruebas: una celda puede colar lo que el
+ * texto niega (en el banco, el pretexto de una visita que la prosa ya había descartado). Se
+ * cotejan con el texto ya comprobado y se corrigen o vacían las celdas que digan algo más.
+ * Devuelve las filas cambiadas (original → nueva).
+ */
+export async function cuadrarTablas(ctx: ContextoHerramientas, markdown: string): Promise<Map<string, string>> {
+  const lineas = markdown.split('\n');
+  const filas: string[] = [];
+  lineas.forEach((l, k) => {
+    if (!l.trim().startsWith('|')) return;
+    // Ni la cabecera (la primera fila de cada tabla) ni la línea de separación.
+    if (!lineas[k - 1]?.trim().startsWith('|') || /^\s*\|[\s:|-]+\|?\s*$/.test(l)) return;
+    filas.push(l);
+  });
+  const cambios = new Map<string, string>();
+  if (!filas.length) return cambios;
+  const texto = lineas.filter((l) => !l.trim().startsWith('|')).join('\n').replace(/\s*\[E\d+\]/g, '').replace(/\n{3,}/g, '\n\n').trim();
+  const modelo = ctx.p.modelos.verificador ?? ctx.p.modelos.agente;
+  const pet = {
+    sistema: SISTEMA_TABLAS,
+    mensajes: [{ rol: 'usuario' as const, partes: [{ tipo: 'texto' as const, texto: `TEXTO:\n${recortar(texto, 60_000)}\n\nFILAS:\n${filas.map((f, i) => `${i}. ${f}`).join('\n')}` }] }],
+    esquema: ESQUEMA_TABLAS, temperatura: 0, pensamiento: 'bajo' as const, maxTokens: 8000, ...(ctx.signal ? { signal: ctx.signal } : {}),
+  };
+  try {
+    const r = await modelo.turno(pet).catch((e: Error) => {
+      if (modelo !== ctx.p.modelos.agente && /bloquead|PROHIBITED|SAFETY/i.test(e.message)) return ctx.p.modelos.agente.turno(pet);
+      throw e;
+    });
+    ctx.cuentas.apuntar(r.uso);
+    for (const x of ((r.json as { filas?: Array<{ i: number; texto: string }> })?.filas ?? [])) {
+      const original = filas[x.i];
+      const nueva = String(x.texto ?? '').trim().replace(/\s*\[(?:E|P)\d+\]/g, '');
+      // Solo una fila con las mismas celdas y sin marcas; si no, se queda como estaba.
+      if (!original || !nueva.startsWith('|') || nueva.includes('\n') || celdas(nueva) !== celdas(original) || nueva === original.trim()) continue;
+      cambios.set(original, original.replace(original.trim(), nueva));
+    }
+  } catch (e) {
+    ctx.avisos.push(`El cotejo de las tablas con el texto falló: ${(e as Error).message}`);
+  }
+  return cambios;
+}
+
 /** Milisegundos de cada paso de la verificación (para el registro). */
-export interface TiemposVerificacion { juicio: number; correccion: number; rejuicio: number; jueces?: number; miradas?: number }
+export interface TiemposVerificacion { juicio: number; correccion: number; rejuicio: number; jueces?: number; miradas?: number; tablas?: number }
 
 export interface ResultadoVerificacion {
   /** La respuesta corregida (sin la lista de pruebas). */
@@ -503,6 +557,8 @@ export interface ResultadoVerificacion {
   detalle: Array<FraseRespuesta & { veredicto: FraseVerificada['veredicto'] | 'interpretacion'; nota?: string; revisada?: boolean }>;
   /** Frases corregidas. */
   correcciones: number;
+  /** Filas de tabla cotejadas con el texto y corregidas. */
+  filasCorregidas: number;
   tiempos: TiemposVerificacion;
 }
 
@@ -526,7 +582,7 @@ export async function verificar(ctx: ContextoHerramientas, numerador: Numerador,
   aplicarMiradas(juzgadas, miradas);
   tiempos.juicio = Date.now() - t0;
   let texto = markdown;
-  let correcciones = 0;
+  let correcciones = 0, filasCorregidas = 0;
   if (o.corregir) {
     const tc = Date.now();
     const c = await corregir(ctx, numerador, texto, juzgadas);
@@ -541,6 +597,9 @@ export async function verificar(ctx: ContextoHerramientas, numerador: Numerador,
       texto = `${texto.slice(0, pos)}${partirPorMarcas(f.original)}${texto.slice(pos + f.original.length)}`;
       correcciones++;
     }
+    // Las tablas, cotejadas con el texto ya corregido (a la vez que se vuelve a juzgar).
+    const tt = Date.now();
+    const tablas = cuadrarTablas(ctx, texto).finally(() => { tiempos.tablas = Date.now() - tt; });
     if (correcciones) {
       const tr = Date.now();
       // Lo corregido se vuelve a juzgar (sin volver a corregir); lo demás conserva su juicio.
@@ -561,6 +620,12 @@ export async function verificar(ctx: ContextoHerramientas, numerador: Numerador,
       const rejuzgadas = new Map(nuevasJuzgadas.map((f) => [f.original, f]));
       juzgadas = frases.map((f) => previas.get(f.original) ?? rejuzgadas.get(f.original) ?? { ...f, clase: 'hecho' as const, marcas: {} });
       tiempos.rejuicio = Date.now() - tr;
+    }
+    for (const [original, nueva] of await tablas) {
+      const pos = texto.indexOf(original);
+      if (pos < 0) continue;
+      texto = `${texto.slice(0, pos)}${nueva}${texto.slice(pos + original.length)}`;
+      filasCorregidas++;
     }
   }
   // Una marca que sigue sin sostener nada se quita: citar una prueba que no dice eso es peor que no
@@ -585,7 +650,7 @@ export async function verificar(ctx: ContextoHerramientas, numerador: Numerador,
   const frases: FraseVerificada[] = detalle
     .filter((d) => d.veredicto !== 'interpretacion')
     .map((d) => ({ frase: d.limpia, evidencias: d.evidencias, veredicto: d.veredicto as FraseVerificada['veredicto'], ...(d.nota ? { nota: d.nota } : {}), ...(d.revisada ? { revisada: true } : {}) }));
-  return { markdown: texto, frases, detalle, correcciones, tiempos };
+  return { markdown: texto, frases, detalle, correcciones, filasCorregidas, tiempos };
 }
 
 /** Confianza de la respuesta según la verificación. */

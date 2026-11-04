@@ -9,7 +9,7 @@ import type { ContextoHerramientas } from '../src/contexto.js';
 import { Contabilidad, type PeticionModelo } from '../src/modelo.js';
 import { CuadernoPruebas, type Ambito } from '../src/pruebas.js';
 import { Numerador } from '../src/sintesis.js';
-import { comprobacionesLiterales, frasesDe, marcaEnMedio, MAX_CORRECCIONES, nombradosEn, partirPorMarcas, verificar } from '../src/verificacion.js';
+import { comprobacionesLiterales, cuadrarTablas, frasesDe, marcaEnMedio, MAX_CORRECCIONES, nombradosEn, partirPorMarcas, verificar } from '../src/verificacion.js';
 import { ModeloGuion, textoDe } from './apoyo.js';
 
 const pagina = (fisica: number, impresa: string): Ancla => ({ tipo: 'pagina', fisica, impresa, romana: false, origen: 'leido', confianza: 1 });
@@ -234,5 +234,49 @@ describe('lo visual y lo sonoro se vuelve a mirar', () => {
     const n = new Numerador(ctx);
     await verificar(ctx, n, n.sustituir('Marta aparece en primer plano junto a la puerta [P3].'), { sitios: 0 });
     expect(miradas).toBe(0);
+  });
+
+  it('una fila de tabla que dice lo que el texto niega se coteja con el texto y se corrige', async () => {
+    let filas = '';
+    const { ctx } = ctxCon((p) => {
+      const t = textoDe(p);
+      if (p.sistema?.startsWith('Revisas las tablas')) {
+        filas = t.slice(t.indexOf('FILAS:'));
+        expect(t).toContain('No va a buscar ningún libro.');
+        // La fila 0 se corrige; la 1 vuelve con una celda de más y se descarta.
+        return { json: { filas: [
+          { i: 0, texto: '| 1.ª | Recoger su maleta azul. |' },
+          { i: 1, texto: '| 2.ª | Oír historias. | De barcos. |' },
+        ] } };
+      }
+      return { json: juicio(t, () => null) };
+    });
+    const n = new Numerador(ctx);
+    const md = n.sustituir([
+      'Marta va al puerto a recoger su maleta azul [P1]. No va a buscar ningún libro.',
+      '',
+      '| Visita | Pretexto |',
+      '|---|---|',
+      '| 1.ª | Recoger su maleta azul y buscar unos libros de Tomás. |',
+      '| 2.ª | Oír historias de barcos hundidos. |',
+    ].join('\n'));
+    const v = await verificar(ctx, n, md, { sitios: 0 });
+    // Ni la cabecera ni el separador se mandan a cotejar.
+    expect(filas).not.toContain('| Visita |');
+    expect(filas).not.toContain('|---|');
+    expect(v.markdown).toContain('| 1.ª | Recoger su maleta azul. |');
+    expect(v.markdown).not.toContain('libros de Tomás');
+    expect(v.markdown).toContain('| 2.ª | Oír historias de barcos hundidos. |');
+    expect(v.filasCorregidas).toBe(1);
+  });
+
+  it('sin tablas no se coteja nada', async () => {
+    let cotejos = 0;
+    const { ctx } = ctxCon((p) => {
+      if (p.sistema?.startsWith('Revisas las tablas')) cotejos++;
+      return { json: juicio(textoDe(p), () => null) };
+    });
+    expect((await cuadrarTablas(ctx, 'Marta llega al puerto [E1].')).size).toBe(0);
+    expect(cotejos).toBe(0);
   });
 });

@@ -372,7 +372,7 @@ export async function* investigar(p: PuertosInvestigar, pregunta: string, o: Opc
     }
     fase('final');
     const ms = Math.round(reloj() - t0);
-    console.error(JSON.stringify({ nivel: 'info', que: 'investigar_tiempos', id, ms, ...fases, ...Object.fromEntries(Object.entries(v.tiempos).map(([k, x]) => [`verificacion_${k}`, x])), regiones: msRegiones, correcciones: v.correcciones, pruebas: evidencias.length, usd: Math.round(cuentas.usd * 1000) / 1000, usdPorModelo: Object.fromEntries([...cuentas.porModelo].map(([m, x]) => [m, Math.round(x.usd * 1000) / 1000])) }));
+    console.error(JSON.stringify({ nivel: 'info', que: 'investigar_tiempos', id, ms, ...fases, ...Object.fromEntries(Object.entries(v.tiempos).map(([k, x]) => [`verificacion_${k}`, x])), regiones: msRegiones, correcciones: v.correcciones, filasCorregidas: v.filasCorregidas, pruebas: evidencias.length, usd: Math.round(cuentas.usd * 1000) / 1000, usdPorModelo: Object.fromEntries([...cuentas.porModelo].map(([m, x]) => [m, Math.round(x.usd * 1000) / 1000])) }));
     const inv: Investigacion = { id, pregunta, plan, markdown, evidencias, frases: frasesFinales, notas: ctx.notas, confianza, modelo: modeloAgente, ms };
 
     // 7. La memoria.
