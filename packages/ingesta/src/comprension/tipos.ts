@@ -5,7 +5,7 @@
  * en las pruebas y en el guion de prueba real sobre una copia local.
  */
 import type {
-  Embebedor, IndiceVectorial, Lente, PercepcionMedio, SQL, TipoEntidadComprension, TipoSegmento,
+  Embebedor, IndiceVectorial, Lente, PercepcionMedio, Region, SQL, TipoEntidadComprension, TipoSegmento,
 } from '@scholaris/nucleo';
 
 // ---------------------------------------------------------------------------
@@ -83,9 +83,32 @@ export interface ContextoComprension {
   fetch?: typeof fetch;
   /** La percepción completa de un medio (el equipo de percepción la produce). */
   percepcion?(documento: string): Promise<PercepcionMedio | null>;
+  /**
+   * El anclaje material de las pruebas de un documento de páginas: su región en la
+   * imagen de la página. Se pide uno por paso, así cada paso apunta lo que gastó. Sin
+   * él, las pruebas de las páginas se quedan con sus caracteres.
+   */
+  anclajeMaterial?(documento: string): AnclajeMaterialDocumento;
   alProgreso?(p: ProgresoComprension): Promise<void> | void;
   /** Reloj inyectable (pruebas). */
   ahora?(): Date;
+}
+
+/**
+ * El anclaje material de un documento de páginas (docs/COMPRENSION.md, principio 1).
+ * La plataforma lo monta con `anclarMaterial` de la percepción: en un PDF digital,
+ * por las líneas de la capa de texto (gratis); en un escaneo o una foto, por visión
+ * (Gemini 3.8 Flash), con caché en el almacén.
+ */
+export interface AnclajeMaterialDocumento {
+  /**
+   * La región (fracciones 0-1 de la imagen de la página) de unos caracteres o de una
+   * cita de la unidad `orden`; undefined si no se encuentra o no es una página. Con
+   * `vision: false`, solo por la capa de texto.
+   */
+  region(orden: number, o: { caracteres?: [number, number]; cita?: string; vision?: boolean }): Promise<Region | undefined>;
+  /** Lo que lleva gastado (las localizaciones por visión; la caché y la capa de texto no cuestan). */
+  uso(): UsoModelo;
 }
 
 export interface OpcionesComprension {

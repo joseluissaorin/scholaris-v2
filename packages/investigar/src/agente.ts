@@ -19,6 +19,7 @@ import { Contabilidad, type MensajeAgente, type ParteMensaje } from './modelo.js
 import { candidatas, catalogo, planificar } from './plan.js';
 import { presupuestoDe, type OpcionesInvestigar, type PuertosInvestigar } from './puertos.js';
 import { CuadernoPruebas, fichaDocumento, vistaPrueba, type Prueba } from './pruebas.js';
+import { regionesDeCitas } from './regiones.js';
 import { afinar, nombreIdioma, Numerador, redactar } from './sintesis.js';
 import { confianzaDe, marcarSinPrueba, verificar } from './verificacion.js';
 import { escuchar, ver } from './vision.js';
@@ -239,7 +240,19 @@ export async function* investigar(p: PuertosInvestigar, pregunta: string, o: Opc
 
     // 5. Las páginas citadas sin cita literal, a sus oraciones; y la verificación.
     afinar(numerador, ctx, texto);
-    const v = await verificar(ctx, numerador, texto, presupuesto.revisiones);
+    // Mientras se verifica, las citas en páginas reciben su región en la imagen (anclaje material).
+    const [v, rg] = await Promise.all([
+      verificar(ctx, numerador, texto, presupuesto.revisiones),
+      regionesDeCitas(ctx, numerador, { vision: () => cuentas.usd < presupuesto.usd }).catch(() => null),
+    ]);
+    if (rg?.uso.llamadas) {
+      // Una entrada por localización, con el total en la primera.
+      for (let i = 0; i < rg.uso.llamadas; i++) cuentas.apuntar({ modelo: rg.uso.modelo, entrada: i ? 0 : rg.uso.tokensEntrada, salida: i ? 0 : rg.uso.tokensSalida, cache: 0, usd: i ? 0 : rg.uso.usd, ms: 0 });
+    }
+    for (const x of rg?.pruebas ?? []) {
+      const url = await urlDe(x);
+      yield { tipo: 'evidencia', evidencia: vistaPrueba(x, ctx.fichas.get(x.evidencia.documento), url ? { imagenUrl: url } : {}) };
+    }
     const respaldadas = v.frases.filter((f) => f.veredicto === 'respaldada').length;
     yield { tipo: 'verificacion', frases: v.frases, respaldadas, total: v.frases.length };
     const confianza = numerador.marcadas.length ? confianzaDe(v.frases) : 'baja';

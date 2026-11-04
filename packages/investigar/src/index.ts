@@ -13,5 +13,6 @@ export * from './vision.js';
 export * from './memoria.js';
 export * from './plan.js';
 export * from './sintesis.js';
+export * from './regiones.js';
 export * from './verificacion.js';
 export * from './agente.js';

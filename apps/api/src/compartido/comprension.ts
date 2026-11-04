@@ -15,6 +15,7 @@ import {
 import { crearComprensorGemini, crearGemini, type ConfigGemini } from '@scholaris/proveedores';
 import type { AlmacenAmpliado, PuertosUsuario } from '../puertos.js';
 import { leerPercepcion } from './percepcion.js';
+import { almacenAnclaje, anclajeMaterial, prefijoAnclaje } from './anclaje-material.js';
 
 /** Con qué se lanza la comprensión de un documento (serializable: va en el Workflow). */
 export interface ParamsComprension {
@@ -53,7 +54,8 @@ export function modeloComprension(gemini: ConfigGemini | undefined): ModeloCompr
 export interface DependenciasContexto {
   sql: SQL;
   usuario: string;
-  almacen: Pick<AlmacenAmpliado, 'bytes'>;
+  /** Con `obtener` y `poner`, las pruebas de las páginas reciben su región en la imagen (anclaje material). */
+  almacen: Pick<AlmacenAmpliado, 'bytes'> & Partial<Pick<AlmacenAmpliado, 'obtener' | 'poner'>>;
   gemini?: ConfigGemini;
   embebedor?: Embebedor;
   indice?: IndiceVectorial | null;
@@ -64,6 +66,7 @@ export interface DependenciasContexto {
 }
 
 export function contextoComprension(d: DependenciasContexto): ContextoComprension {
+  const almacen = almacenAnclaje(d.almacen);
   return {
     sql: d.sql,
     modelo: modeloComprension(d.gemini),
@@ -72,6 +75,10 @@ export function contextoComprension(d: DependenciasContexto): ContextoComprensio
     ...(d.espacioNombres ? { espacioNombres: d.espacioNombres } : {}),
     fetch: globalThis.fetch.bind(globalThis),
     percepcion: (documento) => leerPercepcionAlmacen(d.almacen, d.usuario, documento),
+    // La región de las pruebas en la página: capa de texto (gratis) o Gemini 3.8 Flash en lo escaneado.
+    ...(almacen ? {
+      anclajeMaterial: (documento: string) => anclajeMaterial({ almacen, sql: d.sql, ...(d.gemini ? { gemini: d.gemini } : {}) }, { documento, prefijo: prefijoAnclaje(d.usuario, documento) }),
+    } : {}),
     alProgreso: async (p: ProgresoComprension) => {
       await d.latido?.();
       await d.emisor?.emitir(`usuario:${d.usuario}`, { tipo: 'comprension', documento: p.documento, paso: p.paso, avance: p.avance, mensaje: p.mensaje, estado: p.paso === 'fin' ? 'hecho' : 'en_marcha' }).catch(() => undefined);

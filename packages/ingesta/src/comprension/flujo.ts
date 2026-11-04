@@ -24,6 +24,7 @@ import { indexarFichas } from './indexado.js';
 import { hablantesDe, leerMaterial, muestraDe, tokensDe, type Material, type VozPercibida } from './material.js';
 import { fichasDePlanos } from './medios.js';
 import { llamar } from './modelo.js';
+import { regionesDelPaso } from './regiones.js';
 import { huella } from './util.js';
 import type { ContextoComprension, EstadoComprension, OpcionesComprension, PasoComprension, PlanComprension, UsoModelo } from './tipos.js';
 
@@ -281,8 +282,10 @@ export async function pasoFichas(ctx: ContextoComprension, plan: PlanComprension
     largo: plan.largo, calidad: yaGastado > plan.presupuestoUsd * 0.7 ? 'rapida' : plan.calidades.fichas, maxCaracteres: plan.opciones.maxCaracteresContexto ?? MAX_CONTEXTO,
     percepcion, idioma: m.documento.metadatos.idioma ?? 'es', creada: ahoraDe(ctx),
   });
+  // Las pruebas de las páginas, a su sitio en la imagen (anclaje material).
+  const regiones = await regionesDelPaso(ctx, m, r.fichas, acumulado, { gastado: yaGastado, presupuestoUsd: plan.presupuestoUsd });
   await escribirFichas(ctx.sql, r.fichas);
-  await apuntarPaso(ctx.sql, doc, paso, acumulado.uso, Date.now() - inicio, ahoraDe(ctx), { fichas: r.fichas.length, reutilizadas: r.reutilizadas, citasDescartadas: r.descartadas, sinFicha: r.faltan },
+  await apuntarPaso(ctx.sql, doc, paso, acumulado.uso, Date.now() - inicio, ahoraDe(ctx), { fichas: r.fichas.length, reutilizadas: r.reutilizadas, citasDescartadas: r.descartadas, sinFicha: r.faltan, ...regiones },
     r.faltan ? [`${r.faltan} segmentos se quedaron sin ficha en la tanda ${lote + 1}.`] : []);
   await vaciar(ctx);
   return { fichas: r.fichas.length };
@@ -329,9 +332,10 @@ export async function pasoEntidades(ctx: ContextoComprension, plan: PlanComprens
     await ctx.sql.ejecutar("DELETE FROM vectores WHERE objetivo = 'ficha' AND id = ?", id);
   }
   for (let i = 0; i < apariciones.length; i += 500) await escribirApariciones(ctx.sql, apariciones.slice(i, i + 500));
+  const regiones = await regionesDelPaso(ctx, m, fe.fichas, acumulado, { gastado: await gastado(ctx.sql, doc), presupuestoUsd: plan.presupuestoUsd });
   await escribirFichas(ctx.sql, fe.fichas);
   await apuntarPaso(ctx.sql, doc, 'entidades', acumulado.uso, Date.now() - inicio, ahoraDe(ctx), {
-    entidades: ents.length, apariciones: apariciones.length, papeles: reparto.papeles.length, fichas: fe.fichas.length, citasDescartadas: fe.descartadas,
+    entidades: ents.length, apariciones: apariciones.length, papeles: reparto.papeles.length, fichas: fe.fichas.length, citasDescartadas: fe.descartadas, ...regiones,
   }, avisos);
   await vaciar(ctx);
   return { entidades: ents.length, apariciones: apariciones.length };
@@ -383,8 +387,9 @@ export async function pasoGlobal(ctx: ContextoComprension, plan: PlanComprension
     for (let k = 0; k < aps.length; k += 500) await escribirApariciones(ctx.sql, aps.slice(k, k + 500));
     if (r.ficha.texto) fichas.push(r.ficha);
   }
+  const regiones = await regionesDelPaso(ctx, m, fichas, acumulado, { gastado: await gastado(ctx.sql, doc), presupuestoUsd: plan.presupuestoUsd });
   await escribirFichas(ctx.sql, fichas);
-  await apuntarPaso(ctx.sql, doc, 'global', acumulado.uso, Date.now() - inicio, ahoraDe(ctx), { fichas: fichas.length, temas, citasDescartadas: descartadas });
+  await apuntarPaso(ctx.sql, doc, 'global', acumulado.uso, Date.now() - inicio, ahoraDe(ctx), { fichas: fichas.length, temas, citasDescartadas: descartadas, ...regiones });
   await vaciar(ctx);
   return { fichas: fichas.length, temas };
 }
