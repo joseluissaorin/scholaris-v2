@@ -3,6 +3,7 @@
  *
  *   pnpm bench ingesta <archivo> [--digital capa|vision|auto] [--pliego N] [--concurrencia N] [--tramo S] [--sin-contexto] [--etiqueta X]
  *   pnpm bench comparar [etiqueta…]
+ *   pnpm bench comprension [ejecutar|validar|calibrar] [--modo responder|investigar] (ver src/comprension/index.ts)
  */
 
 import { existsSync } from 'node:fs';
@@ -53,9 +54,12 @@ if (orden === 'ingesta') {
 } else if (orden === 'calidad') {
   const { calidad } = await import('./calidad/index.js');
   await calidad(resto);
+} else if (orden === 'comprension') {
+  const { comprension } = await import('./comprension/index.js');
+  await comprension(resto);
 } else if (orden === 'comparar') {
   console.log(JSON.stringify(compararTodo(resto), null, 2));
 } else {
-  console.error('Uso: pnpm bench ingesta <archivo> [opciones] | pnpm bench comparar [etiqueta…]');
+  console.error('Uso: pnpm bench ingesta <archivo> [opciones] | pnpm bench calidad | pnpm bench comprension | pnpm bench comparar [etiqueta…]');
   process.exit(1);
 }
