@@ -155,10 +155,22 @@ export function textoCuaderno(ctx: ContextoHerramientas): string {
     l.push(p);
     porDoc.set(p.evidencia.documento, l);
   }
+  // Las páginas y los tramos leídos enteros van con su texto entero (hasta un tope por
+  // prueba y otro para todo el cuaderno): de ahí salen las citas literales.
+  let presupuesto = 260_000;
+  const linea = (p: Prueba): string => {
+    const amb = p.ambito;
+    const leida = amb && p.herramienta === 'leer' && amb.texto.length > (p.evidencia.cita?.length ?? 0) + 20;
+    if (!leida || presupuesto <= 0) return lineaPrueba(ctx, p, amb && p.evidencia.cita && p.evidencia.cita.length > 600 ? 1200 : 700);
+    const entero = amb.texto.length > 4500 ? `${amb.texto.slice(0, 4500)}…` : amb.texto;
+    presupuesto -= entero.length;
+    const cabecera = lineaPrueba(ctx, { ...p, evidencia: { ...p.evidencia, cita: '' } }, 0);
+    return `${cabecera}\n«${entero}»`;
+  };
   const bloques: string[] = [];
   for (const [doc, ps] of porDoc) {
     const f = fichaDe(ctx, doc);
-    bloques.push(`### ${f ? `«${f.titulo}» (${f.autor}, ${f.anio})${f.idioma ? `, en ${nombreIdioma(f.idioma)}` : ''}` : doc}\n\n${ps.map((p) => lineaPrueba(ctx, p, p.ambito && p.evidencia.cita && p.evidencia.cita.length > 600 ? 1200 : 700)).join('\n\n')}`);
+    bloques.push(`### ${f ? `«${f.titulo}» (${f.autor}, ${f.anio})${f.idioma ? `, en ${nombreIdioma(f.idioma)}` : ''}` : doc}\n\n${ps.map(linea).join('\n\n')}`);
   }
   return bloques.join('\n\n');
 }
