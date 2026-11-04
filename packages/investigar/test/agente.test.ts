@@ -45,6 +45,11 @@ describe('investigar', () => {
     const pagina = evidencias.find((e) => e.evidencia.documento === CUENTO);
     expect(pagina?.evidencia.imagenUrl).toMatch(/^https:\/\/img\/doc-cuento\/paginas\//);
 
+    // Quiso terminar pronto (6 de 16 pasos): se le pidió una vez repasar el plan antes de dejarlo.
+    const turnos = modelo.peticiones.filter((x) => x.herramientas?.length);
+    expect(turnos).toHaveLength(5);
+    expect(textoDe(turnos.at(-1)!).match(/repasa el plan/g)).toHaveLength(1);
+
     // El modelo de visión recibió el tramo recortado del vídeo.
     const peticionVer = modelo.peticiones.find((p) => JSON.stringify(p.esquema ?? {}).includes('observaciones'))!;
     expect(peticionVer.mensajes[0]!.partes[0]).toMatchObject({ tipo: 'medio', uri: 'https://archivos/fresa', desde: 590, hasta: 645 });

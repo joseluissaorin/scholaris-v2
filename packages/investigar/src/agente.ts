@@ -212,6 +212,7 @@ export async function* investigar(p: PuertosInvestigar, pregunta: string, o: Opc
     }];
     let pasos = 0;
     let empujado = false;
+    let repasado = false;
     let reflexion = '';
     const agotado = () => pasos >= presupuesto.pasos || reloj() - t0 > presupuesto.segundos * 1000 || cuentas.usd >= presupuesto.usd;
     while (!agotado()) {
@@ -225,6 +226,14 @@ export async function* investigar(p: PuertosInvestigar, pregunta: string, o: Opc
         if (!ctx.pruebas.tamano && !empujado) {
           empujado = true;
           mensajes.push({ rol: 'usuario', partes: [{ tipo: 'texto', texto: 'Aún no hay ninguna prueba en el cuaderno: usa las herramientas para reunirlas antes de terminar.' }] });
+          continue;
+        }
+        // Terminar muy pronto suele dejar partes sin cubrir (en el banco, una tabla de diálogos se quedó
+        // a la mitad): una vez, antes de dejarlo, se repasa el plan subpregunta por subpregunta.
+        if (!repasado && plan.subpreguntas.length && pasos < presupuesto.pasos * 0.6 && reloj() - t0 < presupuesto.segundos * 600) {
+          repasado = true;
+          const lista = plan.subpreguntas.map((sp, i) => `${i + 1}. ${sp.pregunta}${sp.documentos?.length ? ` (obras: ${sp.documentos.join(', ')})` : ''}`).join('\n');
+          mensajes.push({ rol: 'usuario', partes: [{ tipo: 'texto', texto: `Antes de terminar, repasa el plan. Para cada subpregunta, ¿tienes pruebas de cada obra que interviene y de cada caso que pide la pregunta (cada diálogo, cada escena, cada motivo)? Si falta algo, sigue buscando; si está todo, termina.\n${lista}` }] });
           continue;
         }
         reflexion = r.texto;
