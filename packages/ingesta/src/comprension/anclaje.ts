@@ -280,3 +280,28 @@ export function buscarFormasEnUnidad(u: UnidadMaterial, formas: readonly string[
 export function textoDeCaracteres(u: { texto: string }, c: [number, number]): string {
   return Array.from(u.texto).slice(c[0], c[1]).join('');
 }
+
+/**
+ * La prosa, sin las marcas del material que a veces deja el modelo («⟦U15⟧»,
+ * «⟦F81 · 14:20⟧»): se cambian por su localizador humano («p. 14», «14:20»).
+ */
+export function limpiarProsa(texto: string, m: Pick<Material, 'porOrden' | 'fotogramas'>): string {
+  if (!texto.includes('⟦')) return texto;
+  return texto
+    .replace(/⟦\s*([UF])(\d+)(?:\s*·\s*([^⟧]*))?⟧/g, (_x, k: string, n: string, et?: string) => {
+      if (et?.trim()) return et.trim();
+      if (k === 'U') return m.porOrden.get(Number(n))?.etiqueta ?? '';
+      const f = m.fotogramas.find((x) => x.n === Number(n));
+      return f ? etiquetaDeTiempo(f.t) : '';
+    })
+    .replace(/\(\s*(?:[,;]\s*)*\)/g, '')
+    .replace(/\(\s*[,;]\s*/g, '(').replace(/\s*[,;]\s*\)/g, ')')
+    .replace(/\s+([,.;:])/g, '$1')
+    .replace(/ {2,}/g, ' ')
+    .trim();
+}
+
+function etiquetaDeTiempo(t: number): string {
+  const s = Math.floor(t), h = Math.floor(s / 3600), mm = Math.floor((s % 3600) / 60), ss = s % 60;
+  return h ? `${h}:${String(mm).padStart(2, '0')}:${String(ss).padStart(2, '0')}` : `${mm}:${String(ss).padStart(2, '0')}`;
+}

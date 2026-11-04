@@ -300,7 +300,7 @@ describe('comprensión', () => {
       await new Promise((r) => setTimeout(r, 250));
     }
     expect(mapa.estado).toBe(200);
-    expect(mapa.cuerpo.estado).toMatchObject({ documento: id, estado: 'sin_modelo', lentes: ['ensayo'] });
+    expect(mapa.cuerpo.estado).toMatchObject({ documento: id, estado: 'sin_modelo', lentes: ['general'] });
     expect(mapa.cuerpo.estado.params).toBeUndefined();
     expect(mapa.cuerpo.totales).toEqual({ segmentos: 0, planos: 0, fichas: 0, apariciones: 0, entidades: 0 });
     expect((await api(`/documentos/${id}/segmentos`, { token: t })).cuerpo).toEqual([]);

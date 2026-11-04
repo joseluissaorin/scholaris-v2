@@ -11,7 +11,7 @@
  */
 import type { AnclaMaterial, Lente, PercepcionMedio, Segmento, SQL, TipoSegmento } from '@scholaris/nucleo';
 import { borrarSegmentos, escribirSecciones, escribirSegmentos, leerSegmentos } from '@scholaris/spdf';
-import { anclaDe, localizarCita } from './anclaje.js';
+import { anclaDe, limpiarProsa, localizarCita } from './anclaje.js';
 import { lente, REGLAS_COMUNES } from './lentes/index.js';
 import { cadena, entero, lista, numero, objeto, opcion } from './lentes/comun.js';
 import { fichaDocumento, textoParaModelo, type Material, type UnidadMaterial } from './material.js';
@@ -266,7 +266,7 @@ export function borradoresDelModelo(m: Material, l: Lente, segs: readonly Segmen
       const t0 = s.desde?.t ?? desde.t0 ?? 0;
       const t1 = Math.max(t0 + 0.5, s.hasta?.t ?? hasta.t1 ?? t0 + 1);
       salida.push({
-        clave: `${prefijo}:${s.id}`, ...(s.padre ? { padreClave: `${prefijo}:${s.padre}` } : {}), tipo, titulo: s.titulo || tipo, ...(s.resumen ? { resumen: s.resumen } : {}),
+        clave: `${prefijo}:${s.id}`, ...(s.padre ? { padreClave: `${prefijo}:${s.padre}` } : {}), tipo, titulo: limpiarProsa(s.titulo || tipo, m), ...(s.resumen ? { resumen: limpiarProsa(s.resumen, m) } : {}),
         origen: 'modelo', confianza, desde, hasta, ancla: { tipo: 'tiempo', t0, t1 }, ini: t0, fin: t1, rango,
       });
       continue;
@@ -274,7 +274,7 @@ export function borradoresDelModelo(m: Material, l: Lente, segs: readonly Segmen
     const cIni: [number, number] | undefined = ini?.caracteres;
     const cFin: [number, number] | undefined = fin?.caracteres;
     salida.push({
-      clave: `${prefijo}:${s.id}`, ...(s.padre ? { padreClave: `${prefijo}:${s.padre}` } : {}), tipo, titulo: s.titulo || tipo, ...(s.resumen ? { resumen: s.resumen } : {}),
+      clave: `${prefijo}:${s.id}`, ...(s.padre ? { padreClave: `${prefijo}:${s.padre}` } : {}), tipo, titulo: limpiarProsa(s.titulo || tipo, m), ...(s.resumen ? { resumen: limpiarProsa(s.resumen, m) } : {}),
       origen: 'modelo', confianza, desde, hasta,
       ancla: anclaDe(desde, cIni), anclaFin: anclaDe(hasta, cFin),
       ini: POS(desde, cIni?.[0] ?? 0), fin: POS(hasta, cFin?.[1] ?? 9e6), rango,

@@ -236,6 +236,13 @@ Modelos: el de comprensión es el mejor disponible, elegido por medición en el 
 (candidatos a 4-11-2026: `gemini-4-argon`, `gemini-3.1-pro-preview`, `gemini-pro-latest`
 y `gemini-3.8-flash`). Las ventanas pueden ir con uno rápido si el banco lo permite.
 Se configuran en `MODELOS_GEMINI.comprension` y `MODELOS_GEMINI.comprensionRapida`.
+Medición del 4-11-2026 (las mismas tandas de fichas de segmento del cuento y de la
+película, con la obra entera en contexto): `gemini-4-argon` ancla 14-15 pruebas literales
+por tanda frente a 6-9 de `gemini-3.1-pro-preview` (`gemini-pro-latest` da lo mismo),
+ninguna cita inventada y el vocabulario técnico más fino, a unos 0,09-0,16 USD y 60 s por
+tanda; `gemini-3.8-flash` se queda cerca a un tercio del precio, pero a veces deja en la
+prosa las marcas del material. De ahí `comprension = gemini-4-argon` y
+`comprensionRapida = gemini-3.8-flash`.
 
 ## Responder: el modo Investigar
 

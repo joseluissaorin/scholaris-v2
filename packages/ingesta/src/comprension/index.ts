@@ -9,7 +9,7 @@ export { modeloDesdeRedactor, llamar, ErrorPresupuesto } from './modelo.js';
 export { DEFINICIONES_LENTES, ESQUEMA_ELECCION, SISTEMA_ELECCION, elegirLentes, lente, senales, versionDe, type Eleccion, type EntradaEleccion } from './lentes/index.js';
 export { REGLAS_COMUNES, VERSION_COMPRENSION, esquemaFichaGlobal, esquemaFichasSegmento } from './lentes/comun.js';
 export { leerMaterial, textoParaModelo, muestraDe, etiquetaUnidad, tokensDe, type Material, type UnidadMaterial, type FotogramaMaterial } from './material.js';
-export { localizarCita, anclarReferencias, anclarReferencia, anclaDe, tramoDeCaracteres, hablanteEn, buscarFormasEnUnidad, textoDeCaracteres, type CitaLocalizada } from './anclaje.js';
+export { localizarCita, limpiarProsa, anclarReferencias, anclarReferencia, anclaDe, tramoDeCaracteres, hablanteEn, buscarFormasEnUnidad, textoDeCaracteres, type CitaLocalizada } from './anclaje.js';
 export { construirArbol, segmentosDeSecciones, segmentosDePercepcion, borradoresDelModelo, guardarEstructura, esquemaEstructura, ventanas } from './estructura.js';
 export { fichasDeLote, fichaGlobal, lotesDeFichas, textoEstructura, idCorto, prefijoMaterial } from './fichas.js';
 export {

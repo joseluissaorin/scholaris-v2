@@ -11,7 +11,7 @@
  */
 import type { Aparicion, Ficha, Lente, PercepcionMedio, RolAparicion, Segmento, SQL, TipoEntidadComprension } from '@scholaris/nucleo';
 import { claveEntidad, entidadActiva, obtenerEntidad } from '@scholaris/funciones';
-import { anclaDe, anclarReferencias, buscarFormasEnUnidad } from './anclaje.js';
+import { anclaDe, anclarReferencias, buscarFormasEnUnidad, limpiarProsa } from './anclaje.js';
 import { ventanas } from './estructura.js';
 import { cadena, cadenas, entero, ESQUEMA_EVIDENCIAS, lista, logico, objeto, opcion } from './lentes/comun.js';
 import { lente, REGLAS_COMUNES } from './lentes/index.js';
@@ -378,7 +378,7 @@ export function fichasDeEntidades(
     const a = anclarReferencias(m, e.evidencias, { maximo: 12 });
     descartadas += a.descartadas;
     const papel = papeles.find((p) => p.personajeId === e.id);
-    const texto = (e.analisis ?? e.descripcion ?? '').trim();
+    const texto = limpiarProsa((e.analisis ?? e.descripcion ?? '').trim(), m);
     if (!texto) continue;
     fichas.push({
       id: `${m.documento.id}:fi:ent:${e.id}`, documento: m.documento.id, objetivo: 'entidad', objetivoId: e.id, lente: l, clase: e.tipo, idioma: o.idioma,

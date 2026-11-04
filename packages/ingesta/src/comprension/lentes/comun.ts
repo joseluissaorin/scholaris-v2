@@ -23,6 +23,7 @@ Escritura:
 - Prosa analítica en la lengua del documento (si es español, español impecable: tildes, eñes, ¿ y ¡ de apertura). Registro académico, preciso y sin relleno, con el vocabulario técnico de la disciplina bien usado. Nada de fórmulas vacías («cabe destacar», «en definitiva», «juega un papel crucial»).
 - Incisos con comas o paréntesis. Si usas la raya, a la española: pegada al inciso y separada por espacios del texto exterior (—así—); nunca la raya con espacios a ambos lados a la inglesa.
 - Sin emojis. Sin markdown en los campos de texto salvo comillas latinas «» para citar.
+- Las marcas del material («⟦U12 · p. 14⟧», «⟦F34 · …⟧») no van nunca en la prosa: las pruebas van en «evidencias»; en el texto, si hace falta, el localizador humano («p. 14», «1:02:03»).
 - Los nombres propios, tal como los da la obra; los personajes, con el nombre con que la obra los conoce.
 - Además de la prosa, «resumen_es» y «resumen_en»: una o dos frases en español y en inglés (para encontrar la ficha desde cualquier lengua).`;
 

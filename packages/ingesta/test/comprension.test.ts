@@ -11,7 +11,7 @@ import { buscarFichas, escribirDocumento, escribirUnidades, leerApariciones, lee
 import { describe, expect, it } from 'vitest';
 import {
   anclarReferencia, comprenderDocumento, elegirLentes, leerEstadoComprension, leerMaterial, localizarCita, pasoSegmentos, pasoFichas, planificarComprension,
-  textoDeCaracteres, tramoDeCaracteres, type ContextoComprension, type ModeloComprension, type PeticionComprension,
+  limpiarProsa, textoDeCaracteres, tramoDeCaracteres, type ContextoComprension, type ModeloComprension, type PeticionComprension,
 } from '../src/index.js';
 import { baseReal, embebedorFalso } from './fakes.js';
 import percepcionFresa from './datos/percepcion-fresa.json';
@@ -149,6 +149,12 @@ describe('comprensión: anclaje', () => {
     // Un carácter astral delante cuenta como uno.
     const c = localizarCita({ texto: '𝔄 Diego vio a David.' }, 'Diego vio a David')!;
     expect(c.caracteres).toEqual([2, 19]);
+  });
+
+  it('limpia de la prosa las marcas del material', () => {
+    const m = { porOrden: new Map([[15, { etiqueta: 'p. 14' }]]) as never, fotogramas: [{ n: 81, t: 864.2, id: 'f', descripcion: '', unidad: 'u' }] };
+    expect(limpiarProsa('La guarida (⟦U15⟧, ⟦F81⟧) y el té ⟦U99⟧.', m)).toBe('La guarida (p. 14, 14:24) y el té.');
+    expect(limpiarProsa('Como dice ⟦U3 · p. 6⟧, nada.', m)).toBe('Como dice p. 6, nada.');
   });
 
   it('elige la lente por el tipo, el CSL y el contenido', () => {

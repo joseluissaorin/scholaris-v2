@@ -46,9 +46,17 @@ export const MODELOS_GEMINI = {
   redactorAlto: 'gemini-3.8-flash',
   embebedor: 'gemini-embedding-2',
   transcriptor: 'gemini-3.5-transcribe',
-  /** Comprensión (docs/COMPRENSION.md): estructura, fichas, entidades y ficha global. Elegido en el banco (ver proveedores/src/comprension.ts). */
-  comprension: 'gemini-3.1-pro-preview',
-  /** Comprensión rápida: secuencias, elección de lente, modo económico y lo que pase del presupuesto. */
+  /**
+   * Comprensión (docs/COMPRENSION.md): estructura, fichas, entidades y ficha global. Medido el 4-11-2026 con las
+   * mismas fichas de segmento del cuento de Senel Paz y de «Fresa y chocolate»: el que más pruebas literales ancla
+   * (14-15 por tanda frente a 6-9 de 3.1 Pro), ninguna cita inventada, el vocabulario técnico más fino y prosa
+   * limpia; es el más lento (≈ 60 s por tanda) y cuesta como un Pro.
+   */
+  comprension: 'gemini-4-argon',
+  /**
+   * Comprensión rápida: secuencias, elección de lente, modo económico y lo que pase del presupuesto. Buena calidad a
+   * un tercio del precio, pero a veces deja en la prosa las marcas del material (se limpian al guardar).
+   */
   comprensionRapida: 'gemini-3.8-flash',
 } as const;
 

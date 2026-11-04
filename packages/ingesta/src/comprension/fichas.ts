@@ -6,7 +6,7 @@
  * Cada afirmación lleva sus evidencias, ancladas aquí contra el material.
  */
 import type { Ficha, Lente, PercepcionMedio, Segmento } from '@scholaris/nucleo';
-import { anclarReferencias } from './anclaje.js';
+import { anclarReferencias, limpiarProsa } from './anclaje.js';
 import { esquemaFichaGlobal, esquemaFichasSegmento, lente, REGLAS_COMUNES } from './lentes/index.js';
 import { fichaDocumento, textoParaModelo, type Material } from './material.js';
 import { textoEscena, textoReparto } from './medios.js';
@@ -122,8 +122,8 @@ export async function fichasDeLote(
     descartadas += a.descartadas;
     fichas.push({
       id: `${m.documento.id}:fi:${s.id}:${l}`, documento: m.documento.id, objetivo: 'segmento', objetivoId: s.id, lente: l, clase: s.tipo,
-      idioma: o.idioma, texto: f.texto.trim(),
-      datos: { ...(f.datos ?? {}), resumen: { es: f.resumen_es ?? '', en: f.resumen_en ?? '' }, titulo: s.titulo, ...(a.descartadas ? { citasNoVerificadas: a.descartadas } : {}) },
+      idioma: o.idioma, texto: limpiarProsa(f.texto.trim(), m),
+      datos: { ...(f.datos ?? {}), resumen: { es: limpiarProsa(f.resumen_es ?? '', m), en: limpiarProsa(f.resumen_en ?? '', m) }, titulo: s.titulo, ...(a.descartadas ? { citasNoVerificadas: a.descartadas } : {}) },
       evidencias: a.evidencias, modelo: modelo.modelo(o.calidad), version: def.version, creada: o.creada,
     });
   }
@@ -178,12 +178,12 @@ export async function fichaGlobal(
   const a = anclarReferencias(m, r.evidencias, { maximo: 60 });
   const ficha: Ficha = {
     id: `${m.documento.id}:fi:global:${l}`, documento: m.documento.id, objetivo: 'documento', objetivoId: m.documento.id, lente: l, clase: 'global',
-    idioma: o.idioma, texto: (r.texto ?? '').trim(),
+    idioma: o.idioma, texto: limpiarProsa((r.texto ?? '').trim(), m),
     datos: {
-      ...(r.datos ?? {}), sinopsis: r.sinopsis ?? '', contexto: r.contexto ?? [],
+      ...(r.datos ?? {}), sinopsis: limpiarProsa(r.sinopsis ?? '', m), contexto: r.contexto ?? [],
       temas: (r.temas ?? []).map((t) => ({ nombre: t.nombre, descripcion: t.descripcion })),
       motivos: (r.motivos ?? []).map((t) => ({ nombre: t.nombre, descripcion: t.descripcion })),
-      resumen: { es: r.resumen_es ?? '', en: r.resumen_en ?? '' },
+      resumen: { es: limpiarProsa(r.resumen_es ?? '', m), en: limpiarProsa(r.resumen_en ?? '', m) },
       fuente: o.largo ? 'obra entera' : 'mapa de fichas',
       ...(a.descartadas ? { citasNoVerificadas: a.descartadas } : {}),
     },
