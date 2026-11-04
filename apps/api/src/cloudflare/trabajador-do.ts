@@ -16,8 +16,12 @@ import { almacenDesdeEnv, catalogosDesdeEnv, cuentasDesdeEnv, emisorDesdeEnv, ge
 import { espacioNombresDe } from './indice-vectorize.js';
 import { recortadorCF } from './conversor.js';
 import { UnaVez } from '../compartido/una-vez.js';
-import { cerrarComprension, pasoEntidades, pasoFichas, pasoGlobal, pasoIndexado, pasoSegmentos, planificarComprension, type ContextoComprension, type PlanComprension } from '@scholaris/ingesta';
+import {
+  alinearRelacion, cerrarComprension, pasoEntidades, pasoFichas, pasoGlobal, pasoIndexado, pasoSegmentos, pasoTransmedia, pasoTransmediaBiblioteca, planificarComprension,
+  type ContextoComprension, type PlanComprension, type ResultadoAlinear, type ResultadoTransmedia,
+} from '@scholaris/ingesta';
 import { contextoComprension, type ParamsComprension } from '../compartido/comprension.js';
+import { opcionesTransmedia } from '../compartido/transmedia.js';
 import type { PasoTrabajador } from './flujo-comprension.js';
 
 export class Trabajador extends DurableObject<Env> {
@@ -139,6 +143,27 @@ export class Trabajador extends DurableObject<Env> {
         case 'global': return pasoGlobal(ctx, plan);
         case 'indexado': return pasoIndexado(ctx, plan);
       }
+    });
+  }
+
+  /** Transmedia: las relaciones del documento (o de la biblioteca) y las que quedan por alinear. Una vez por instancia. */
+  async transmediaDetectar(p: ParamsComprension): Promise<ResultadoTransmedia> {
+    return this.unaVez.hacer(`tmd:${p.instancia}:detectar`, async () => {
+      const ctx = await this.contextoComprension(p);
+      const o = opcionesTransmedia(p);
+      const r = p.transmedia === 'biblioteca' || p.documento === '*' ? await pasoTransmediaBiblioteca(ctx, o) : await pasoTransmedia(ctx, p.documento, o);
+      await (ctx.sql as SqlRemoto).vaciarPendientes();
+      return r;
+    }, { recordar: true });
+  }
+
+  /** Alinea una relación (gruesa, fina y ficha); el cerrojo de la relación evita pagarla dos veces. */
+  async transmediaAlinear(p: ParamsComprension, relacion: string): Promise<ResultadoAlinear> {
+    return this.unaVez.hacer(`tmd:${p.instancia}:${relacion}`, async () => {
+      const ctx = await this.contextoComprension(p);
+      const r = await alinearRelacion(ctx, relacion, opcionesTransmedia(p));
+      await (ctx.sql as SqlRemoto).vaciarPendientes();
+      return r;
     });
   }
 

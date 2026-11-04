@@ -167,6 +167,46 @@ class Scholaris:
         """El estado de la comprensión de cada documento que la tiene (o la está haciendo)."""
         return self.pedir("GET", "/comprension")
 
+    # -- relaciones entre obras y alineaciones (transmedia y transidioma) ----
+
+    def relaciones(self, id: str) -> List[dict]:
+        """Las relaciones de un documento con otras obras (con la otra obra, sus pruebas, su ficha y el estado de su alineación)."""
+        return self.pedir("GET", f"/documentos/{id}/relaciones")
+
+    def relacion(self, id: str) -> dict:
+        return self.pedir("GET", f"/relaciones/{id}")
+
+    def alineaciones(self, relacion: str, *, tipo: Optional[str] = None) -> Iterator[dict]:
+        """Las alineaciones de una relación, página a página: `a` (origen) frente a `b` (destino), con tipo y nota."""
+        desde = 0
+        while True:
+            filtros = {"tipo": tipo, "desde": desde, "limite": 2000}
+            p = self.pedir("GET", f"/relaciones/{relacion}/alineaciones", params={k: v for k, v in filtros.items() if v is not None})
+            yield from p["elementos"]
+            if not p.get("siguiente"):
+                return
+            desde = int(p["siguiente"])
+
+    def relacionar(self, origen: str, destino: str, tipo: str, *, nota: Optional[str] = None) -> dict:
+        """Crea a mano una relación (`origen` adapta, traduce, edita o cita a `destino`)."""
+        return self.pedir("POST", "/relaciones", json_={"origen": origen, "destino": destino, "tipo": tipo, **({"nota": nota} if nota else {})})
+
+    def confirmar_relacion(self, id: str) -> dict:
+        return self.pedir("POST", f"/relaciones/{id}/confirmar")
+
+    def rechazar_relacion(self, id: str) -> dict:
+        return self.pedir("DELETE", f"/relaciones/{id}")
+
+    def alinear(self, id: str, *, relacion: Optional[str] = None, forzar: bool = False) -> dict:
+        """Detecta las relaciones de un documento y alinea lo que toque (o solo `relacion`)."""
+        cuerpo = {k: v for k, v in {"relacion": relacion, "forzar": forzar or None}.items() if v is not None}
+        return self.pedir("POST", f"/documentos/{id}/alinear", json_=cuerpo)
+
+    def transmedia_biblioteca(self, *, documentos: Optional[List[str]] = None, forzar: bool = False, alinear: bool = True) -> dict:
+        """Detecta las relaciones de toda la biblioteca (o de unos documentos) y alinea las nuevas."""
+        cuerpo = {k: v for k, v in {"documentos": documentos, "forzar": forzar or None, "alinear": None if alinear else False}.items() if v is not None}
+        return self.pedir("POST", "/transmedia/biblioteca", json_=cuerpo)
+
     # -- subidas e ingesta --------------------------------------------------
 
     def subir(self, ruta: str, *, bibliotecas: Optional[List[str]] = None, metadatos: Optional[dict] = None,

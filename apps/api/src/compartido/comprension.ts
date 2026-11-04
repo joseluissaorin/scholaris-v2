@@ -27,6 +27,17 @@ export interface ParamsComprension {
   lentes?: Lente[];
   economico?: boolean;
   relanzamientos?: number;
+  /**
+   * Solo transmedia (docs/COMPRENSION.md, paso 7): detectar las relaciones del documento
+   * («documento») o de toda la biblioteca («biblioteca», con `documento: '*'`) y alinearlas.
+   */
+  transmedia?: 'documento' | 'biblioteca';
+  /** Con «biblioteca»: solo los pares en que intervienen estos documentos. */
+  documentos?: string[];
+  /** Solo esta relación (alinearla o rehacerla). */
+  relacion?: string;
+  /** `false`: detectar sin alinear. */
+  alinear?: boolean;
 }
 
 /** Comprensiones a la vez por usuario cuando se pide la biblioteca entera. */
@@ -169,10 +180,21 @@ export async function comprenderEnProceso(p: PuertosUsuario, params: ParamsCompr
     sql: p.sql, usuario: params.usuario, almacen: p.almacen, ...(gemini ? { gemini } : {}), embebedor: ia.embebedor, indice: p.indice,
     espacioNombres: p.config.espacioNombres(params.usuario), emisor: p.emisor,
   });
+  if (params.transmedia) {
+    const { transmediaDeContexto } = await import('./transmedia.js');
+    await transmediaDeContexto(ctx, params);
+    return (await leerEstadoComprension(p.sql, params.documento)) ?? (await import('@scholaris/ingesta')).estadoNuevo(params.documento, [], '', new Date().toISOString(), 'hecho');
+  }
   try {
-    return await comprenderDocumento(ctx, params.documento, {
+    const e = await comprenderDocumento(ctx, params.documento, {
       ...(params.forzar ? { forzar: true } : {}), ...(params.lentes?.length ? { lentes: params.lentes } : {}), ...(params.economico ? { economico: true } : {}),
     });
+    // Después, sus relaciones con el resto de la biblioteca (un fallo aquí no estropea la comprensión).
+    if (e.estado === 'hecho') {
+      const { transmediaDeContexto } = await import('./transmedia.js');
+      await transmediaDeContexto(ctx, { ...params, transmedia: 'documento', forzar: false }).catch((x: unknown) => console.error(`[transmedia ${params.documento}]`, x));
+    }
+    return e;
   } finally {
     await p.emisor.emitir(`usuario:${params.usuario}`, { tipo: 'comprension', documento: params.documento, paso: 'fin', avance: 1, mensaje: 'Comprensión terminada' }).catch(() => undefined);
   }

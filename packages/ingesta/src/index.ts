@@ -34,3 +34,4 @@ export { revisarTranscripcion, aplicarReemplazos, cribarFrases, alinear, sustitu
 export { fichasDe, palabrasCompactas } from './pasos/medios.js';
 export * from './percepcion/index.js';
 export * from './comprension/index.js';
+export * from './transmedia/index.js';

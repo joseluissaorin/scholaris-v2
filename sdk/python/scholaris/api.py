@@ -139,6 +139,46 @@ class Scholaris:
                                      "documentos": list(documentos) if documentos else None}.items() if v is not None}
         return self._json("POST", f"/documentos/{id}/comprender" if id else "/comprender", json_=cuerpo)
 
+    # -- relaciones entre obras y alineaciones (transmedia y transidioma) ----
+
+    def relaciones(self, id: str) -> List[dict]:
+        """Las relaciones de un documento con otras obras de la biblioteca (adaptación, traducción, edición,
+        cita…), cada una con `otro` (la otra obra), `sentido`, `confianza`, `fuente`, sus `evidencias` y,
+        si ya está escrita, su `ficha` (el análisis de la transformación entera)."""
+        return self._json("GET", f"/documentos/{id}/relaciones")
+
+    def relacion(self, id: str) -> dict:
+        return self._json("GET", f"/relaciones/{id}")
+
+    def alineaciones(self, relacion: str, tipo: Optional[str] = None, desde: int = 0, limite: int = 500) -> dict:
+        """Una página de alineaciones ({elementos, total, siguiente}): tramo de `a` (el origen: la película,
+        la traducción) frente a tramo de `b` (el destino), con su `tipo` (equivalente, traducido, condensado,
+        ampliado, transformado, reordenado, anadido, suprimido, alusion) y su `nota`."""
+        return self._json("GET", f"/relaciones/{relacion}/alineaciones", params={"tipo": tipo, "desde": desde, "limite": limite})
+
+    def relacionar(self, origen: str, destino: str, tipo: str, nota: Optional[str] = None) -> dict:
+        """Dice a mano que `origen` adapta (traduce, edita, cita…) a `destino`. La detección no la toca."""
+        cuerpo = {"origen": origen, "destino": destino, "tipo": tipo, **({"nota": nota} if nota else {})}
+        return self._json("POST", "/relaciones", json_=cuerpo)
+
+    def confirmar_relacion(self, id: str) -> dict:
+        return self._json("POST", f"/relaciones/{id}/confirmar")
+
+    def rechazar_relacion(self, id: str) -> dict:
+        """Borra una relación (con sus alineaciones); la detección no la vuelve a proponer."""
+        return self._json("DELETE", f"/relaciones/{id}")
+
+    def alinear(self, id: Optional[str] = None, *, relacion: Optional[str] = None, forzar: bool = False,
+                documentos: Optional[Sequence[str]] = None, solo_detectar: bool = False) -> dict:
+        """Con `id`, detecta las relaciones de ese documento y las alinea; sin él, las de toda la biblioteca
+        (o de `documentos`). Devuelve la instancia que lo lleva ({instancia, relaciones})."""
+        if id:
+            cuerpo = {k: v for k, v in {"relacion": relacion, "forzar": forzar or None}.items() if v is not None}
+            return self._json("POST", f"/documentos/{id}/alinear", json_=cuerpo)
+        cuerpo = {k: v for k, v in {"documentos": list(documentos) if documentos else None, "forzar": forzar or None,
+                                    "alinear": False if solo_detectar else None}.items() if v is not None}
+        return self._json("POST", "/transmedia", json_=cuerpo)
+
     # -- buscar, preguntar, citar, verificar ---------------------------------
 
     def buscar(self, q: str, k: int = 10, documentos: Optional[Sequence[str]] = None) -> List[dict]:

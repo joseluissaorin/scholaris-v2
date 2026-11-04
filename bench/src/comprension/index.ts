@@ -12,6 +12,8 @@
  *       --etiqueta texto              nota libre para el informe
  *   validar                    forma del banco y citas literales contra las fuentes
  *   calibrar                   acuerdo de los jueces con la calificación manual (calibracion.json del banco privado)
+ *   transmedia --dir <carpeta> cobertura de las alineaciones y la ficha de una relación frente a la rúbrica
+ *       --juez <modelo> | --sin-juez   (por defecto gemini-3.8-flash)
  *       --jueces a,b                  modelos que se comparan
  *
  * Necesita SCHOLARIS_URL y SCHOLARIS_CLAVE (y GEMINI_API_KEY) en el entorno o en
@@ -186,11 +188,30 @@ async function calibrar(args: string[]): Promise<void> {
   }
 }
 
+async function transmedia(args: string[]): Promise<void> {
+  const dir = opcion(args, '--dir');
+  if (!dir) throw new Error('Falta --dir (la carpeta con relaciones.json y alineaciones-*.json).');
+  const { informeTransmedia } = await import('./transmedia.js');
+  const banco = cargarBanco(RUTA_BANCO);
+  let j: ModeloJuez | null = null;
+  if (!args.includes('--sin-juez')) {
+    const env = { ...cargarEntorno(['gemini']) };
+    const clave = process.env.GEMINI_API_KEY ?? env.GEMINI_API_KEY;
+    if (!clave) throw new Error('Falta GEMINI_API_KEY.');
+    j = juezConCache(juezGemini({ clave, modelo: opcion(args, '--juez') ?? 'gemini-3.8-flash' }), join(DIR_DATOS, 'cache-juez-transmedia'));
+  }
+  for (const i of await informeTransmedia(dir, banco, j)) {
+    console.log(`${i.relacion}: ${i.cubiertos}/${i.puntos} puntos con alineación en sus anclas${i.juez ? `; juez: ${i.juez.si} sí, ${i.juez.parcial} parcial, ${i.juez.no} no (${i.juez.usd.toFixed(3)} USD)` : ''}`);
+    for (const [q, x] of Object.entries(i.porPregunta)) console.log(`  ${q}: ${x.cubiertos}/${x.puntos}${x.si !== undefined ? ` (sí ${x.si})` : ''}`);
+  }
+}
+
 export async function comprension(args: string[]): Promise<void> {
   const [orden, ...resto] = args;
   if (orden === 'validar') return validar();
   if (orden === 'calibrar') return calibrar(resto);
   if (orden === 'ejecutar') return ejecutar(resto);
+  if (orden === 'transmedia') return transmedia(resto);
   if (orden === undefined || orden.startsWith('--')) return ejecutar(args);
   throw new Error(`Orden desconocida: ${orden}`);
 }

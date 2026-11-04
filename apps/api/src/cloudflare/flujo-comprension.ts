@@ -2,7 +2,11 @@
  * Workflow `Comprension` (`scholaris-comprension`): la capa de comprensión de un
  * documento ya «listo» (docs/COMPRENSION.md). Pasos durables:
  *
- *   plan → estructura → [fichas-0 … fichas-n ‖ entidades] → global → indexado → cerrar
+ *   plan → estructura → [fichas-0 … fichas-n ‖ entidades] → global → indexado → cerrar → transmedia → alinear-0 … alinear-n
+ *
+ * Con `transmedia` en los parámetros solo hace lo último (las relaciones de un
+ * documento o de toda la biblioteca y su alineación). Un fallo de la transmedia no
+ * estropea la comprensión: queda en el estado de la alineación de cada relación.
  *
  * Cada paso corre en su propio Trabajador (su cupo de conexiones) y pasa por
  * `UnaVez`: si el paso caduca, el trabajo sigue en el objeto y el reintento se
@@ -14,7 +18,7 @@
 import { WorkflowEntrypoint, type WorkflowEvent, type WorkflowStep } from 'cloudflare:workers';
 import { NonRetryableError } from 'cloudflare:workflows';
 import { enParalelo } from '@scholaris/nucleo';
-import type { PlanComprension } from '@scholaris/ingesta';
+import type { PlanComprension, ResultadoTransmedia } from '@scholaris/ingesta';
 import type { ParamsComprension } from '../compartido/comprension.js';
 import type { Env } from './env.js';
 
@@ -41,6 +45,16 @@ export class FlujoComprension extends WorkflowEntrypoint<Env, ParamsComprension>
     const paso = async (nombre: string, segundos: number, fn: () => Promise<unknown>): Promise<unknown> =>
       step.do(nombre, opciones(segundos), async () => JSON.parse(JSON.stringify(await conLatido(Math.ceil(segundos / 60) + 4, fn) ?? null)) as Record<string, never>);
 
+    // Transmedia: detección (barata) y alineación de cada relación en su propio paso y su propio Trabajador.
+    const transmedia = async (): Promise<{ relaciones: number; alineadas: number }> => {
+      const r = (await step.do('transmedia', opciones(900), async () => JSON.parse(JSON.stringify(await trabajador('transmedia').transmediaDetectar(p))) as Record<string, never>)) as unknown as ResultadoTransmedia;
+      const ids = p.alinear === false ? [] : p.relacion ? r.porAlinear.filter((x) => x === p.relacion) : r.porAlinear;
+      await enParalelo(ids, 2, (id, i) => step.do(`alinear-${i}`, { retries: { limit: 2, delay: '30 seconds', backoff: 'exponential' }, timeout: '2400 seconds' }, async () =>
+        JSON.parse(JSON.stringify(await trabajador(`alinear-${id}`).transmediaAlinear(p, id))) as Record<string, never>));
+      return { relaciones: r.relaciones, alineadas: ids.length };
+    };
+    if (p.transmedia) return { transmedia: await transmedia() };
+
     let plan: PlanComprension | null = null;
     try {
       plan = (await paso('plan', 600, () => trabajador('plan').comprensionPlan(p))) as PlanComprension;
@@ -57,7 +71,10 @@ export class FlujoComprension extends WorkflowEntrypoint<Env, ParamsComprension>
       }
       const pl: PlanComprension = plan;
       await step.do('cerrar', { retries: REINTENTOS }, async () => { await trabajador('cerrar').comprensionCerrar(p, pl, { ok: true }); });
-      return { documento: p.documento, hecha: true };
+      // Las relaciones con el resto de la biblioteca: si fallan, la comprensión sigue hecha.
+      let rel: { relaciones: number; alineadas: number } | null = null;
+      try { rel = await transmedia(); } catch (e) { console.error(JSON.stringify({ que: 'transmedia', documento: p.documento, error: e instanceof Error ? e.message : String(e) })); }
+      return { documento: p.documento, hecha: true, ...(rel ? { transmedia: rel } : {}) };
     } catch (e) {
       const mensaje = e instanceof Error ? e.message : String(e);
       await step.do('fallo', { retries: { limit: 3, delay: '5 seconds' } }, async () => {
