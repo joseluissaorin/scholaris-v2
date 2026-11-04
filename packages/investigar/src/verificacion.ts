@@ -479,11 +479,12 @@ export async function verificar(ctx: ContextoHerramientas, numerador: Numerador,
       juzgadas = frases.map((f) => previas.get(f.original) ?? rejuzgadas.get(f.original) ?? { ...f, clase: 'hecho' as const, marcas: {} });
     }
   }
-  // Una marca que sigue sin sostener nada se quita: citar una prueba que no dice eso es peor que no citar.
+  // Una marca que sigue sin sostener nada se quita: citar una prueba que no dice eso es peor que no
+  // citar. Si no le queda ninguna, la frase se queda sin marcas y se señala «sin prueba».
   for (const f of juzgadas) {
     const malas = f.evidencias.filter((id) => f.marcas[id]?.veredicto === 'no_sostiene');
-    // Sin ninguna buena, la frase se queda con sus marcas y se señala «sin prueba».
-    if (!malas.length || malas.length === f.evidencias.length) continue;
+    if (!malas.length) continue;
+    if (malas.length === f.evidencias.length) f.clase = f.clase === 'interpretacion' ? 'hecho' : f.clase;
     let nueva = f.original;
     for (const id of malas) nueva = nueva.split(`[${id}]`).join('');
     const pos = texto.indexOf(f.original);
@@ -493,7 +494,7 @@ export async function verificar(ctx: ContextoHerramientas, numerador: Numerador,
   }
   const detalle = juzgadas.map((f) => {
     const v = veredictoDeFrase(f);
-    const notas = f.evidencias.map((id) => f.marcas[id]).filter((x) => x && x.veredicto !== 'sostiene' && x.nota).map((x) => x!.nota!);
+    const notas = Object.values(f.marcas).filter((x) => x.veredicto !== 'sostiene' && x.nota).map((x) => x.nota!);
     const nota = notas[0] ?? f.nota;
     return { ...f, veredicto: v, ...(nota ? { nota } : {}), ...(f.revisada ? { revisada: true } : {}) };
   });

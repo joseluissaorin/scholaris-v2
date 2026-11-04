@@ -180,7 +180,8 @@ describe('herramientas de lectura', () => {
     const md = n.sustituir('Diego responde con entusiasmo: «Me encanta la fresa» [P1].');
     const v = await verificar(ctx, n, md, 2);
     expect(revisiones).toBe(1);
-    expect(v.frases[0]).toMatchObject({ veredicto: 'sin_respaldo', revisada: true, nota: 'Al volver a mirar: Lo dice otra persona.' });
+    expect(v.frases[0]).toMatchObject({ veredicto: 'sin_prueba', revisada: true, nota: 'Al volver a mirar: Lo dice otra persona.' });
+    expect(v.markdown).not.toContain('[E1]');
   });
 
   it('anotar guarda hallazgos con pruebas que existen', async () => {

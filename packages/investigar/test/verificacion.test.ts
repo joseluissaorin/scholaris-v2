@@ -90,8 +90,9 @@ describe('verificación por marcas y corrección', () => {
     });
     const n = new Numerador(ctx);
     const v = await verificar(ctx, n, n.sustituir('El viejo Tomás cuenta historias en la plaza [P1].'), { sitios: 0 });
-    expect(v.markdown).toBe('El viejo Tomás cuenta historias en la plaza [E1].');
-    expect(v.frases[0]!.veredicto).toBe('sin_respaldo');
+    // Sin ninguna prueba que la sostenga, la frase pierde su marca (y el agente la señala «sin prueba»).
+    expect(v.markdown).toBe('El viejo Tomás cuenta historias en la plaza.');
+    expect(v.frases[0]).toMatchObject({ veredicto: 'sin_prueba', evidencias: [] });
   });
 
   it('una cita puesta con la marca de otra página pasa a la prueba donde está de verdad', () => {
