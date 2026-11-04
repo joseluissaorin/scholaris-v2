@@ -8,7 +8,7 @@
 import type { Ficha, Lente, PercepcionMedio, Segmento } from '@scholaris/nucleo';
 import { anclarReferencias, limpiarProsa } from './anclaje.js';
 import { esquemaFichaGlobal, esquemaFichasSegmento, lente, REGLAS_COMUNES } from './lentes/index.js';
-import { coberturaTranscripcion, etiquetaUnidad, fichaDocumento, huecosTranscripcion, textoParaModelo, type Material } from './material.js';
+import { coberturaDelMaterial, etiquetaUnidad, fichaDocumento, huecosTranscripcion, textoParaModelo, type Material } from './material.js';
 import { VERSION_COMPRENSION } from './lentes/comun.js';
 import { huella } from './util.js';
 import { textoEscena, textoReparto } from './medios.js';
@@ -131,7 +131,7 @@ export async function fichasDeLote(
       escenasPercibidas.forEach((e, i) => { if (e.t0 < a.t1 && e.t1 > a.t0) partes.push(textoEscena(o.percepcion!, i)); });
     }
     if (s.ancla.tipo === 'tiempo') {
-      const c = coberturaTranscripcion(m, s.ancla.t0, s.ancla.t1);
+      const c = coberturaDelMaterial(m, s.ancla.t0, s.ancla.t1);
       const t = (x: number) => etiquetaUnidad({ tipo: 'tiempo', t0: x, t1: x });
       if (c.cobertura < 0.9) partes.push(`Transcripción de este tramo: ${Math.round(c.cobertura * 100)} %${c.huecos.length ? ` (sin transcripción: ${c.huecos.map(([x, y]) => `${t(x)}-${t(y)}`).join(', ')})` : ''}. Apóyate en lo percibido y no afirmes ausencias.`);
     }
@@ -168,7 +168,7 @@ export async function fichasDeLote(
     vistos.add(s.id);
     const a = anclarReferencias(m, f.evidencias, { maximo: 24 });
     descartadas += a.descartadas;
-    const transcripcion = s.ancla.tipo === 'tiempo' ? coberturaTranscripcion(m, s.ancla.t0, s.ancla.t1) : null;
+    const transcripcion = s.ancla.tipo === 'tiempo' ? coberturaDelMaterial(m, s.ancla.t0, s.ancla.t1) : null;
     fichas.push({
       id: `${m.documento.id}:fi:${s.id}:${l}`, documento: m.documento.id, objetivo: 'segmento', objetivoId: s.id, lente: l, clase: s.tipo,
       idioma: o.idioma, texto: limpiarProsa(f.texto.trim(), m),

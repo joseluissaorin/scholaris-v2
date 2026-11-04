@@ -188,7 +188,7 @@ export function huecosTranscripcion(m: Pick<Material, 'unidades' | 'documento'>,
 }
 
 /** Qué parte de [t0, t1] tiene transcripción (0-1) y qué huecos caen dentro. */
-export function coberturaTranscripcion(m: Pick<Material, 'unidades' | 'documento'>, t0: number, t1: number, minimo = 30): { cobertura: number; huecos: Array<[number, number]> } {
+export function coberturaDelMaterial(m: Pick<Material, 'unidades' | 'documento'>, t0: number, t1: number, minimo = 30): { cobertura: number; huecos: Array<[number, number]> } {
   const huecos = huecosTranscripcion(m, minimo).map(([a, b]) => [Math.max(a, t0), Math.min(b, t1)] as [number, number]).filter(([a, b]) => b - a > 1);
   const total = Math.max(1, t1 - t0);
   const sin = huecos.reduce((x, [a, b]) => x + (b - a), 0);

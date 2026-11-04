@@ -21,7 +21,8 @@ describe('comprensor de Gemini', () => {
     // gemini-4-argon admite 32 768 tokens de salida: no se le piden más.
     expect(cuerpo.generationConfig.maxOutputTokens).toBe(32_768);
     expect(r.uso).toMatchObject({ modelo: MODELOS_GEMINI.comprension, tokensEntrada: 20_000, tokensSalida: 4000, llamadas: 1 });
-    expect(r.uso.usd).toBeCloseTo((20_000 * 2 + 4000 * 12) / 1e6, 6);
+    // Precio de lanzamiento de gemini-4-argon (2 y 10 $ por millón hasta el 30-11-2026).
+    expect(r.uso.usd).toBeCloseTo((20_000 * 2 + 4000 * 10) / 1e6, 6);
     expect(c.precio('rapida')).toEqual({ entrada: 0.75, salida: 3.75 });
   });
 

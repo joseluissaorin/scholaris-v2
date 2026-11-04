@@ -10,7 +10,7 @@ import { aplicarEsquemaFunciones } from '@scholaris/funciones';
 import { buscarFichas, escribirDocumento, escribirUnidades, leerApariciones, leerFichas, leerSecciones, leerSegmentos, type UnidadSpdf } from '@scholaris/spdf';
 import { describe, expect, it } from 'vitest';
 import {
-  anclarReferencia, coberturaTranscripcion, comprenderDocumento, huecosTranscripcion, elegirLentes, leerEstadoComprension, leerMaterial, localizarCita, pasoSegmentos, pasoFichas, planificarComprension,
+  anclarReferencia, coberturaDelMaterial, comprenderDocumento, huecosTranscripcion, elegirLentes, leerEstadoComprension, leerMaterial, localizarCita, pasoSegmentos, pasoFichas, planificarComprension,
   limpiarProsa, textoDeCaracteres, tramoDeCaracteres, type ContextoComprension, type ModeloComprension, type PeticionComprension,
 } from '../src/index.js';
 import { baseReal, embebedorFalso } from './fakes.js';
@@ -432,7 +432,7 @@ describe('comprensión: una película con su percepción', () => {
     await pelicula(sql);
     const m = await leerMaterial(sql, 'pelicula');
     expect(huecosTranscripcion(m).map(([a, b]) => [Math.round(a), Math.round(b)])).toEqual([[0, 107], [146, 374], [418, 467], [520, 595]]);
-    expect(coberturaTranscripcion(m, 107, 418)).toEqual({ cobertura: 0.27, huecos: [[146, 374]] });
+    expect(coberturaDelMaterial(m, 107, 418)).toEqual({ cobertura: 0.27, huecos: [[146, 374]] });
     // La transcripción atribuye a Diego una línea que, según la imagen y la voz, dice Germán.
     const corregida: PercepcionMedio = JSON.parse(JSON.stringify(percepcion));
     corregida.reparto.push({ nombre: 'Germán', ficticia: true, actor: 'Francisco Gattorno' });

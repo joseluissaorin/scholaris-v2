@@ -28,7 +28,7 @@ export function modeloDesdeRedactor(redactor: Redactor, nombres: { alta?: string
   };
 }
 
-export class ErrorPresupuesto extends Error {
+export class ErrorPresupuestoComprension extends Error {
   constructor(public readonly gastado: number, public readonly tope: number) {
     super(`La comprensión de este documento ha llegado a su presupuesto (${gastado.toFixed(2)} de ${tope.toFixed(2)} USD).`);
   }
