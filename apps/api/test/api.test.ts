@@ -281,7 +281,7 @@ describe('subida → ingesta → búsqueda', () => {
 });
 
 describe('comprensión', () => {
-  it('se lanza sola al dejar listo el documento y se consulta por la v2 y la v1', async () => {
+  it('no se lanza sola: se pide con «Comprender» y se consulta por la v2 y la v1', async () => {
     const t = await token('user_comprension', { fea: 'u:scholaris' });
     const original = new TextEncoder().encode('# Letters\n\nThe building is circular.');
     const s = await api('/subidas', { token: t, cuerpo: { nombre: 'ensayo.md', mime: 'text/markdown', bytes: original.byteLength } });
@@ -291,6 +291,13 @@ describe('comprensión', () => {
     const ing = await api(`/subidas/${s.cuerpo.subida}/ingestar`, { token: t, cuerpo: { paquete: 'paquete.json' } });
     expect((await esperarTarea(t, ing.cuerpo.tarea)).estado).toBe('listo');
     const id = ing.cuerpo.documento as string;
+
+    // Al quedar listo no se gasta nada: la comprensión no ha empezado.
+    const antes = await api(`/documentos/${id}/comprension`, { token: t });
+    expect(antes.cuerpo.estado?.estado).not.toBe('en_marcha');
+    expect((await api('/comprension', { token: t })).cuerpo).toEqual([]);
+    // Se pide a mano.
+    expect((await api(`/documentos/${id}/comprender`, { token: t, cuerpo: {} })).estado).toBe(202);
 
     // Sin clave de Gemini en las pruebas: el Workflow de comprensión corre y lo deja dicho.
     let mapa: any;

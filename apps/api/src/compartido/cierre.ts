@@ -10,6 +10,9 @@ import { invalidarBuscador, puertosFunciones } from './servicios.js';
 import { alCerrarDocumento } from './lotes.js';
 import { lanzarComprension } from './comprension.js';
 
+/** Comprender cada documento al terminar su ingesta, sin pedirlo (4-11-2026: apagado para no gastar sin avisar). */
+export const COMPRENSION_AUTOMATICA = false;
+
 export interface DatosCierre {
   tarea: string;
   documento: string;
@@ -62,10 +65,11 @@ export async function cerrarIngesta(p: PuertosUsuario, d: DatosCierre): Promise<
   await alCerrarDocumento(p, d.documento, true).catch((e) => console.error('lotes', e));
   // Vigilantes «al ingerir», grafo de citas y corpus: después, sin bloquear el cierre.
   p.segundoPlano((async () => alIngerirDocumento(await puertosFunciones(p), d.documento))().catch((e) => console.error('alIngerirDocumento', e)));
-  // La comprensión (docs/COMPRENSION.md) llega después, con su propio flujo: el documento ya se puede leer y buscar.
-  // Cuesta (con el mejor modelo, del orden de 1 $ por libro y 3 $ por película): sola, solo en los planes de pago;
-  // en el gratuito se puede pedir a mano con POST /documentos/:id/comprender.
-  if (p.orquestador.lanzarComprension && p.usuario.plan !== 'gratis') p.segundoPlano(lanzarComprension(p, d.documento).catch((e) => console.error('comprension', e)));
+  // La comprensión (docs/COMPRENSION.md) va aparte, con su propio flujo: el documento ya se puede leer y buscar.
+  // Cuesta (con el mejor modelo, del orden de 1 $ por libro y 3 $ por película), así que no se lanza sola: se pide
+  // con «Comprender» (POST /documentos/:id/comprender), que enseña antes lo que costará. COMPRENSION_AUTOMATICA la
+  // vuelve a lanzar sola tras cada ingesta en los planes de pago.
+  if (COMPRENSION_AUTOMATICA && p.orquestador.lanzarComprension && p.usuario.plan !== 'gratis') p.segundoPlano(lanzarComprension(p, d.documento).catch((e) => console.error('comprension', e)));
   // Si hay medios en cola (revisar su transcripción, percibirlos), sale el siguiente.
   p.segundoPlano(import('./medios-existentes.js').then((m) => m.lanzarMediosPendientes(p)).catch((e) => console.error('medios', e)));
 }
