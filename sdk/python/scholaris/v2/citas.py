@@ -21,9 +21,10 @@ def ancla_a_cita(ancla: Mapping[str, Any], fin: Optional[Mapping[str, Any]] = No
         return f"p. {a}"
     if tipo == "tiempo":
         t = tiempo_a_cadena(float(ancla.get("t0", 0)))
-        if fin and fin.get("tipo") == "tiempo":
-            t += "-" + tiempo_a_cadena(float(fin.get("t1", 0)))
-        return t
+        # Un tramo se cita entero; un fotograma (t0 = t1), con su segundo.
+        fin_t = fin.get("t1") if fin and fin.get("tipo") == "tiempo" else ancla.get("t1", ancla.get("t0", 0))
+        f = tiempo_a_cadena(float(fin_t if fin_t is not None else 0))
+        return f"{t}-{f}" if f != t else t
     if tipo == "seccion":
         if ancla.get("impresa"):
             return f"p. {ancla['impresa']}"

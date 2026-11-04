@@ -143,8 +143,8 @@ export function localizador(ancla: Ancla | undefined, fin?: Ancla, idioma = 'es'
     }
     case 'tiempo': {
       const t = tiempoACadena(ancla.t0);
-      const f = fin?.tipo === 'tiempo' ? tiempoACadena(fin.t1) : undefined;
-      return { locator: f && f !== t ? `${t}${guion}${f}` : t, label: 'timestamp' };
+      const f = tiempoACadena(fin?.tipo === 'tiempo' ? fin.t1 : ancla.t1);
+      return { locator: f !== t ? `${t}${guion}${f}` : t, label: 'timestamp' };
     }
     case 'seccion':
       if (ancla.impresa) return { locator: ancla.impresa, label: 'page' };

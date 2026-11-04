@@ -697,7 +697,12 @@ export async function consolidar(
   // Escribir: unidades definitivas, secciones, fragmentos (orden final), fuera los provisionales sobrantes.
   tm = reloj();
   const idUnidad = (orden: number) => idUnidadDe(documento, orden);
-  const sobrantes = provisionales.map((p) => p.id).filter((id) => !usados.has(id));
+  // Sobra todo fragmento del documento que no esté entre los finales: los provisionales que no se
+  // reaprovecharon y, al reprocesar, los de una ingesta anterior (sus ids salen del texto, y una
+  // transcripción revisada cambia el texto: antes quedaban dos transcripciones superpuestas).
+  const idsFinales = new Set(finales.map((f) => f.id));
+  const existentes = (await sql.ejecutar<{ id: string }>('SELECT id FROM fragmentos WHERE documento = ?', documento)).map((f) => f.id);
+  const sobrantes = [...new Set([...provisionales.map((p) => p.id).filter((id) => !usados.has(id)), ...existentes])].filter((id) => !idsFinales.has(id));
   const ahora = new Date().toISOString();
   if (refinada) {
     const r = await refinada;
@@ -715,6 +720,8 @@ export async function consolidar(
       // Las unidades provisionales de los tramos se sustituyen por las definitivas.
       await tx.ejecutar("DELETE FROM unidades WHERE documento = ? AND id LIKE ?", documento, `${documento}:m%`);
     }
+    // Unidades de más de una ingesta anterior más larga (las de este orden se sustituyen al escribir).
+    await tx.ejecutar('DELETE FROM unidades WHERE documento = ? AND orden >= ?', documento, unidades.length);
     await tx.ejecutar('DELETE FROM secciones WHERE documento = ?', documento);
     await spdf.escribirDocumento(tx, documentoFinal);
     await spdf.escribirUnidades(tx, unidades.map((u) => aFilaUnidad(documento, u, paquete, idUnidad(u.orden))));
@@ -743,10 +750,24 @@ export async function consolidar(
     const vv = await vectorizarYGuardar(ctx, plan.paginasImagen.map((p) => ({ objetivo: 'unidad' as const, id: idUnidad(p.fisica - 1), parte: p.parte })), documentoFinal);
     procedencia.push(...vv.procedencia);
   }
-  await escribir(sql, (tx) => spdf.escribirFiguras(tx, fig.figuras.map((g) => ({
-    id: g.id, documento, unidad: idUnidad(g.unidad), imagen: g.imagen ?? g.parte ?? '',
-    ...(g.pie ? { pie: g.pie } : {}), ...(g.descripcion ? { descripcion: g.descripcion } : {}), ancla: anclaGuardada(g),
-  }))));
+  // Las figuras se sustituyen enteras: sus ids son nuevos en cada ingesta, así que las de una
+  // anterior (y sus vectores, también en el índice) se quitan; si no, un reproceso las duplica.
+  const idsFiguras = new Set(fig.figuras.map((g) => g.id));
+  const figurasViejas = (await sql.ejecutar<{ id: string }>('SELECT id FROM figuras WHERE documento = ?', documento)).map((f) => f.id).filter((id) => !idsFiguras.has(id));
+  await escribir(sql, async (tx) => {
+    for (let i = 0; i < figurasViejas.length; i += 500) {
+      const l = enLista(figurasViejas.slice(i, i + 500));
+      await tx.ejecutar(`DELETE FROM figuras WHERE id IN ${l.sql}`, l.param);
+      await tx.ejecutar(`DELETE FROM vectores WHERE objetivo = 'figura' AND id IN ${l.sql}`, l.param);
+    }
+    await spdf.escribirFiguras(tx, fig.figuras.map((g) => ({
+      id: g.id, documento, unidad: idUnidad(g.unidad), imagen: g.imagen ?? g.parte ?? '',
+      ...(g.pie ? { pie: g.pie } : {}), ...(g.descripcion ? { descripcion: g.descripcion } : {}), ancla: anclaGuardada(g),
+    })));
+  });
+  if (puertos.indice?.borrar && figurasViejas.length) {
+    for (const e of [ia.embebedor, ...(ia.embebedoresExtra ?? [])]) await puertos.indice.borrar(e.espacio, figurasViejas).catch(() => undefined);
+  }
   marca('vectores', tm);
 
   // Procedencia, cuenta de vectores y fuera el estado de trabajo.

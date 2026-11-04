@@ -11,8 +11,13 @@ export function anclaACita(ancla: Ancla, fin?: Ancla): string {
       }
       return `p. ${a}`;
     }
-    case 'tiempo':
-      return tiempoACadena(ancla.t0) + (fin && fin.tipo === 'tiempo' ? `-${tiempoACadena(fin.t1)}` : '');
+    case 'tiempo': {
+      // Un tramo se cita entero, «12:04-12:40»: el final es el del ancla de cierre o, si no la hay,
+      // el del propio tramo. Un fotograma (t0 = t1) se cita con su segundo.
+      const a = tiempoACadena(ancla.t0);
+      const b = tiempoACadena(fin && fin.tipo === 'tiempo' ? fin.t1 : ancla.t1);
+      return b !== a ? `${a}-${b}` : a;
+    }
     case 'seccion':
       return ancla.impresa ? `p. ${ancla.impresa}` : [...ancla.ruta.slice(-1), `párr. ${ancla.parrafo}`].join(', ');
     case 'diapositiva':
