@@ -317,7 +317,7 @@ type Miradas = Map<number, Record<string, { veredicto: 'si' | 'no' | 'dudoso'; n
  * las que dicen quién habla, cuando solo se apoyan en la transcripción). Agrupa por sitio:
  * una llamada comprueba todas las frases de un tramo. Como mucho `sitios` sitios.
  */
-async function mirarSitios(ctx: ContextoHerramientas, numerador: Numerador, frases: FraseRespuesta[], clases: ClaseFrase[], sitios: number): Promise<Miradas> {
+async function mirarSitios(ctx: ContextoHerramientas, numerador: Numerador, frases: FraseRespuesta[], clases: ClaseFrase[], sitios: number, abandonadas: { n: number } = { n: 0 }): Promise<Miradas> {
   const salida: Miradas = new Map();
   const grupos = new Map<string, { prueba: Prueba; sentido: 'ver' | 'escuchar'; frases: Array<{ i: number; marca: string }> }>();
   frases.forEach((f, i) => {
@@ -346,8 +346,13 @@ async function mirarSitios(ctx: ContextoHerramientas, numerador: Numerador, fras
   await Promise.all(Array.from({ length: Math.min(8, lista.length) }, async () => {
     while (k < lista.length) {
       const g = lista[k++]!;
+      // Con plazo: la verificación espera a la más lenta, y alguna tarda el doble que las demás.
+      const control = new AbortController();
+      const reloj = setTimeout(() => control.abort(new Error(`más de ${PLAZO_MIRADA_MS / 1000} s`)), PLAZO_MIRADA_MS);
+      const alAbortar = () => control.abort(ctx.signal?.reason);
+      ctx.signal?.addEventListener('abort', alAbortar, { once: true });
       try {
-        const r = await comprobarEnSitio(ctx, g.prueba, g.frases.map((x) => frases[x.i]!.limpia), g.sentido);
+        const r = await comprobarEnSitio(ctx, g.prueba, g.frases.map((x) => frases[x.i]!.limpia), g.sentido, { signal: control.signal });
         if (!r) continue;
         r.forEach((v, n) => {
           const { i, marca } = g.frases[n]!;
@@ -356,10 +361,15 @@ async function mirarSitios(ctx: ContextoHerramientas, numerador: Numerador, fras
           salida.set(i, m);
         });
       } catch (e) {
-        ctx.avisos.push(`No se pudo volver a mirar: ${(e as Error).message}`);
+        if (control.signal.aborted && !ctx.signal?.aborted) abandonadas.n++;
+        else ctx.avisos.push(`No se pudo volver a mirar: ${(e as Error).message}`);
+      } finally {
+        clearTimeout(reloj);
+        ctx.signal?.removeEventListener('abort', alAbortar);
       }
     }
   }));
+  if (abandonadas.n) ctx.avisos.push(`${abandonadas.n === 1 ? 'Una revisión' : `${abandonadas.n} revisiones`} del vídeo o de la página ${abandonadas.n === 1 ? 'tardó' : 'tardaron'} demasiado y se ${abandonadas.n === 1 ? 'dejó' : 'dejaron'}: lo que comprobaban queda con el juicio del texto.`);
   return salida;
 }
 
@@ -387,6 +397,8 @@ function aplicarMiradas(juzgadas: FraseJuzgada[], miradas: Miradas): void {
 export const MAX_CORRECCIONES = 36;
 /** Frases que, tras corregir, siguen juntando tres marcas o más y se corrigen otra vez (si son más, no). */
 export const MAX_SEGUNDA_VUELTA = 6;
+/** Plazo de cada «volver a mirar» (la verificación espera a la más lenta). */
+export const PLAZO_MIRADA_MS = 90_000;
 
 const SISTEMA_CORRECCION = `Corriges frases de una respuesta académica para que cada una diga exactamente lo que prueban sus pruebas. Recibes cada frase con sus marcas [E#], el juicio de cada marca y el texto de las pruebas; a veces, otras pruebas del cuaderno [P#] que podrían servir.
 Reglas:
@@ -551,7 +563,7 @@ export async function cuadrarTablas(ctx: ContextoHerramientas, markdown: string)
 }
 
 /** Milisegundos de cada paso de la verificación (para el registro). */
-export interface TiemposVerificacion { juicio: number; correccion: number; rejuicio: number; jueces?: number; miradas?: number; tablas?: number }
+export interface TiemposVerificacion { juicio: number; correccion: number; rejuicio: number; jueces?: number; miradas?: number; tablas?: number; miradasAbandonadas?: number }
 
 export interface ResultadoVerificacion {
   /** La respuesta corregida (sin la lista de pruebas). */
@@ -576,11 +588,13 @@ export async function verificar(ctx: ContextoHerramientas, numerador: Numerador,
   const tiempos: TiemposVerificacion = { juicio: 0, correccion: 0, rejuicio: 0 };
   // Se juzga y, a la vez, se vuelve a mirar lo que parece visual o sonoro.
   const iniciales = frasesDe(markdown);
+  const abandonadas = { n: 0 };
   const medir = async <T>(clave: 'jueces' | 'miradas', p: Promise<T>): Promise<T> => { try { return await p; } finally { tiempos[clave] = Date.now() - t0; } };
   const [juzgadasIniciales, miradas] = await Promise.all([
     medir('jueces', juzgar(ctx, numerador, iniciales)),
-    medir('miradas', mirarSitios(ctx, numerador, iniciales, iniciales.map((f) => claseProvisional(f, numerador)), o.sitios)),
+    medir('miradas', mirarSitios(ctx, numerador, iniciales, iniciales.map((f) => claseProvisional(f, numerador)), o.sitios, abandonadas)),
   ]);
+  if (abandonadas.n) tiempos.miradasAbandonadas = abandonadas.n;
   let juzgadas = juzgadasIniciales;
   aplicarMiradas(juzgadas, miradas);
   tiempos.juicio = Date.now() - t0;

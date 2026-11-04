@@ -3,13 +3,13 @@
  * frases que juntan varias afirmaciones, nombres que la prueba no trae, sonidos y
  * gestos que no se ven ni se oyen al volver a mirar.
  */
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { Ancla } from '@scholaris/nucleo';
 import type { ContextoHerramientas } from '../src/contexto.js';
 import { Contabilidad, type PeticionModelo } from '../src/modelo.js';
 import { CuadernoPruebas, type Ambito } from '../src/pruebas.js';
 import { Numerador } from '../src/sintesis.js';
-import { comprobacionesLiterales, cuadrarTablas, frasesDe, marcaEnMedio, MAX_CORRECCIONES, nombradosEn, partirPorMarcas, verificar } from '../src/verificacion.js';
+import { comprobacionesLiterales, cuadrarTablas, frasesDe, marcaEnMedio, MAX_CORRECCIONES, nombradosEn, PLAZO_MIRADA_MS, partirPorMarcas, verificar } from '../src/verificacion.js';
 import { ModeloGuion, textoDe } from './apoyo.js';
 
 const pagina = (fisica: number, impresa: string): Ancla => ({ tipo: 'pagina', fisica, impresa, romana: false, origen: 'leido', confianza: 1 });
@@ -243,6 +243,29 @@ describe('lo visual y lo sonoro se vuelve a mirar', () => {
     expect(miradas).toBe(1);
     expect(v.markdown).toBe('Marta se niega a volver a la casa [E1].');
     expect(v.frases[0]!.veredicto).toBe('respaldada');
+  });
+
+  it('una revisión que no contesta a tiempo se deja y la frase se queda con el juicio del texto', async () => {
+    vi.useFakeTimers();
+    try {
+      const { ctx } = ctxCon((p) => ({ json: juicio(textoDe(p), () => null, () => 'visual') }));
+      let abortada = false;
+      // El revisor no contesta nunca: solo se rinde cuando le cortan.
+      (ctx.p.modelos as { revisor?: unknown }).revisor = {
+        nombre: 'lento',
+        turno: (p: PeticionModelo) => new Promise((_, rechazar) => p.signal?.addEventListener('abort', () => { abortada = true; rechazar(new Error('cortada')); })),
+      };
+      const n = new Numerador(ctx);
+      const promesa = verificar(ctx, n, n.sustituir('Marta aparece en primer plano junto a la puerta [P3].'), { sitios: 4 });
+      await vi.advanceTimersByTimeAsync(PLAZO_MIRADA_MS + 10);
+      const v = await promesa;
+      expect(abortada).toBe(true);
+      expect(v.tiempos.miradasAbandonadas).toBe(1);
+      expect(v.frases[0]!.veredicto).toBe('respaldada');
+      expect(ctx.avisos.join(' ')).toContain('tardó demasiado');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('sin presupuesto de sitios no se mira nada', async () => {

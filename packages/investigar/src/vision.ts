@@ -279,7 +279,7 @@ export function tramoDeComprobacion(a: { t0: number; t1: number; instante?: numb
  * audio (con margen) o la imagen de la página. Para cada una: «si» (se ve o se oye tal
  * cual), «no» (no es así) o «dudoso». Null si ese sitio no se puede mirar.
  */
-export async function comprobarEnSitio(ctx: ContextoHerramientas, p: Prueba, afirmaciones: string[], sentido: 'ver' | 'escuchar'): Promise<Array<{ veredicto: 'si' | 'no' | 'dudoso'; nota: string }> | null> {
+export async function comprobarEnSitio(ctx: ContextoHerramientas, p: Prueba, afirmaciones: string[], sentido: 'ver' | 'escuchar', o: { signal?: AbortSignal } = {}): Promise<Array<{ veredicto: 'si' | 'no' | 'dudoso'; nota: string }> | null> {
   if (!afirmaciones.length) return [];
   const modelo = ctx.p.modelos.revisor ?? ctx.p.modelos.agente;
   const e = p.evidencia;
@@ -306,7 +306,7 @@ export async function comprobarEnSitio(ctx: ContextoHerramientas, p: Prueba, afi
       properties: { juicios: { type: 'array', items: { type: 'object', properties: { n: { type: 'integer' }, veredicto: { type: 'string', enum: ['si', 'no', 'dudoso'] }, nota: { type: 'string' } }, required: ['n', 'veredicto', 'nota'] } } },
       required: ['juicios'],
     },
-    ...(ctx.signal ? { signal: ctx.signal } : {}),
+    ...(o.signal ?? ctx.signal ? { signal: o.signal ?? ctx.signal } : {}),
   });
   ctx.cuentas.apuntar(r.uso);
   const juicios = ((r.json ?? {}) as { juicios?: Array<{ n: number; veredicto?: string; nota?: string }> }).juicios ?? [];
