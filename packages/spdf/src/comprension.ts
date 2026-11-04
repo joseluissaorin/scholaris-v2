@@ -1,14 +1,15 @@
 /**
  * Repositorio de la capa de comprensión (SPDF 4.2, docs/COMPRENSION.md):
- * segmentos, fichas, entidades, menciones, relaciones, alineaciones y memoria.
+ * segmentos, fichas, apariciones, relaciones y alineaciones. Las entidades son
+ * las del grafo de @scholaris/funciones; aquí solo se anota dónde aparecen.
  *
  * Mismas reglas que el resto del repositorio: un puerto SQL cualquiera (sqlite-wasm,
  * Durable Object, D1, better-sqlite3), JSON en las columnas de anclas y evidencias,
  * y nunca más de 100 parámetros por sentencia (las listas van como un solo JSON).
  */
 import type {
-  Alineacion, AnclaMaterial, Entidad, Evidencia, Ficha, LadoAlineacion, Lente, Mencion, ObjetivoFicha, Recuerdo,
-  Relacion, RolMencion, Segmento, SQL, TipoCorrespondencia, TipoEntidad, TipoRecuerdo, TipoRelacion, TipoSegmento, ValorSQL,
+  Alineacion, AnclaMaterial, Aparicion, Evidencia, Ficha, LadoAlineacion, Lente, ObjetivoFicha, Relacion, RolAparicion,
+  Segmento, SQL, TipoCorrespondencia, TipoRelacion, TipoSegmento, ValorSQL,
 } from '@scholaris/nucleo';
 import { enLista } from '@scholaris/nucleo';
 
@@ -172,92 +173,32 @@ export async function borrarFichas(sql: SQL, documento: string, opciones: { salv
 }
 
 // ---------------------------------------------------------------------------
-// Entidades
+// Apariciones
 // ---------------------------------------------------------------------------
 
-export async function escribirEntidades(sql: SQL, entidades: readonly Entidad[]): Promise<void> {
-  for (const e of entidades) {
-    await sql.ejecutar(
-      `INSERT INTO entidades (id, tipo, nombre, alias, etiquetas, qid, descripcion, datos) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-       ON CONFLICT(id) DO UPDATE SET tipo = excluded.tipo, nombre = excluded.nombre, alias = excluded.alias, etiquetas = excluded.etiquetas,
-         qid = excluded.qid, descripcion = excluded.descripcion, datos = excluded.datos`,
-      e.id, e.tipo, e.nombre, json(e.alias), e.etiquetas ? json(e.etiquetas) : null, opcional(e.qid), opcional(e.descripcion), e.datos ? json(e.datos) : null,
-    );
-  }
-}
-
-function filaAEntidad(f: Fila): Entidad {
-  const e: Entidad = { id: texto(f.id), tipo: texto(f.tipo) as TipoEntidad, nombre: texto(f.nombre), alias: deJson<string[]>(f.alias, []) };
-  if (f.etiquetas) e.etiquetas = deJson<Record<string, string>>(f.etiquetas, {});
-  if (f.qid) e.qid = texto(f.qid);
-  if (f.descripcion) e.descripcion = texto(f.descripcion);
-  if (f.datos) e.datos = deJson<Record<string, unknown>>(f.datos, {});
-  return e;
-}
-
-export async function leerEntidades(sql: SQL, ids: readonly string[]): Promise<Entidad[]> {
-  if (!ids.length) return [];
-  const l = enLista([...ids]);
-  return (await sql.ejecutar<Fila>(`SELECT * FROM entidades WHERE id IN ${l.sql}`, l.param)).map(filaAEntidad);
-}
-
-export async function entidadPorQid(sql: SQL, qid: string): Promise<Entidad | null> {
-  const [f] = await sql.ejecutar<Fila>('SELECT * FROM entidades WHERE qid = ? LIMIT 1', qid);
-  return f ? filaAEntidad(f) : null;
-}
-
-/** Entidades por nombre o alias (FTS), opcionalmente de un tipo. */
-export async function buscarEntidades(sql: SQL, consulta: string, opciones: { tipo?: TipoEntidad; limite?: number } = {}): Promise<Entidad[]> {
-  const q = consultaFtsComprension(consulta);
-  if (!q) return [];
-  const p: ValorSQL[] = [q];
-  let filtro = '';
-  if (opciones.tipo) { filtro = ' AND e.tipo = ?'; p.push(opciones.tipo); }
-  p.push(opciones.limite ?? 20);
-  return (await sql.ejecutar<Fila>(
-    `SELECT e.* FROM entidades_fts JOIN entidades e ON e.n = entidades_fts.rowid WHERE entidades_fts MATCH ?${filtro} ORDER BY bm25(entidades_fts) LIMIT ?`, ...p,
-  )).map(filaAEntidad);
-}
-
-/** Entidades que aparecen en un documento, con cuántas menciones tienen. */
-export async function entidadesDeDocumento(sql: SQL, documento: string, opciones: { tipo?: TipoEntidad } = {}): Promise<Array<Entidad & { menciones: number }>> {
-  const p: ValorSQL[] = [documento];
-  let filtro = '';
-  if (opciones.tipo) { filtro = ' AND e.tipo = ?'; p.push(opciones.tipo); }
-  const filas = await sql.ejecutar<Fila>(
-    `SELECT e.*, count(m.id) AS cuantas FROM menciones m JOIN entidades e ON e.id = m.entidad
-     WHERE m.documento = ?${filtro} GROUP BY e.id ORDER BY cuantas DESC, e.nombre`, ...p,
-  );
-  return filas.map((f) => ({ ...filaAEntidad(f), menciones: numero(f.cuantas) }));
-}
-
-// ---------------------------------------------------------------------------
-// Menciones
-// ---------------------------------------------------------------------------
-
-export async function escribirMenciones(sql: SQL, menciones: readonly Mencion[]): Promise<void> {
-  for (const m of menciones) {
+export async function escribirApariciones(sql: SQL, apariciones: readonly Aparicion[]): Promise<void> {
+  for (const m of apariciones) {
     const [t0] = tiempos(m.ancla, m.anclaFin);
     const fisica = m.ancla.tipo === 'pagina' ? m.ancla.fisica : null;
     await sql.ejecutar(
-      `INSERT OR REPLACE INTO menciones (id, entidad, documento, segmento, ancla, ancla_fin, forma, rol, confianza, t0, fisica)
+      `INSERT OR REPLACE INTO apariciones (id, entidad, documento, segmento, ancla, ancla_fin, forma, rol, confianza, t0, fisica)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       m.id, m.entidad, m.documento, opcional(m.segmento), json(m.ancla), m.anclaFin ? json(m.anclaFin) : null, m.forma, m.rol, m.confianza, t0, fisica,
     );
   }
 }
 
-function filaAMencion(f: Fila): Mencion {
-  const m: Mencion = {
+function filaAAparicion(f: Fila): Aparicion {
+  const m: Aparicion = {
     id: texto(f.id), entidad: texto(f.entidad), documento: texto(f.documento), ancla: deJson<AnclaMaterial>(f.ancla, { tipo: 'imagen' }),
-    forma: texto(f.forma), rol: texto(f.rol) as RolMencion, confianza: numero(f.confianza),
+    forma: texto(f.forma), rol: texto(f.rol) as RolAparicion, confianza: numero(f.confianza),
   };
   if (f.segmento) m.segmento = texto(f.segmento);
   if (f.ancla_fin) m.anclaFin = deJson<AnclaMaterial>(f.ancla_fin, m.ancla);
   return m;
 }
 
-export async function leerMenciones(sql: SQL, filtro: { entidad?: string; documento?: string; segmento?: string; limite?: number }): Promise<Mencion[]> {
+export async function leerApariciones(sql: SQL, filtro: { entidad?: string; documento?: string; segmento?: string; limite?: number }): Promise<Aparicion[]> {
   const condiciones: string[] = [];
   const p: ValorSQL[] = [];
   if (filtro.entidad) { condiciones.push('entidad = ?'); p.push(filtro.entidad); }
@@ -265,24 +206,16 @@ export async function leerMenciones(sql: SQL, filtro: { entidad?: string; docume
   if (filtro.segmento) { condiciones.push('segmento = ?'); p.push(filtro.segmento); }
   const donde = condiciones.length ? `WHERE ${condiciones.join(' AND ')}` : '';
   p.push(filtro.limite ?? 5000);
-  return (await sql.ejecutar<Fila>(`SELECT * FROM menciones ${donde} ORDER BY documento, coalesce(fisica, 0), coalesce(t0, 0) LIMIT ?`, ...p)).map(filaAMencion);
+  return (await sql.ejecutar<Fila>(`SELECT * FROM apariciones ${donde} ORDER BY documento, coalesce(fisica, 0), coalesce(t0, 0) LIMIT ?`, ...p)).map(filaAAparicion);
 }
 
-export async function borrarMenciones(sql: SQL, documento: string): Promise<void> {
-  await sql.ejecutar('DELETE FROM menciones WHERE documento = ?', documento);
+/** Apariciones en un tramo de tiempo (quién está en pantalla o se oye entre t0 y t1). */
+export async function aparicionesEnTiempo(sql: SQL, documento: string, t0: number, t1: number): Promise<Aparicion[]> {
+  return (await sql.ejecutar<Fila>('SELECT * FROM apariciones WHERE documento = ? AND t0 >= ? AND t0 < ? ORDER BY t0', documento, t0, t1)).map(filaAAparicion);
 }
 
-/** Entidades sin ninguna mención (tras reprocesar o borrar documentos), con sus vectores. */
-export async function borrarEntidadesHuerfanas(sql: SQL): Promise<string[]> {
-  const ids = (await sql.ejecutar<{ id: string }>(
-    "SELECT id FROM entidades e WHERE NOT EXISTS (SELECT 1 FROM menciones m WHERE m.entidad = e.id) AND NOT EXISTS (SELECT 1 FROM fichas f WHERE f.objetivo = 'entidad' AND f.objetivo_id = e.id)",
-  )).map((f) => texto(f.id));
-  for (let i = 0; i < ids.length; i += 500) {
-    const l = enLista(ids.slice(i, i + 500));
-    await sql.ejecutar(`DELETE FROM entidades WHERE id IN ${l.sql}`, l.param);
-    await sql.ejecutar(`DELETE FROM vectores WHERE objetivo = 'entidad' AND id IN ${l.sql}`, l.param);
-  }
-  return ids;
+export async function borrarApariciones(sql: SQL, documento: string): Promise<void> {
+  await sql.ejecutar('DELETE FROM apariciones WHERE documento = ?', documento);
 }
 
 // ---------------------------------------------------------------------------
@@ -307,7 +240,7 @@ function filaARelacion(f: Fila): Relacion {
   return r;
 }
 
-/** Relaciones en que participa un documento (o una entidad, «ent:…»), en cualquiera de los dos lados. */
+/** Relaciones en que participa un documento, en cualquiera de los dos lados. */
 export async function leerRelaciones(sql: SQL, quien?: string): Promise<Relacion[]> {
   const filas = quien
     ? await sql.ejecutar<Fila>('SELECT * FROM relaciones WHERE origen = ? OR destino = ? ORDER BY creada', quien, quien)
@@ -358,75 +291,18 @@ export async function leerAlineaciones(sql: SQL, filtro: { relacion?: string; do
 }
 
 // ---------------------------------------------------------------------------
-// Memoria
-// ---------------------------------------------------------------------------
-
-export async function escribirRecuerdos(sql: SQL, recuerdos: readonly Recuerdo[]): Promise<void> {
-  for (const r of recuerdos) {
-    await sql.ejecutar(
-      `INSERT INTO memoria (id, tipo, texto, evidencias, documentos, proyecto, fuente, creado, fijado, padre) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-       ON CONFLICT(id) DO UPDATE SET tipo = excluded.tipo, texto = excluded.texto, evidencias = excluded.evidencias, documentos = excluded.documentos,
-         proyecto = excluded.proyecto, fuente = excluded.fuente, fijado = excluded.fijado, padre = excluded.padre`,
-      r.id, r.tipo, r.texto, json(r.evidencias), json(r.documentos), opcional(r.proyecto), r.fuente, r.creado, r.fijado ? 1 : 0, opcional(r.padre),
-    );
-  }
-}
-
-function filaARecuerdo(f: Fila): Recuerdo {
-  const r: Recuerdo = {
-    id: texto(f.id), tipo: texto(f.tipo) as TipoRecuerdo, texto: texto(f.texto), evidencias: deJson<Evidencia[]>(f.evidencias, []),
-    documentos: deJson<string[]>(f.documentos, []), fuente: texto(f.fuente) as Recuerdo['fuente'], creado: texto(f.creado),
-  };
-  if (f.proyecto) r.proyecto = texto(f.proyecto);
-  if (numero(f.fijado)) r.fijado = true;
-  if (f.padre) r.padre = texto(f.padre);
-  return r;
-}
-
-export async function leerRecuerdos(sql: SQL, filtro: { proyecto?: string; tipo?: TipoRecuerdo; padre?: string; ids?: string[]; limite?: number } = {}): Promise<Recuerdo[]> {
-  const condiciones: string[] = [];
-  const p: ValorSQL[] = [];
-  if (filtro.proyecto) { condiciones.push('proyecto = ?'); p.push(filtro.proyecto); }
-  if (filtro.tipo) { condiciones.push('tipo = ?'); p.push(filtro.tipo); }
-  if (filtro.padre) { condiciones.push('padre = ?'); p.push(filtro.padre); }
-  if (filtro.ids?.length) { const l = enLista(filtro.ids); condiciones.push(`id IN ${l.sql}`); p.push(l.param); }
-  const donde = condiciones.length ? `WHERE ${condiciones.join(' AND ')}` : '';
-  p.push(filtro.limite ?? 200);
-  return (await sql.ejecutar<Fila>(`SELECT * FROM memoria ${donde} ORDER BY fijado DESC, creado DESC LIMIT ?`, ...p)).map(filaARecuerdo);
-}
-
-/** Búsqueda léxica (BM25) en la memoria. */
-export async function buscarRecuerdos(sql: SQL, consulta: string, opciones: { proyecto?: string; limite?: number } = {}): Promise<Array<Recuerdo & { puntuacion: number }>> {
-  const q = consultaFtsComprension(consulta);
-  if (!q) return [];
-  const p: ValorSQL[] = [q];
-  let filtro = '';
-  if (opciones.proyecto) { filtro = ' AND r.proyecto = ?'; p.push(opciones.proyecto); }
-  p.push(opciones.limite ?? 20);
-  const filas = await sql.ejecutar<Fila>(
-    `SELECT r.*, bm25(memoria_fts) AS rango FROM memoria_fts JOIN memoria r ON r.n = memoria_fts.rowid WHERE memoria_fts MATCH ?${filtro} ORDER BY rango LIMIT ?`, ...p,
-  );
-  return filas.map((f) => ({ ...filaARecuerdo(f), puntuacion: -numero(f.rango) }));
-}
-
-export async function borrarRecuerdo(sql: SQL, id: string): Promise<void> {
-  await sql.ejecutar('DELETE FROM memoria WHERE id = ?', id);
-  await sql.ejecutar("DELETE FROM vectores WHERE objetivo = 'recuerdo' AND id = ?", id);
-}
-
-// ---------------------------------------------------------------------------
 // Limpieza por documento
 // ---------------------------------------------------------------------------
 
 /**
  * Quita la comprensión de un documento (para rehacerla): segmentos, fichas con sus vectores,
- * menciones y las alineaciones en que interviene. Las relaciones y las entidades se quedan:
- * son de la biblioteca (las huérfanas se limpian con `borrarEntidadesHuerfanas`).
+ * apariciones y las alineaciones en que interviene. Las relaciones y las entidades se quedan:
+ * son de la biblioteca.
  */
 export async function borrarComprension(sql: SQL, documento: string): Promise<{ fichas: string[] }> {
   const fichas = await borrarFichas(sql, documento);
   await borrarSegmentos(sql, documento);
-  await borrarMenciones(sql, documento);
+  await borrarApariciones(sql, documento);
   await sql.ejecutar('DELETE FROM alineaciones WHERE doc_a = ? OR doc_b = ?', documento, documento);
   return { fichas };
 }

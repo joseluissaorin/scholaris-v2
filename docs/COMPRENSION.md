@@ -24,10 +24,36 @@ misma biblioteca. Preguntas como esta tienen que salir bien, con páginas y segu
 primera escena (planos, quién domina el encuadre) y cómo resignifica la película el
 helado al final?».
 
+## Lo que ya existe y se aprovecha
+
+La comprensión no parte de cero. `@scholaris/funciones` ya trae, sobre la estantería de
+cada usuario:
+
+- **Grafo de entidades** (`entidades`, `menciones`, `aristas_entidades`,
+  `entidades_relaciones`, `entidades_wikidata`): personas, obras, lugares,
+  organizaciones, conceptos, eventos y fechas, con alias, clave normalizada, fusión de
+  duplicados (`fusionada_en`), personajes (`ficticia`), Wikidata, coapariciones,
+  relaciones con nombre entre entidades, línea temporal, vecindarios y caminos
+  (`entidades/consultas.ts`). Sus menciones son de texto, por fragmento y desplazamiento.
+- **Grafo de citas** (`grafo_referencias`, `grafo_aristas`): qué documento cita o
+  menciona a cuál.
+- **Cuadernos** (`cuadernos`, `cuadernos_tarjetas`, `cuadernos_sintesis`): notas con
+  tarjetas que guardan una copia verificada del pasaje y su ancla («citas vivas»), y
+  síntesis que solo pueden citar sus tarjetas.
+- **Historial** (`historial`, `historial_fts`, `historial_eventos`), **vigilantes**,
+  **conceptos** y **mapa de conceptos**, **perspectivas** y **corpus**.
+
+La capa de comprensión se construye encima. Las entidades y sus menciones de texto
+siguen siendo las del grafo, y la comprensión añade las **apariciones** multimodales
+ancladas (región de un fotograma, voz en un tramo, caracteres de una página). La
+memoria de la investigación son los **cuadernos** y el **historial**: Investigar escribe
+en ellos. Las relaciones entre obras de la comprensión (adaptación, traducción, edición)
+completan el grafo de citas, no lo sustituyen.
+
 ## Principios
 
 1. **Anclaje material.** Toda afirmación derivada (una ficha, una mención, una
-   alineación, un recuerdo, una frase de una respuesta) apunta a pruebas: documento,
+   alineación, una tarjeta de un cuaderno, una frase de una respuesta) apunta a pruebas: documento,
    ancla y, cuando el soporte lo permite, la posición exacta. Eso son los caracteres del
    texto de la unidad, la región en la imagen de la página o del fotograma, el instante
    y el hablante. Lo que no tiene prueba se marca como inferido y nunca se cita como
@@ -37,7 +63,8 @@ helado al final?».
    recalculable y con procedencia.
 3. **Una gramática para todos los medios.** Libro, artículo, manuscrito, película,
    clase, entrevista, pódcast, presentación, hoja o web comparten las mismas estructuras:
-   segmentos, fichas, entidades, menciones, relaciones, alineaciones y recuerdos.
+   segmentos, fichas, entidades con sus apariciones, relaciones, alineaciones y la
+   memoria de los cuadernos.
 4. **Lentes de especialista.** El análisis se hace con la lente del género y de la
    disciplina (ver «Lentes»), con su vocabulario y sus preguntas. No hay resúmenes
    genéricos.
@@ -56,7 +83,9 @@ helado al final?».
 
 Los tipos están en `packages/nucleo/src/comprension.ts`, el esquema interno en
 `packages/spdf/src/esquema.ts` (SPDF 4.2 interno) y el repositorio en
-`packages/spdf/src/comprension.ts`.
+`packages/spdf/src/comprension.ts`. Ningún nombre de tabla puede chocar con los de
+`@scholaris/funciones`: lo comprueba `packages/funciones/test/esquema.test.ts` contra
+todas las versiones del esquema SPDF.
 
 ### Ancla material y evidencia
 
@@ -93,18 +122,19 @@ Tiene:
 - `evidencias`: las pruebas de lo que afirma.
 - `lente`, `clase`, `idioma`, `modelo`, `version` y fecha de creación.
 
-### Entidades y menciones (el grafo de la biblioteca)
+### Entidades y apariciones (el grafo de la biblioteca)
 
-Las entidades viven en la estantería del usuario, una para toda la biblioteca: personas,
-personajes, lugares, obras, organizaciones, conceptos, eventos, objetos, motivos, temas,
-obras musicales y fechas. Llevan nombre, alias en cualquier lengua, etiquetas por
-idioma, QID de Wikidata, descripción y datos. Por ejemplo, un personaje lleva quién lo
-interpreta y un evento su orden en la historia.
+Las entidades son las del grafo de `@scholaris/funciones`, una para toda la biblioteca,
+y se crean y se fusionan con su resolutor (`entidades/resolver.ts`). La comprensión les
+propone tipos más finos (personaje, objeto, motivo, tema, obra musical) en sus datos y
+añade quién interpreta a cada personaje.
 
-Cada aparición en un documento es una mención con ancla material, la forma en que
-aparece y su rol: `nombrado`, `aludido`, `presente`, `habla`, `visible`, `audible`,
-`citado` o `definido`. Así Diego es la misma entidad en el cuento y en la película, y
-«Lezama» se puede seguir por toda la biblioteca.
+Cada aparición de una entidad en el material es una `Aparicion` (tabla `apariciones`)
+con ancla material, la forma en que aparece y su rol: `nombrado`, `aludido`, `presente`,
+`habla`, `visible`, `audible`, `citado` o `definido`. Las menciones de texto que el grafo
+ya detecta siguen en `menciones`. Así Diego es la misma entidad en el cuento y en la
+película, se ve en qué plano está y en qué región del fotograma, y «Lezama» se puede
+seguir por toda la biblioteca.
 
 ### Relaciones y alineaciones (transmedia y transidioma)
 
@@ -122,20 +152,22 @@ vacío.
 
 ### Memoria
 
-Lo que se investiga no se pierde. Un recuerdo es una pregunta, una respuesta, un
-hallazgo, una nota, una hipótesis, una decisión o una preferencia, con sus evidencias,
-los documentos que toca, el proyecto (biblioteca), su fuente (`investigar`, `usuario`,
-`sistema`), si está fijado y de qué recuerdo cuelga. Los recuerdos se buscan (FTS y
-vectores) y el modo Investigar los consulta y los escribe. Se exportan como anotaciones
-W3C (`*.spdfa.json`, SPDF 5.0 §9).
+Lo que se investiga no se pierde, y se guarda con lo que ya existe. Cada pregunta queda
+en el **historial**. Cada investigación deja un **cuaderno**: sus pruebas son tarjetas
+verificadas (pasaje literal, ancla material y huella, que «reverificar» comprueba), y su
+respuesta es una síntesis que solo cita esas tarjetas. Los hallazgos, las notas y las
+hipótesis son tarjetas de tipo nota. Investigar consulta esa memoria antes de buscar y
+escribe en ella al terminar. Si hace falta, la memoria gana su índice de búsqueda
+(`cuadernos_fts`) en el esquema de funciones. Se exporta como anotaciones W3C
+(`*.spdfa.json`, SPDF 5.0 §9).
 
 ### Vectores y búsqueda
 
 `vectores.objetivo` admite, además de `fragmento | unidad | figura`, los valores
-`ficha`, `entidad` y `recuerdo`. Las fichas tienen su propia tabla FTS (`fichas_fts`),
-las entidades la suya (`entidades_fts`) y la memoria la suya (`memoria_fts`). El
-buscador fusiona la capa literal y la de comprensión. Cada resultado dice de qué capa
-viene, y uno de comprensión arrastra sus evidencias literales.
+`ficha` y `entidad`. Las fichas tienen su propia tabla FTS (`fichas_fts`); las entidades
+se buscan con el campo `busqueda` del grafo. El buscador fusiona la capa literal y la de
+comprensión. Cada resultado dice de qué capa viene, y uno de comprensión arrastra sus
+evidencias literales.
 
 ## Lentes
 
@@ -186,9 +218,10 @@ primer momento y la comprensión llega después, con su progreso. Pasos:
    - Presentaciones y hojas: maqueta de cada diapositiva y semántica de cada tabla.
 2. **Estructura**: el árbol de segmentos de la lente, consolidado entre ventanas.
 3. **Fichas de segmento**, con el esquema de la lente y sus evidencias.
-4. **Entidades y menciones**: reconocimiento y correferencia en todo el documento (el
-   reparto como guía), enlace a Wikidata (personas, lugares, obras) y, en el cine, la
-   relación actor ↔ personaje (P161 con el calificador P453).
+4. **Entidades y apariciones**: reconocimiento y correferencia en todo el documento (el
+   reparto como guía), resueltas contra el grafo (`entidades/resolver.ts`) y su enlace a
+   Wikidata, apariciones multimodales ancladas y, en el cine, la relación actor ↔
+   personaje (P161 con el calificador P453).
 5. **Ficha global holística**: sinopsis extensa, tesis o argumento, temas y motivos con
    todas sus apariciones, cronología de la historia frente al orden del relato, voz y
    punto de vista, estilo y contexto. Lo que venga de fuera del documento (Wikidata,
@@ -213,20 +246,22 @@ herramientas:
   tramo de páginas o de tiempo, entidad y tipo de segmento.
 - `leer`: unidades o segmentos enteros.
 - `mapa`: la estructura y la ficha global de un documento.
-- `entidad`: una entidad y todas sus menciones en la biblioteca.
+- `entidad`: una entidad del grafo, con sus menciones, apariciones, vecinos, línea
+  temporal y caminos hacia otras (`entidades/consultas.ts`).
 - `alinear`: lo que corresponde a un tramo en las obras relacionadas.
 - `ver`: un fragmento de vídeo o unas páginas, que el modelo mira con la pregunta.
 - `escuchar`: un tramo de audio.
-- `recordar` y `anotar`: la memoria.
+- `citas`: el grafo de citas entre documentos.
+- `recordar` y `anotar`: la memoria (historial y cuadernos).
 
 El agente planifica (qué obras intervienen, qué pruebas hacen falta y qué subpreguntas
 salen), investiga en varios pasos con presupuesto de pasos y de tiempo, y apunta cada
-prueba en un cuaderno de evidencias. Después escribe una respuesta con la extensión que
+prueba en el cuaderno de la investigación. Después escribe una respuesta con la extensión que
 pida la pregunta, en registro académico, con tablas cuando compara. Cada afirmación
 lleva su evidencia («p. 14», «1:02:03-1:03:10»). Lo visual se comprueba volviendo a
 mirar, y lo que no se pueda probar se dice. Emite eventos en directo (`plan`, `paso`,
-`evidencia`, `texto`, `verificacion`, `fin`) y guarda la pregunta, la respuesta y las
-pruebas en la memoria.
+`evidencia`, `texto`, `verificacion`, `fin`) y deja la pregunta en el historial y las
+pruebas y la respuesta en su cuaderno.
 
 Va en la API (`POST /busqueda/investigar` y `/api/v1/investigar`), en el SDK
 (`investigar()`), en el MCP (herramienta `investigate`) y en la web, donde se ven el plan
@@ -252,7 +287,7 @@ compara el modo rápido con Investigar, antes y después de cada cambio.
 
 Por dentro, el esquema pasa a SPDF 4.2 con las tablas de comprensión. Al exportar a 5.0,
 la comprensión viaja como extensión opcional `x_scholaris_comprension`, con las tablas
-`x_scholaris_segments`, `x_scholaris_cards`, `x_scholaris_entities`,
-`x_scholaris_mentions`, `x_scholaris_relations` y `x_scholaris_alignments`. Las
-relaciones nombran al otro documento por su `sha256-…` y la memoria va como anotaciones
-W3C. En el repositorio de SPDF se propone un RFC para un perfil `understanding` en 5.1.
+`x_scholaris_segments`, `x_scholaris_cards`, `x_scholaris_entities` (las del grafo que
+aparecen en el documento), `x_scholaris_appearances`, `x_scholaris_relations` y
+`x_scholaris_alignments`. Las relaciones nombran al otro documento por su `sha256-…` y
+la memoria va como anotaciones W3C. En el repositorio de SPDF se propone un RFC para un perfil `understanding` en 5.1.

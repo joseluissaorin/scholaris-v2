@@ -37,8 +37,8 @@ describe('esquema v4.1', () => {
   it('partirSentencias respeta los disparadores, los comentarios y las cadenas', () => {
     const s = partirSentencias(ESQUEMA_V4);
     const disparadores = s.filter((x) => /^CREATE TRIGGER/i.test(x));
-    // Tres de los fragmentos y tres por cada tabla FTS de la comprensión (fichas, entidades, memoria).
-    expect(disparadores).toHaveLength(12);
+    // Tres de los fragmentos y tres de las fichas (la otra tabla FTS de la comprensión).
+    expect(disparadores).toHaveLength(6);
     for (const d of disparadores) expect(d.trimEnd().endsWith('END')).toBe(true);
     expect(s.some((x) => x.startsWith('--'))).toBe(false);
     expect(partirSentencias("INSERT INTO t VALUES ('a;b'); -- c;d\nSELECT \"x;y\" FROM t;")).toEqual(["INSERT INTO t VALUES ('a;b')", 'SELECT "x;y" FROM t']);

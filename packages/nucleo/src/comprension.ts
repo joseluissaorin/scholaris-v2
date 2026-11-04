@@ -1,7 +1,8 @@
 /**
- * La capa de comprensión (docs/COMPRENSION.md): estructura, fichas, entidades,
- * menciones, relaciones entre obras, alineaciones y memoria. Todo derivado,
- * versionado y anclado al sitio material exacto de donde sale.
+ * La capa de comprensión (docs/COMPRENSION.md): estructura, fichas, apariciones,
+ * relaciones entre obras y alineaciones. Todo derivado, versionado y anclado al
+ * sitio material exacto de donde sale. Las entidades son las del grafo de
+ * @scholaris/funciones y la memoria se apoya en sus cuadernos y su historial.
  */
 import type { Ancla } from './dominio.js';
 
@@ -147,40 +148,17 @@ export interface Ficha {
 }
 
 // ---------------------------------------------------------------------------
-// Entidades y menciones
+// Apariciones (sobre el grafo de entidades de @scholaris/funciones)
 // ---------------------------------------------------------------------------
 
-export type TipoEntidad =
-  | 'persona'
-  | 'personaje'
-  | 'lugar'
-  | 'obra'
-  | 'organizacion'
-  | 'concepto'
-  | 'evento'
-  | 'objeto'
-  | 'motivo'
-  | 'tema'
-  | 'obra_musical'
-  | 'fecha';
+/**
+ * Tipos de entidad que la comprensión puede proponer al grafo de la biblioteca. El grafo
+ * (@scholaris/funciones, tablas «entidades» y «menciones») guarda persona, obra, lugar,
+ * organización, concepto, evento y fecha, y marca los personajes con «ficticia».
+ */
+export type TipoEntidadComprension = 'persona' | 'personaje' | 'lugar' | 'obra' | 'organizacion' | 'concepto' | 'evento' | 'objeto' | 'motivo' | 'tema' | 'obra_musical' | 'fecha';
 
-/** Algo de lo que hablan los documentos, uno para toda la biblioteca. */
-export interface Entidad {
-  id: string;
-  tipo: TipoEntidad;
-  nombre: string;
-  /** Otras formas, en cualquier lengua. */
-  alias: string[];
-  /** Nombre por idioma (BCP 47 → nombre). */
-  etiquetas?: Record<string, string>;
-  /** Wikidata. */
-  qid?: string;
-  descripcion?: string;
-  /** Según el tipo: un personaje lleva `interpretadoPor` (QID o nombre); un evento, `ordenHistoria`. */
-  datos?: Record<string, unknown>;
-}
-
-export type RolMencion =
+export type RolAparicion =
   | 'nombrado'
   | 'aludido'
   | 'presente'
@@ -191,17 +169,22 @@ export type RolMencion =
   | 'definido'
   | 'otro';
 
-/** Una aparición de una entidad en un documento. */
-export interface Mencion {
+/**
+ * Dónde está una entidad del grafo en el material, con la precisión del soporte: una
+ * región de un fotograma en un instante, una voz en un tramo, unos caracteres de una
+ * página. Las menciones de texto que ya guarda el grafo (por fragmento) siguen allí.
+ */
+export interface Aparicion {
   id: string;
+  /** id en la tabla «entidades» del grafo de la biblioteca. */
   entidad: string;
   documento: string;
   segmento?: string;
   ancla: AnclaMaterial;
   anclaFin?: AnclaMaterial;
-  /** Cómo aparece: «Diego», «el maricón», una silueta en el plano. */
+  /** Cómo aparece: «Diego», «una silueta junto a la ventana». */
   forma: string;
-  rol: RolMencion;
+  rol: RolAparicion;
   confianza: number;
 }
 
@@ -223,7 +206,7 @@ export type TipoRelacion =
 
 export type FuenteRelacion = 'metadatos' | 'wikidata' | 'modelo' | 'usuario';
 
-/** Dos documentos (o dos entidades, con el prefijo «ent:») unidos. `origen` adapta, traduce, edita o cita a `destino`. */
+/** Dos documentos unidos. `origen` adapta, traduce, edita o cita a `destino`. (Las citas bibliográficas detectadas ya están en el grafo de citas de @scholaris/funciones.) */
 export interface Relacion {
   id: string;
   origen: string;
@@ -269,27 +252,5 @@ export interface Alineacion {
   confianza: number;
 }
 
-// ---------------------------------------------------------------------------
-// Memoria
-// ---------------------------------------------------------------------------
-
-export type TipoRecuerdo = 'pregunta' | 'respuesta' | 'hallazgo' | 'nota' | 'hipotesis' | 'decision' | 'preferencia';
-
-/** Lo que se ha investigado, para no perderlo. */
-export interface Recuerdo {
-  id: string;
-  tipo: TipoRecuerdo;
-  texto: string;
-  evidencias: Evidencia[];
-  documentos: string[];
-  /** La biblioteca (proyecto) en que se hizo, si la hay. */
-  proyecto?: string;
-  fuente: 'investigar' | 'usuario' | 'sistema';
-  creado: string;
-  fijado?: boolean;
-  /** Recuerdo del que cuelga (una respuesta, de su pregunta). */
-  padre?: string;
-}
-
 /** Objetivos de un vector además de los de la capa literal. */
-export type ObjetivoVectorComprension = 'ficha' | 'entidad' | 'recuerdo';
+export type ObjetivoVectorComprension = 'ficha' | 'entidad';

@@ -246,8 +246,8 @@ export interface EspacioVectorial {
   modalidades: Modalidad[];
 }
 
-/** A qué pertenece un vector: la capa literal (fragmento, unidad, figura) o la de comprensión (ficha, entidad, recuerdo). */
-export type ObjetivoVector = 'fragmento' | 'unidad' | 'figura' | 'ficha' | 'entidad' | 'recuerdo';
+/** A qué pertenece un vector: la capa literal (fragmento, unidad, figura) o la de comprensión (ficha, entidad). */
+export type ObjetivoVector = 'fragmento' | 'unidad' | 'figura' | 'ficha' | 'entidad';
 
 export interface Vector {
   objetivo: ObjetivoVector;

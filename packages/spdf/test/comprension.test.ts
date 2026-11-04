@@ -2,13 +2,12 @@
  * La capa de comprensión (SPDF 4.2) de ida y vuelta contra la base real: el contrato
  * que comparten la ingesta, la capa transmedia, Investigar y la exportación.
  */
-import type { Alineacion, Documento, Entidad, Evidencia, Ficha, Mencion, Recuerdo, Relacion, Segmento } from '@scholaris/nucleo';
+import type { Alineacion, Aparicion, Documento, Evidencia, Ficha, Relacion, Segmento } from '@scholaris/nucleo';
 import { describe, expect, it } from 'vitest';
 import { crearSpdf } from '../src/archivo.js';
 import {
-  borrarComprension, borrarEntidadesHuerfanas, buscarEntidades, buscarFichas, buscarRecuerdos, entidadesDeDocumento, entidadPorQid,
-  escribirAlineaciones, escribirEntidades, escribirFichas, escribirMenciones, escribirRecuerdos, escribirRelaciones, escribirSegmentos,
-  leerAlineaciones, leerFichas, leerMenciones, leerRecuerdos, leerRelaciones, leerSegmentos, segmentosEnTiempo,
+  aparicionesEnTiempo, borrarComprension, buscarFichas, escribirAlineaciones, escribirApariciones, escribirFichas, escribirRelaciones,
+  escribirSegmentos, leerAlineaciones, leerApariciones, leerFichas, leerRelaciones, leerSegmentos, segmentosEnTiempo,
 } from '../src/comprension.js';
 import { escribirDocumento } from '../src/repositorio.js';
 
@@ -30,7 +29,7 @@ const coppeliaPelicula: Evidencia = {
 };
 
 describe('comprensión: repositorio', () => {
-  it('segmentos, fichas, entidades, menciones, relaciones, alineaciones y memoria', async () => {
+  it('segmentos, fichas, apariciones, relaciones y alineaciones', async () => {
     const a = await crearSpdf();
     const sql = a.sql;
     await escribirDocumento(sql, base('cuento', 'pdf_escaneado', 'El lobo, el bosque y el hombre nuevo'));
@@ -60,21 +59,16 @@ describe('comprensión: repositorio', () => {
     expect(leida?.evidencias[0]?.ancla).toMatchObject({ region: { x: 0.1 }, instante: 421 });
     expect((await buscarFichas(sql, 'encuadre helado')).map((f) => f.id)).toEqual(['fi1']);
 
-    // La misma entidad en las dos obras.
-    const diego: Entidad = { id: 'ent-diego', tipo: 'personaje', nombre: 'Diego', alias: ['el maricón', 'Diego'], qid: 'Q999', datos: { interpretadoPor: 'Jorge Perugorría' } };
-    const lezama: Entidad = { id: 'ent-lezama', tipo: 'persona', nombre: 'José Lezama Lima', alias: ['Lezama'], qid: 'Q370941' };
-    const huerfana: Entidad = { id: 'ent-nada', tipo: 'objeto', nombre: 'Taza de Sèvres', alias: [] };
-    await escribirEntidades(sql, [diego, lezama, huerfana]);
-    const menciones: Mencion[] = [
+    // Dónde aparece Diego (entidad del grafo de la biblioteca) en las dos obras, y Lezama en la película.
+    const apariciones: Aparicion[] = [
       { id: 'm1', entidad: 'ent-diego', documento: 'cuento', ancla: coppeliaCuento.ancla, forma: 'Diego', rol: 'nombrado', confianza: 1 },
       { id: 'm2', entidad: 'ent-diego', documento: 'pelicula', segmento: 'es1', ancla: coppeliaPelicula.ancla, forma: 'Diego', rol: 'visible', confianza: 0.97 },
       { id: 'm3', entidad: 'ent-lezama', documento: 'pelicula', segmento: 'es2', ancla: { tipo: 'tiempo', t0: 600, t1: 612 }, forma: 'Lezama', rol: 'nombrado', confianza: 1 },
     ];
-    await escribirMenciones(sql, menciones);
-    expect((await leerMenciones(sql, { entidad: 'ent-diego' })).map((m) => m.documento)).toEqual(['cuento', 'pelicula']);
-    expect((await entidadPorQid(sql, 'Q370941'))?.nombre).toBe('José Lezama Lima');
-    expect((await buscarEntidades(sql, 'Lezama')).map((e) => e.id)).toEqual(['ent-lezama']);
-    expect((await entidadesDeDocumento(sql, 'pelicula')).map((e) => [e.id, e.menciones])).toEqual([['ent-diego', 1], ['ent-lezama', 1]]);
+    await escribirApariciones(sql, apariciones);
+    expect((await leerApariciones(sql, { entidad: 'ent-diego' })).map((m) => m.documento)).toEqual(['cuento', 'pelicula']);
+    expect((await leerApariciones(sql, { entidad: 'ent-diego', documento: 'pelicula' }))[0]?.ancla).toMatchObject({ instante: 421, region: { w: 0.3 } });
+    expect((await aparicionesEnTiempo(sql, 'pelicula', 400, 620)).map((m) => m.id)).toEqual(['m2', 'm3']);
 
     // La película adapta el cuento; la escena de Coppelia se alinea con su pasaje.
     const relacion: Relacion = { id: 'r1', origen: 'pelicula', destino: 'cuento', tipo: 'adaptacion_de', evidencias: [], confianza: 0.99, fuente: 'wikidata', creada: '2026-11-04T00:00:00.000Z' };
@@ -90,24 +84,14 @@ describe('comprensión: repositorio', () => {
     expect(al[1]?.b).toBeUndefined();
     expect((await leerAlineaciones(sql, { segmento: 'es1' })).map((x) => x.id)).toEqual(['al1']);
 
-    // Memoria de la investigación.
-    const pregunta: Recuerdo = { id: 'q1', tipo: 'pregunta', texto: '¿Cómo cambia Coppelia entre el cuento y la película?', evidencias: [], documentos: ['cuento', 'pelicula'], proyecto: 'tfg', fuente: 'investigar', creado: '2026-11-04T10:00:00.000Z' };
-    const respuesta: Recuerdo = { id: 'a1', tipo: 'respuesta', texto: 'En el cuento Coppelia es un recuerdo narrado; en la película, un espacio filmado.', evidencias: [coppeliaCuento, coppeliaPelicula], documentos: ['cuento', 'pelicula'], proyecto: 'tfg', fuente: 'investigar', creado: '2026-11-04T10:01:00.000Z', padre: 'q1', fijado: true };
-    await escribirRecuerdos(sql, [pregunta, respuesta]);
-    expect((await leerRecuerdos(sql, { proyecto: 'tfg' })).map((r) => r.id)).toEqual(['a1', 'q1']);
-    expect((await leerRecuerdos(sql, { padre: 'q1' }))[0]?.evidencias).toHaveLength(2);
-    expect((await buscarRecuerdos(sql, 'Coppelia filmado')).map((r) => r.id)).toContain('a1');
-
     // Rehacer la comprensión de la película: fuera lo suyo, la biblioteca se queda.
     await borrarComprension(sql, 'pelicula');
     expect(await leerSegmentos(sql, 'pelicula')).toEqual([]);
     expect(await leerFichas(sql, { documento: 'pelicula' })).toEqual([]);
-    expect(await leerMenciones(sql, { documento: 'pelicula' })).toEqual([]);
+    expect(await leerApariciones(sql, { documento: 'pelicula' })).toEqual([]);
+    expect(await leerApariciones(sql, { documento: 'cuento' })).toHaveLength(1);
     expect(await leerAlineaciones(sql, { relacion: 'r1' })).toEqual([]);
     expect(await leerRelaciones(sql, 'pelicula')).toHaveLength(1);
-    // Lezama ya no tiene menciones; Diego sigue en el cuento.
-    expect((await borrarEntidadesHuerfanas(sql)).sort()).toEqual(['ent-lezama', 'ent-nada']);
-    expect((await buscarEntidades(sql, 'Diego')).map((e) => e.id)).toEqual(['ent-diego']);
     a.cerrar();
   });
 });

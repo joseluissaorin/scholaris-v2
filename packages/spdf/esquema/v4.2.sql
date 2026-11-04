@@ -241,52 +241,25 @@ CREATE TRIGGER IF NOT EXISTS fichas_au AFTER UPDATE ON fichas BEGIN
   INSERT INTO fichas_fts(rowid, texto, clase) VALUES (new.n, new.texto, new.clase);
 END;
 
--- Entidades: una para toda la biblioteca (personas, personajes, lugares, obras, conceptos…).
-CREATE TABLE IF NOT EXISTS entidades (
-  n            INTEGER PRIMARY KEY,
-  id           TEXT NOT NULL UNIQUE,
-  tipo         TEXT NOT NULL,            -- TipoEntidad
-  nombre       TEXT NOT NULL,
-  alias        TEXT NOT NULL DEFAULT '[]',   -- JSON string[], en cualquier lengua
-  etiquetas    TEXT,                     -- JSON {idioma: nombre}
-  qid          TEXT,                     -- Wikidata
-  descripcion  TEXT,
-  datos        TEXT                      -- JSON
-);
-CREATE INDEX IF NOT EXISTS entidades_qid ON entidades(qid);
-CREATE INDEX IF NOT EXISTS entidades_tipo ON entidades(tipo, nombre);
-CREATE VIRTUAL TABLE IF NOT EXISTS entidades_fts USING fts5(
-  nombre, alias, descripcion,
-  content='entidades', content_rowid='n',
-  tokenize='unicode61 remove_diacritics 2'
-);
-CREATE TRIGGER IF NOT EXISTS entidades_ai AFTER INSERT ON entidades BEGIN
-  INSERT INTO entidades_fts(rowid, nombre, alias, descripcion) VALUES (new.n, new.nombre, new.alias, new.descripcion);
-END;
-CREATE TRIGGER IF NOT EXISTS entidades_ad AFTER DELETE ON entidades BEGIN
-  INSERT INTO entidades_fts(entidades_fts, rowid, nombre, alias, descripcion) VALUES ('delete', old.n, old.nombre, old.alias, old.descripcion);
-END;
-CREATE TRIGGER IF NOT EXISTS entidades_au AFTER UPDATE ON entidades BEGIN
-  INSERT INTO entidades_fts(entidades_fts, rowid, nombre, alias, descripcion) VALUES ('delete', old.n, old.nombre, old.alias, old.descripcion);
-  INSERT INTO entidades_fts(rowid, nombre, alias, descripcion) VALUES (new.n, new.nombre, new.alias, new.descripcion);
-END;
-
--- Menciones: cada aparición de una entidad en un documento.
-CREATE TABLE IF NOT EXISTS menciones (
+-- Apariciones: dónde está una entidad en el material, con la precisión del soporte
+-- (una región de un fotograma en un instante, una voz en un tramo, unos caracteres
+-- de una página). Las entidades son las del grafo de la biblioteca de
+-- @scholaris/funciones (tablas «entidades» y «menciones», esta última solo de texto).
+CREATE TABLE IF NOT EXISTS apariciones (
   id           TEXT PRIMARY KEY,
-  entidad      TEXT NOT NULL,
+  entidad      TEXT NOT NULL,            -- id en «entidades» (grafo de la biblioteca)
   documento    TEXT NOT NULL REFERENCES documentos(id) ON DELETE CASCADE,
   segmento     TEXT,
-  ancla        TEXT NOT NULL,
+  ancla        TEXT NOT NULL,            -- JSON AnclaMaterial
   ancla_fin    TEXT,
-  forma        TEXT NOT NULL,
-  rol          TEXT NOT NULL,            -- RolMencion
+  forma        TEXT NOT NULL,            -- cómo aparece: «Diego», «una silueta junto a la ventana»
+  rol          TEXT NOT NULL,            -- RolAparicion
   confianza    REAL NOT NULL DEFAULT 1,
   t0           REAL,                     -- desnormalizados para ordenar y filtrar
   fisica       INTEGER
 );
-CREATE INDEX IF NOT EXISTS menciones_entidad ON menciones(entidad, documento);
-CREATE INDEX IF NOT EXISTS menciones_doc ON menciones(documento, segmento);
+CREATE INDEX IF NOT EXISTS apariciones_entidad ON apariciones(entidad, documento);
+CREATE INDEX IF NOT EXISTS apariciones_doc ON apariciones(documento, segmento);
 
 -- Relaciones entre obras (o entre entidades, con «ent:»): adaptación, traducción, edición…
 CREATE TABLE IF NOT EXISTS relaciones (
@@ -323,34 +296,3 @@ CREATE TABLE IF NOT EXISTS alineaciones (
 CREATE INDEX IF NOT EXISTS alineaciones_relacion ON alineaciones(relacion, orden);
 CREATE INDEX IF NOT EXISTS alineaciones_a ON alineaciones(doc_a, segmento_a);
 CREATE INDEX IF NOT EXISTS alineaciones_b ON alineaciones(doc_b, segmento_b);
-
--- Memoria: preguntas, respuestas, hallazgos, notas e hipótesis de la investigación.
-CREATE TABLE IF NOT EXISTS memoria (
-  n            INTEGER PRIMARY KEY,
-  id           TEXT NOT NULL UNIQUE,
-  tipo         TEXT NOT NULL,            -- TipoRecuerdo
-  texto        TEXT NOT NULL,
-  evidencias   TEXT NOT NULL DEFAULT '[]',
-  documentos   TEXT NOT NULL DEFAULT '[]',
-  proyecto     TEXT,
-  fuente       TEXT NOT NULL,            -- investigar | usuario | sistema
-  creado       TEXT NOT NULL,
-  fijado       INTEGER NOT NULL DEFAULT 0,
-  padre        TEXT
-);
-CREATE INDEX IF NOT EXISTS memoria_proyecto ON memoria(proyecto, creado);
-CREATE VIRTUAL TABLE IF NOT EXISTS memoria_fts USING fts5(
-  texto,
-  content='memoria', content_rowid='n',
-  tokenize='unicode61 remove_diacritics 2'
-);
-CREATE TRIGGER IF NOT EXISTS memoria_ai AFTER INSERT ON memoria BEGIN
-  INSERT INTO memoria_fts(rowid, texto) VALUES (new.n, new.texto);
-END;
-CREATE TRIGGER IF NOT EXISTS memoria_ad AFTER DELETE ON memoria BEGIN
-  INSERT INTO memoria_fts(memoria_fts, rowid, texto) VALUES ('delete', old.n, old.texto);
-END;
-CREATE TRIGGER IF NOT EXISTS memoria_au AFTER UPDATE ON memoria BEGIN
-  INSERT INTO memoria_fts(memoria_fts, rowid, texto) VALUES ('delete', old.n, old.texto);
-  INSERT INTO memoria_fts(rowid, texto) VALUES (new.n, new.texto);
-END;
