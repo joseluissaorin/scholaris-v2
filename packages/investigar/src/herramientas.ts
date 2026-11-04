@@ -7,7 +7,7 @@
 import { buscarEnCapas, evidenciaDeResultado, modoDeAncla, type FiltrosCapas } from '@scholaris/busqueda';
 import type { Ancla, AnclaMaterial, Evidencia, TipoSegmento } from '@scholaris/nucleo';
 import { anclaACita, enLista, tiempoACadena } from '@scholaris/nucleo';
-import { leerAlineaciones, leerApariciones, leerFichas, leerRelaciones, leerSegmento, leerSegmentos } from '@scholaris/spdf';
+import { leerAlineaciones, leerApariciones, leerFichas, leerRelaciones, leerSegmento, leerSegmentos, textoDeLado } from '@scholaris/spdf';
 import { buscarEntidades, caminoEntidades, detalleNodo, entidadesDocumento, fichaEntidad, lineaTemporalEntidad, vecinosEntidad } from '@scholaris/funciones';
 import {
   apuntar, documentosDisponibles, fallo, fichaDe, lineaPrueba, recortar, resolverDocumento, rotuloDocumento, segundosDe, texto, tramoDe,
@@ -547,16 +547,20 @@ const alinear: Herramienta = {
     for (const a of relevantes) {
       const lados = [a.a, a.b].filter((x): x is NonNullable<typeof x> => !!x);
       const ids: string[] = [];
+      const textos: string[] = [];
       for (const l of lados) {
         const us = await quieto(() => unidadesDeTramo(sql, l.documento, l.ancla.tipo === 'tiempo' ? { tiempo: [l.ancla.t0, l.anclaFin?.tipo === 'tiempo' ? l.anclaFin.t1 : l.ancla.t1] } : l.ancla.tipo === 'pagina' ? { paginas: [l.ancla.fisica, l.anclaFin?.tipo === 'pagina' ? l.anclaFin.fisica : l.ancla.fisica] } : {}, 1), []);
         const u = us[0];
-        const p = apuntar(ctx, { documento: l.documento, ancla: l.ancla, ...(l.anclaFin ? { anclaFin: l.anclaFin } : {}), cita: u ? recortar(u.texto, 600) : '', modo: modoDeAncla(l.ancla, ctx.docs.get(l.documento)?.tipo), ...(u ? { unidad: u.unidad } : {}) },
+        // El texto literal de ese lado (sus caracteres, si la alineación es fina): con él se puede citar.
+        const literal = (await quieto(() => textoDeLado(sql, l, 1500), '')).trim() || (u ? u.texto : '');
+        textos.push(literal);
+        const p = apuntar(ctx, { documento: l.documento, ancla: l.ancla, ...(l.anclaFin ? { anclaFin: l.anclaFin } : {}), cita: recortar(literal, 900), modo: modoDeAncla(l.ancla, ctx.docs.get(l.documento)?.tipo), ...(u ? { unidad: u.unidad } : {}) },
           { capa: 'comprension', herramienta: 'alinear', ...(u ? { ambito: u } : {}), nota: `Lado de una alineación (${a.tipo})` });
         ids.push(p.id);
         nuevas.push(p.id);
       }
-      const desc = lados.map((l, i) => `${rotuloDocumento(ctx, l.documento)} ${anclaACita(l.ancla, l.anclaFin)} [${ids[i]}]`).join(' ↔ ');
-      lineas.push(`${a.tipo}: ${desc}${lados.length < 2 ? ' (el otro lado no existe)' : ''}\n  ${recortar(a.nota, 500)}`);
+      const desc = lados.map((l, i) => `${rotuloDocumento(ctx, l.documento)} ${anclaACita(l.ancla, l.anclaFin)} [${ids[i]}]:\n    «${recortar(textos[i] ?? '', 450)}»`).join('\n  ↔ ');
+      lineas.push(`${a.tipo}: ${desc}${lados.length < 2 ? '\n  (el otro lado no existe)' : ''}\n  Nota: ${recortar(a.nota, 400)}`);
     }
     if (!relevantes.length) {
       // Sin alineación calculada: los pasajes más parecidos de las otras obras.

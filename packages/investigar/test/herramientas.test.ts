@@ -113,8 +113,10 @@ describe('herramientas de lectura', () => {
       { id: 'r1:f0001', relacion: 'r1', orden: 2, tipo: 'transformado', nota: 'Fina y estrecha.', a: { documento: PELICULA, ancla: { tipo: 'tiempo', t0: 600, t1: 605 } }, b: { documento: CUENTO, ancla: { ...pag, caracteres: [100, 160] } }, confianza: 0.9 },
     ]);
     const r = await h('alinear').ejecutar({ documento: CUENTO, paginas: { desde: 2, hasta: 2 } }, ctx);
-    const notas = [...r.texto.matchAll(/\n {2}(.+)/g)].map((m) => m[1]);
+    const notas = [...r.texto.matchAll(/\n {2}Nota: (.+)/g)].map((m) => m[1]);
     expect(notas).toEqual(['Fina y estrecha.', 'Fina y ancha.', 'Gruesa.']);
+    // Cada lado con su texto literal (el de la película, el de su tramo de transcripción).
+    expect(r.texto).toContain('«**Diego:** No pude resistir la tentación.');
   });
 
   it('alinear: las alineaciones calculadas o, si no hay, lo más parecido de la otra obra', async () => {
