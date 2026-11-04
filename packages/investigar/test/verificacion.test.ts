@@ -268,17 +268,6 @@ describe('lo visual y lo sonoro se vuelve a mirar', () => {
     }
   });
 
-  it('vuelve a mirar con el modelo de la visión, no con el del agente', async () => {
-    const { ctx, modelo } = ctxCon((p) => ({ json: juicio(textoDe(p), () => null, () => 'visual') }));
-    const vision = new ModeloGuion(() => ({ json: { juicios: [{ n: 1, veredicto: 'si', nota: 'Se ve así.' }] } }));
-    (ctx.p.modelos as { vision?: unknown }).vision = vision;
-    const n = new Numerador(ctx);
-    const v = await verificar(ctx, n, n.sustituir('Marta aparece en primer plano junto a la puerta [P3].'), { sitios: 4 });
-    expect(vision.peticiones).toHaveLength(1);
-    expect(modelo.peticiones.some((p) => JSON.stringify(p.esquema ?? {}).includes('juicios'))).toBe(false);
-    expect(v.frases[0]).toMatchObject({ veredicto: 'respaldada', revisada: true });
-  });
-
   it('sin presupuesto de sitios no se mira nada', async () => {
     let miradas = 0;
     const { ctx } = ctxCon((p) => {

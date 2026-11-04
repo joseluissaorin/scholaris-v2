@@ -45,9 +45,8 @@ export interface ModelosInvestigar {
   /** El que corrige las frases que no están del todo sostenidas (por defecto, el verificador). */
   corrector?: ModeloAgente;
   /**
-   * El que vuelve a mirar o a escuchar para comprobar lo visual y lo sonoro (por defecto, el de
-   * la visión: las revisiones van todas a la vez y Gemini atiende las del modelo grande de una en
-   * una con la misma clave; con las reglas estrictas de la revisión, el rápido acierta igual).
+   * El que vuelve a mirar o a escuchar para comprobar lo visual y lo sonoro (por defecto, el
+   * del agente: tiene que ver los detalles mejor que quien los describió al investigar).
    */
   revisor?: ModeloAgente;
 }
