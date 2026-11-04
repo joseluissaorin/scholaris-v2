@@ -52,12 +52,12 @@ async function lleno(): Promise<ArchivoSpdf> {
 }
 
 describe('ArchivoSpdf', () => {
-  it('crea un SPDF 4.1 vacío', async () => {
+  it('crea un SPDF 4.2 vacío', async () => {
     const a = await crearSpdf();
     expect(await a.version()).toBe(VERSION_SPDF);
     expect(await a.documentos()).toEqual([]);
     const [v] = await a.sql.ejecutar<{ user_version: number }>('PRAGMA user_version');
-    expect(v?.user_version).toBe(410);
+    expect(v?.user_version).toBe(420);
     a.cerrar();
   });
 

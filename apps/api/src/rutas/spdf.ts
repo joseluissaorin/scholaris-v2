@@ -6,7 +6,7 @@
  */
 import type { Hono } from 'hono';
 import type { Documento } from '@scholaris/nucleo';
-import { crearSpdf, leerDocumento } from '@scholaris/spdf';
+import { crearSpdf, leerDocumento, VERSION_SPDF } from '@scholaris/spdf';
 import type { CompletarPartesImportacion, ImportacionSpdf, ImportarRecursos, Ok, PedirPartesImportacion, RecursosFirmados, UrlsPartes } from '@scholaris/contrato';
 import { leerBiblioteca } from '../compartido/estanteria.js';
 import type { Entorno } from '../entorno.js';
@@ -87,7 +87,7 @@ export async function armarSpdf(p: PuertosUsuario, d: Documento, o: OpcionesArma
  * estantería, como siempre (lo usan la web, las copias entre bibliotecas y los paquetes).
  */
 export function versionPedida(v: string | undefined): 4 | 5 {
-  if (v === undefined || v === '' || v === '4' || v === '4.1') return 4;
+  if (v === undefined || v === '' || v === '4' || v === '4.1' || v === '4.2') return 4;
   if (v === '5' || v === '5.0') return 5;
   return fallo('peticion_invalida', `Versión de SPDF desconocida: «${v}». Usa 5 (SPDF 5.0) o 4 (4.1).`);
 }
@@ -108,7 +108,7 @@ export function rutasSpdf(app: Hono<Entorno>): void {
     const h = new Headers({
       'content-type': version === 5 ? MEDIO_SPDF_50 : 'application/x-spdf',
       'content-disposition': `attachment; filename*=UTF-8''${encodeURIComponent(nombre)}`,
-      'x-spdf-version': version === 5 ? '5.0' : '4.1',
+      'x-spdf-version': version === 5 ? '5.0' : VERSION_SPDF,
     });
     if (incrustar && omitidos > 0) {
       // Límite claro: el servidor incrusta hasta MAX_INCRUSTADO; el resto se queda fuera del fichero.

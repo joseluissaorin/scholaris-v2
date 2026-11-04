@@ -29,15 +29,16 @@ function puertoNode(db: DatabaseSync, opciones: { sinPragma?: boolean } = {}): S
 }
 
 describe('esquema v4.1', () => {
-  it('la constante coincide con esquema/v4.1.sql', () => {
-    const sql = readFileSync(join(import.meta.dirname, '../esquema/v4.1.sql'), 'utf8');
+  it('la constante coincide con esquema/v4.2.sql', () => {
+    const sql = readFileSync(join(import.meta.dirname, '../esquema/v4.2.sql'), 'utf8');
     expect(ESQUEMA_V4).toBe(sql);
   });
 
   it('partirSentencias respeta los disparadores, los comentarios y las cadenas', () => {
     const s = partirSentencias(ESQUEMA_V4);
     const disparadores = s.filter((x) => /^CREATE TRIGGER/i.test(x));
-    expect(disparadores).toHaveLength(3);
+    // Tres de los fragmentos y tres por cada tabla FTS de la comprensión (fichas, entidades, memoria).
+    expect(disparadores).toHaveLength(12);
     for (const d of disparadores) expect(d.trimEnd().endsWith('END')).toBe(true);
     expect(s.some((x) => x.startsWith('--'))).toBe(false);
     expect(partirSentencias("INSERT INTO t VALUES ('a;b'); -- c;d\nSELECT \"x;y\" FROM t;")).toEqual(["INSERT INTO t VALUES ('a;b')", 'SELECT "x;y" FROM t']);

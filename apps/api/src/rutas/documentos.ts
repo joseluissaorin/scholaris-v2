@@ -442,6 +442,8 @@ export async function volcarDocumento(p: PuertosUsuario, d: Documento): Promise<
   const vectores: VolcadoDocumento['vectores'] = [];
   for (const e of espacios) {
     for (const v of await leerVectores(p.sql, { espacio: e.id, documento: d.id })) {
+      // El volcado es de la capa literal; la comprensión (fichas, entidades, recuerdos) va aparte.
+      if (v.objetivo !== 'fragmento' && v.objetivo !== 'unidad' && v.objetivo !== 'figura') continue;
       vectores.push({ objetivo: v.objetivo, id: v.id, espacio: v.espacio, base64: aBase64Url(vectorABytes(v.valores)) });
     }
   }

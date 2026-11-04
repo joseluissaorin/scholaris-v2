@@ -530,12 +530,12 @@ export function montarV1(app: AppPuerta, pl: Plataforma, autenticar: (r: Request
   }));
 
   // GET /documentos/{id}/spdf?version=5: el documento como fichero SPDF (5.0, el estándar
-  // abierto, por defecto; `version=4` da el 4.1 de la estantería). Pasa tal cual por la v2.
+  // abierto, por defecto; `version=4` da el 4.2 de la estantería). Pasa tal cual por la v2.
   app.get(`${V}/documentos/:id/spdf`, conClave(async (c, io) => {
     const id = encodeURIComponent(c.req.param('id')!);
     const version = c.req.query('version') ?? '5';
-    if (!['4', '4.1', '5', '5.0'].includes(version)) {
-      falla('peticion_invalida', `Versión de SPDF desconocida: «${version}». Usa 5 (SPDF 5.0) o 4 (4.1).`, `Unknown SPDF version «${version}». Use 5 (SPDF 5.0) or 4 (4.1).`);
+    if (!['4', '4.1', '4.2', '5', '5.0'].includes(version)) {
+      falla('peticion_invalida', `Versión de SPDF desconocida: «${version}». Usa 5 (SPDF 5.0) o 4 (4.2).`, `Unknown SPDF version «${version}». Use 5 (SPDF 5.0) or 4 (4.2).`);
     }
     const q = new URLSearchParams({ version });
     for (const k of ['incrustar', 'originales', 'vectores']) { const v = c.req.query(k); if (v !== undefined) q.set(k, v); }

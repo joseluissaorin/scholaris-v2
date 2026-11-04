@@ -12,6 +12,7 @@ export * from './motor.js';
 export * from './puerto.js';
 export * from './vectores.js';
 export * from './repositorio.js';
+export * from './comprension.js';
 export * from './archivo.js';
 export * from './migrar-v3.js';
 export * from './limpieza.js';

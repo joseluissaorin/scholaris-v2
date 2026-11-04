@@ -1,21 +1,24 @@
 /**
- * El esquema SPDF 4.1 como cadena, para poder aplicarlo en cualquier plataforma
- * (navegador, Workers, Node) sin leer ficheros. `esquema/v4.1.sql` es una copia
+ * El esquema SPDF 4.2 como cadena, para poder aplicarlo en cualquier plataforma
+ * (navegador, Workers, Node) sin leer ficheros. `esquema/v4.2.sql` es una copia
  * legible; una prueba comprueba que ambos coinciden. `esquema/v4.0.sql` queda
  * como referencia histórica (las pruebas de migración lo usan).
  *
  * 4.1: `fragmentos.texto_busqueda`, la capa de ortografía modernizada
  * (@scholaris/normalizacion), indexada en FTS5 junto al texto fiel.
+ * 4.2: la capa de comprensión (segmentos, fichas, entidades, menciones,
+ * relaciones, alineaciones y memoria; docs/COMPRENSION.md). Solo añade tablas:
+ * una base 4.1 pasa a 4.2 con aplicar el esquema.
  */
 
 import type { SQL, ValorSQL } from "@scholaris/nucleo";
 import { limpiarDescripcionV1, limpiarMarcadoOCR } from "@scholaris/nucleo";
 import { epocaDeDocumento, lenguaDe, textoBusqueda, type Epoca } from "@scholaris/normalizacion";
 
-export const VERSION_SPDF = "4.1";
-export const USER_VERSION_SPDF = 410;
+export const VERSION_SPDF = "4.2";
+export const USER_VERSION_SPDF = 420;
 
-export const ESQUEMA_V4 = `-- SPDF 4.1: un documento leído y citable, de cualquier cosa.
+export const ESQUEMA_V4 = `-- SPDF 4.2: un documento leído y citable, de cualquier cosa, y lo que se entiende de él.
 --
 -- Un .spdf es una base SQLite comprimida con gzip. Este esquema es también el de
 -- la «estantería» (el Durable Object de cada usuario): allí conviven muchos
@@ -33,7 +36,7 @@ export const ESQUEMA_V4 = `-- SPDF 4.1: un documento leído y citable, de cualqu
 -- Este fichero es una copia legible de «ESQUEMA_V4» (packages/spdf/src/esquema.ts),
 -- que es la fuente de verdad; una prueba comprueba que coinciden. «aplicarEsquema»
 -- ejecuta las sentencias una a una sobre cualquier puerto SQL (sqlite-wasm,
--- Durable Object, better-sqlite3), y fija «PRAGMA user_version = 410» solo donde
+-- Durable Object, better-sqlite3), y fija «PRAGMA user_version = 420» solo donde
 -- la plataforma lo permite: la versión vive además en la tabla «spdf».
 
 -- Clave/valor del fichero: spdf_version, creado, generador, huella_original…
@@ -192,6 +195,185 @@ CREATE TABLE IF NOT EXISTS procedencia (
   cuando      TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS procedencia_doc ON procedencia(documento);
+
+-- ===========================================================================
+-- 4.2: la capa de comprensión (docs/COMPRENSION.md). Todo derivado, versionado
+-- y anclado: las anclas son JSON con la precisión material opcional
+-- («caracteres» [inicio, fin) en puntos de código NFC, «region» {x,y,w,h} en
+-- fracciones de la imagen de la unidad, «instante» en vídeo). Las evidencias son
+-- listas JSON de {documento, ancla, anclaFin?, cita?, modo, unidad?, fragmento?, figura?}.
+-- En SPDF 5.0 viaja como extensión opcional «x_scholaris_comprension».
+-- ===========================================================================
+
+-- Estructura: partes, capítulos, escenas, planos, poemas, temas… en árbol.
+CREATE TABLE IF NOT EXISTS segmentos (
+  id           TEXT PRIMARY KEY,
+  documento    TEXT NOT NULL REFERENCES documentos(id) ON DELETE CASCADE,
+  padre        TEXT,
+  nivel        INTEGER NOT NULL,
+  orden        INTEGER NOT NULL,         -- orden de lectura en todo el árbol (preorden)
+  tipo         TEXT NOT NULL,            -- TipoSegmento
+  titulo       TEXT NOT NULL,
+  ancla        TEXT NOT NULL,            -- JSON AnclaMaterial
+  ancla_fin    TEXT,
+  unidad_desde TEXT NOT NULL,
+  unidad_hasta TEXT NOT NULL,
+  resumen      TEXT,
+  origen       TEXT NOT NULL,            -- leido | deducido | modelo
+  confianza    REAL NOT NULL DEFAULT 1,
+  t0           REAL,                     -- desnormalizado en audio y vídeo
+  t1           REAL
+);
+CREATE INDEX IF NOT EXISTS segmentos_doc ON segmentos(documento, orden);
+
+-- Fichas: el análisis de un documento, un segmento, una entidad, una figura o una relación.
+CREATE TABLE IF NOT EXISTS fichas (
+  n            INTEGER PRIMARY KEY,
+  id           TEXT NOT NULL UNIQUE,
+  documento    TEXT,                     -- NULL en las de una entidad o una relación
+  objetivo     TEXT NOT NULL,            -- documento | segmento | entidad | figura | relacion
+  objetivo_id  TEXT NOT NULL,
+  lente        TEXT NOT NULL,
+  clase        TEXT NOT NULL,            -- global | escena | capitulo | plano | personaje | …
+  idioma       TEXT,
+  texto        TEXT NOT NULL,            -- prosa analítica (se busca y se lee)
+  datos        TEXT NOT NULL DEFAULT '{}',
+  evidencias   TEXT NOT NULL DEFAULT '[]',
+  modelo       TEXT NOT NULL,
+  version      TEXT NOT NULL,
+  creada       TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS fichas_doc ON fichas(documento, clase);
+CREATE INDEX IF NOT EXISTS fichas_objetivo ON fichas(objetivo, objetivo_id);
+CREATE VIRTUAL TABLE IF NOT EXISTS fichas_fts USING fts5(
+  texto, clase,
+  content='fichas', content_rowid='n',
+  tokenize='unicode61 remove_diacritics 2'
+);
+CREATE TRIGGER IF NOT EXISTS fichas_ai AFTER INSERT ON fichas BEGIN
+  INSERT INTO fichas_fts(rowid, texto, clase) VALUES (new.n, new.texto, new.clase);
+END;
+CREATE TRIGGER IF NOT EXISTS fichas_ad AFTER DELETE ON fichas BEGIN
+  INSERT INTO fichas_fts(fichas_fts, rowid, texto, clase) VALUES ('delete', old.n, old.texto, old.clase);
+END;
+CREATE TRIGGER IF NOT EXISTS fichas_au AFTER UPDATE ON fichas BEGIN
+  INSERT INTO fichas_fts(fichas_fts, rowid, texto, clase) VALUES ('delete', old.n, old.texto, old.clase);
+  INSERT INTO fichas_fts(rowid, texto, clase) VALUES (new.n, new.texto, new.clase);
+END;
+
+-- Entidades: una para toda la biblioteca (personas, personajes, lugares, obras, conceptos…).
+CREATE TABLE IF NOT EXISTS entidades (
+  n            INTEGER PRIMARY KEY,
+  id           TEXT NOT NULL UNIQUE,
+  tipo         TEXT NOT NULL,            -- TipoEntidad
+  nombre       TEXT NOT NULL,
+  alias        TEXT NOT NULL DEFAULT '[]',   -- JSON string[], en cualquier lengua
+  etiquetas    TEXT,                     -- JSON {idioma: nombre}
+  qid          TEXT,                     -- Wikidata
+  descripcion  TEXT,
+  datos        TEXT                      -- JSON
+);
+CREATE INDEX IF NOT EXISTS entidades_qid ON entidades(qid);
+CREATE INDEX IF NOT EXISTS entidades_tipo ON entidades(tipo, nombre);
+CREATE VIRTUAL TABLE IF NOT EXISTS entidades_fts USING fts5(
+  nombre, alias, descripcion,
+  content='entidades', content_rowid='n',
+  tokenize='unicode61 remove_diacritics 2'
+);
+CREATE TRIGGER IF NOT EXISTS entidades_ai AFTER INSERT ON entidades BEGIN
+  INSERT INTO entidades_fts(rowid, nombre, alias, descripcion) VALUES (new.n, new.nombre, new.alias, new.descripcion);
+END;
+CREATE TRIGGER IF NOT EXISTS entidades_ad AFTER DELETE ON entidades BEGIN
+  INSERT INTO entidades_fts(entidades_fts, rowid, nombre, alias, descripcion) VALUES ('delete', old.n, old.nombre, old.alias, old.descripcion);
+END;
+CREATE TRIGGER IF NOT EXISTS entidades_au AFTER UPDATE ON entidades BEGIN
+  INSERT INTO entidades_fts(entidades_fts, rowid, nombre, alias, descripcion) VALUES ('delete', old.n, old.nombre, old.alias, old.descripcion);
+  INSERT INTO entidades_fts(rowid, nombre, alias, descripcion) VALUES (new.n, new.nombre, new.alias, new.descripcion);
+END;
+
+-- Menciones: cada aparición de una entidad en un documento.
+CREATE TABLE IF NOT EXISTS menciones (
+  id           TEXT PRIMARY KEY,
+  entidad      TEXT NOT NULL,
+  documento    TEXT NOT NULL REFERENCES documentos(id) ON DELETE CASCADE,
+  segmento     TEXT,
+  ancla        TEXT NOT NULL,
+  ancla_fin    TEXT,
+  forma        TEXT NOT NULL,
+  rol          TEXT NOT NULL,            -- RolMencion
+  confianza    REAL NOT NULL DEFAULT 1,
+  t0           REAL,                     -- desnormalizados para ordenar y filtrar
+  fisica       INTEGER
+);
+CREATE INDEX IF NOT EXISTS menciones_entidad ON menciones(entidad, documento);
+CREATE INDEX IF NOT EXISTS menciones_doc ON menciones(documento, segmento);
+
+-- Relaciones entre obras (o entre entidades, con «ent:»): adaptación, traducción, edición…
+CREATE TABLE IF NOT EXISTS relaciones (
+  id           TEXT PRIMARY KEY,
+  origen       TEXT NOT NULL,
+  destino      TEXT NOT NULL,
+  tipo         TEXT NOT NULL,            -- TipoRelacion
+  nota         TEXT,
+  evidencias   TEXT NOT NULL DEFAULT '[]',
+  confianza    REAL NOT NULL DEFAULT 1,
+  fuente       TEXT NOT NULL,            -- metadatos | wikidata | modelo | usuario
+  creada       TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS relaciones_origen ON relaciones(origen);
+CREATE INDEX IF NOT EXISTS relaciones_destino ON relaciones(destino);
+
+-- Alineaciones: correspondencias finas dentro de una relación (escena ↔ pasaje, traducción ↔ original).
+CREATE TABLE IF NOT EXISTS alineaciones (
+  id           TEXT PRIMARY KEY,
+  relacion     TEXT NOT NULL REFERENCES relaciones(id) ON DELETE CASCADE,
+  orden        INTEGER NOT NULL,
+  tipo         TEXT NOT NULL,            -- TipoCorrespondencia
+  doc_a        TEXT,
+  ancla_a      TEXT,
+  ancla_fin_a  TEXT,
+  segmento_a   TEXT,
+  doc_b        TEXT,
+  ancla_b      TEXT,
+  ancla_fin_b  TEXT,
+  segmento_b   TEXT,
+  nota         TEXT NOT NULL DEFAULT '',
+  confianza    REAL NOT NULL DEFAULT 1
+);
+CREATE INDEX IF NOT EXISTS alineaciones_relacion ON alineaciones(relacion, orden);
+CREATE INDEX IF NOT EXISTS alineaciones_a ON alineaciones(doc_a, segmento_a);
+CREATE INDEX IF NOT EXISTS alineaciones_b ON alineaciones(doc_b, segmento_b);
+
+-- Memoria: preguntas, respuestas, hallazgos, notas e hipótesis de la investigación.
+CREATE TABLE IF NOT EXISTS memoria (
+  n            INTEGER PRIMARY KEY,
+  id           TEXT NOT NULL UNIQUE,
+  tipo         TEXT NOT NULL,            -- TipoRecuerdo
+  texto        TEXT NOT NULL,
+  evidencias   TEXT NOT NULL DEFAULT '[]',
+  documentos   TEXT NOT NULL DEFAULT '[]',
+  proyecto     TEXT,
+  fuente       TEXT NOT NULL,            -- investigar | usuario | sistema
+  creado       TEXT NOT NULL,
+  fijado       INTEGER NOT NULL DEFAULT 0,
+  padre        TEXT
+);
+CREATE INDEX IF NOT EXISTS memoria_proyecto ON memoria(proyecto, creado);
+CREATE VIRTUAL TABLE IF NOT EXISTS memoria_fts USING fts5(
+  texto,
+  content='memoria', content_rowid='n',
+  tokenize='unicode61 remove_diacritics 2'
+);
+CREATE TRIGGER IF NOT EXISTS memoria_ai AFTER INSERT ON memoria BEGIN
+  INSERT INTO memoria_fts(rowid, texto) VALUES (new.n, new.texto);
+END;
+CREATE TRIGGER IF NOT EXISTS memoria_ad AFTER DELETE ON memoria BEGIN
+  INSERT INTO memoria_fts(memoria_fts, rowid, texto) VALUES ('delete', old.n, old.texto);
+END;
+CREATE TRIGGER IF NOT EXISTS memoria_au AFTER UPDATE ON memoria BEGIN
+  INSERT INTO memoria_fts(memoria_fts, rowid, texto) VALUES ('delete', old.n, old.texto);
+  INSERT INTO memoria_fts(rowid, texto) VALUES (new.n, new.texto);
+END;
 `;
 
 /**
@@ -365,7 +547,7 @@ export async function rellenarTextoBusqueda(sql: SQL, opciones: { lote?: number;
 }
 
 /**
- * Crea (o completa) el esquema SPDF 4.1 sobre cualquier puerto SQL, y migra una
+ * Crea (o completa) el esquema SPDF 4.2 sobre cualquier puerto SQL, y migra una
  * base 4.0 si la encuentra. Es idempotente: todas las sentencias llevan IF NOT
  * EXISTS y la migración mira antes qué falta. Las plataformas que no permiten
  * PRAGMA user_version (Durable Objects) se conforman con la tabla `spdf`.
