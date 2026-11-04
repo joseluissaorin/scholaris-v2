@@ -42,8 +42,13 @@ export interface ModelosInvestigar {
   vision?: ModeloAgente;
   /** El que verifica frase a frase (barato; por defecto, el agente). */
   verificador?: ModeloAgente;
-  /** El que corrige las frases que no están del todo sostenidas (por defecto, el redactor). */
+  /** El que corrige las frases que no están del todo sostenidas (por defecto, el verificador). */
   corrector?: ModeloAgente;
+  /**
+   * El que vuelve a mirar o a escuchar para comprobar lo visual y lo sonoro (por defecto, el
+   * del agente: tiene que ver los detalles mejor que quien los describió al investigar).
+   */
+  revisor?: ModeloAgente;
 }
 
 export interface PuertosInvestigar {

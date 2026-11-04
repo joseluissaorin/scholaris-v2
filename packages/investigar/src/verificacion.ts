@@ -207,10 +207,15 @@ async function juzgarFrases(ctx: ContextoHerramientas, numerador: Numerador, fra
     const pruebas = ids.map((id) => textoDePrueba(numerador, id)).filter(Boolean).join('\n');
     const lista = lote.map((i) => `${i}. ${frases[i]!.limpia}${frases[i]!.evidencias.length ? ` [marcas: ${frases[i]!.evidencias.join(', ')}]` : ' [sin marcas]'}`).join('\n');
     try {
-      const r = await modelo.turno({
+      const pet = {
         sistema: SISTEMA,
-        mensajes: [{ rol: 'usuario', partes: [{ tipo: 'texto', texto: `PRUEBAS:\n${pruebas || '(ninguna)'}\n\nFRASES:\n${lista}` }] }],
-        esquema: ESQUEMA, temperatura: 0, pensamiento: 'bajo', maxTokens: 8000, ...(ctx.signal ? { signal: ctx.signal } : {}),
+        mensajes: [{ rol: 'usuario' as const, partes: [{ tipo: 'texto' as const, texto: `PRUEBAS:\n${pruebas || '(ninguna)'}\n\nFRASES:\n${lista}` }] }],
+        esquema: ESQUEMA, temperatura: 0, pensamiento: 'bajo' as const, maxTokens: 8000, ...(ctx.signal ? { signal: ctx.signal } : {}),
+      };
+      // Si el modelo barato bloquea el lote (contenido literario delicado), lo juzga el del agente.
+      const r = await modelo.turno(pet).catch((e: Error) => {
+        if (modelo !== ctx.p.modelos.agente && /bloquead|PROHIBITED|SAFETY/i.test(e.message)) return ctx.p.modelos.agente.turno(pet);
+        throw e;
       });
       ctx.cuentas.apuntar(r.uso);
       for (const x of ((r.json as { frases?: Array<{ i: number; clase?: string; marcas?: Array<{ marca: string; veredicto: string; nota?: string }>; nota?: string }> })?.frases ?? [])) {
@@ -376,7 +381,8 @@ function citasEn(textoNuevo: string, permitidos: string[]): boolean {
  * Markdown nuevo y las frases que cambiaron.
  */
 async function corregir(ctx: ContextoHerramientas, numerador: Numerador, markdown: string, juzgadas: FraseJuzgada[]): Promise<{ markdown: string; cambiadas: string[] }> {
-  const modelo = ctx.p.modelos.corrector ?? ctx.p.modelos.redactor ?? ctx.p.modelos.agente;
+  // Un modelo rápido: corregir es ceñir y partir frases, no investigar (y la latencia cuenta).
+  const modelo = ctx.p.modelos.corrector ?? ctx.p.modelos.verificador ?? ctx.p.modelos.redactor ?? ctx.p.modelos.agente;
   const pendientes = juzgadas
     .map((f, i) => ({ f, i }))
     .filter(({ f }) => !f.tabla && (f.evidencias.some((id) => f.marcas[id]?.veredicto !== 'sostiene') || (!f.evidencias.length && f.clase !== 'interpretacion')));
@@ -413,7 +419,9 @@ async function corregir(ctx: ContextoHerramientas, numerador: Numerador, markdow
     const ofrecidas = new Set((extra.get(i) ?? []).map((p) => p.id));
     nuevo = nuevo.replace(/\[\s*([EP]\d+(?:\s*[,;]\s*[EP]\d+)*)\s*\]/gi, (_, c: string) => c.split(/\s*[,;]\s*/).map((x) => x.toUpperCase()).filter((x) => f.evidencias.includes(x) || ofrecidas.has(x)).map((x) => `[${x}]`).join(''));
     const textos = [...f.evidencias.map((id) => todoElTexto(numerador, id)), ...(extra.get(i) ?? []).map((p) => `${p.evidencia.cita ?? ''}\n${p.ambito?.texto ?? ''}`)];
-    if (!citasEn(nuevo, textos)) continue; // una cita que no está en sus pruebas: se queda la frase de antes (y su juicio)
+    // Una frase nueva con una cita que no está en ninguna de sus pruebas se cae; el resto de la corrección vale.
+    nuevo = oracionesDe(nuevo).filter((o) => citasEn(o, textos)).join(' ');
+    if (!nuevo && nuevos.get(i)) continue; // todo lo nuevo era inventado: se queda la frase de antes (y su juicio)
     // Las pruebas nuevas entran en la numeración (y se estrechan a su cita, si la llevan).
     nuevo = numerador.sustituir(nuevo).replace(/\s+([.,;:])/g, '$1').trim();
     const pos = salida.indexOf(f.original);

@@ -281,17 +281,17 @@ export function tramoDeComprobacion(a: { t0: number; t1: number; instante?: numb
  */
 export async function comprobarEnSitio(ctx: ContextoHerramientas, p: Prueba, afirmaciones: string[], sentido: 'ver' | 'escuchar'): Promise<Array<{ veredicto: 'si' | 'no' | 'dudoso'; nota: string }> | null> {
   if (!afirmaciones.length) return [];
-  const modelo = ctx.p.modelos.vision ?? ctx.p.modelos.agente;
+  const modelo = ctx.p.modelos.revisor ?? ctx.p.modelos.agente;
   const e = p.evidencia;
   const a = e.ancla;
   const partes: ParteMensaje[] = [];
   const lista = afirmaciones.map((x, i) => `${i + 1}. ${x}`).join('\n');
-  const reglas = 'Para cada afirmación responde «si» si lo que afirma se ve o se oye tal cual; «no» si no es así (otra cosa, otra persona, otro objeto, otra música, o no ocurre aquí); «dudoso» si no se distingue. Sé estricto con los detalles concretos (quién, qué objeto, qué música, qué gesto, qué dice). Una nota breve en español para cada una.';
+  const reglas = 'Para cada afirmación responde «si» solo si TODO lo que afirma se ve o se oye tal cual (quién es cada persona, qué hace, qué objeto, cuántos, qué música, qué gesto, la escala del plano si la dice); «no» si algo no es así (otra persona, otro objeto, otra acción, otra música, o no ocurre aquí); «dudoso» si no se distingue. Sé estricto con cada detalle. Una nota breve en español para cada una que diga qué detalle falla.';
   if (a.tipo === 'tiempo') {
     const fuente = ctx.p.medios ? await ctx.p.medios.fuente(e.documento).catch(() => null) : null;
     if (!fuente) return null;
     const [desde, hasta] = tramoDeComprobacion(a);
-    partes.push({ tipo: 'medio', uri: fuente.uri, mime: fuente.mime, desde, hasta, fps: sentido === 'escuchar' ? 1 : 2 });
+    partes.push({ tipo: 'medio', uri: fuente.uri, mime: fuente.mime, desde, hasta, fps: 1 });
     partes.push({ tipo: 'texto', texto: `Tramo ${tiempoACadena(desde)}-${tiempoACadena(hasta)} (${sentido === 'escuchar' ? 'escucha con atención el sonido: música, voces, ruidos' : 'mira y escucha'}). Afirmaciones sobre este tramo:\n${lista}\n\n${reglas}` });
   } else if (a.tipo === 'pagina' && p.imagen && ctx.p.medios) {
     const img = await ctx.p.medios.imagen(e.documento, p.imagen).catch(() => null);

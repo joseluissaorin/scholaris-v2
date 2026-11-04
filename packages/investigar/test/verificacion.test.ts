@@ -77,9 +77,29 @@ describe('verificación por marcas y corrección', () => {
     const n = new Numerador(ctx);
     const md = n.sustituir('El viejo Tomás cuenta historias de barcos hundidos en la taberna [P1].');
     const v = await verificar(ctx, n, md, { sitios: 0 });
-    // Una cita que no está en sus pruebas invalida la corrección: se queda la frase de antes, sin prueba.
-    expect(v.markdown).toBe('El viejo Tomás cuenta historias de barcos hundidos en la taberna [E1].');
+    // La frase nueva con una cita que no está en sus pruebas se cae; la otra, con la prueba del cuaderno, se queda.
+    expect(v.markdown).toBe('Tomás cuenta historias de barcos hundidos [E2].');
+    expect(v.frases.map((f) => f.veredicto)).toEqual(['respaldada']);
+  });
+
+  it('si todo lo corregido es inventado, se queda la frase de antes, señalada', async () => {
+    const { ctx } = ctxCon((p) => {
+      const t = textoDe(p);
+      if (p.sistema?.startsWith('Corriges')) return { json: { frases: [{ i: 0, texto: 'Tomás dice «palabras que no existen en ninguna prueba» [E1].' }] } };
+      return { json: juicio(t, () => 'no_sostiene') };
+    });
+    const n = new Numerador(ctx);
+    const v = await verificar(ctx, n, n.sustituir('El viejo Tomás cuenta historias en la plaza [P1].'), { sitios: 0 });
+    expect(v.markdown).toBe('El viejo Tomás cuenta historias en la plaza [E1].');
     expect(v.frases[0]!.veredicto).toBe('sin_respaldo');
+  });
+
+  it('una cita puesta con la marca de otra página pasa a la prueba donde está de verdad', () => {
+    const { ctx } = ctxCon(() => ({ texto: '' }));
+    const n = new Numerador(ctx);
+    expect(n.sustituir('Tomás «contaba historias de barcos hundidos» [P1].')).toBe('Tomás «contaba historias de barcos hundidos» [E1].');
+    expect(n.evidencia('E1')).toMatchObject({ etiqueta: 'p. 8', cita: 'contaba historias de barcos hundidos.', prueba: 'P2' });
+    expect(n.reanclados).toBe(1);
   });
 
   it('las citas nuevas entran en la numeración', async () => {
