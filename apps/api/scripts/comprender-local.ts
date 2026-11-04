@@ -6,7 +6,7 @@
  *
  *   npx tsx apps/api/scripts/comprender-local.ts --salida DIR --spdf a.spdf --spdf b.spdf \
  *     [--percepcion DOC=ruta.json] [--lentes DOC=cine,documental] [--alto MODELO] [--rapido MODELO] \
- *     [--presupuesto 6] [--solo DOC] [--sin-vectores] [--sin-wikidata]
+ *     [--presupuesto 6] [--solo DOC] [--sin-vectores] [--sin-wikidata] [--forzar] [--estanteria pasada-anterior.sqlite]
  *
  *   npx tsx apps/api/scripts/comprender-local.ts evaluar --salida DIR --spdf … --modelos a,b,c [--segmentos 3]
  *     Hace la estructura una vez (con --alto) y después las fichas de los primeros
@@ -44,10 +44,12 @@ const gemini = crearGemini({ clave, concurrencia: 8, timeoutMs: 600_000 });
 const comprensor = (alto?: string, rapido?: string) => crearComprensorGemini(gemini, { ...(alto ? { modeloAlto: alto } : {}), ...(rapido ? { modeloRapido: rapido } : {}) }) as unknown as ModeloComprension;
 
 // Estantería local: SPDF 4.2 más el esquema de las funciones (grafo de entidades).
-const estanteria = await crearSpdf({ generador: 'comprender-local' });
+// Con --estanteria se sigue sobre una estantería de una pasada anterior (para ver la biblioteca entera).
+const previa = valor('estanteria');
+const estanteria = previa ? await abrirSpdf(readFileSync(previa)) : await crearSpdf({ generador: 'comprender-local' });
 const sql = estanteria.sql;
 await aplicarEsquemaFunciones(sql);
-const documentos: string[] = [];
+const documentos: string[] = previa ? (await sql.ejecutar<{ id: string }>('SELECT id FROM documentos ORDER BY creado')).map((f) => String(f.id)) : [];
 for (const ruta of valores('spdf')) {
   const a = await abrirSpdf(readFileSync(ruta));
   const d = await leerDocumento(a.sql);
