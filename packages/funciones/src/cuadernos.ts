@@ -448,3 +448,33 @@ export async function listarSintesis(sql: SQL, cuaderno: string): Promise<Sintes
   await obtenerCuaderno(sql, cuaderno);
   return (await sql.ejecutar('SELECT * FROM cuadernos_sintesis WHERE cuaderno = ? ORDER BY creada DESC', cuaderno)).map(filaASintesis);
 }
+
+/**
+ * Guarda una síntesis ya redactada (la respuesta de una investigación). Como las de
+ * `sintetizar`, solo puede citar tarjetas del cuaderno con su cita: las marcas [n]
+ * remiten a la n-ésima tarjeta citable (en el orden del cuaderno) y las que no
+ * existen se quitan.
+ */
+export async function guardarSintesis(
+  sql: SQL,
+  cuaderno: string,
+  s: { peticion: string; cuerpo: string; confianza?: 'alta' | 'media' | 'baja'; modelo?: string; ms?: number },
+): Promise<SintesisCompleta> {
+  await obtenerCuaderno(sql, cuaderno);
+  const tarjetas = await listarTarjetas(sql, cuaderno);
+  const citables = tarjetas.filter((t) => t.cita && !t.huerfana);
+  const { texto: limpio, usadas, descartadas } = depurarMarcas(s.cuerpo, new Set(citables.map((_, i) => i + 1)));
+  const citas = usadas.map((n) => {
+    const t = citables[n - 1]!;
+    return { n, tarjeta: t.id, ...(t.tipo === 'fragmento' && t.objetivo ? { fragmento: t.objetivo } : {}), etiqueta: t.cita!.citaCorta };
+  });
+  const id = nuevoId('s');
+  await sql.ejecutar(
+    'INSERT INTO cuadernos_sintesis (id, cuaderno, peticion, cuerpo, fuentes, confianza, modelo, ms, creada) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    id, cuaderno, s.peticion.slice(0, 2000), limpio.trim(), JSON.stringify(citas), s.confianza ?? null, s.modelo ?? null, s.ms ?? null, ahora(),
+  );
+  await tocar(sql, cuaderno);
+  const r = await obtenerSintesis(sql, id);
+  if (descartadas) r.marcasDescartadas = descartadas;
+  return r;
+}

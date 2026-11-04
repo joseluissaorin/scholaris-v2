@@ -28,7 +28,7 @@ import type {
 } from './comunidad.js';
 import { consultaPaquete } from './paquete.js';
 import type {
-  Buscar, BuscarMultilingue, EventoBusquedaEnDos, EventoRespuesta, Responder, RespuestaBusqueda, RespuestaMultilingue, ResultadoVista, Similares,
+  Buscar, BuscarMultilingue, EventoBusquedaEnDos, EventoInvestigacion, EventoRespuesta, Investigar, Responder, RespuestaBusqueda, RespuestaMultilingue, ResultadoVista, Similares,
 } from './busqueda.js';
 import type {
   Autocita, AutocitaIniciada, Bibliografia, FicheroCitas, CitaDocumento, DecisionesAutocita, DetalleAutocita, EstiloCsl, ExportarReferencias,
@@ -338,6 +338,8 @@ export function crearCliente(opciones: OpcionesCliente) {
         throw new ErrorApi(500, 'interno', 'La búsqueda terminó sin resultado final.');
       },
       responder: (p: Responder) => sse<EventoRespuesta>('/busqueda/responder', p),
+      /** El agente de investigación: plan, pasos, pruebas, respuesta, verificación y fin. */
+      investigar: (p: Investigar) => sse<EventoInvestigacion>('/busqueda/investigar', p),
       similares: (p: Similares) => post<RespuestaBusqueda>('/busqueda/similares', p),
       multilingue: (p: BuscarMultilingue) => post<RespuestaMultilingue>('/busqueda/multilingue', p),
       /** En lo mío y en lo que sigo (con `alcance`); cada pasaje dice de dónde sale. */
