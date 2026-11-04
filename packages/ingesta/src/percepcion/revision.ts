@@ -60,6 +60,8 @@ export interface Hueco extends Tramo {
   motivo: 'sin_texto' | 'tiempos_rotos';
   /** Segundos con sonido dentro del hueco. */
   activo: number;
+  /** En `tiempos_rotos`, la unidad (su orden). */
+  unidad?: number;
 }
 
 /** Lo que se oye en un tramo: una frase con su hablante. */
@@ -221,7 +223,7 @@ export function coberturaTranscripcion(
   unidades.forEach((u, k) => {
     const ps = palabras.filter((p) => p.unidad === (u.orden ?? k));
     const rotas = ps.filter(esRota).length;
-    if (rotas >= minRotas && rotas >= ps.length * 0.25) huecos.push({ t0: r2(u.t0), t1: r2(Math.max(u.t1, u.t0 + 1)), motivo: 'tiempos_rotos', activo: r2(u.t1 - u.t0) });
+    if (rotas >= minRotas && rotas >= ps.length * 0.25) huecos.push({ t0: r2(u.t0), t1: r2(Math.max(u.t1, u.t0 + 1)), motivo: 'tiempos_rotos', activo: r2(u.t1 - u.t0), unidad: u.orden ?? k });
   });
   huecos.sort((a, b) => a.t0 - b.t0);
   return {
@@ -486,7 +488,7 @@ export async function revisarTranscripcionConVideo(p: PuertosRevision, o: Opcion
       }
       await p.alProgreso?.({ fase: 'huecos', hechas: ++hechas, total: subs.length, usd: coste.usd });
     });
-    const rotas = new Set(cobertura.huecos.filter((h) => h.motivo === 'tiempos_rotos').map((h) => palabras.find((w) => w.t0 >= h.t0 - 0.01 && w.t1 <= h.t1 + 0.01)?.unidad).filter((x): x is number => x !== undefined));
+    const rotas = new Set(cobertura.huecos.flatMap((h) => (h.motivo === 'tiempos_rotos' && h.unidad !== undefined ? [h.unidad] : [])));
     const usados = new Set<SegmentoOido>();
     const canonico = (x: SegmentoOido) => ({ ...x, ...(x.hablante ? { hablante: unificador.canonico(x.hablante) } : {}) });
     // Unidades con el tiempo roto: se sustituyen por lo oído en su tramo, si se oyó algo.

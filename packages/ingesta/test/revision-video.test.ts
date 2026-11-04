@@ -123,6 +123,16 @@ describe('revisión entera', () => {
     expect(r2.correcciones).toEqual(r.correcciones);
   });
 
+  it('una unidad con el tiempo roto se sustituye por lo que se oye en su tramo', async () => {
+    const rotas = [unidad(0, '**Diego:** Vamos a buscar los libros.', 10), unidad(1, '**Diego:** siete ocho nueve', 80, true)];
+    const v = videnteFalso((p) => ((p.esquema.properties as Record<string, unknown>).segmentos
+      ? { segmentos: p.desde! <= 80 && p.hasta! >= 80 ? [{ inicio: marca(78.5), fin: marca(80), hablante: 'Nancy', texto: 'Siete, ocho, nueve.' }] : [] }
+      : { frases: [] }));
+    const r = await revisarTranscripcionConVideo({ vidente: v, fuente: async () => ({ uri: 'f', mime: 'video/mp4' }), trabajo: trabajoEnMemoria() }, { ...opciones, unidades: rotas, actividad: [[10, 13], [78, 81]] });
+    expect(r.correcciones).toMatchObject([{ tipo: 'hueco', reemplaza: [1], segmentos: [{ t0: 78.5, t1: 80, hablante: 'Nancy', texto: 'Siete, ocho, nueve.' }] }]);
+    expect(aplicarCorrecciones(rotas, r.correcciones).map((u) => u.texto)).toEqual(['**Diego:** Vamos a buscar los libros.', '**Nancy:** Siete, ocho, nueve.']);
+  });
+
   it('si el modelo falla en un hueco, entra la reserva con el audio del tramo', async () => {
     const v = videnteFalso((p) => ((p.esquema.properties as Record<string, unknown>).segmentos ? new Error('HTTP 500') : { frases: [] }));
     const pedidos: Array<[number, number]> = [];
