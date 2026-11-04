@@ -10,3 +10,4 @@ export { detectar, compararNombres, type Deteccion, type Formato } from './detec
 export type { Plataforma, Lienzo, MotorPdf } from './plataforma.js';
 export { diagnosticar, construirCapa, detectarTitulillos } from './pdf/capa-texto.js';
 export { PARAMETROS_PROXY, interpretarEscenasFfmpeg, cortesDe, argumentosProxy, filtroSilencios, interpretarSilencios, type CortesProxy, type ActividadAudio } from './medios/proxy.js';
+export { escribirOggOpus, leerOgg } from './medios/ogg.js';

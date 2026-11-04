@@ -76,17 +76,21 @@ async function comprobarCuotaDocumento(p: PuertosUsuario, bytes: number): Promis
 }
 
 /** Crea la tarea, marca el documento y lanza el motor de ingesta. */
-export async function lanzarIngesta(p: PuertosUsuario, params: Omit<ParamsIngesta, 'usuario' | 'plan' | 'tarea'>, tipoTarea: 'ingesta' | 'reproceso' | 'importacion' = 'ingesta'): Promise<IngestaIniciada> {
+export async function lanzarIngesta(
+  p: PuertosUsuario, params: Omit<ParamsIngesta, 'usuario' | 'plan' | 'tarea'>, tipoTarea: 'ingesta' | 'reproceso' | 'importacion' = 'ingesta',
+  /** `conservarEstado`: el documento sigue «listo» mientras tanto (revisar la transcripción, percibir un medio). */
+  opciones: { conservarEstado?: boolean } = {},
+): Promise<IngestaIniciada> {
   const tarea = await crearTarea(p.sql, tipoTarea, params.documento, { paquete: params.paquete, url: params.url, fases: params.fases });
   const completos: ParamsIngesta = { ...params, usuario: p.usuario.id, plan: p.usuario.plan, tarea: tarea.id };
   // Todo lo necesario para relanzarla tal cual si se queda parada.
   await p.sql.ejecutar('UPDATE pl_tareas SET params = ? WHERE id = ?', JSON.stringify(completos), tarea.id);
-  await marcarDocumento(p.sql, params.documento, 'procesando');
+  if (!opciones.conservarEstado) await marcarDocumento(p.sql, params.documento, 'procesando');
   try {
     await p.orquestador.lanzarIngesta(completos);
   } catch (e) {
     await p.sql.ejecutar("UPDATE pl_tareas SET estado = 'error', error = ? WHERE id = ?", (e as Error).message, tarea.id);
-    await marcarDocumento(p.sql, params.documento, 'error');
+    if (!opciones.conservarEstado) await marcarDocumento(p.sql, params.documento, 'error');
     throw e;
   }
   await p.emisor.emitir(`usuario:${p.usuario.id}`, {

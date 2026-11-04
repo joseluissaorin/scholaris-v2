@@ -104,6 +104,14 @@ export interface RevisionTranscripcion {
   correcciones: CorreccionTranscripcion[];
   avisos: string[];
   coste: CostePercepcion;
+  /**
+   * ISO 8601: cuándo se aplicó a las unidades del documento (la ingesta o la
+   * reescritura de la transcripción). Una revisión aplicada ya no se vuelve a
+   * aplicar: sus `unidad` y `palabras` se refieren a las unidades de antes.
+   */
+  aplicada?: string;
+  /** La cobertura de la transcripción ya corregida (la que quedó al aplicarla). */
+  coberturaFinal?: CoberturaTranscripcion;
 }
 
 // ---------------------------------------------------------------------------
@@ -364,11 +372,17 @@ export async function revisarHablantesVentana(
 // ---------------------------------------------------------------------------
 
 export interface PuertosRevision {
-  vidente: Vidente;
-  fuente(opciones?: { renovar?: boolean }): Promise<FicheroModelo>;
+  /** El modelo que mira y escucha el proxy. Sin él (o sin `fuente`), los huecos van directamente a la reserva y no se revisan los hablantes. */
+  vidente?: Vidente;
+  fuente?(opciones?: { renovar?: boolean }): Promise<FicheroModelo>;
   trabajo: AlmacenTrabajo;
-  /** Reserva para los huecos: un transcriptor (Whisper) y el audio de un tramo. */
-  reserva?: { transcriptor: Transcriptor; audio(t0: number, t1: number): Promise<{ bytes: Uint8Array; mime: string; desplazamiento: number } | null> };
+  /**
+   * Reserva para los huecos: un transcriptor y el audio de un tramo (mejor
+   * recortado a ese tramo: un trozo largo es justo lo que el transcriptor de
+   * Gemini oye a medias). Con `hablantes`, se le piden (el enrutado de la
+   * plataforma prueba entonces Gemini Transcribe antes que Whisper).
+   */
+  reserva?: { transcriptor: Transcriptor; audio(t0: number, t1: number): Promise<{ bytes: Uint8Array; mime: string; desplazamiento: number } | null>; hablantes?: boolean };
   alProgreso?(p: { fase: 'huecos' | 'hablantes'; hechas: number; total: number; usd: number }): void | Promise<void>;
 }
 
@@ -392,6 +406,10 @@ export interface OpcionesRevisionTranscripcion {
   hablantes?: boolean;
   concurrencia?: number;
   prefijoTrabajo?: string;
+  /** Deja de pedir subventanas y ventanas nuevas cuando el gasto nuevo pasa de aquí (lo hecho queda grabado). */
+  presupuestoUsd?: number;
+  /** Como mucho, tantas subventanas de huecos (las de más hueco con sonido primero). */
+  maxSubventanas?: number;
 }
 
 /** Las subventanas de los huecos: los cercanos se juntan, y cada trozo, de `max` s como mucho y con 2 s de margen. */
@@ -420,7 +438,8 @@ export async function revisarTranscripcionConVideo(p: PuertosRevision, o: Opcion
   const turnos = turnosDe(o.unidades);
   const reparto = repartoInicial(separarInterpretes(o.reparto).personajes, hablantesDe(turnos)).slice(0, 30);
   const unificador = new Unificador(reparto);
-  const modelo = o.modelo ?? p.vidente.nombre.replace(/^[^:]*:/, '');
+  const conVideo = !!(p.vidente && p.fuente);
+  const modelo = o.modelo ?? p.vidente?.nombre.replace(/^[^:]*:/, '') ?? p.reserva?.transcriptor.nombre ?? 'reserva';
   const modeloHablantes = o.modeloHablantes ?? modelo;
   // Una huella por fase: cambiar el modelo de los hablantes no obliga a volver a pagar los huecos.
   const huellaHuecos = (await sha256(JSON.stringify([VERSION_REVISION, 'huecos', modelo]))).slice(0, 12);
@@ -434,9 +453,11 @@ export async function revisarTranscripcionConVideo(p: PuertosRevision, o: Opcion
 
   let fichero: Promise<FicheroModelo> | null = null;
   const fuente = (renovar = false) => {
+    if (!p.fuente) return Promise.reject(new Error('Sin proxy que mirar'));
     if (!fichero || renovar) { fichero = p.fuente(renovar ? { renovar: true } : undefined); fichero.catch(() => { fichero = null; }); }
     return fichero;
   };
+  const sinPresupuesto = () => o.presupuestoUsd !== undefined && coste.usd >= o.presupuestoUsd;
   const contar = (m: Mirada) => { coste.usd += m.usd ?? 0; coste.llamadas++; coste.tokensEntrada += m.tokensEntrada; coste.tokensSalida += m.tokensSalida; coste.ms += m.ms; };
   /** Una llamada grabada: si ya se hizo, se devuelve lo guardado. */
   async function grabada<T>(clave: string, fn: () => Promise<{ valor: T; mirada?: Mirada }>): Promise<T> {
@@ -460,34 +481,51 @@ export async function revisarTranscripcionConVideo(p: PuertosRevision, o: Opcion
 
   // 2. Huecos, en subventanas cortas. Las unidades con el tiempo roto se sustituyen por lo que se oye en su tramo.
   if (o.huecos !== false && cobertura.huecos.length) {
-    const subs = subventanasDe(cobertura.huecos, o.duracion, o.subventana ?? 75);
+    let subs = subventanasDe(cobertura.huecos, o.duracion, o.subventana ?? 75);
+    if (o.maxSubventanas !== undefined && subs.length > o.maxSubventanas) {
+      // Las de más sonido sin transcribir primero; después, en orden.
+      const activoEn = (s: Tramo) => cobertura.huecos.reduce((n, h) => n + Math.max(0, Math.min(s.t1, h.t1) - Math.max(s.t0, h.t0)) * (h.activo / Math.max(0.01, h.t1 - h.t0)), 0);
+      const fuera = subs.length - o.maxSubventanas;
+      subs = subs.map((s) => ({ s, a: activoEn(s) })).sort((x, y) => y.a - x.a).slice(0, o.maxSubventanas).map((x) => x.s).sort((a, b) => a.t0 - b.t0);
+      avisos.push(`${fuera} subventanas de huecos se quedaron sin revisar (tope de ${o.maxSubventanas}).`);
+    }
     const oidos: Array<{ s: Tramo; segmentos: SegmentoOido[]; origen: string }> = [];
-    let hechas = 0;
+    let hechas = 0, sinDinero = 0;
     await enParalelo(subs, o.concurrencia ?? 6, async (s) => {
       const contexto = turnos.filter((t) => t.t1 >= s.t0 - 15 && t.t0 <= s.t1 + 15).map((t) => `[${marca(t.t0)}] ${t.hablante ? `${t.hablante}: ` : ''}${t.texto}`).join('\n');
+      let e: unknown = null;
+      if (sinPresupuesto()) { sinDinero++; await p.alProgreso?.({ fase: 'huecos', hechas: ++hechas, total: subs.length, usd: coste.usd }); return; }
       try {
+        if (!conVideo) throw new Error('Sin proxy que mirar');
         const segmentos = await grabada(`hueco-${Math.round(s.t0 * 10)}-${Math.round(s.t1 * 10)}.json`, async () => {
-          const r = await transcribirConVideo(p.vidente, await fuente(), s, { reparto, ...(o.ficha ? { ficha: o.ficha } : {}), ...(o.idioma ? { idioma: o.idioma } : {}), modelo, ...(contexto ? { contexto } : {}) });
+          const r = await transcribirConVideo(p.vidente!, await fuente(), s, { reparto, ...(o.ficha ? { ficha: o.ficha } : {}), ...(o.idioma ? { idioma: o.idioma } : {}), modelo, ...(contexto ? { contexto } : {}) });
           return { valor: r.segmentos, mirada: r.mirada };
         });
         oidos.push({ s, segmentos, origen: modelo });
-      } catch (e) {
-        // Reserva: Whisper con el audio del tramo.
+      } catch (x) { e = x; }
+      if (e) {
+        // Reserva: el transcriptor con el audio de ese tramo (grabado también: repetirlo no cuesta).
         let hecho = false;
         if (p.reserva) {
+          const reserva = p.reserva;
           try {
-            const audio = await p.reserva.audio(s.t0, s.t1);
-            if (audio) {
-              const t = await p.reserva.transcriptor.transcribir(audio, { ...(o.idioma ? { idioma: o.idioma } : {}) });
-              oidos.push({ s, segmentos: segmentosDePalabras(t.palabras.filter((w) => w.t0 >= s.t0 - 0.5 && w.t1 <= s.t1 + 0.5)), origen: p.reserva.transcriptor.nombre });
-              hecho = true;
-            }
+            const segmentos = await grabada(`reserva-${Math.round(s.t0 * 10)}-${Math.round(s.t1 * 10)}.json`, async () => {
+              const audio = await reserva.audio(Math.max(0, s.t0 - 1), Math.min(o.duracion, s.t1 + 1));
+              if (!audio) throw new Error('Sin audio para la reserva');
+              const t = await reserva.transcriptor.transcribir(audio, { ...(o.idioma ? { idioma: o.idioma } : {}), ...(reserva.hablantes ? { hablantes: true } : {}) });
+              // Las etiquetas de una diarización suelta no dicen quién es: se quedan fuera.
+              const valor = segmentosDePalabras(t.palabras.filter((w) => w.t0 >= s.t0 - 0.5 && w.t1 <= s.t1 + 0.5).map(({ hablante: _h, ...w }) => w));
+              return { valor };
+            });
+            oidos.push({ s, segmentos, origen: reserva.transcriptor.nombre });
+            hecho = true;
           } catch (e2) { e = e2; }
         }
         if (!hecho) avisos.push(`Hueco ${Math.round(s.t0)}-${Math.round(s.t1)} s sin transcribir: ${String((e as Error)?.message ?? e).slice(0, 160)}`);
       }
       await p.alProgreso?.({ fase: 'huecos', hechas: ++hechas, total: subs.length, usd: coste.usd });
     });
+    if (sinDinero) avisos.push(`${sinDinero} subventanas de huecos se quedaron sin revisar: se acabó el presupuesto.`);
     const rotas = new Set(cobertura.huecos.flatMap((h) => (h.motivo === 'tiempos_rotos' && h.unidad !== undefined ? [h.unidad] : [])));
     const usados = new Set<SegmentoOido>();
     const canonico = (x: SegmentoOido) => ({ ...x, ...(x.hablante ? { hablante: unificador.canonico(x.hablante) } : {}) });
@@ -509,16 +547,17 @@ export async function revisarTranscripcionConVideo(p: PuertosRevision, o: Opcion
   }
 
   // 3. Hablantes y tiempos, por ventanas.
-  if (o.hablantes !== false) {
+  if (o.hablantes !== false && conVideo) {
     const frases = frasesUbicadas(palabras);
     const ventanas = ventanasDe(o.duracion, o.largo ?? 480, o.solape ?? 30);
     let hechas = 0;
     await enParalelo(ventanas, o.concurrencia ?? 4, async (v, k) => {
       const propias = frases.filter((f) => { const c = (f.t0 + f.t1) / 2; return c >= v.propioDesde && (c < v.propioHasta || k === ventanas.length - 1); });
-      if (propias.length) {
+      if (propias.length && sinPresupuesto()) avisos.push(`No se revisaron los hablantes de ${Math.round(v.t0)}-${Math.round(v.t1)} s: se acabó el presupuesto.`);
+      else if (propias.length) {
         try {
           const cs = await grabada(`hablantes-${v.id}.json`, async () => {
-            const r = await revisarHablantesVentana(p.vidente, await fuente(), v, propias, { reparto, ...(o.ficha ? { ficha: o.ficha } : {}), modelo: modeloHablantes, unificador, documento: o.documento });
+            const r = await revisarHablantesVentana(p.vidente!, await fuente(), v, propias, { reparto, ...(o.ficha ? { ficha: o.ficha } : {}), modelo: modeloHablantes, unificador, documento: o.documento });
             return { valor: r.correcciones, mirada: r.mirada };
           });
           correcciones.push(...cs);
@@ -652,4 +691,37 @@ export function hablantesDeDialogos(p: PercepcionMedio, unidades: UnidadMedio[])
     }),
   }));
   return { percepcion: { ...p, escenas }, cambios };
+}
+
+/**
+ * Las unidades (ya corregidas) como palabras del transcriptor, en orden: cada
+ * palabra del texto con su instante y su hablante. Es lo que la ingesta vuelve a
+ * cortar en unidades al consolidar o al reescribir la transcripción.
+ */
+export function palabrasTranscritas(unidades: UnidadMedio[]): Array<{ texto: string; t0: number; t1: number; hablante?: string }> {
+  return palabrasDeUnidades(unidades)
+    .map((w) => ({ texto: w.texto, t0: r2(w.t0), t1: r2(Math.max(w.t1, w.t0 + 0.01)), ...(w.hablante ? { hablante: w.hablante } : {}) }))
+    .sort((a, b) => a.t0 - b.t0);
+}
+
+/**
+ * ¿Se hizo esta revisión sobre estas unidades? Sus correcciones de hablante y de
+ * desfase citan el texto de las palabras que tocan: si las unidades cambiaron
+ * (se volvió a ingerir el documento), ya no coinciden y aplicarla las estropearía.
+ */
+export function comprobarRevision(unidades: UnidadMedio[], revision: Pick<RevisionTranscripcion, 'correcciones'>): { comprobadas: number; coinciden: number; fraccion: number } {
+  const porOrden = new Map(unidades.map((u, k) => [u.orden ?? k, u]));
+  const palabras = new Map<number, string[]>();
+  const de = (orden: number) => {
+    if (!palabras.has(orden)) { const u = porOrden.get(orden); palabras.set(orden, u ? palabrasDeUnidad(u, orden).map((w) => normal(w.texto)) : []); }
+    return palabras.get(orden)!;
+  };
+  let comprobadas = 0, coinciden = 0;
+  for (const c of revision.correcciones) {
+    if (c.tipo === 'hueco') continue;
+    comprobadas++;
+    if (de(c.unidad).slice(c.palabras[0], c.palabras[1]).join(' ').replace(/\s+/g, ' ').trim() === normal(c.texto)) coinciden++;
+  }
+  // Sin correcciones que comprobar, los huecos se aplican por tiempo y sin duplicar: vale.
+  return { comprobadas, coinciden, fraccion: comprobadas ? coinciden / comprobadas : 1 };
 }

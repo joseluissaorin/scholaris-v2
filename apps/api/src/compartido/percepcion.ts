@@ -8,15 +8,16 @@
  *   percepcion.json          el PercepcionMedio de la obra (lo lee la comprensión)
  *   percepcion/<huella>/…    lo que devolvió cada ventana (no se paga dos veces)
  *   percepcion/anclaje/…     las localizaciones de citas en imágenes de página
- *   transcripcion.revision.json   la revisión de la transcripción (huecos, hablantes, desfases)
+ *   transcripcion.revision.json   la revisión de la transcripción (huecos, hablantes, desfases;
+ *                            la hacen y la aplican las funciones de compartido/transcripcion.ts)
  *   percepcion/revision/…    lo que devolvió cada llamada de la revisión
  */
 import {
-  anclarMaterial, aplicarCorrecciones, clavesProxy, fuenteGemini, percibirMedio, revisarTranscripcionConVideo,
-  type ActividadAudio, type AlmacenTrabajo, type AnclajeResultado, type CortesProxy, type LineaPagina, type PercepcionConCoste, type ProgresoPercepcion, type RevisionTranscripcion, type UnidadAnclable, type UnidadMedio,
+  anclarMaterial, aplicarCorrecciones, clavesProxy, fuenteGemini, percibirMedio,
+  type AlmacenTrabajo, type AnclajeResultado, type CortesProxy, type LineaPagina, type PercepcionConCoste, type ProgresoPercepcion, type RevisionTranscripcion, type UnidadAnclable, type UnidadMedio,
 } from '@scholaris/ingesta';
 import type { PaqueteConversion } from '@scholaris/imprenta';
-import type { Ancla, Lente, PersonaPercibida, Redactor, SQL, Transcriptor } from '@scholaris/nucleo';
+import type { Ancla, Lente, PersonaPercibida, Redactor, SQL } from '@scholaris/nucleo';
 import { crearGemini, MODELOS_GEMINI, videnteGemini, type ClienteGemini, type ConfigGemini, type ContadorUso } from '@scholaris/proveedores';
 import { leerDocumento } from '@scholaris/spdf';
 import type { AlmacenAmpliado } from '../puertos.js';
@@ -39,7 +40,7 @@ export async function leerPercepcion(almacen: AlmacenAmpliado, prefijo: string):
   try { return JSON.parse(new TextDecoder().decode(b)) as PercepcionConCoste; } catch { return null; }
 }
 
-function cliente(gemini: ConfigGemini | ClienteGemini, contador?: ContadorUso): ClienteGemini {
+export function clienteGemini(gemini: ConfigGemini | ClienteGemini, contador?: ContadorUso): ClienteGemini {
   return 'generar' in gemini ? gemini : crearGemini({ ...gemini, timeoutMs: Math.max(gemini.timeoutMs ?? 0, 900_000), ...(contador ? { contador } : {}) });
 }
 
@@ -49,7 +50,7 @@ function cliente(gemini: ConfigGemini | ClienteGemini, contador?: ContadorUso): 
  * sube si hace falta y reaprovecha la subida mientras viva.
  */
 export function fuenteGeminiDocumento(almacen: AlmacenAmpliado, gemini: ConfigGemini | ClienteGemini, prefijo: string, opciones: { renovar?: boolean } = {}) {
-  return fuenteGemini({ almacen, ficheros: cliente(gemini) }, { prefijo, ...(opciones.renovar ? { renovar: true } : {}) });
+  return fuenteGemini({ almacen, ficheros: clienteGemini(gemini) }, { prefijo, ...(opciones.renovar ? { renovar: true } : {}) });
 }
 
 interface FilaUnidad { orden: number; ancla: string; texto: string; t0: number | null; t1: number | null; palabras: string | null; imagen: string | null }
@@ -115,13 +116,14 @@ export async function percibirDocumento(
   // Si ya se revisó la transcripción (huecos, hablantes, desfases), se mira con la revisada.
   const revision = await ctx.almacen.bytes(claveRevision(doc.prefijo)).then((b) => (b ? (JSON.parse(new TextDecoder().decode(b)) as RevisionTranscripcion) : null)).catch(() => null);
   const leidas = await unidadesDeMedio(ctx.sql, doc.documento);
-  const unidades = revision?.correcciones.length ? aplicarCorrecciones(leidas, revision.correcciones) : leidas;
+  // Una revisión ya aplicada (la ingesta o la reescritura la volcaron en las unidades) no se vuelve a aplicar.
+  const unidades = revision?.correcciones.length && !revision.aplicada ? aplicarCorrecciones(leidas, revision.correcciones) : leidas;
   const cortes = await ctx.almacen.bytes(clavesProxy(doc.prefijo).cortes).then((b) => (b ? (JSON.parse(new TextDecoder().decode(b)) as CortesProxy).cortes : undefined)).catch(() => undefined);
   const m = d.metadatos;
   const autores = (m.autores ?? []).map((x) => `${x.nombre} ${x.apellidos}`.trim()).filter(Boolean);
   const ficha = `«${m.titulo}»${m.anio ? ` (${m.anio})` : ''}${autores.length ? `, de ${autores.join(' y ')}` : ''}`;
   const duracion = (d as { duracion?: number }).duracion ?? Math.max(0, ...unidades.map((u) => u.t1));
-  const g = cliente(ctx.gemini, ctx.contador);
+  const g = clienteGemini(ctx.gemini, ctx.contador);
   const r = await percibirMedio({
     vidente: videnteGemini(g, { modelo }),
     fuente: (o) => fuenteGemini({ almacen: ctx.almacen, ficheros: g }, { prefijo: doc.prefijo, ...(o?.renovar ? { renovar: true } : {}) }),
@@ -179,56 +181,3 @@ export function crearAnclador(ctx: { almacen: AlmacenAmpliado; sql: SQL; redacto
 }
 
 export const claveRevision = (prefijo: string) => `${prefijo}transcripcion.revision.json`;
-
-/**
- * Revisa la transcripción de un documento de audio o vídeo con el proxy: los
- * huecos se vuelven a transcribir (Flash, en subventanas cortas; si falla, el
- * transcriptor de reserva con el tramo de audio del paquete) y cada frase se
- * atribuye a quien la dice de verdad (Argon, por ventanas). Guarda el resultado
- * en `transcripcion.revision.json`; la ingesta lo aplica con `aplicarCorrecciones`.
- */
-export async function revisarTranscripcionDocumento(
-  ctx: ContextoPercepcion & { transcriptor?: Transcriptor },
-  doc: DocumentoPercibible,
-  opciones: { reparto?: PersonaPercibida[]; modelo?: string; modeloHablantes?: string; hablantes?: boolean; huecos?: boolean } = {},
-): Promise<RevisionTranscripcion> {
-  const d = await leerDocumento(ctx.sql, doc.documento);
-  if (!d) throw new Error(`No encuentro el documento ${doc.documento}`);
-  const unidades = await unidadesDeMedio(ctx.sql, doc.documento);
-  const claves = clavesProxy(doc.prefijo);
-  const voz = await ctx.almacen.bytes(claves.voz).then((b) => (b ? (JSON.parse(new TextDecoder().decode(b)) as ActividadAudio) : null)).catch(() => null);
-  // El reparto que ya vio la percepción, si la hay: con descripciones de cara y de voz.
-  const percepcion = await leerPercepcion(ctx.almacen, doc.prefijo);
-  const reparto = opciones.reparto ?? percepcion?.reparto;
-  const m = d.metadatos;
-  const autores = (m.autores ?? []).map((x) => `${x.nombre} ${x.apellidos}`.trim()).filter(Boolean);
-  const g = cliente(ctx.gemini, ctx.contador);
-  // Reserva: el tramo de audio del paquete que contiene el hueco (el transcriptor se queda con lo del hueco).
-  const paquete = await ctx.almacen.bytes(`${doc.prefijo}paquete.json`).then((b) => (b ? (JSON.parse(new TextDecoder().decode(b)) as PaqueteConversion) : null)).catch(() => null);
-  const tramos = paquete?.contenido.clase === 'medio' ? paquete.contenido.audio?.tramos ?? [] : [];
-  const transcriptor = ctx.transcriptor;
-  const reserva = transcriptor && tramos.length ? {
-    transcriptor,
-    async audio(t0: number, t1: number) {
-      const solape = (x: { t0: number; t1: number }) => Math.max(0, Math.min(t1, x.t1) - Math.max(t0, x.t0));
-      const tramo = [...tramos].sort((a, b) => solape(b) - solape(a))[0];
-      if (!tramo || !solape(tramo)) return null;
-      const b = await ctx.almacen.bytes(`${doc.prefijo}${tramo.parte}`);
-      return b ? { bytes: b, mime: paquete!.contenido.clase === 'medio' ? paquete!.contenido.audio?.mime ?? 'audio/ogg' : 'audio/ogg', desplazamiento: tramo.t0 } : null;
-    },
-  } : undefined;
-  const r = await revisarTranscripcionConVideo({
-    vidente: videnteGemini(g, { modelo: opciones.modelo ?? MODELOS_GEMINI.percepcionRapida }),
-    fuente: (o) => fuenteGemini({ almacen: ctx.almacen, ficheros: g }, { prefijo: doc.prefijo, ...(o?.renovar ? { renovar: true } : {}) }),
-    trabajo: trabajoEnAlmacen(ctx.almacen, `${doc.prefijo}percepcion/`),
-    ...(reserva ? { reserva } : {}),
-  }, {
-    documento: doc.documento, duracion: (d as { duracion?: number }).duracion ?? Math.max(0, ...unidades.map((u) => u.t1)), unidades,
-    ...(voz ? { actividad: voz.tramos } : {}), ...(reparto ? { reparto } : {}),
-    ficha: `«${m.titulo}»${m.anio ? ` (${m.anio})` : ''}${autores.length ? `, de ${autores.join(' y ')}` : ''}`, idioma: m.idioma ?? 'es',
-    modelo: opciones.modelo ?? MODELOS_GEMINI.percepcionRapida, modeloHablantes: opciones.modeloHablantes ?? MODELOS_GEMINI.percepcion,
-    ...(opciones.hablantes === false ? { hablantes: false } : {}), ...(opciones.huecos === false ? { huecos: false } : {}), prefijoTrabajo: 'revision/',
-  });
-  await ctx.almacen.poner(claveRevision(doc.prefijo), JSON.stringify(r), 'application/json');
-  return r;
-}

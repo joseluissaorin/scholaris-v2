@@ -16,6 +16,8 @@ import {
   consolidacionRegistrada, consolidar, enviarLote, ErrorFaltaTanda, indexarTanda, leerTanda, metadatosTempranos, planificar, prepararDocumento, recogerLote,
   type ContextoTuberia, type Plan, type ResumenTanda, type Tanda,
 } from '@scholaris/ingesta';
+import type { Plan as PlanUsuario } from '@scholaris/contrato';
+import { completarTranscripcionEn } from './transcripcion.js';
 import type { PaqueteConversion } from '@scholaris/imprenta';
 import type { EntradaIndice, EspacioVectorial, Lector, MetadatosDocumento, PaginaLeida } from '@scholaris/nucleo';
 import { enParalelo } from '@scholaris/nucleo';
@@ -141,6 +143,26 @@ export async function prepararTuberia(ctx: ContextoMotor, params: ParamsIngesta 
     tandas: plan.tandas.map((t) => ({ id: t.id, clase: t.clase, desde: t.desde, hasta: t.hasta })),
     ...(descargado ?? {}),
   };
+}
+
+/**
+ * Completa la transcripción de un medio antes de consolidarlo (percepcion/NOTAS.md):
+ * cobertura contra el mapa de la voz, huecos en subventanas de 75 s como mucho
+ * (Gemini mirando el proxy; si no, la reserva con el audio recortado), unidades
+ * con el tiempo roto y, si ya hay percepción y el plan lo permite, los hablantes.
+ * Lo deja en el estado de trabajo para `consolidar` y guarda la revisión (aplicada).
+ * Cada llamada queda grabada: un reintento no vuelve a pagar nada.
+ */
+export async function completarTranscripcionTuberia(
+  ctx: ContextoMotor, params: ParamsIngesta, info: InfoTuberia,
+  o: { plan: PlanUsuario; alProgreso?: (p: { fase: 'huecos' | 'hablantes'; hechas: number; total: number; usd: number }) => void | Promise<void> },
+): Promise<Record<string, unknown>> {
+  if (info.modo !== 'medio') return { omitida: 'no es un medio' };
+  const paquete = await leerPaquete(ctx.almacen, info.paquete);
+  const plan = (await leerJson<Plan>(ctx, clavePlan(params)))!;
+  const r = await completarTranscripcionEn(ctx, contexto(ctx, params, paquete, plan, { vectores: false }), params, o);
+  await (ctx.sql as { vaciarPendientes?: () => Promise<void> }).vaciarPendientes?.();
+  return r;
 }
 
 /** Modo económico: manda las páginas difíciles a la API por lotes. */

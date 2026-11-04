@@ -62,6 +62,12 @@ export interface OpcionesOrquestador extends OpcionesIngesta {
   alUnidades?: (desde: number, hasta: number, buscables: boolean) => void;
   /** Modo económico: cada cuánto se pregunta por el lote y cuánto se espera como mucho. */
   esperaLote?: { cadaMs?: number; maximoMs?: number };
+  /**
+   * Después de leer todas las tandas y antes de consolidar (en los medios, para
+   * completar la transcripción: `completarTranscripcion`). Si falla, se consolida
+   * con lo que haya.
+   */
+  antesDeConsolidar?: (ctx: ContextoTuberia) => Promise<unknown>;
 }
 
 export type ProgresoIngesta = Progreso;
@@ -186,6 +192,11 @@ export async function ejecutarIngesta(paquete: PaqueteConversion, puertos: Puert
   // La consolidación empieza ya (folios, secciones, troceado, figuras) y espera a las tandas solo para reaprovechar.
   const todas = Promise.all(indexaciones).then((rs) => { hito('todoBuscable'); emitir('vectores', 0.5, `${vectorizadas} vectores durante la lectura`); return rs; });
   await Promise.all(yaBuscables);
+  if (opciones.antesDeConsolidar) {
+    const ta = reloj();
+    await opciones.antesDeConsolidar(ctx).catch((e: unknown) => { console.error('antesDeConsolidar', e); });
+    tiempos.antesDeConsolidar = reloj() - ta;
+  }
   const tc = reloj();
   emitir('estructura', 0.5);
   const r = await consolidar(ctx, { metadatos: metadatosP, esperarTandas: todas });

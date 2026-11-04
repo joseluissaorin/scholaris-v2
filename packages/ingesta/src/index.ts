@@ -27,7 +27,13 @@ export {
   ErrorFaltaTanda, consolidacionRegistrada, type ConsolidacionRegistrada,
   seccionesDeTanda, anclaProvisional, documentoProvisional, idUnidadDe, huellaCorta, claveLote,
   type ContextoTuberia, type OpcionesTuberia, type EstadoTanda, type ResumenTanda, type ResultadoConsolidacion,
+  palabrasDeTandas, claveTranscripcionCompleta, type TranscripcionCompleta,
 } from './tuberia.js';
+export {
+  completarTranscripcion, reescribirTranscripcion, unidadesDePalabras,
+  type OpcionesCompletar, type ResultadoCompletar, type PuertosReescritura, type OpcionesReescritura, type ResultadoReescritura,
+} from './transcripcion.js';
+export { partirAudio, recortarAudio, recortarOggOpus, recortarWav, muestrasPaqueteOpus, PIEZA_ASR, SOLAPE_PIEZA, type PiezaAudio } from './pasos/piezas.js';
 export { Cobertura } from './cobertura.js';
 export { planificar as planificarTandas, tandasDePaginas } from './planificar.js';
 export { revisarTranscripcion, aplicarReemplazos, cribarFrases, alinear, sustituir, reescuchar, nombresPropios, type CambioTranscripcion } from './pasos/revision.js';

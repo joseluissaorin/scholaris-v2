@@ -66,4 +66,6 @@ export async function cerrarIngesta(p: PuertosUsuario, d: DatosCierre): Promise<
   // Cuesta (con el mejor modelo, del orden de 1 $ por libro y 3 $ por película): sola, solo en los planes de pago;
   // en el gratuito se puede pedir a mano con POST /documentos/:id/comprender.
   if (p.orquestador.lanzarComprension && p.usuario.plan !== 'gratis') p.segundoPlano(lanzarComprension(p, d.documento).catch((e) => console.error('comprension', e)));
+  // Si hay medios en cola (revisar su transcripción, percibirlos), sale el siguiente.
+  p.segundoPlano(import('./medios-existentes.js').then((m) => m.lanzarMediosPendientes(p)).catch((e) => console.error('medios', e)));
 }

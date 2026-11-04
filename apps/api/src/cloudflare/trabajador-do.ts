@@ -9,12 +9,13 @@ import { DurableObject } from 'cloudflare:workers';
 import type { Progreso } from '@scholaris/nucleo';
 import type { ParamsIngesta } from '../puertos.js';
 import { leerPrimeraPagina, leerUnPliego, transcribirUnTramo, type ContextoMotor, type InfoPlan } from '../compartido/motor-ingesta.js';
-import { consolidarTuberia, enviarLoteTuberia, procesarTanda, recogerLoteTuberia, type InfoTuberia, type ResultadoTanda, type ResumenConsolidacion } from '../compartido/tuberia-plataforma.js';
+import { completarTranscripcionTuberia, consolidarTuberia, enviarLoteTuberia, procesarTanda, recogerLoteTuberia, type InfoTuberia, type ResultadoTanda, type ResumenConsolidacion } from '../compartido/tuberia-plataforma.js';
+import { pasoAplicarMedio, pasoPercepcionMedio, pasoRevisionMedio, type ContextoMedio } from '../compartido/medios-existentes.js';
 import type { Env } from './env.js';
 import { SqlRemoto } from './sql.js';
 import { almacenDesdeEnv, catalogosDesdeEnv, cuentasDesdeEnv, emisorDesdeEnv, geminiPara, indiceDesdeEnv, inteligenciaPara, origenDe } from './puertos-cf.js';
 import { espacioNombresDe } from './indice-vectorize.js';
-import { recortadorCF } from './conversor.js';
+import { proxyCF, recortadorCF } from './conversor.js';
 import { UnaVez } from '../compartido/una-vez.js';
 import { cerrarComprension, pasoEntidades, pasoFichas, pasoGlobal, pasoIndexado, pasoSegmentos, planificarComprension, type ContextoComprension, type PlanComprension } from '@scholaris/ingesta';
 import { contextoComprension, type ParamsComprension } from '../compartido/comprension.js';
@@ -81,6 +82,57 @@ export class Trabajador extends DurableObject<Env> {
     // así que trae otra fecha y consolida de nuevo, pero en fila: nunca dos a la vez.
     const clave = `consolidar:${p.tarea}:${p.documento}:${info.preparado ?? 'sin-fecha'}`;
     return this.unaVez.hacer(clave, async () => consolidarTuberia(await this.contexto(p), p, info), { recordar: true, exclusivo: true });
+  }
+
+  /**
+   * Completa la transcripción de un medio antes de consolidar (huecos, tiempos rotos y, con
+   * percepción, hablantes). Recordada como la consolidación: un reintento del paso recoge
+   * lo hecho, y cada llamada al modelo queda además grabada en el almacén.
+   */
+  async transcripcion(p: ParamsIngesta, info: InfoTuberia): Promise<Record<string, unknown>> {
+    const clave = `transcripcion:${p.tarea}:${p.documento}:${info.preparado ?? 'sin-fecha'}`;
+    return this.unaVez.hacer(clave, async () => {
+      const ctx = await this.contexto(p);
+      const emisor = emisorDesdeEnv(this.env, p.usuario);
+      let ultimo = 0;
+      return completarTranscripcionTuberia(ctx, p, info, {
+        plan: p.plan,
+        alProgreso: async (pr) => {
+          if (Date.now() - ultimo < 5000 && pr.hechas < pr.total) return;
+          ultimo = Date.now();
+          const mensaje = pr.fase === 'huecos' ? `Revisando la transcripción: ${pr.hechas} de ${pr.total} tramos sin texto` : `Revisando quién habla: ${pr.hechas} de ${pr.total} ventanas`;
+          await emisor.emitir(`usuario:${p.usuario}`, { tipo: 'progreso', progreso: { tarea: p.tarea, documento: p.documento, fase: 'lectura', avance: pr.hechas / Math.max(1, pr.total), total: 0.71, mensaje, transcurrido: 0 } }).catch(() => undefined);
+        },
+      });
+    }, { recordar: true, exclusivo: true });
+  }
+
+  private async contextoMedio(p: ParamsIngesta): Promise<ContextoMedio> {
+    const ctx = await this.contexto(p);
+    const hacerProxy = proxyCF(this.env);
+    return {
+      almacen: ctx.almacen, sql: ctx.sql, inteligencia: ctx.inteligencia, indice: ctx.indice, espacioNombres: ctx.espacioNombres,
+      ...(ctx.gemini ? { gemini: ctx.gemini } : {}), ...(hacerProxy ? { hacerProxy } : {}),
+    };
+  }
+
+  /**
+   * Un paso de las fases `transcripcion` y `percepcion` de un medio que ya existe
+   * (revisar, percibir, aplicar). Recordado: un reintento recoge lo hecho.
+   */
+  async medio(p: ParamsIngesta, paso: 'revision' | 'revision-hablantes' | 'percepcion' | 'aplicar'): Promise<unknown> {
+    return this.unaVez.hacer(`medio:${p.tarea}:${paso}`, async () => {
+      const ctx = await this.contextoMedio(p);
+      let r: unknown;
+      switch (paso) {
+        case 'revision': r = await pasoRevisionMedio(ctx, p); break;
+        case 'revision-hablantes': r = await pasoRevisionMedio(ctx, { ...p, medio: { ...p.medio, rehacer: true } }, { hablantes: true }); break;
+        case 'percepcion': r = await pasoPercepcionMedio(ctx, p); break;
+        case 'aplicar': r = await pasoAplicarMedio(ctx, p); break;
+      }
+      await (ctx.sql as SqlRemoto).vaciarPendientes();
+      return JSON.parse(JSON.stringify(r ?? null)) as unknown;
+    }, { recordar: true, exclusivo: true });
   }
 
   async enviarLote(p: ParamsIngesta, info: InfoTuberia): Promise<string | null> {

@@ -78,6 +78,29 @@ def test_comprension_por_la_v1():
     assert f.pedidas[3][2]["json"] == {"documentos": ["d1", "d2"]}
 
 
+def test_revisar_la_transcripcion_por_la_v1(tmp_path):
+    rev = {"documento": "d1", "version": "revision-1", "cobertura": {"huecos": []}, "correcciones": [{"tipo": "hueco"}]}
+    ruta = tmp_path / "revision.json"
+    ruta.write_text(json.dumps(rev), encoding="utf-8")
+    f = SesionFalsa([
+        Respuesta(202, {"documento": "d1", "tarea": "t1", "lanzada": True}),
+        Respuesta(200, {"documento": "d1", "aplicada": "2026-11-04T10:00:00Z", "correcciones": {"huecos": 1}}),
+        Respuesta(200, {"lanzada": False, "usd": 3.2, "documentos": []}),
+        Respuesta(200, {"lanzada": False, "usd": 5.1, "documentos": []}),
+    ])
+    s = Scholaris("sch_prueba", base="https://ejemplo.es", sesion=f)
+    assert s.revisar_transcripcion("d1", revision=str(ruta))["tarea"] == "t1"
+    metodo, url, k = f.pedidas[0]
+    assert (metodo, url) == ("POST", "https://ejemplo.es/api/v1/documentos/d1/transcripcion/revisar")
+    assert k["json"] == {"revision": rev}
+    assert s.revision_transcripcion("d1")["aplicada"]
+    assert f.pedidas[1][1] == "https://ejemplo.es/api/v1/documentos/d1/transcripcion/revision"
+    assert s.revisar_transcripciones(presupuesto_usd=4)["usd"] == 3.2
+    assert f.pedidas[2][2]["json"] == {"presupuestoUsd": 4}
+    assert s.percibir_medios(["d1", "d2"], confirmar=True)["usd"] == 5.1
+    assert (f.pedidas[3][1], f.pedidas[3][2]["json"]) == ("https://ejemplo.es/api/v1/medios/percibir", {"documentos": ["d1", "d2"], "confirmar": True})
+
+
 def test_fichas_de_la_v2_pasan_de_pagina():
     from scholaris.v2 import Scholaris as V2
 
