@@ -19,7 +19,7 @@
  */
 import { enParalelo, sha256, type Evidencia, type PercepcionMedio, type PersonaPercibida, type Transcriptor } from '@scholaris/nucleo';
 import { instantesDePalabras, type PalabrasTiempo } from '@scholaris/spdf';
-import { normalNombre, Unificador, repartoInicial } from './reparto.js';
+import { normalNombre, Unificador, repartoInicial, separarInterpretes } from './reparto.js';
 import type { AlmacenTrabajo, CostePercepcion, FicheroModelo, Mirada, UnidadMedio, Vidente } from './tipos.js';
 import { aSegundos, hablantesDe, marca, turnosDe, ventanasDe, type Ventana } from './ventanas.js';
 
@@ -416,12 +416,14 @@ function yaEsta(s: SegmentoOido, palabras: PalabraUbicada[]): boolean {
 
 export async function revisarTranscripcionConVideo(p: PuertosRevision, o: OpcionesRevisionTranscripcion): Promise<RevisionTranscripcion> {
   const turnos = turnosDe(o.unidades);
-  const reparto = repartoInicial(o.reparto, hablantesDe(turnos)).slice(0, 30);
+  const reparto = repartoInicial(separarInterpretes(o.reparto).personajes, hablantesDe(turnos)).slice(0, 30);
   const unificador = new Unificador(reparto);
   const modelo = o.modelo ?? p.vidente.nombre.replace(/^[^:]*:/, '');
   const modeloHablantes = o.modeloHablantes ?? modelo;
-  const huella = (await sha256(JSON.stringify([VERSION_REVISION, modelo, modeloHablantes]))).slice(0, 12);
-  const prefijo = `${o.prefijoTrabajo ?? 'revision/'}${huella}/`;
+  // Una huella por fase: cambiar el modelo de los hablantes no obliga a volver a pagar los huecos.
+  const huellaHuecos = (await sha256(JSON.stringify([VERSION_REVISION, 'huecos', modelo]))).slice(0, 12);
+  const huellaHablantes = (await sha256(JSON.stringify([VERSION_REVISION, 'hablantes', modeloHablantes]))).slice(0, 12);
+  const base = o.prefijoTrabajo ?? 'revision/';
   const coste: CostePercepcion = { usd: 0, llamadas: 0, tokensEntrada: 0, tokensSalida: 0, ms: 0, grabadas: 0 };
   const avisos: string[] = [];
   const cobertura = coberturaTranscripcion(o.unidades, { duracion: o.duracion, ...(o.actividad ? { actividad: o.actividad } : {}) });
@@ -436,6 +438,7 @@ export async function revisarTranscripcionConVideo(p: PuertosRevision, o: Opcion
   const contar = (m: Mirada) => { coste.usd += m.usd ?? 0; coste.llamadas++; coste.tokensEntrada += m.tokensEntrada; coste.tokensSalida += m.tokensSalida; coste.ms += m.ms; };
   /** Una llamada grabada: si ya se hizo, se devuelve lo guardado. */
   async function grabada<T>(clave: string, fn: () => Promise<{ valor: T; mirada?: Mirada }>): Promise<T> {
+    const prefijo = `${base}${clave.startsWith('hablantes-') ? huellaHablantes : huellaHuecos}/`;
     const g = await p.trabajo.leer(`${prefijo}${clave}`).catch(() => null);
     if (g) { try { coste.grabadas++; return (JSON.parse(g) as { valor: T }).valor; } catch { /* se repite */ } }
     let ultimo: unknown = null;
