@@ -76,7 +76,8 @@ export interface RespuestaModelo {
   fin?: string;
 }
 
-export type TrozoModelo = { delta: string } | { uso: UsoModelo };
+/** Un trozo del flujo: texto, o al final lo gastado y el motivo de fin del proveedor (STOP, MAX_TOKENS…). */
+export type TrozoModelo = { delta: string } | { uso: UsoModelo; fin?: string };
 
 export interface ModeloAgente {
   readonly nombre: string;
@@ -106,15 +107,19 @@ export class Contabilidad {
 }
 
 /** Texto entero de un `flujo` (o del `turno` si no hay flujo), apuntando el uso. */
-export async function* flujoDe(modelo: ModeloAgente, p: PeticionModelo, cuentas?: Contabilidad): AsyncGenerator<string> {
+export async function* flujoDe(modelo: ModeloAgente, p: PeticionModelo, cuentas?: Contabilidad, estado?: { fin?: string }): AsyncGenerator<string> {
   if (modelo.flujo) {
     for await (const t of modelo.flujo(p)) {
       if ('delta' in t) yield t.delta;
-      else cuentas?.apuntar(t.uso);
+      else {
+        cuentas?.apuntar(t.uso);
+        if (estado && t.fin) estado.fin = t.fin;
+      }
     }
     return;
   }
   const r = await modelo.turno(p);
   cuentas?.apuntar(r.uso);
+  if (estado && r.fin) estado.fin = r.fin;
   yield r.texto;
 }

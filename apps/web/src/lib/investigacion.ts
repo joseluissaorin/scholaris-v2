@@ -66,7 +66,10 @@ export function aplicarEvento(e: EstadoInvestigacion, ev: EventoInvestigacion, a
       const pruebas = e.pruebas.some((x) => x.id === p.id) ? e.pruebas.map((x) => (x.id === p.id ? p : x)) : [...e.pruebas, p];
       return { ...e, pruebas };
     }
-    case 'texto': return { ...e, fase: 'escribiendo', texto: e.texto + ev.delta, marcas: ev.marcas ? { ...e.marcas, ...ev.marcas } : e.marcas };
+    // «reinicio»: la redacción anterior falló y se vuelve a escribir desde cero.
+    case 'texto': return ev.reinicio
+      ? { ...e, fase: 'escribiendo', texto: ev.delta, marcas: ev.marcas ?? {} }
+      : { ...e, fase: 'escribiendo', texto: e.texto + ev.delta, marcas: ev.marcas ? { ...e.marcas, ...ev.marcas } : e.marcas };
     case 'verificacion': return { ...e, verificacion: { frases: ev.frases, respaldadas: ev.respaldadas, total: ev.total } };
     case 'fin': return { ...e, fase: 'hecho', fin: ev, terminada: ahora };
     case 'error': return { ...e, fase: 'error', error: ev.mensaje || 'La investigación falló.', terminada: ahora };

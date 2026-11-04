@@ -15,7 +15,7 @@ import type { Filtros } from '@scholaris/nucleo';
 import { recortar, type ContextoHerramientas, type Herramienta, type ResultadoHerramienta } from './contexto.js';
 import { HERRAMIENTAS_LECTURA } from './herramientas.js';
 import { guardarEnCuaderno, guardarEnHistorial, HERRAMIENTAS_MEMORIA, type Investigacion } from './memoria.js';
-import { Contabilidad, type MensajeAgente, type ParteMensaje } from './modelo.js';
+import { Contabilidad, type MensajeAgente, type ModeloAgente, type ParteMensaje } from './modelo.js';
 import { candidatas, catalogo, planificar } from './plan.js';
 import { presupuestoDe, type OpcionesInvestigar, type PuertosInvestigar } from './puertos.js';
 import { CuadernoPruebas, fichaDocumento, vistaPrueba, type Prueba } from './pruebas.js';
@@ -59,6 +59,32 @@ export function compactar(mensajes: MensajeAgente[], limite = 160_000, conservar
     });
     if (tam() <= limite) return;
   }
+}
+
+/** La redacción no llegó: ningún `fin` con una respuesta vacía o cortada. */
+export class ErrorRedaccion extends Error {
+  constructor(mensaje: string) {
+    super(mensaje);
+    this.name = 'ErrorRedaccion';
+  }
+}
+
+/**
+ * ¿Falló la redacción? Vacía (o casi), o cortada: el proveedor no terminó con STOP (se quedó
+ * sin tokens, la bloqueó, la cortó). Devuelve el motivo, o null si está bien.
+ */
+export function redaccionFallida(texto: string, fin?: string): string | null {
+  const limpio = texto.replace(/\[E\d+\]/g, '').trim();
+  if (limpio.length < 120) return `vacía (${limpio.length} caracteres)`;
+  if (fin && !/^(STOP|FINISH_REASON_UNSPECIFIED)$/.test(fin)) return `cortada (${fin})`;
+  return null;
+}
+
+/** Con qué modelos se intenta redactar: el redactor dos veces y, después, otro distinto. */
+export function modelosRedaccion(p: PuertosInvestigar): ModeloAgente[] {
+  const principal = p.modelos.redactor ?? p.modelos.agente;
+  const otro = [p.modelos.agente, p.modelos.verificador, p.modelos.vision].find((m) => m && m !== principal && m.nombre !== principal.nombre);
+  return [principal, principal, ...(otro ? [otro] : [])];
 }
 
 /** Ejecuta varias promesas con un tope de concurrencia, conservando el orden. */
@@ -224,17 +250,43 @@ export async function* investigar(p: PuertosInvestigar, pregunta: string, o: Opc
     }
     if (agotado()) avisos.push(`La investigación agotó su presupuesto (${pasos} pasos, ${Math.round((reloj() - t0) / 1000)} s, ${cuentas.usd.toFixed(3)} $).`);
 
-    // 4. La redacción.
-    const numerador = new Numerador(ctx, (x) => (x.imagen ? urls.get(`${x.evidencia.documento}|${x.imagen}`) : undefined));
+    // 4. La redacción. Una redacción vacía o cortada (un flujo que se cae, un modelo que no
+    // devuelve nada) nunca llega a «fin»: se vuelve a escribir (otra vez con el mismo modelo y
+    // después con otro) y, si sigue fallando, la investigación termina en error.
+    const urlNumerador = (x: Prueba) => (x.imagen ? urls.get(`${x.evidencia.documento}|${x.imagen}`) : undefined);
+    let numerador = new Numerador(ctx, urlNumerador);
     for (const x of ctx.pruebas.todas()) await urlDe(x);
     let texto = '';
     if (!ctx.pruebas.tamano) {
       texto = idioma.startsWith('en') ? 'I could not find evidence in your library to answer this question.' : 'No he encontrado en tu biblioteca pruebas con que responder a esta pregunta.';
       yield { tipo: 'texto', delta: texto };
     } else {
-      for await (const t of redactar(ctx, numerador, pregunta, plan, ctx.notas, reflexion, idioma)) {
-        texto += t.delta;
-        yield { tipo: 'texto', delta: t.delta, ...(Object.keys(t.marcas).length ? { marcas: t.marcas } : {}) };
+      let lista = false;
+      const intentos = modelosRedaccion(p);
+      for (const [i, modelo] of intentos.entries()) {
+        if (i) {
+          numerador = new Numerador(ctx, urlNumerador);
+          yield { tipo: 'texto', delta: '', reinicio: true };
+        }
+        texto = '';
+        const estado: { fin?: string } = {};
+        let fallo: string | undefined;
+        try {
+          for await (const t of redactar(ctx, numerador, pregunta, plan, ctx.notas, reflexion, idioma, { modelo, estado })) {
+            texto += t.delta;
+            yield { tipo: 'texto', delta: t.delta, ...(Object.keys(t.marcas).length ? { marcas: t.marcas } : {}) };
+          }
+        } catch (e) {
+          if (o.signal?.aborted) throw e;
+          fallo = (e as Error).message ?? String(e);
+        }
+        const problema = fallo ? `error: ${fallo.slice(0, 200)}` : redaccionFallida(texto, estado.fin);
+        if (!problema) { lista = true; break; }
+        console.error(JSON.stringify({ nivel: 'aviso', que: 'investigar_redaccion_fallida', id, intento: i + 1, de: intentos.length, modelo: modelo.nombre, problema, longitud: texto.length, fin: estado.fin ?? null }));
+      }
+      if (!lista) {
+        console.error(JSON.stringify({ nivel: 'error', que: 'investigar_sin_respuesta', id, intentos: intentos.length, pruebas: ctx.pruebas.tamano }));
+        throw new ErrorRedaccion('La redacción salió vacía o cortada en todos los intentos.');
       }
     }
     if (numerador.descartadas.length) avisos.push(`Se quitaron ${numerador.descartadas.length} marcas que no correspondían a ninguna prueba.`);
@@ -271,7 +323,16 @@ export async function* investigar(p: PuertosInvestigar, pregunta: string, o: Opc
       const t = trad.get(m.id);
       return t && m.evidencia.idioma && !idioma.startsWith(m.evidencia.idioma.slice(0, 2)) ? { ...m.evidencia, traduccion: t } : m.evidencia;
     });
+    // Si la corrección dejara la respuesta vacía (no debería), vale la redacción sin corregir.
+    if (!cuerpo.trim()) {
+      console.error(JSON.stringify({ nivel: 'aviso', que: 'investigar_correccion_vacia', id, longitud: texto.length }));
+      cuerpo = texto;
+    }
     const final = renumerar(marcarSinPrueba(cuerpo.trim(), v.detalle), todas);
+    if (!final.markdown.trim()) {
+      console.error(JSON.stringify({ nivel: 'error', que: 'investigar_sin_respuesta', id, fase: 'final' }));
+      throw new ErrorRedaccion('La respuesta final quedó vacía.');
+    }
     const evidencias = final.evidencias;
     const frasesFinales = v.frases.map((f) => ({ ...f, evidencias: f.evidencias.map((id) => final.mapa.get(id)).filter((x): x is string => !!x) }));
     const respaldadas = frasesFinales.filter((f) => f.veredicto === 'respaldada').length;
@@ -311,7 +372,12 @@ export async function* investigar(p: PuertosInvestigar, pregunta: string, o: Opc
       await guardarEnHistorial(p.sql, { id, pregunta, plan, markdown, evidencias: [], frases: [], notas: ctx.notas, confianza: 'baja', modelo: modeloAgente, ms: Math.round(reloj() - t0) }, { filtros, error: m, eventos });
     }
     console.error(JSON.stringify({ que: 'investigar', id, error: m }));
-    yield { tipo: 'error', mensaje: /cancelada/.test(m) ? 'Investigación cancelada.' : 'No he podido terminar la investigación. Vuelve a intentarlo.' };
+    yield {
+      tipo: 'error',
+      mensaje: /cancelada/.test(m) ? 'Investigación cancelada.'
+        : e instanceof ErrorRedaccion ? 'No he podido redactar la respuesta: el modelo la devolvió vacía o cortada. Vuelve a intentarlo.'
+          : 'No he podido terminar la investigación. Vuelve a intentarlo.',
+    };
   }
 }
 

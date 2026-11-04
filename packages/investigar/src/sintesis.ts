@@ -8,7 +8,7 @@
 import type { EvidenciaInvestigacion, PlanInvestigacion } from '@scholaris/contrato';
 import { pasajeSiResponde, terminos } from '@scholaris/busqueda';
 import { frasesDe } from './verificacion.js';
-import { flujoDe } from './modelo.js';
+import { flujoDe, type ModeloAgente } from './modelo.js';
 import { fichaDe, lineaPrueba, recortar, type ContextoHerramientas, type Nota } from './contexto.js';
 import { estrechar, vistaPrueba, type Prueba } from './pruebas.js';
 
@@ -216,8 +216,11 @@ export function peticionRedaccion(ctx: ContextoHerramientas, pregunta: string, p
  * Escribe la respuesta por trozos. Cada trozo sale con sus marcas ya convertidas
  * (y las nuevas, E → P). Retiene lo que empieza por «[» hasta que se cierra.
  */
-export async function* redactar(ctx: ContextoHerramientas, numerador: Numerador, pregunta: string, plan: PlanInvestigacion | null, notas: Nota[], reflexion: string, idioma: string): AsyncGenerator<{ delta: string; marcas: Record<string, string> }> {
-  const modelo = ctx.p.modelos.redactor ?? ctx.p.modelos.agente;
+export async function* redactar(
+  ctx: ContextoHerramientas, numerador: Numerador, pregunta: string, plan: PlanInvestigacion | null, notas: Nota[], reflexion: string, idioma: string,
+  o: { modelo?: ModeloAgente; estado?: { fin?: string } } = {},
+): AsyncGenerator<{ delta: string; marcas: Record<string, string> }> {
+  const modelo = o.modelo ?? ctx.p.modelos.redactor ?? ctx.p.modelos.agente;
   const pet = peticionRedaccion(ctx, pregunta, plan, notas, reflexion, idioma);
   let crudo = '';
   let pendiente = '';
@@ -243,7 +246,7 @@ export async function* redactar(ctx: ContextoHerramientas, numerador: Numerador,
     salida += listo.slice(ultimo);
     return { delta: salida, marcas };
   };
-  for await (const trozo of flujoDe(modelo, { ...pet, temperatura: 0.4, maxTokens: 16_000, pensamiento: 'bajo', ...(ctx.signal ? { signal: ctx.signal } : {}) }, ctx.cuentas)) {
+  for await (const trozo of flujoDe(modelo, { ...pet, temperatura: 0.4, maxTokens: 16_000, pensamiento: 'bajo', ...(ctx.signal ? { signal: ctx.signal } : {}) }, ctx.cuentas, o.estado)) {
     crudo += trozo;
     pendiente += trozo;
     const x = emitir(false);

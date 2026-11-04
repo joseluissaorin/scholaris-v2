@@ -34,6 +34,12 @@ describe('el estado de una investigación', () => {
     expect(e.pruebas.map((p) => p.id)).toEqual(['P1', 'P2']);
   });
 
+  it('si la redacción vuelve a empezar («reinicio»), se descarta lo recibido y sus marcas', () => {
+    const e = correr([...base, { tipo: 'texto', delta: '', reinicio: true }, { tipo: 'texto', delta: 'Otra versión [E1].', marcas: { E1: 'P2' } }]);
+    expect(e.texto).toBe('Otra versión [E1].');
+    expect(e.marcas).toEqual({ E1: 'P2' });
+  });
+
   it('mientras se escribe, cada marca lleva a su prueba por las «marcas» del texto', () => {
     const m = pruebasCitadas(correr(base));
     expect(m.get('E1')?.id).toBe('P1');
