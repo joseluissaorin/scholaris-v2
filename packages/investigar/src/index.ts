@@ -12,6 +12,7 @@ export * from './herramientas.js';
 export * from './vision.js';
 export * from './memoria.js';
 export * from './plan.js';
+export * from './prosa.js';
 export * from './sintesis.js';
 export * from './regiones.js';
 export * from './verificacion.js';

@@ -7,7 +7,7 @@ import { verificar } from '../src/verificacion.js';
 import { HERRAMIENTAS_MEMORIA } from '../src/memoria.js';
 import { Contabilidad } from '../src/modelo.js';
 import { CuadernoPruebas, fichaDocumento, type Prueba } from '../src/pruebas.js';
-import { CUENTO, crearSQL, ModeloGuion, PELICULA, puertos, sembrar } from './apoyo.js';
+import { CUENTO, crearSQL, juicioDeFrases, ModeloGuion, PELICULA, puertos, sembrar, textoDe } from './apoyo.js';
 
 const h = (nombre: string): Herramienta => [...HERRAMIENTAS_LECTURA, ...HERRAMIENTAS_MEMORIA].find((x) => x.declaracion.nombre === nombre)!;
 
@@ -161,22 +161,26 @@ describe('herramientas de lectura', () => {
     expect(pruebaEnAmbito(ctx, pelicula)).toBe(true);
   });
 
-  it('verificar vuelve a mirar quién dice una frase que solo se apoya en la transcripción', async () => {
+  it('verificar vuelve a mirar quién dice una frase que solo se apoya en la transcripción, y quita la marca que no la sostiene', async () => {
     const { ctx } = await contexto();
     let revisiones = 0;
     ctx.p.modelos.agente = new ModeloGuion((pet) => {
       const esquema = JSON.stringify(pet.esquema ?? {});
-      if (esquema.includes('"frases"')) return { json: { frases: [{ i: 0, veredicto: 'respaldada' }] } };
-      revisiones++;
-      expect(pet.mensajes[0]!.partes[0]).toMatchObject({ tipo: 'medio', uri: 'https://archivos/fresa' });
-      return { json: { veredicto: 'no', nota: 'Lo dice Germán, no Diego.' } };
+      if (esquema.includes('juicios')) {
+        revisiones++;
+        expect(pet.mensajes[0]!.partes[0]).toMatchObject({ tipo: 'medio', uri: 'https://archivos/fresa' });
+        return { json: { juicios: [{ n: 1, veredicto: 'no', nota: 'Lo dice otra persona.' }] } };
+      }
+      if (pet.sistema?.startsWith('Corriges')) return { json: { frases: [] } };
+      if (esquema.includes('"frases"')) return { json: juicioDeFrases(textoDe(pet)) };
+      return { texto: '' };
     });
     await h('leer').ejecutar({ documento: PELICULA, tiempo: { desde: 590, hasta: 650 } }, ctx);
     const n = new Numerador(ctx);
     const md = n.sustituir('Diego responde con entusiasmo: «Me encanta la fresa» [P1].');
     const v = await verificar(ctx, n, md, 2);
     expect(revisiones).toBe(1);
-    expect(v.frases[0]).toMatchObject({ veredicto: 'sin_respaldo', revisada: true, nota: 'Al volver a mirar: Lo dice Germán, no Diego.' });
+    expect(v.frases[0]).toMatchObject({ veredicto: 'sin_respaldo', revisada: true, nota: 'Al volver a mirar: Lo dice otra persona.' });
   });
 
   it('anotar guarda hallazgos con pruebas que existen', async () => {

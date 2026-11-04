@@ -60,9 +60,9 @@ describe('investigar', () => {
     if (fin?.tipo !== 'fin') throw new Error('sin fin');
     expect(fin.markdown).toContain('## Pruebas');
     expect(fin.markdown).not.toContain('P999');
-    // E4: la misma página citada sin cita literal (en la tabla) es la página entera, otra evidencia.
-    expect(fin.evidencias.map((e) => e.id)).toEqual(['E1', 'E2', 'E3', 'E4']);
-    expect(fin.evidencias[3]!.ancla.caracteres).toBeUndefined();
+    // La tabla resume sin marcas (una fila se juzga entera): la página que solo citaba la tabla ya no es prueba.
+    expect(fin.evidencias.map((e) => e.id)).toEqual(['E1', 'E2', 'E3']);
+    expect(fin.markdown).toContain('| Cuento | marca a Diego |');
     const e1 = fin.evidencias[0]!;
     expect(e1).toMatchObject({ documento: CUENTO, etiqueta: 'p. 4', citaCorta: '(Paz, 1991/1994, p. 4)' });
     expect(e1.cita).toBe('habiendo chocolate, había pedido fresa.');
@@ -81,7 +81,7 @@ describe('investigar', () => {
     // La memoria: un cuaderno con una tarjeta verificada por prueba, la nota y la síntesis; y el historial.
     expect(fin.cuaderno).toBeDefined();
     const tarjetas = await listarTarjetas(sql, fin.cuaderno!);
-    expect(tarjetas.filter((t) => t.cita).length).toBe(4);
+    expect(tarjetas.filter((t) => t.cita).length).toBe(3);
     expect(tarjetas.find((t) => t.tipo === 'nota')?.contenido).toMatchObject({ clase: 'hallazgo' });
     expect(tarjetas.find((t) => t.tipo === 'tramo')).toBeDefined();
     const [s] = await listarSintesis(sql, fin.cuaderno!);

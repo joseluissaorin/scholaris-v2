@@ -142,11 +142,11 @@ export function guionCompleto(): Guion {
         { desde: '3:00:00', clase: 'accion', descripcion: 'Fuera del tramo: se descarta.' },
       ] } };
     }
-    if (esquema.includes('veredicto') && !esquema.includes('frases')) return { json: { veredicto: 'si', nota: 'Se ve.' } };
-    if (esquema.includes('"frases"')) {
-      const frases = [...t.matchAll(/^(\d+)\. (.*)$/gm)].map((m) => ({ i: Number(m[1]), sin: m[2]!.includes('[sin citas]') }));
-      return { json: { frases: frases.map((f) => ({ i: f.i, veredicto: f.sin ? 'interpretacion' : 'respaldada' })) } };
-    }
+    // Volver a mirar: todas las afirmaciones se ven.
+    if (esquema.includes('juicios')) return { json: { juicios: [...t.matchAll(/^(\d+)\. /gm)].map((m) => ({ n: Number(m[1]), veredicto: 'si', nota: 'Se ve.' })) } };
+    // Corregir: nada que corregir (devuelve la frase igual).
+    if (p.sistema?.startsWith('Corriges')) return { json: { frases: [...t.matchAll(/^### Frase (\d+)\n(.*)$/gm)].map((m) => ({ i: Number(m[1]), texto: m[2] })) } };
+    if (esquema.includes('"frases"')) return { json: juicioDeFrases(t) };
     if (p.herramientas?.length) {
       turnoAgente++;
       if (turnoAgente === 1) return { llamadas: [{ nombre: 'mapa', args: { documento: PELICULA } }, { nombre: 'buscar', args: { consulta: 'Coppelia helado fresa', documentos: [CUENTO] } }] };
@@ -166,4 +166,19 @@ export function guionCompleto(): Guion {
 
 export function puertos(sql: SQLPrueba, modelo: ModeloAgente, conMedios = true): PuertosInvestigar {
   return { sql, buscador: new Buscador({ sql }), modelos: { agente: modelo }, ...(conMedios ? { medios } : {}), usuario: { id: 'u1', pro: true }, ahora: () => Date.now() };
+}
+
+/**
+ * El juicio del verificador falso: cada marca sostiene su frase; la frase es visual si habla
+ * de encuadre o de plano, e interpretación si no lleva marcas.
+ */
+export function juicioDeFrases(t: string, veredicto: (frase: string, marca: string) => string = () => 'sostiene') {
+  const frases = [...t.matchAll(/^(\d+)\. (.*?)(?: \[marcas: ([^\]]+)\]| \[sin marcas\])$/gm)].map((m) => ({ i: Number(m[1]), texto: m[2]!, marcas: m[3] ? m[3].split(/,\s*/) : [] }));
+  return {
+    frases: frases.map((f) => ({
+      i: f.i,
+      clase: !f.marcas.length ? 'interpretacion' : /encuadre|plano/.test(f.texto) ? 'visual' : 'hecho',
+      marcas: f.marcas.map((marca) => ({ marca, veredicto: veredicto(f.texto, marca) })),
+    })),
+  };
 }

@@ -20,6 +20,7 @@ import { candidatas, catalogo, planificar } from './plan.js';
 import { presupuestoDe, type OpcionesInvestigar, type PuertosInvestigar } from './puertos.js';
 import { CuadernoPruebas, fichaDocumento, vistaPrueba, type Prueba } from './pruebas.js';
 import { regionesDeCitas } from './regiones.js';
+import { quitarLocalizadores, renumerar, tablasSinMarcas } from './prosa.js';
 import { afinar, nombreIdioma, Numerador, redactar } from './sintesis.js';
 import { confianzaDe, marcarSinPrueba, verificar } from './verificacion.js';
 import { escuchar, ver } from './vision.js';
@@ -238,32 +239,45 @@ export async function* investigar(p: PuertosInvestigar, pregunta: string, o: Opc
     }
     if (numerador.descartadas.length) avisos.push(`Se quitaron ${numerador.descartadas.length} marcas que no correspondían a ninguna prueba.`);
 
-    // 5. Las páginas citadas sin cita literal, a sus oraciones; y la verificación.
-    afinar(numerador, ctx, texto);
-    // Mientras se verifica, las citas en páginas reciben su región en la imagen (anclaje material).
-    const [v, rg] = await Promise.all([
-      verificar(ctx, numerador, texto, presupuesto.revisiones),
-      regionesDeCitas(ctx, numerador, { vision: () => cuentas.usd < presupuesto.usd }).catch(() => null),
-    ]);
-    if (rg?.uso.llamadas) {
+    // 5. La prosa, sin páginas ni minutos escritos a mano (el sitio lo dan las marcas) y sin
+    // marcas en las tablas (una fila se juzga entera y casi ninguna marca la sostiene entera).
+    const anclas = () => numerador.marcadas.map((m) => m.evidencia);
+    const sinTablas = tablasSinMarcas(texto);
+    const loc = quitarLocalizadores(sinTablas.markdown, anclas());
+    let cuerpo = loc.markdown;
+    if (loc.quitados) avisos.push(`Se quitaron ${loc.quitados} páginas o minutos escritos en la prosa: el sitio lo dan las marcas${loc.convertidos ? ` (${loc.convertidos} pasaron a ser marcas)` : ''}.`);
+
+    // 6. Las páginas citadas sin cita literal, a sus oraciones; la verificación y la corrección.
+    afinar(numerador, ctx, cuerpo);
+    const regiones = () => regionesDeCitas(ctx, numerador, { vision: () => cuentas.usd < presupuesto.usd }).catch(() => null);
+    const [v, rg] = await Promise.all([verificar(ctx, numerador, cuerpo, { sitios: presupuesto.revisiones }), regiones()]);
+    cuerpo = quitarLocalizadores(v.markdown, anclas()).markdown;
+    // Lo corregido puede citar pruebas nuevas: a sus oraciones y a su región.
+    let rg2: Awaited<ReturnType<typeof regiones>> = null;
+    if (v.correcciones) { afinar(numerador, ctx, cuerpo); rg2 = await regiones(); }
+    for (const r of [rg, rg2]) {
+      if (!r?.uso.llamadas) continue;
       // Una entrada por localización, con el total en la primera.
-      for (let i = 0; i < rg.uso.llamadas; i++) cuentas.apuntar({ modelo: rg.uso.modelo, entrada: i ? 0 : rg.uso.tokensEntrada, salida: i ? 0 : rg.uso.tokensSalida, cache: 0, usd: i ? 0 : rg.uso.usd, ms: 0 });
+      for (let i = 0; i < r.uso.llamadas; i++) cuentas.apuntar({ modelo: r.uso.modelo, entrada: i ? 0 : r.uso.tokensEntrada, salida: i ? 0 : r.uso.tokensSalida, cache: 0, usd: i ? 0 : r.uso.usd, ms: 0 });
     }
-    for (const x of rg?.pruebas ?? []) {
+    for (const x of [...(rg?.pruebas ?? []), ...(rg2?.pruebas ?? [])]) {
       const url = await urlDe(x);
       yield { tipo: 'evidencia', evidencia: vistaPrueba(x, ctx.fichas.get(x.evidencia.documento), url ? { imagenUrl: url } : {}) };
     }
-    const respaldadas = v.frases.filter((f) => f.veredicto === 'respaldada').length;
-    yield { tipo: 'verificacion', frases: v.frases, respaldadas, total: v.frases.length };
-    const confianza = numerador.marcadas.length ? confianzaDe(v.frases) : 'baja';
 
-    // 6. El resultado: traducciones, pruebas, fuentes.
-    const trad = traducciones(texto);
-    const evidencias = numerador.marcadas.map((m) => {
+    // 7. El resultado: traducciones, pruebas renumeradas por orden de aparición (solo las citadas), fuentes.
+    const trad = traducciones(cuerpo);
+    const todas = numerador.marcadas.map((m) => {
       const t = trad.get(m.id);
       return t && m.evidencia.idioma && !idioma.startsWith(m.evidencia.idioma.slice(0, 2)) ? { ...m.evidencia, traduccion: t } : m.evidencia;
     });
-    markdown = `${marcarSinPrueba(texto.trim(), v.detalle)}${listaPruebas(evidencias, idioma)}`;
+    const final = renumerar(marcarSinPrueba(cuerpo.trim(), v.detalle), todas);
+    const evidencias = final.evidencias;
+    const frasesFinales = v.frases.map((f) => ({ ...f, evidencias: f.evidencias.map((id) => final.mapa.get(id)).filter((x): x is string => !!x) }));
+    const respaldadas = frasesFinales.filter((f) => f.veredicto === 'respaldada').length;
+    yield { tipo: 'verificacion', frases: frasesFinales, respaldadas, total: frasesFinales.length };
+    const confianza = evidencias.length ? confianzaDe(frasesFinales) : 'baja';
+    markdown = `${final.markdown}${listaPruebas(evidencias, idioma)}`;
     const fuentes: FuenteInvestigacion[] = [];
     for (const e of evidencias) {
       let f = fuentes.find((x) => x.documento === e.documento);
@@ -276,7 +290,7 @@ export async function* investigar(p: PuertosInvestigar, pregunta: string, o: Opc
       f.evidencias.push(e.id);
     }
     const ms = Math.round(reloj() - t0);
-    const inv: Investigacion = { id, pregunta, plan, markdown, evidencias, frases: v.frases, notas: ctx.notas, confianza, modelo: modeloAgente, ms };
+    const inv: Investigacion = { id, pregunta, plan, markdown, evidencias, frases: frasesFinales, notas: ctx.notas, confianza, modelo: modeloAgente, ms };
 
     // 7. La memoria.
     let cuaderno: string | undefined;

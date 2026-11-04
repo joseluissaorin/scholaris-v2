@@ -42,6 +42,8 @@ export interface ModelosInvestigar {
   vision?: ModeloAgente;
   /** El que verifica frase a frase (barato; por defecto, el agente). */
   verificador?: ModeloAgente;
+  /** El que corrige las frases que no están del todo sostenidas (por defecto, el redactor). */
+  corrector?: ModeloAgente;
 }
 
 export interface PuertosInvestigar {
@@ -77,9 +79,9 @@ export interface OpcionesInvestigar {
 
 /** Perfiles de cada profundidad. El plan del usuario los recorta (`tope`). */
 export const PERFILES: Record<ProfundidadInvestigacion, PresupuestoInvestigacion & { revisiones: number; resultadosPorBusqueda: number; segundosVer: number }> = {
-  rapida: { pasos: 6, segundos: 75, usd: 0.15, revisiones: 1, resultadosPorBusqueda: 5, segundosVer: 180 },
-  normal: { pasos: 16, segundos: 210, usd: 0.75, revisiones: 3, resultadosPorBusqueda: 6, segundosVer: 360 },
-  exhaustiva: { pasos: 32, segundos: 480, usd: 2.5, revisiones: 6, resultadosPorBusqueda: 8, segundosVer: 600 },
+  rapida: { pasos: 6, segundos: 75, usd: 0.15, revisiones: 2, resultadosPorBusqueda: 5, segundosVer: 180 },
+  normal: { pasos: 16, segundos: 210, usd: 0.75, revisiones: 8, resultadosPorBusqueda: 6, segundosVer: 360 },
+  exhaustiva: { pasos: 32, segundos: 480, usd: 2.5, revisiones: 16, resultadosPorBusqueda: 8, segundosVer: 600 },
 };
 
 export function presupuestoDe(o: OpcionesInvestigar): PresupuestoInvestigacion & { revisiones: number; resultadosPorBusqueda: number; segundosVer: number } {
