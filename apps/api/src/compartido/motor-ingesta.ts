@@ -14,7 +14,7 @@
  * La grabación vive en el almacén, en `<prefijo>trabajo/<tarea>/`.
  */
 import type {
-  FuentePaquete, Pliego, ResultadoIngesta,
+  ContextoTuberia, FuentePaquete, Pliego, ResultadoIngesta,
 } from '@scholaris/ingesta';
 import { cuerpoDominante, leerCapaPagina, ejecutarIngesta, leerPliego, planificar, transcribirTramo, vectorizar, textoVectorizable, escribirVectores as escribirVectoresIngesta, entradasIndice } from '@scholaris/ingesta';
 import type { PuertoCatalogos } from '@scholaris/ingesta';
@@ -517,7 +517,10 @@ function indiceSeguro(ctx: ContextoMotor, base: string, estado: { pendientes: bo
   };
 }
 
-export async function componer(ctx: ContextoMotor, params: ParamsIngesta, info: InfoPlan, metadatosUsuario?: Record<string, unknown> | null): Promise<ResumenComposicion> {
+export async function componer(
+  ctx: ContextoMotor, params: ParamsIngesta, info: InfoPlan, metadatosUsuario?: Record<string, unknown> | null,
+  opciones: { antesDeConsolidar?: (ctx: ContextoTuberia) => Promise<unknown> } = {},
+): Promise<ResumenComposicion> {
   const paquete = await leerPaquete(ctx.almacen, info.paquete);
   const ia = inteligenciaConMemoria(ctx.inteligencia, ctx.almacen, trabajo(params), ctx.gemini);
   const base = ia.embebedor.espacio.id;
@@ -540,6 +543,7 @@ export async function componer(ctx: ContextoMotor, params: ParamsIngesta, info: 
     ...(params.pista ? { pista: params.pista } : {}),
     ...(params.bibliotecas?.length ? { bibliotecas: params.bibliotecas } : {}),
     ...(metadatosUsuario ? { metadatosUsuario: metadatosUsuario as never } : {}),
+    ...(opciones.antesDeConsolidar ? { antesDeConsolidar: opciones.antesDeConsolidar } : {}),
     onProgreso: (p) => {
       const ahora = Date.now();
       if (p.fase !== faseAnterior) console.log(JSON.stringify({ que: 'componer', documento: params.documento, fase: p.fase, ms: p.transcurrido }));
@@ -633,6 +637,13 @@ export async function reindexar(sql: SQL, indice: IndiceVectorial, espacioNombre
 /** Borra la grabación de lecturas de una tarea (al terminar bien). */
 export async function limpiarTrabajo(almacen: AlmacenAmpliado, params: ParamsIngesta): Promise<void> {
   await almacen.borrarPrefijo(trabajo(params));
+}
+
+/** Revisar y reescribir la transcripción de un medio que ya existe (y, con `percepcion`, percibirlo antes). */
+export function soloMedio(params: ParamsIngesta): 'transcripcion' | 'percepcion' | null {
+  const f = params.fases ?? [];
+  if (!f.length || !f.every((x) => x === 'transcripcion' || x === 'percepcion' || x === 'proxy')) return null;
+  return f.includes('percepcion') ? 'percepcion' : f.includes('transcripcion') ? 'transcripcion' : null;
 }
 
 export function soloVectores(params: ParamsIngesta): boolean {

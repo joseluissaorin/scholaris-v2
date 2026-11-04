@@ -90,9 +90,25 @@ export interface ParamsIngesta {
   pista?: string;
   /** 'rapido' (por defecto) o 'economico' (API por lotes y lector barato). */
   modo?: 'rapido' | 'economico';
-  /** Fases a rehacer (reproceso); sin valor, todas. */
+  /**
+   * Fases a rehacer (reproceso); sin valor, todas. Además de las de la ingesta:
+   * `transcripcion` (revisar y reescribir la transcripción de un medio que ya
+   * existe) y `percepcion` (proxy y percepción completa de un medio, con la
+   * revisión de su transcripción).
+   */
   fases?: string[];
   bibliotecas?: string[];
+  /** Opciones de las fases `transcripcion` y `percepcion`. */
+  medio?: {
+    /** Volver a revisar aunque haya una revisión guardada sin aplicar. */
+    rehacer?: boolean;
+    /** Aplicar aunque conste como aplicada o no case del todo con las unidades. */
+    forzar?: boolean;
+    /** Revisar también quién dice cada frase (hace falta la percepción). */
+    hablantes?: boolean;
+    /** Tope de gasto de este trabajo, en dólares. */
+    presupuestoUsd?: number;
+  };
 }
 
 export interface Orquestador {

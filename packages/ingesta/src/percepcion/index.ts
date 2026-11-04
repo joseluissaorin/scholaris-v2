@@ -10,9 +10,9 @@ export { Unificador, fusionarReparto, repartoInicial, repartoDeWikidata, separar
 export { percibirMedio, mirarVentana, ErrorPresupuesto, type VentanaGrabada, type OpcionesVentana } from './percibir.js';
 export { PROXY, clavesProxy, PARAMETROS_PROXY, interpretarEscenasFfmpeg, cortesDe, interpretarSilencios, type CortesProxy, type ActividadAudio } from './proxy.js';
 export { fuenteGemini, ErrorSinProxy, type PuertoFicheros, type FicheroRemoto, type AlmacenProxy, type CacheGemini, type PuertosFuenteGemini } from './fuente-gemini.js';
-export { anclarMaterial, buscarCita, textoEn, esqueleto, regionPorLineas, regionPorVision, unirRegiones, type PuertosAnclaje, type UnidadAnclable, type LineaPagina, type AnclajeResultado } from './anclaje.js';
+export { anclarMaterial, buscarCita, textoEn, esqueleto, regionPorLineas, regionPorVision, unirRegiones, cajasPrincipales, type PuertosAnclaje, type UnidadAnclable, type LineaPagina, type AnclajeResultado } from './anclaje.js';
 export {
-  revisarTranscripcionConVideo, hablantesDeDialogos, coberturaTranscripcion, transcribirConVideo, revisarHablantesVentana, aplicarCorrecciones, palabrasDeUnidad, palabrasDeUnidades, frasesUbicadas, subventanasDe, segmentosDePalabras, esRota,
+  revisarTranscripcionConVideo, hablantesDeDialogos, coberturaTranscripcion, transcribirConVideo, revisarHablantesVentana, aplicarCorrecciones, palabrasDeUnidad, palabrasDeUnidades, palabrasTranscritas, comprobarRevision, frasesUbicadas, subventanasDe, segmentosDePalabras, esRota,
   VERSION_REVISION, ESQUEMA_OIDO, ESQUEMA_HABLANTES,
   type CorreccionTranscripcion, type RevisionTranscripcion, type CoberturaTranscripcion, type Hueco, type SegmentoOido, type PalabraUbicada, type FraseUbicada, type PuertosRevision, type OpcionesRevisionTranscripcion, type Tramo,
 } from './revision.js';

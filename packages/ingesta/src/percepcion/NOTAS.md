@@ -173,22 +173,62 @@ La transcripción de la película en producción (`dmw21xnomjseg07mi`) tiene hue
   - sustituye las unidades rotas;
   - no duplica lo que ya está.
 
-  Después hay que reescribir `unidades`, trocear de nuevo y revectorizar lo que cambie (como un reproceso de la tanda de medios). Esa parte no está hecha, porque es de la ingesta.
+  Después se reescribe la capa literal con `reescribirTranscripcion` (packages/ingesta/src/transcripcion.ts): ver «La transcripción en la ingesta» más abajo.
 
 ### Orden en la comprensión
 
-1. Revisar la transcripción (`revisarTranscripcionDocumento`).
-2. Percibir (`percibirDocumento`). Si existe `transcripcion.revision.json`, lo aplica solo y mira con la transcripción revisada.
+1. Revisar la transcripción (`revisarTranscripcionDocumento`, ahora en apps/api/src/compartido/transcripcion.ts).
+2. Percibir (`percibirDocumento`). Si existe `transcripcion.revision.json` sin aplicar, lo aplica en memoria y mira con la transcripción revisada. Una revisión ya aplicada (`aplicada`) no se vuelve a aplicar: sus `unidad` son las de antes.
 3. Para una percepción hecha antes de la revisión, `hablantesDeDialogos(percepcion, unidadesRevisadas)` pone en las frases clave el hablante bueno.
 
-### Recomendación para la ingesta
+## La transcripción en la ingesta (4-11-2026)
 
-Esto no está en esta rama.
+### Piezas de 150 s
 
-- Con `gemini-3.5-transcribe`, tramos de 2 o 3 min y no de 10. Whisper sí aguanta 10 min.
-- Ejecutar `coberturaTranscripcion` nada más consolidar y volver a transcribir los huecos sin esperar a la comprensión.
+`transcribirTramo` parte cada tramo del conversor (600 s) en piezas de unos 150 s con 5 s de solape (`partirAudio`, pasos/piezas.ts) y las transcribe a la vez, de cuatro en cuatro. No decodifica nada: en Ogg/Opus lee los paquetes, saca la duración de cada uno de su byte TOC y los vuelve a empaquetar con la misma `OpusHead` (con un paquete de más al principio para que el decodificador se asiente); en WAV corta las muestras; en YouTube cambia el subtramo del JSON. Las etiquetas de hablante de cada pieza se casan con las de la anterior por las palabras del solape (`casarHablantes`) y cada palabra se queda en la pieza dueña de su centro. Los recortes de un tramo real de la película decodifican con ffmpeg sin errores y caen en su sitio (0,25 ms de desfase con el original).
+
+En la película, con el mismo transcriptor y los mismos tramos del conversor, los segmentos de Whisper sin cubrir bajan de 191 (328 s) a **92 (215 s)** solo con las piezas, y la primera frase ya no sale en 0:01: queda en 1:41, donde se dice. La transcripción entera costó unos 0,61 $ (122 min de audio con el solape).
+
+### Completar antes de consolidar
+
+Paso «transcripcion» del Workflow de ingesta (y lo mismo en la cola local, con `antesDeConsolidar`), después del proxy y antes de consolidar: `completarTranscripcion` (packages/ingesta/src/transcripcion.ts) con los puertos de `puertosRevision` (apps/api/src/compartido/transcripcion.ts):
+
+- Cobertura contra `proxy.voz.json`; sin él, los silencios de la transcripción de más de 25 s.
+- Huecos en subventanas de 75 s como mucho con Flash mirando el proxy (marcas absolutas, hablante por la voz y la imagen). Sin proxy, o si falla, la reserva: el transcriptor de la plataforma (con hablantes: Gemini Transcribe antes que Whisper) con el audio del tramo **recortado a la subventana** (`recortarAudio`), sin las etiquetas de su diarización y sin pasar por la grabación de la ingesta (que devolvería lo ya oído). Todo grabado en `percepcion/revision/`.
+- Unidades con el tiempo roto, sustituidas por lo que se oye en su tramo.
+- Con percepción (un reproceso) y plan de pago, los hablantes con Argon; si no, se quedan para `atribuirHablantes`.
+- Tope de gasto: 1,5 $ por hora de medio en los planes de pago y 0,3 en el gratuito, y como mucho una subventana por minuto.
+- Las palabras corregidas quedan en `trabajo/<doc>/transcripcion.json`; `consolidar` las recoge en vez de casar otra vez las de las tandas. La revisión se guarda en `transcripcion.revision.json` con `aplicada` y `coberturaFinal`.
+- Idempotente: el trabajador lo hace con `UnaVez` recordado y cada llamada está grabada. Si el paso falla del todo, se consolida lo que hay.
+
+En la película, después de las piezas: 96 subventanas con Flash, 27 huecos rellenos, 1,09 $ y 7,5 min; los segmentos de Whisper sin cubrir quedan en **66 (117 s)**. La revisión de este equipo sobre la transcripción de producción llegó a 58 (108 s), con la ayuda de los desfases de Argon. Lo que falta en las dos es casi todo letra de canciones, interjecciones y frases que Whisper oye de otra manera («¡Ah! ¡Raskolnikov!» frente a «A Rastólnikov»). Una segunda escucha de los huecos que quedan con Gemini Transcribe (95 subventanas, 0,17 $) deja 59 (94 s), pero solo el 29 % de las palabras que añade las oye también Whisper: no se ha puesto.
+
+Ojo con el límite de la cuenta: `gemini-3.5-transcribe` admite 100 000 tokens de entrada por minuto en el nivel 2, y una película son unas 48 piezas a la vez. En la plataforma el transcriptor enrutado pasa a Whisper si Gemini responde 429; el paso de la tanda, además, se reintenta y las piezas ya oídas están grabadas.
+
+### Documentos que ya existen
+
+- `POST /documentos/:id/transcripcion/revisar` (y `/api/v1/…`, y `revisar_transcripcion` en el SDK de Python): revisa la transcripción o aplica una revisión que llega en el cuerpo. Se lanza como una tarea con la fase `transcripcion` del Workflow de ingesta: proxy si falta, revisión (si no hay una guardada sin aplicar), revisión aplicada. `percepcion: true` añade la percepción completa y, con su reparto, la revisión de los hablantes. El documento sigue «listo» mientras tanto y nunca queda en error por esto; al cerrar, la comprensión de los planes de pago se pone al día sola (solo los segmentos cuyo texto cambió).
+- `aplicarRevisionDocumento` comprueba antes que la revisión es de estas unidades (sus frases de hablante y de desfase citan el texto que tocan); si no coincide el 90 %, no la aplica.
+- `reescribirTranscripcion` rehace unidades de 30 a 60 s, fragmentos, instantes por palabra y hablantes. Los fragmentos con el mismo texto conservan id, contexto y vectores; lo nuevo se sitúa y se vectoriza; lo que sobra sale de la estantería y del índice; los fotogramas se cuelgan de la unidad que los contiene.
+- `GET /documentos/:id/transcripcion/revision`: la revisión resumida (correcciones, cobertura antes y después, `aplicada`) y la última tarea.
+- `POST /transcripcion/revisar` y `POST /medios/percibir`: lo mismo para la biblioteca. Sin `confirmar` solo estiman (dólares por documento y total, con el precio de Argon doblado desde el 1-12-2026); se encolan de dos en dos (la cola vive en `procedencia`, fase `cola_medio`, y avanza al cerrar cada tarea). Percibir la biblioteca entera es de los planes de pago.
+
+Prueba en local sobre una copia de *Fresa y chocolate* (el .spdf 4.2 de producción importado en `apps/local`, con los instantes por palabra de la API v2, porque el .spdf 4.2 no los lleva), con la revisión de este equipo y la orden de producción contra el servidor local:
+
+- Comprobación: 172 de 172 frases coinciden.
+- 120 → 137 unidades. De 137 fragmentos, 41 conservan id y vectores; 96 nuevos (96 vectores), 79 fuera. 587 fotogramas recolgados. 4,9 s.
+- Segmentos de Whisper sin cubrir: 191 (328 s) → **58 (108 s)**.
+- Hablantes en las 101 frases del oro (casadas por tiempo y texto con la transcripción nueva): del 52 % al **96 %**.
+
+La orden para producción:
+
+```
+SCHOLARIS_CLAVE=sch_… python3 apps/api/scripts/revisar-transcripcion.py \
+  --documento dmw21xnomjseg07mi --revision ~/tmp/scholaris-fresa/percepcion/fresa-y-chocolate.transcripcion.json
+```
 
 ## Pendiente
 
 - Los créditos con fundidos no dan cortes de ffmpeg; el modelo los trata como un plano por rótulo.
-- En el contenedor (`standard-4`), el proxy de una película de 2 h debería tardar de 20 a 35 min, pero no se ha medido.
+- En el contenedor (`standard-4`), el proxy de una película de 2 h debería tardar de 20 a 35 min, pero no se ha medido. Ahora el «listo» de un medio espera al proxy y a completar la transcripción (las unidades de las tandas ya se leen mientras tanto).
+- El .spdf 4.2 que exporta la API no lleva los instantes por palabra (`unidades.palabras`).

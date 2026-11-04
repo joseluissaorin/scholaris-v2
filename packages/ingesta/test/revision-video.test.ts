@@ -141,8 +141,9 @@ describe('revisión entera', () => {
       vidente: v, fuente: async () => ({ uri: 'f', mime: 'video/mp4' }), trabajo: trabajoEnMemoria(),
       reserva: { transcriptor, async audio(t0, t1) { pedidos.push([t0, t1]); return { bytes: new Uint8Array([1]), mime: 'audio/wav', desplazamiento: t0 }; } },
     }, opciones);
-    expect(pedidos).toEqual([[98, 132]]);
-    expect(r.correcciones[0]).toMatchObject({ tipo: 'hueco', fuente: 'whisper', confianza: 0.75, segmentos: [{ t0: 108, t1: 109, texto: 'Hola, Nancy.' }] });
+    // El audio de la subventana con un segundo de margen a cada lado.
+    expect(pedidos).toEqual([[97, 133]]);
+    expect(r.correcciones[0]).toMatchObject({ tipo: 'hueco', fuente: 'whisper', confianza: 0.75, segmentos: [{ t0: 107, t1: 108, texto: 'Hola, Nancy.' }] });
   });
 });
 

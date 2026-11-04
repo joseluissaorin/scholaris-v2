@@ -5,7 +5,7 @@
  */
 import type { Buscador } from '@scholaris/busqueda';
 import type { PresupuestoInvestigacion, ProfundidadInvestigacion } from '@scholaris/contrato';
-import type { Filtros, SQL } from '@scholaris/nucleo';
+import type { Filtros, Region, SQL } from '@scholaris/nucleo';
 import type { ModeloAgente } from './modelo.js';
 
 /** Los medios que el agente puede mirar y escuchar. */
@@ -19,6 +19,18 @@ export interface MediosInvestigar {
   imagen(documento: string, clave: string): Promise<{ bytes: Uint8Array; mime: string } | null>;
   /** URL para enseñar esa imagen en la interfaz. */
   url?(documento: string, clave: string): Promise<string | undefined>;
+}
+
+/**
+ * El anclaje material de las citas de un documento de páginas (docs/COMPRENSION.md,
+ * principio 1): su región en la imagen de la página. En un PDF digital sale de la
+ * capa de texto (gratis); en un escaneo, de la visión (con caché en el almacén).
+ */
+export interface AnclajeInvestigar {
+  /** La región (fracciones 0-1 de la imagen) de unos caracteres o de una cita de la unidad `orden`; undefined si no se encuentra. */
+  region(orden: number, o: { caracteres?: [number, number]; cita?: string; vision?: boolean }): Promise<Region | undefined>;
+  /** Lo que lleva gastado (solo cuestan las localizaciones por visión). */
+  uso(): { modelo: string; tokensEntrada: number; tokensSalida: number; usd: number; llamadas: number };
 }
 
 export interface ModelosInvestigar {
@@ -38,6 +50,11 @@ export interface PuertosInvestigar {
   buscador: Buscador;
   modelos: ModelosInvestigar;
   medios?: MediosInvestigar;
+  /**
+   * El anclaje material de un documento (uno por documento y por investigación). Las
+   * citas de la respuesta en una página reciben así su región al terminar.
+   */
+  anclajeMaterial?(documento: string): AnclajeInvestigar;
   usuario?: { id: string; pro?: boolean };
   /** Reloj (para las pruebas). */
   ahora?: () => number;

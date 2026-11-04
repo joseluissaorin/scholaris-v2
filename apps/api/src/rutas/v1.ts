@@ -384,6 +384,7 @@ export function montarV1(app: AppPuerta, pl: Plataforma, autenticar: (r: Request
         'POST /documentos/{id}/comprender', 'POST /comprender',
         'GET /documentos/{id}/relaciones', 'POST /documentos/{id}/alinear', 'GET /relaciones/{id}', 'GET /relaciones/{id}/alineaciones',
         'POST /relaciones', 'POST /relaciones/{id}/confirmar', 'DELETE /relaciones/{id}', 'POST /transmedia',
+        'POST /documentos/{id}/transcripcion/revisar', 'GET /documentos/{id}/transcripcion/revision', 'POST /transcripcion/revisar', 'POST /medios/percibir',
       ].map((v) => v.replace(' /', ` ${V}/`)),
     });
   };
@@ -556,6 +557,20 @@ export function montarV1(app: AppPuerta, pl: Plataforma, autenticar: (r: Request
   app.post(`${V}/relaciones/:id/confirmar`, conClave(async (c, io) => c.json(await io.pedir('POST', `/relaciones/${rel(c)}/confirmar`))));
   app.delete(`${V}/relaciones/:id`, conClave(async (c, io) => c.json(await io.pedir('DELETE', `/relaciones/${rel(c)}`))));
   app.post(`${V}/transmedia`, conClave(async (c, io) => c.json(await io.pedir('POST', '/transmedia/biblioteca', { json: await cuerpoJsonV1(c) }), 202)));
+  // La transcripción revisada de los medios y la percepción de los que ya estaban (percepcion/NOTAS.md).
+  // Pasa tal cual por la v2. Con «simular» (o sin «confirmar», en la biblioteca) solo se estima el coste.
+  const conEstado = async (r: Response) => { if (!r.ok) throw await errorDe(r); return { cuerpo: await r.json(), estado: r.status }; };
+  app.post(`${V}/documentos/:id/transcripcion/revisar`, conClave(async (c, io) => {
+    const r = await conEstado(await io.llamar('POST', `/documentos/${encodeURIComponent(c.req.param('id')!)}/transcripcion/revisar`, { json: await cuerpoJsonV1(c) }));
+    return c.json(r.cuerpo as Record<string, unknown>, r.estado === 202 ? 202 : 200);
+  }));
+  app.get(`${V}/documentos/:id/transcripcion/revision`, conClave(async (c, io) => c.json(await io.pedir('GET', `/documentos/${encodeURIComponent(c.req.param('id')!)}/transcripcion/revision`))));
+  for (const ruta of ['/transcripcion/revisar', '/medios/percibir'] as const) {
+    app.post(`${V}${ruta}`, conClave(async (c, io) => {
+      const r = await conEstado(await io.llamar('POST', ruta, { json: await cuerpoJsonV1(c) }));
+      return c.json(r.cuerpo as Record<string, unknown>, r.estado === 202 ? 202 : 200);
+    }));
+  }
 
   // GET /documentos/{id}/spdf?version=5: el documento como fichero SPDF (5.0, el estándar
   // abierto, por defecto; `version=4` da el 4.2 de la estantería). Pasa tal cual por la v2.

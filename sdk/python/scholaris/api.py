@@ -179,6 +179,43 @@ class Scholaris:
                                     "alinear": False if solo_detectar else None}.items() if v is not None}
         return self._json("POST", "/transmedia", json_=cuerpo)
 
+    # -- transcripción revisada y percepción de los medios -------------------
+
+    def revisar_transcripcion(self, id: str, *, revision: Optional[Union[dict, str]] = None, rehacer: bool = False, forzar: bool = False,
+                              hablantes: Optional[bool] = None, percepcion: bool = False, simular: bool = False,
+                              presupuesto_usd: Optional[float] = None) -> dict:
+        """Revisa la transcripción de un audio o un vídeo (huecos, tiempos y, con la percepción, quién
+        dice cada frase) y reescribe su capa literal; la comprensión se pone al día sola después.
+
+        `revision`: una revisión hecha fuera (el JSON de la percepción, o su ruta): se aplica tal cual,
+        si corresponde a la transcripción actual. `percepcion=True` percibe antes el medio entero.
+        `simular=True` solo dice qué se haría y cuánto costaría. Devuelve la tarea (202)."""
+        if isinstance(revision, str):
+            with open(revision, encoding="utf-8") as f:
+                revision = json.load(f)
+        cuerpo = {k: v for k, v in {"revision": revision, "rehacer": rehacer or None, "forzar": forzar or None, "hablantes": hablantes,
+                                     "percepcion": percepcion or None, "simular": simular or None, "presupuestoUsd": presupuesto_usd}.items() if v is not None}
+        return self._json("POST", f"/documentos/{id}/transcripcion/revisar", json_=cuerpo)
+
+    def revision_transcripcion(self, id: str) -> dict:
+        """La revisión guardada de la transcripción de un medio: correcciones, cobertura antes y después, si ya se aplicó."""
+        return self._json("GET", f"/documentos/{id}/transcripcion/revision")
+
+    def revisar_transcripciones(self, documentos: Optional[Sequence[str]] = None, *, confirmar: bool = False, rehacer: bool = False,
+                                hablantes: Optional[bool] = None, presupuesto_usd: Optional[float] = None) -> dict:
+        """Lo mismo para los medios de la biblioteca (o los `documentos` dados). Sin `confirmar`, solo estima el coste."""
+        cuerpo = {k: v for k, v in {"documentos": list(documentos) if documentos else None, "confirmar": confirmar or None, "rehacer": rehacer or None,
+                                     "hablantes": hablantes, "presupuestoUsd": presupuesto_usd}.items() if v is not None}
+        return self._json("POST", "/transcripcion/revisar", json_=cuerpo)
+
+    def percibir_medios(self, documentos: Optional[Sequence[str]] = None, *, confirmar: bool = False, rehacer: bool = False,
+                        hablantes: Optional[bool] = None, presupuesto_usd: Optional[float] = None) -> dict:
+        """Proxy, percepción completa y transcripción revisada de los medios que aún no la tienen. Sin
+        `confirmar`, solo estima el coste (dólares por documento y total); la biblioteca entera, en los planes de pago."""
+        cuerpo = {k: v for k, v in {"documentos": list(documentos) if documentos else None, "confirmar": confirmar or None, "rehacer": rehacer or None,
+                                     "hablantes": hablantes, "presupuestoUsd": presupuesto_usd}.items() if v is not None}
+        return self._json("POST", "/medios/percibir", json_=cuerpo)
+
     # -- buscar, preguntar, citar, verificar ---------------------------------
 
     def buscar(self, q: str, k: int = 10, documentos: Optional[Sequence[str]] = None) -> List[dict]:

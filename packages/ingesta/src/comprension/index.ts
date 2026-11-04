@@ -12,6 +12,7 @@ export { leerMaterial, textoParaModelo, muestraDe, etiquetaUnidad, tokensDe, hue
 export { localizarCita, limpiarProsa, hablantePercibido, anclarReferencias, anclarReferencia, anclaDe, tramoDeCaracteres, hablanteEn, buscarFormasEnUnidad, textoDeCaracteres, type CitaLocalizada } from './anclaje.js';
 export { construirArbol, segmentosDeSecciones, segmentosDePercepcion, borradoresDelModelo, guardarEstructura, esquemaEstructura, ventanas } from './estructura.js';
 export { fichasDeLote, fichaGlobal, lotesDeFichas, textoEstructura, idCorto, prefijoMaterial, huellaEntradaSegmento } from './fichas.js';
+export { candidatasRegion, regionesDeFichas, regionesDelPaso, type OpcionesRegiones, type ResultadoRegiones } from './regiones.js';
 export {
   TIPO_GRAFO, TIPOS_FINOS, ESQUEMA_ENTIDADES, resolverEntidades, aparicionesDeTexto, aparicionesDePercepcion, aparicionesDeTemas, enlazarReparto, fichasDeEntidades,
   unirEntidades, conocidasEnBiblioteca, extraerEntidadesDelModelo, analizarEntidades, principalesDe, conLimite, cacheWikidataSql,

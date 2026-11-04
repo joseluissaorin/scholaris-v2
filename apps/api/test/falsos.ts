@@ -32,6 +32,9 @@ export const embebedorFalso: Embebedor = {
   },
 };
 
+/** Cuántas veces se ha oído cada «audio» de las pruebas de medios. */
+const oidas = new Map<string, number>();
+
 export function inteligenciaFalsa(): Inteligencia {
   return {
     lector: {
@@ -45,7 +48,24 @@ export function inteligenciaFalsa(): Inteligencia {
       },
     },
     embebedor: embebedorFalso,
-    transcriptor: { nombre: 'asr-falso', async transcribir() { return { palabras: [], texto: '' }; } },
+    transcriptor: {
+      nombre: 'asr-falso',
+      // Un «audio» que es un JSON con sus palabras: las devuelve tal cual. Las `ocultas` solo las oye a la segunda
+      // (lo que el transcriptor se saltó en la ingesta y sale al revisar la transcripción).
+      async transcribir(a) {
+        try {
+          const texto = new TextDecoder().decode(a.bytes);
+          const j = JSON.parse(texto) as { palabras?: Array<{ texto: string; t0: number; t1: number; hablante?: string }>; ocultas?: Array<{ texto: string; t0: number; t1: number }> };
+          if (Array.isArray(j.palabras)) {
+            const vez = (oidas.get(texto) ?? 0) + 1;
+            oidas.set(texto, vez);
+            const palabras = [...j.palabras, ...(vez > 1 ? j.ocultas ?? [] : [])].sort((x, y) => x.t0 - y.t0);
+            return { palabras, texto: palabras.map((w) => w.texto).join(' ') };
+          }
+        } catch { /* no es de las pruebas de medios */ }
+        return { palabras: [], texto: '' };
+      },
+    },
     reordenador: {
       nombre: 'reordenador-falso',
       async reordenar(consulta, textos) {

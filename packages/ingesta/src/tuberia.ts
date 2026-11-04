@@ -87,6 +87,16 @@ export function huellaCorta(s: string): string {
 const prefijoTrabajo = (doc: string) => `trabajo/${doc}/`;
 const claveTanda = (doc: string, id: number) => `${prefijoTrabajo(doc)}tanda/${String(id).padStart(5, '0')}.json`;
 const claveMetadatos = (doc: string) => `${prefijoTrabajo(doc)}metadatos.json`;
+/** La transcripción completada antes de consolidar (huecos rellenos, tiempos arreglados): ver `completarTranscripcion`. */
+export const claveTranscripcionCompleta = (doc: string) => `${prefijoTrabajo(doc)}transcripcion.json`;
+
+/** Lo que deja `completarTranscripcion` para la consolidación. */
+export interface TranscripcionCompleta {
+  palabras: PalabraTranscrita[];
+  /** Los hablantes ya vienen revisados mirando el vídeo (con la percepción): no se vuelven a atribuir por el texto. */
+  hablantesRevisados?: boolean;
+  resumen?: Record<string, unknown>;
+}
 
 /**
  * Escrituras en serie por base: las tandas corren en paralelo pero comparten
@@ -101,10 +111,10 @@ export function escribir<T>(sql: NonNullable<PuertosIngesta['sql']>, fn: (tx: No
   return p;
 }
 
-async function guardarJson(ctx: ContextoTuberia, clave: string, valor: unknown): Promise<void> {
+export async function guardarJson(ctx: Pick<ContextoTuberia, 'puertos'>, clave: string, valor: unknown): Promise<void> {
   await escribir(ctx.puertos.sql, (tx) => spdf.ponerBlob(tx, clave, 'application/json', new TextEncoder().encode(JSON.stringify(valor))));
 }
-async function leerJson<T>(ctx: ContextoTuberia, clave: string): Promise<T | null> {
+export async function leerJson<T>(ctx: Pick<ContextoTuberia, 'puertos'>, clave: string): Promise<T | null> {
   const b = await spdf.leerBlob(ctx.puertos.sql, clave);
   return b ? (JSON.parse(new TextDecoder().decode(b.datos)) as T) : null;
 }
@@ -167,6 +177,8 @@ export async function prepararDocumento(ctx: ContextoTuberia): Promise<void> {
   const existente = await spdf.leerDocumento(sql, ctx.documento).catch(() => null);
   await escribir(sql, async (tx) => {
     if (!existente) await spdf.escribirDocumento(tx, documentoProvisional(ctx));
+    // Una transcripción completada de una ingesta anterior que no llegó a consolidar no vale para esta.
+    await tx.ejecutar('DELETE FROM blobs WHERE clave = ?', claveTranscripcionCompleta(ctx.documento));
     for (const e of [inteligencia.embebedor, ...(inteligencia.embebedoresExtra ?? [])]) await spdf.escribirEspacio(tx, e.espacio);
   });
 }
@@ -496,6 +508,35 @@ export async function consolidacionRegistrada(sql: ContextoTuberia['puertos']['s
   };
 }
 
+/** Las palabras de las tandas de un medio, con las etiquetas de hablante casadas entre tramos por el solape. */
+function palabrasDeEstados(estados: EstadoTanda[], plan: Plan): PalabraTranscrita[] {
+  const tramos = estados.map((e, i) => {
+    const ws = (e.palabras ?? []) as Array<PalabraTranscrita & { solape?: boolean }>;
+    return { n: plan.tramos[i]?.n ?? i, palabras: ws.filter((w) => !w.solape).map((w) => ({ ...w })), solape: ws.filter((w) => w.solape).map(({ solape: _s, ...w }) => w) };
+  });
+  casarHablantes(tramos);
+  return tramos.flatMap((x) => x.palabras).sort((a, b) => a.t0 - b.t0);
+}
+
+/**
+ * La transcripción entera de un medio tal como la consolidaría `consolidar`
+ * ahora mismo: las palabras de todas las tandas (con los hablantes casados) o,
+ * si ya se completó, la completada. Para revisarla antes de consolidar.
+ */
+export async function palabrasDeTandas(ctx: ContextoTuberia, o: { completa?: boolean } = {}): Promise<PalabraTranscrita[]> {
+  if (o.completa !== false) {
+    const c = await leerJson<TranscripcionCompleta>(ctx, claveTranscripcionCompleta(ctx.documento));
+    if (c?.palabras.length) return c.palabras;
+  }
+  const estados: EstadoTanda[] = [];
+  for (const t of [...ctx.plan.tandas].sort((a, b) => a.id - b.id)) {
+    const e = await leerJson<EstadoTanda>(ctx, claveTanda(ctx.documento, t.id));
+    if (!e) throw new ErrorFaltaTanda(t.id);
+    estados.push(e);
+  }
+  return palabrasDeEstados(estados, ctx.plan);
+}
+
 /**
  * Paso «consolidar»: el documento entero, una vez. Folios definitivos, secciones,
  * costuras entre tandas, hablantes, figuras; reaprovecha todo fragmento
@@ -541,14 +582,15 @@ export async function consolidar(
   let meta = (await Promise.resolve(extras.metadatos ?? null).catch(() => null)) ?? (await leerJson<{ metadatos: MetadatosDocumento; hablantes?: Record<string, string> }>(ctx, claveMetadatos(documento)))?.metadatos ?? null;
   let unidades: UnidadLeida[];
   let palabras: PalabraTranscrita[] = [];
+  let hablantesRevisados = false;
   if (medio) {
-    // Se casan las etiquetas entre tramos por el solape y se rehace la transcripción entera.
-    const tramos = estados.map((e, i) => {
-      const ws = (e.palabras ?? []) as Array<PalabraTranscrita & { solape?: boolean }>;
-      return { n: plan.tramos[i]?.n ?? i, palabras: ws.filter((w) => !w.solape), solape: ws.filter((w) => w.solape).map(({ solape: _s, ...w }) => w) };
-    });
-    casarHablantes(tramos);
-    palabras = tramos.flatMap((x) => x.palabras).sort((a, b) => a.t0 - b.t0);
+    // La transcripción completada (huecos rellenos, tiempos arreglados), si se hizo; si no, la de las tandas.
+    const completa = await leerJson<TranscripcionCompleta>(ctx, claveTranscripcionCompleta(documento));
+    if (completa?.palabras.length) {
+      palabras = completa.palabras;
+      hablantesRevisados = !!completa.hablantesRevisados;
+      if (completa.resumen) procedencia.push({ fase: 'lectura', proveedor: 'transcripcion-completa', ms: 0, detalle: completa.resumen });
+    } else palabras = palabrasDeEstados(estados, plan);
     unidades = segmentarTranscripcion(palabras, ctx.opciones.tramosMedio);
   } else unidades = estados.flatMap((e) => e.unidades).sort((a, b) => a.fisica - b.fisica);
   unidades.forEach((u, i) => { u.orden = i; });
@@ -577,7 +619,8 @@ export async function consolidar(
     const revision = ctx.opciones.revisarTranscripcion !== false
       ? revisarTranscripcion(palabras, plan.tramos, puertos.fuente, meta, ia.redactor, { reloj, concurrencia: 24 }).catch(() => null)
       : Promise.resolve(null);
-    const hablantes = ctx.opciones.atribuirHablantes !== false
+    // Con los hablantes ya revisados mirando el vídeo, no se vuelven a poner por el texto (acierta mucho menos).
+    const hablantes = ctx.opciones.atribuirHablantes !== false && !hablantesRevisados
       ? atribuirHablantes(palabras, meta, ia.redactor, { reloj, concurrencia: plan.concurrencia }).catch(() => null)
       : Promise.resolve(null);
     const [rev, hab] = await Promise.all([revision, hablantes]);

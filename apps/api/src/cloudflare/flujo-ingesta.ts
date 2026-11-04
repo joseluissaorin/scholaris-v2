@@ -11,7 +11,7 @@ import type { Progreso } from '@scholaris/nucleo';
 import type { ParamsIngesta } from '../puertos.js';
 import { enParalelo } from '@scholaris/nucleo';
 import { plazoConsolidacion, prepararTuberia, type InfoTuberia } from '../compartido/tuberia-plataforma.js';
-import { componer, ErrorReserva, leerPrimeraPagina, leerUnPliego, limpiarTrabajo, preparar, revectorizar, soloVectores, transcribirUnTramo, type ContextoMotor, type InfoPlan } from '../compartido/motor-ingesta.js';
+import { componer, ErrorReserva, leerPrimeraPagina, leerUnPliego, limpiarTrabajo, preparar, revectorizar, soloMedio, soloVectores, transcribirUnTramo, type ContextoMotor, type InfoPlan } from '../compartido/motor-ingesta.js';
 import type { Env } from './env.js';
 import { SqlRemoto } from './sql.js';
 import { almacenDesdeEnv, catalogosDesdeEnv, cuentasDesdeEnv, emisorDesdeEnv, geminiPara, indiceDesdeEnv, inteligenciaPara, origenDe } from './puertos-cf.js';
@@ -19,12 +19,84 @@ import { espacioNombresDe } from './indice-vectorize.js';
 import { conversorCF, proxyCF, recortadorCF } from './conversor.js';
 import { asegurarProxy } from '../compartido/proxy.js';
 import { adelantarMoov, esMp4 } from '../compartido/medio-rapido.js';
+import { revisaHablantes } from '../compartido/transcripcion.js';
 
 const REINTENTOS = { limit: 5, delay: '10 seconds', backoff: 'exponential' } as const;
+
+/**
+ * Cuánto puede tardar completar la transcripción de un medio (huecos con Flash a seis a
+ * la vez y, con percepción, hablantes con Argon a cuatro a la vez), en segundos.
+ */
+export function plazoTranscripcion(info: Pick<InfoTuberia, 'coste'>): number {
+  return Math.min(5400, Math.max(600, Math.ceil(300 + 25 * info.coste)));
+}
 /** Tandas a la vez (cada una en su trabajador, con su propio cupo de conexiones). */
 const OLEADA = 24;
 
+type Avisar = (fase: Progreso['fase'], avance: number, total: number, mensaje?: string) => Progreso;
+type ConLatido = <T>(fn: () => Promise<T>) => Promise<T>;
+
 export class FlujoIngesta extends WorkflowEntrypoint<Env, ParamsIngesta> {
+  /**
+   * Fases `transcripcion` y `percepcion` de un medio que ya existe: proxy (si falta),
+   * revisión de la transcripción, percepción (con `percepcion`), revisión de los
+   * hablantes con su reparto y la revisión aplicada (capa literal reescrita). Cada
+   * paso en su trabajador y recordado. El documento nunca queda en error por esto:
+   * si algo falla, se cierra con un aviso y sigue como estaba.
+   */
+  private async medioExistente(p: ParamsIngesta, step: WorkflowStep, que: 'transcripcion' | 'percepcion', progreso: Avisar, conLatido: ConLatido): Promise<unknown> {
+    const estanteria = this.env.ESTANTERIA.getByName(p.usuario);
+    const emisor = emisorDesdeEnv(this.env, p.usuario);
+    const trabajador = (paso: string) => this.env.TRABAJADOR.getByName(`${p.tarea}:${paso}`);
+    const avisar = (total: number, mensaje: string) => emisor.emitir(`usuario:${p.usuario}`, { tipo: 'progreso', progreso: progreso('lectura', total, total, mensaje) }).catch(() => undefined);
+    const avisos: Array<{ codigo: string; mensaje: string }> = [];
+    const largo = { retries: { limit: 2, delay: '30 seconds', backoff: 'exponential' } } as const;
+    let resultado: { aplicada?: boolean; motivo?: string } | null = null;
+    try {
+      const hacerProxy = proxyCF(this.env);
+      if (hacerProxy && p.original) {
+        await step.do('proxy', { ...largo, timeout: '60 minutes' }, async () => conLatido(async () => {
+          await avisar(0.05, 'Preparando el proxy del medio');
+          try {
+            const tipo = p.tipo === 'audio' || /^audio\//.test(p.mime) ? 'audio' : 'video';
+            const r = await asegurarProxy({ almacen: almacenDesdeEnv(this.env, origenDe(this.env)), hacerProxy }, { prefijo: p.prefijo, original: p.original, mime: p.mime, tipo, nombre: p.nombre });
+            return r ? `${r.bytes} bytes${r.existia ? ' (ya estaba)' : ''}` : 'sin proxy';
+          } catch (e) { return `fallo: ${e instanceof Error ? e.message : String(e)}`.slice(0, 200); }
+        }));
+      }
+      await step.do('revision', { ...largo, timeout: '60 minutes' }, async () => conLatido(async () => {
+        await avisar(0.2, 'Revisando la transcripción');
+        return trabajador('revision').medio(p, 'revision') as Promise<Record<string, never>>;
+      }));
+      if (que === 'percepcion') {
+        await step.do('percepcion', { ...largo, timeout: '150 minutes' }, async () => conLatido(async () => {
+          await avisar(0.4, 'Mirando y escuchando la obra entera');
+          return trabajador('percepcion').medio(p, 'percepcion') as Promise<Record<string, never>>;
+        }));
+        // Con el reparto de la percepción (caras y voces), quién dice cada frase.
+        if (revisaHablantes(p.plan) && p.medio?.hablantes !== false) {
+          await step.do('revision-hablantes', { ...largo, timeout: '60 minutes' }, async () => conLatido(async () => {
+            await avisar(0.8, 'Revisando quién dice cada frase');
+            return trabajador('revision-hablantes').medio(p, 'revision-hablantes') as Promise<Record<string, never>>;
+          }));
+        }
+      }
+      resultado = await step.do('aplicar', { ...largo, timeout: '30 minutes' }, async () => conLatido(async () => {
+        await avisar(0.9, 'Reescribiendo la transcripción');
+        return trabajador('aplicar').medio(p, 'aplicar') as Promise<{ aplicada?: boolean; motivo?: string }>;
+      }));
+      if (resultado && !resultado.aplicada && resultado.motivo) avisos.push({ codigo: 'transcripcion_sin_aplicar', mensaje: resultado.motivo });
+    } catch (e) {
+      const m = e instanceof Error ? e.message : String(e);
+      avisos.push({ codigo: 'transcripcion_sin_revisar', mensaje: /presupuesto/i.test(m) ? m : 'No se pudo revisar la transcripción de este medio. Lo ya hecho se aprovecha si se vuelve a pedir.' });
+    }
+    await step.do('cerrar', { retries: REINTENTOS }, async () => {
+      // El documento sigue «listo» pase lo que pase; con la transcripción nueva, la comprensión se pone al día (solo lo que cambió).
+      await estanteria.cerrar({ id: p.usuario, plan: p.plan }, { tarea: p.tarea, documento: p.documento, ok: true, ...(avisos.length ? { avisos } : {}) });
+    });
+    return resultado;
+  }
+
   private async contexto(p: ParamsIngesta): Promise<ContextoMotor & { emitir(pr: Progreso): Promise<void> }> {
     const env = this.env;
     const cuentas = cuentasDesdeEnv(env);
@@ -88,6 +160,9 @@ export class FlujoIngesta extends WorkflowEntrypoint<Env, ParamsIngesta> {
         return r;
       }
 
+      const medioExistente = soloMedio(p);
+      if (medioExistente) return await this.medioExistente(p, step, medioExistente, progreso, conLatido);
+
       const info: InfoTuberia = await step.do('preparar', { retries: { limit: 3, delay: '5 seconds', backoff: 'exponential' }, timeout: '30 minutes' }, async () => {
         const ctx = await this.contexto(p);
         await ctx.emitir(progreso('conversion', 0, 0.01, p.paquete ? 'Planificando la lectura' : 'Convirtiendo en el servidor'));
@@ -146,6 +221,54 @@ export class FlujoIngesta extends WorkflowEntrypoint<Env, ParamsIngesta> {
 
       const metadatosUsuario = await step.do('metadatos-usuario', async () => (await estanteria.metadatosSubida(p.documento)) ?? null);
 
+      // El original pudo seguir subiendo mientras se leía el paquete: se espera hasta 2 h.
+      const esperarOriginal = async () => (info.original ?? p.original) ? step.do('original', { retries: { limit: 720, delay: '10 seconds', backoff: 'constant' } }, async () => {
+        const cab = await almacenDesdeEnv(this.env, origenDe(this.env)).cabecera(info.original ?? p.original);
+        // Esperar al navegador es legítimo: cada intento renueva el aviso al vigilante.
+        if (!cab) { await vivo(2); throw new Error('El original aún no ha terminado de subir'); }
+        return cab.bytes;
+      }) : undefined;
+      const claveOriginal = info.original ?? p.original;
+      const mimeOriginal = info.mime ?? p.mime;
+      // MP4 con el índice al final: se pone delante para que suene al instante (lo que hace «ffmpeg -movflags +faststart»);
+      // y el proxy ligero para los modelos (percepción, «ver» de Investigar, huecos de la transcripción). Si falla, el
+      // documento sigue valiendo: la transcripción se completa con el audio de los tramos y la comprensión lo reintenta.
+      const prepararMedio = async (bytes: number | undefined) => {
+        if (bytes && claveOriginal && esMp4(mimeOriginal, claveOriginal)) {
+          await step.do('medio-rapido', { retries: { limit: 2, delay: '10 seconds' }, timeout: '15 minutes' }, async () => {
+            await vivo(16);
+            try { return (await adelantarMoov(almacenDesdeEnv(this.env, origenDe(this.env)), claveOriginal, mimeOriginal)).estado; }
+            catch (e) { return `fallo: ${e instanceof Error ? e.message : String(e)}`.slice(0, 200); }
+          });
+        }
+        const hacerProxy = proxyCF(this.env);
+        const tipoMedio = p.tipo === 'audio' || /^audio\//.test(mimeOriginal) ? 'audio' : p.tipo === 'video' || /^video\//.test(mimeOriginal) ? 'video' : null;
+        if (bytes && claveOriginal && hacerProxy && tipoMedio) {
+          await step.do('proxy', { retries: { limit: 2, delay: '30 seconds' }, timeout: '60 minutes' }, async () => conLatido(async () => {
+            try {
+              const r = await asegurarProxy({ almacen: almacenDesdeEnv(this.env, origenDe(this.env)), hacerProxy }, { prefijo: p.prefijo, original: claveOriginal, mime: mimeOriginal, tipo: tipoMedio, nombre: p.nombre });
+              return r ? `${r.bytes} bytes, ${r.cortes} cortes` : 'sin proxy';
+            } catch (e) { return `fallo: ${e instanceof Error ? e.message : String(e)}`.slice(0, 200); }
+          }));
+        }
+      };
+
+      // Audio y vídeo: la transcripción se completa ANTES de consolidar (percepcion/NOTAS.md): cobertura contra el
+      // mapa de la voz del proxy, huecos otra vez en subventanas cortas, tiempos rotos y, con percepción, hablantes.
+      // Así el documento queda «listo» con la transcripción entera. Mientras, las unidades de las tandas ya se leen.
+      let bytesOriginal: number | undefined;
+      const medio = info.modo === 'medio';
+      if (medio) {
+        bytesOriginal = await esperarOriginal();
+        await prepararMedio(bytesOriginal);
+        // Nunca tira la ingesta: si no se puede completar (ni con los reintentos), se consolida lo que hay.
+        await step.do('transcripcion', { retries: { limit: 2, delay: '30 seconds', backoff: 'exponential' }, timeout: `${plazoTranscripcion(info)} seconds` }, async () => conLatido(async () => {
+          await emisor.emitir(`usuario:${p.usuario}`, { tipo: 'progreso', progreso: progreso('lectura', 1, 0.7, 'Revisando la transcripción') });
+          try { return await this.env.TRABAJADOR.getByName(`${p.tarea}:transcripcion`).transcripcion(p, info); }
+          catch (e) { return { fallo: `${e instanceof Error ? e.message : String(e)}`.slice(0, 300) }; }
+        })).catch((e: unknown) => ({ fallo: `${e instanceof Error ? e.message : String(e)}`.slice(0, 300) }));
+      }
+
       // Si el plazo vence, el trabajador sigue consolidando y el reintento se suma a esa misma
       // consolidación (o recoge su resultado): caducar ya no la repite ni la deja a medias.
       const plazo = plazoConsolidacion(info);
@@ -161,36 +284,9 @@ export class FlujoIngesta extends WorkflowEntrypoint<Env, ParamsIngesta> {
       });
       if (resumen.vectoresPendientes) vectoresPendientes = true;
 
-      // El original pudo seguir subiendo mientras se leía el paquete: se espera hasta 2 h.
-      const bytesOriginal = (info.original ?? p.original) ? await step.do('original', { retries: { limit: 720, delay: '10 seconds', backoff: 'constant' } }, async () => {
-        const cab = await almacenDesdeEnv(this.env, origenDe(this.env)).cabecera(info.original ?? p.original);
-        // Esperar al navegador es legítimo: cada intento renueva el aviso al vigilante.
-        if (!cab) { await vivo(2); throw new Error('El original aún no ha terminado de subir'); }
-        return cab.bytes;
-      }) : undefined;
-
-      // MP4 con el índice al final: se pone delante para que suene al instante (lo que hace «ffmpeg -movflags +faststart»).
-      const claveOriginal = info.original ?? p.original;
-      const mimeOriginal = info.mime ?? p.mime;
-      if (bytesOriginal && claveOriginal && esMp4(mimeOriginal, claveOriginal)) {
-        await step.do('medio-rapido', { retries: { limit: 2, delay: '10 seconds' }, timeout: '15 minutes' }, async () => {
-          await vivo(16);
-          try { return (await adelantarMoov(almacenDesdeEnv(this.env, origenDe(this.env)), claveOriginal, mimeOriginal)).estado; }
-          catch (e) { return `fallo: ${e instanceof Error ? e.message : String(e)}`.slice(0, 200); }
-        });
-      }
-
-      // El proxy ligero para los modelos (percepción, «ver» de Investigar). Si falla, el documento sigue valiendo:
-      // la comprensión lo vuelve a intentar antes de mirar el medio.
-      const hacerProxy = proxyCF(this.env);
-      const tipoMedio = p.tipo === 'audio' || /^audio\//.test(mimeOriginal) ? 'audio' : p.tipo === 'video' || /^video\//.test(mimeOriginal) ? 'video' : null;
-      if (bytesOriginal && claveOriginal && hacerProxy && tipoMedio) {
-        await step.do('proxy', { retries: { limit: 2, delay: '30 seconds' }, timeout: '60 minutes' }, async () => conLatido(async () => {
-          try {
-            const r = await asegurarProxy({ almacen: almacenDesdeEnv(this.env, origenDe(this.env)), hacerProxy }, { prefijo: p.prefijo, original: claveOriginal, mime: mimeOriginal, tipo: tipoMedio, nombre: p.nombre });
-            return r ? `${r.bytes} bytes, ${r.cortes} cortes` : 'sin proxy';
-          } catch (e) { return `fallo: ${e instanceof Error ? e.message : String(e)}`.slice(0, 200); }
-        }));
+      if (!medio) {
+        bytesOriginal = await esperarOriginal();
+        await prepararMedio(bytesOriginal);
       }
 
       await step.do('cerrar', { retries: REINTENTOS }, async () => {

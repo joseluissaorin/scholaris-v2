@@ -45,6 +45,7 @@ import { rutasMcp } from './rutas/mcp.js';
 import { rutasContenido } from './rutas/contenido.js';
 import { rutasComprension } from './rutas/comprension.js';
 import { rutasTransmedia } from './rutas/transmedia.js';
+import { rutasTranscripcion } from './rutas/transcripcion.js';
 import { restringirAmbito } from './rutas/ambito.js';
 import { montarSocial, type MensajeCorreo } from './rutas/social.js';
 import { montarV1 } from './rutas/v1.js';
@@ -77,6 +78,7 @@ export function crearAppUsuario() {
   rutasContenido(sub);
   rutasComprension(sub);
   rutasTransmedia(sub);
+  rutasTranscripcion(sub);
   rutasSpdf(sub);
   rutasMedios(sub);
   rutasBibliotecas(sub);

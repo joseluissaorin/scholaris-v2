@@ -16,6 +16,7 @@ import { prefijoDocumento } from '../rutas/subidas.js';
 import { fallo } from './errores.js';
 import { obtenerBuscador } from './servicios.js';
 import { fuenteGeminiDocumento } from './percepcion.js';
+import { anclajeMaterial } from './anclaje-material.js';
 
 /**
  * Modelos del agente, elegidos con el banco de Investigar (packages/investigar/banco,
@@ -133,6 +134,8 @@ export async function puertosInvestigar(p: PuertosUsuario, modelo?: string, prof
       verificador: crearModeloGemini(cfg, MODELOS_INVESTIGAR.verificador),
     },
     medios: mediosInvestigar(p, cfg),
+    // Las citas en páginas, con su región: capa de texto (gratis) o Gemini 3.8 Flash en lo escaneado (con caché).
+    anclajeMaterial: (documento) => anclajeMaterial({ almacen: p.almacen, sql: p.sql, gemini: { clave: cfg.clave, ...(cfg.baseUrl ? { baseUrl: cfg.baseUrl } : {}) } }, { documento, prefijo: prefijoDocumento(p.usuario.id, documento) }),
     usuario: { id: p.usuario.id, pro: p.usuario.plan === 'pro' },
   };
 }

@@ -7,6 +7,7 @@ import { enParalelo, reintentar, type PalabraTranscrita, type Transcriptor } fro
 import type { PalabrasTiempo } from '@scholaris/spdf';
 import type { FuentePaquete, Procedencia, TramoPlan, UnidadLeida } from '../tipos.js';
 import { Cobertura } from '../cobertura.js';
+import { partirAudio, PIEZA_ASR, SOLAPE_PIEZA } from './piezas.js';
 
 export interface ResultadoTranscripcionTramo {
   n: number;
@@ -17,31 +18,67 @@ export interface ResultadoTranscripcionTramo {
   procedencia: Procedencia;
 }
 
+/** ¿Tiempos relativos al audio? Si caben todos en su duración y el audio no empieza en 0, se desplazan. */
+function absolutas(palabras: PalabraTranscrita[], t0: number, t1: number): PalabraTranscrita[] {
+  const dur = t1 - t0;
+  const maxT = palabras.reduce((m, p) => Math.max(m, p.t1), 0);
+  const minT = palabras.reduce((m, p) => Math.min(m, p.t0), Infinity);
+  return t0 > 1 && maxT <= dur + 2 && minT < t0 - 1 ? palabras.map((p) => ({ ...p, t0: p.t0 + t0, t1: p.t1 + t0 })) : palabras;
+}
+
+export interface OpcionesTranscribirTramo {
+  idioma?: string;
+  pista?: string;
+  reloj?: () => number;
+  cobertura?: Cobertura;
+  /**
+   * Segundos por pieza (por defecto 150; 0, el tramo entero de una vez). El
+   * transcriptor de Gemini se salta trozos largos de los tramos de 10 min: en
+   * piezas de 2-3 min no pasa (percepcion/NOTAS.md).
+   */
+  pieza?: number;
+  solapePieza?: number;
+  /** Piezas a la vez (por defecto 4). */
+  concurrenciaPiezas?: number;
+}
+
 /** Transcribe un tramo y devuelve sus palabras en tiempo absoluto, solo las propias (sin solape). */
 export async function transcribirTramo(
   tramo: TramoPlan,
   fuente: FuentePaquete,
   transcriptor: Transcriptor,
-  opciones: { idioma?: string; pista?: string; reloj?: () => number; cobertura?: Cobertura } = {},
+  opciones: OpcionesTranscribirTramo = {},
 ): Promise<ResultadoTranscripcionTramo> {
   const reloj = opciones.reloj ?? Date.now;
   const t = reloj();
   const audio = await fuente.parte(tramo.parte);
   if (!audio) throw new Error(`Falta el tramo de audio ${tramo.parte}`);
   const llamar = <T,>(fn: () => Promise<T>) => (opciones.cobertura ? opciones.cobertura.llamar(fn) : fn());
-  const r = await reintentar(
-    () => llamar(() => transcriptor.transcribir(
-      { bytes: audio.bytes, mime: audio.mime, desplazamiento: tramo.t0 },
-      { hablantes: true, ...(opciones.idioma ? { idioma: opciones.idioma } : {}), ...(opciones.pista ? { pista: opciones.pista } : {}) },
-    )),
+  const transcribir = (a: { bytes: Uint8Array; mime: string; desplazamiento: number }) => reintentar(
+    () => llamar(() => transcriptor.transcribir(a, { hablantes: true, ...(opciones.idioma ? { idioma: opciones.idioma } : {}), ...(opciones.pista ? { pista: opciones.pista } : {}) })),
     { intentos: 3, base: 2000 },
   );
-  let palabras = r.palabras.filter((p) => p.texto.trim());
-  // ¿Tiempos relativos al tramo? Si caben todos en su duración y el tramo no empieza en 0, se desplazan.
-  const dur = tramo.t1 - tramo.t0;
-  const maxT = palabras.reduce((m, p) => Math.max(m, p.t1), 0);
-  const minT = palabras.reduce((m, p) => Math.min(m, p.t0), Infinity);
-  if (tramo.t0 > 1 && maxT <= dur + 2 && minT < tramo.t0 - 1) palabras = palabras.map((p) => ({ ...p, t0: p.t0 + tramo.t0, t1: p.t1 + tramo.t0 }));
+  const piezas = partirAudio(audio, tramo, { pieza: opciones.pieza ?? PIEZA_ASR, solape: opciones.solapePieza ?? SOLAPE_PIEZA });
+  let palabras: PalabraTranscrita[];
+  let idioma: string | undefined;
+  if (!piezas) {
+    const r = await transcribir({ bytes: audio.bytes, mime: audio.mime, desplazamiento: tramo.t0 });
+    palabras = absolutas(r.palabras.filter((p) => p.texto.trim()), tramo.t0, tramo.t1);
+    idioma = r.idioma;
+  } else {
+    // Cada pieza por su lado; las etiquetas de hablante se casan por el solape y cada palabra se queda en la pieza dueña de su centro.
+    const rs = await enParalelo(piezas, opciones.concurrenciaPiezas ?? 4, async (p) => {
+      const r = await transcribir({ bytes: p.bytes, mime: p.mime, desplazamiento: p.t0 });
+      return { r, ws: absolutas(r.palabras.filter((w) => w.texto.trim()), p.t0, p.t1) };
+    });
+    const casables = rs.map((x, k) => ({ n: k, palabras: x.ws, solape: k ? x.ws.filter((w) => w.t0 < piezas[k - 1]!.t1) : [] }));
+    casarHablantes(casables);
+    palabras = casables.flatMap((x, k) => x.palabras.filter((w) => { const c = (w.t0 + w.t1) / 2; return c >= piezas[k]!.propioDesde && c < piezas[k]!.propioHasta; }))
+      .sort((a, b) => a.t0 - b.t0);
+    const idiomas = new Map<string, number>();
+    for (const x of rs) if (x.r.idioma) idiomas.set(x.r.idioma, (idiomas.get(x.r.idioma) ?? 0) + x.ws.length);
+    idioma = [...idiomas].sort((a, b) => b[1] - a[1])[0]?.[0];
+  }
   // Solo lo propio: el solape lo cuenta el tramo vecino (pero se guarda para casar hablantes).
   const solape = palabras.filter((p) => (p.t0 + p.t1) / 2 < tramo.propioDesde - 0.01);
   palabras = palabras.filter((p) => {
@@ -50,10 +87,10 @@ export async function transcribirTramo(
   });
   return {
     n: tramo.n,
-    ...(r.idioma ? { idioma: r.idioma } : {}),
+    ...(idioma ? { idioma } : {}),
     palabras,
     ...(solape.length ? { solape } : {}),
-    procedencia: { fase: 'lectura', proveedor: transcriptor.nombre, ms: reloj() - t, detalle: { tramo: tramo.n, t0: tramo.t0, t1: tramo.t1, palabras: palabras.length } },
+    procedencia: { fase: 'lectura', proveedor: transcriptor.nombre, ms: reloj() - t, detalle: { tramo: tramo.n, t0: tramo.t0, t1: tramo.t1, palabras: palabras.length, ...(piezas ? { piezas: piezas.length } : {}) } },
   };
 }
 
