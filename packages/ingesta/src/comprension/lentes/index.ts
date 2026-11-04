@@ -65,7 +65,8 @@ export function senales(muestra: string) {
   const lineas = muestra.split('\n').map((l) => l.trim()).filter(Boolean);
   const cortas = lineas.filter((l) => l.length > 0 && l.length <= 60 && !/[.:;]$/.test(l) && !/^[#*|-]/.test(l)).length;
   const dialogoGuion = (muestra.match(/(^|\n)\s*[—–-]\s*[¿¡A-ZÁÉÍÓÚÑ]/g) ?? []).length;
-  const comillasDialogo = (muestra.match(/["“«][^"”»\n]{3,200}["”»]/g) ?? []).length;
+  // Solo cuentan como diálogo las réplicas que abren línea: un ensayo cita entre comillas sin parar.
+  const comillasDialogo = (muestra.match(/(^|\n)\s*["“«][^"”»\n]{3,200}["”»]/g) ?? []).length;
   const primeraPersona = (muestra.match(/\b(yo|me|mi|conmigo|nosotros)\b/gi) ?? []).length;
   const pasado = (muestra.match(/\b\w+(aba|ía|ió|aron|ieron)\b/gi) ?? []).length;
   const acotaciones = (muestra.match(/(^|\n)\s*\([^)\n]{5,200}\)/g) ?? []).length;
@@ -130,7 +131,10 @@ export function elegirLentes(e: EntradaEleccion): Eleccion {
   const ensayoS = /ensayo|filosof|cr[ií]tica|teor[ií]a|historia de|estudio/.test(pistas) || s.academico >= 4;
   if (teatro) return ok(['teatro'], 0.8, 'texto dramático');
   if (poesia && !narrativa) return ok(['poesia'], 0.8, 'verso');
-  if (narrativa) return ok(['narrativa'], /novela|cuento|relato/.test(pistas) ? 0.9 : 0.7, 'narración');
+  // Sin pistas de género (título, colección, género), la narración se deduce solo del contenido y es
+  // fácil confundirla con un ensayo que cita y cuenta en pasado: que decida el modelo rápido.
+  if (narrativa && ensayoS && !/novela|cuento|relato|narrativa|nouvelle|f[aá]bula/.test(pistas)) return ok(['ensayo'], 0.45, 'prosa con citas y relato: dudosa entre ensayo y narración');
+  if (narrativa) return ok(['narrativa'], /novela|cuento|relato/.test(pistas) ? 0.9 : 0.45, 'narración');
   if (ensayoS) return ok(['ensayo'], 0.65, 'prosa argumentativa');
   if (['book', 'chapter'].includes(csl)) return ok(['general'], 0.4, 'libro sin señales claras');
   return ok(['general'], 0.35, 'sin señales');

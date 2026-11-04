@@ -177,6 +177,18 @@ describe('comprensión: anclaje', () => {
     expect(elegirLentes({ tipo: 'pdf', metadatos: {}, muestra: versos }).lentes).toEqual(['poesia']);
     expect(elegirLentes({ tipo: 'audio', metadatos: {}, muestra: '', hablantes: 2 }).lentes).toEqual(['entrevista']);
   });
+
+  it('un ensayo que cita entre comillas y cuenta en pasado no es narrativa segura (pasó con Bourdieu, Douglas, Kristeva y Butler)', () => {
+    // Prosa teórica inventada: muchas citas «…» dentro del párrafo y verbos en pasado, sin pistas de género en el título.
+    const ensayo = Array.from({ length: 12 }, (_, i) => `En el capítulo ${i + 1}, la autora mostraba que la noción de «frontera ${i}» organizaba lo que la sociedad consideraba «impuro» y «peligroso»; el análisis de la teoría clásica, que ya había descrito el «orden simbólico», permitía ver cómo el poder producía sus márgenes y cómo los rituales protegían aquella estructura.`).join('\n\n');
+    const e = elegirLentes({ tipo: 'pdf', metadatos: { tipoCSL: 'book', titulo: 'Fronteras del orden' }, muestra: ensayo });
+    expect(e.lentes).not.toEqual(['narrativa']);
+    // Si aún dudara, la confianza baja hace que decida el modelo rápido.
+    if (e.lentes[0] !== 'ensayo') expect(e.confianza).toBeLessThan(0.5);
+    // Un relato con réplicas que abren línea sigue siendo narrativa.
+    const relato = Array.from({ length: 10 }, (_, i) => `—¿Vendrás mañana? —preguntó ella.\n«No lo sé», respondió él, y se marchó por la calle ${i}.\nLlegaba tarde y caminaba despacio.`).join('\n');
+    expect(elegirLentes({ tipo: 'pdf', metadatos: { coleccion: 'Cuento' }, muestra: relato }).lentes).toEqual(['narrativa']);
+  });
 });
 
 describe('comprensión: un cuento', () => {

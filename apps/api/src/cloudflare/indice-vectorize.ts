@@ -53,6 +53,27 @@ function filtroVectorize(f: Record<string, unknown> | undefined): VectorizeVecto
   return Object.keys(salida).length ? (salida as VectorizeVectorMetadataFilter) : undefined;
 }
 
+/**
+ * Vectorize admite ids de 64 bytes como mucho, y el nuestro lleva delante el espacio de nombres
+ * del usuario (unos 16). Los de las fichas repiten el del documento («doc:fi:doc:sg82:lente», 53
+ * caracteres) y no cabían: Vectorize rechazaba todos los vectores de las fichas. La segunda vez
+ * que aparece el documento (el primer tramo del id) se escribe «~», y se deshace al leer.
+ */
+export const MAX_ID_VECTORIZE = 64;
+export function idParaVectorize(ns: string, id: string): string {
+  const doc = id.split(':')[0] ?? '';
+  const corto = doc.length >= 8 && !id.includes('~') ? doc + id.slice(doc.length).split(doc).join('~') : id;
+  return `${ns}.${corto}`;
+}
+export function idDeVectorize(ns: string, idVectorize: string): string {
+  const prefijo = `${ns}.`;
+  const id = idVectorize.startsWith(prefijo) ? idVectorize.slice(prefijo.length) : idVectorize;
+  if (!id.includes('~')) return id;
+  const doc = id.split(':')[0] ?? '';
+  return doc + id.slice(doc.length).split('~').join(doc);
+}
+const bytes = (t: string) => new TextEncoder().encode(t).length;
+
 export function crearIndiceVectorize(indice: VectorizeIndex, espacio: EspacioVectorial, cupo?: CupoVectorial): IndiceVectorial {
   const recortar = (v: Float32Array | number[]) => {
     const a = Array.from(v.length > espacio.dims ? v.slice(0, espacio.dims) : v);
@@ -61,11 +82,17 @@ export function crearIndiceVectorize(indice: VectorizeIndex, espacio: EspacioVec
   return {
     espacio,
     async insertar(ns, entradas: EntradaIndice[]) {
+      const largas = entradas.filter((e) => bytes(idParaVectorize(ns, e.id)) > MAX_ID_VECTORIZE);
+      if (largas.length) {
+        // No se tragan: que se vea en el registro y que el llamador lo cuente como pendiente.
+        console.error(JSON.stringify({ que: 'vectorize_id_largo', n: largas.length, ejemplo: largas[0]!.id }));
+        throw new Error(`${largas.length} ids no caben en Vectorize (más de ${MAX_ID_VECTORIZE} bytes), p. ej. «${largas[0]!.id}»`);
+      }
       for (let i = 0; i < entradas.length; i += LOTE) {
         const lote = entradas.slice(i, i + LOTE);
         await cupo?.turno(lote.length);
         await conReintentos(() => indice.upsert(lote.map((e) => ({
-          id: `${ns}.${e.id}`,
+          id: idParaVectorize(ns, e.id),
           values: recortar(e.valores),
           namespace: ns,
           metadata: Object.fromEntries(Object.entries(e.metadatos).filter(([k]) => CAMPOS.has(k))) as Record<string, VectorizeVectorMetadata>,
@@ -81,16 +108,15 @@ export function crearIndiceVectorize(indice: VectorizeIndex, espacio: EspacioVec
       } catch {
         r = await pedir(Math.min(50, op.k));
       }
-      const prefijo = `${ns}.`;
       return r.matches.map((m) => ({
-        id: m.id.startsWith(prefijo) ? m.id.slice(prefijo.length) : m.id,
+        id: idDeVectorize(ns, m.id),
         puntuacion: m.score,
         ...(m.metadata ? { metadatos: m.metadata as Record<string, string | number | boolean> } : {}),
       }));
     },
     async borrar(ns, ids) {
       for (let i = 0; i < ids.length; i += LOTE) {
-        const lote = ids.slice(i, i + LOTE).map((id) => `${ns}.${id}`);
+        const lote = ids.slice(i, i + LOTE).map((id) => idParaVectorize(ns, id));
         await conReintentos(() => indice.deleteByIds(lote), cupo);
       }
     },
