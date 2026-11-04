@@ -43,6 +43,10 @@ export function textoReparto(p: PercepcionMedio): string {
   return p.reparto.map((r) => `- ${r.nombre}${r.actor ? ` (${r.actor})` : ''}${r.ficticia === false ? ', persona real' : ''}${r.descripcionVisual ? `: ${r.descripcionVisual}` : ''}${r.voz ? `; voz: ${r.voz}` : ''}`).join('\n');
 }
 
+const sinPunto = (x: string) => x.trim().replace(/[.;]+$/, '');
+/** Una frase como inciso entre paréntesis: sin punto final y con minúscula inicial («Come su helado.» → «come su helado»). */
+const inciso = (x: string) => { const t = sinPunto(x); return /^\p{Lu}\p{Ll}/u.test(t) ? t.charAt(0).toLowerCase() + t.slice(1) : t; };
+
 /** La ficha de un plano, en prosa del análisis fílmico, sin llamar al modelo. */
 export function prosaPlano(pl: PlanoPercibido): string {
   const partes: string[] = [];
@@ -50,9 +54,9 @@ export function prosaPlano(pl: PlanoPercibido): string {
   partes.push(`${cab}, de ${t(pl.t0)} a ${t(pl.t1)} (${Math.max(0, pl.t1 - pl.t0).toFixed(1).replace('.', ',')} s).`);
   if (pl.descripcion) partes.push(pl.descripcion.trim().replace(/\.?$/, '.'));
   if (pl.composicion) partes.push(`Composición: ${pl.composicion.trim().replace(/\.?$/, '.')}`);
-  if (pl.luz || pl.color) partes.push(`Luz y color: ${[pl.luz, pl.color].filter(Boolean).join('; ').trim().replace(/\.?$/, '.')}`);
-  if (pl.personas.length) partes.push(`En cuadro: ${pl.personas.map((x) => `${x.nombre}${x.nota ? ` (${x.nota})` : ''}`).join(', ')}.`);
-  if (pl.objetos.length) partes.push(`Objetos: ${pl.objetos.map((x) => `${x.nombre}${x.nota ? ` (${x.nota})` : ''}`).join(', ')}.`);
+  if (pl.luz || pl.color) partes.push(`Luz y color: ${[pl.luz, pl.color].filter(Boolean).map((x) => sinPunto(x!)).join('; ')}.`);
+  if (pl.personas.length) partes.push(`En cuadro: ${pl.personas.map((x) => `${x.nombre}${x.nota ? ` (${inciso(x.nota)})` : ''}`).join(', ')}.`);
+  if (pl.objetos.length) partes.push(`Objetos: ${pl.objetos.map((x) => `${x.nombre}${x.nota ? ` (${inciso(x.nota)})` : ''}`).join(', ')}.`);
   if (pl.textoEnPantalla) partes.push(`Texto en pantalla: «${pl.textoEnPantalla}».`);
   return partes.join(' ');
 }
