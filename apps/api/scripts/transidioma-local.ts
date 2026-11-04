@@ -16,7 +16,7 @@ import { join } from 'node:path';
 import type { Documento } from '@scholaris/nucleo';
 import { aplicarEsquemaFunciones } from '@scholaris/funciones';
 import {
-  alinearRelacion, correspondencias, detectarRelaciones, materialObra, parrafosDe, relacionesPorAlinear, type ContextoComprension, type ModeloComprension,
+  alinearRelacion, correspondencias, detectarRelaciones, materialObra, parrafosDe, relacionesPorAlinear, textosDe, type ContextoComprension, type ModeloComprension,
 } from '@scholaris/ingesta';
 import { crearComprensorGemini, crearGemini } from '@scholaris/proveedores';
 import { crearSpdf, escribirDocumento, escribirUnidades, leerAlineaciones, leerFichas, leerRelaciones } from '@scholaris/spdf';
@@ -78,8 +78,10 @@ writeFileSync(join(salida, 'ficha.json'), JSON.stringify((await leerFichas(sql, 
 // Búsqueda entre lenguas
 // ---------------------------------------------------------------------------
 console.log('\n== Búsqueda entre lenguas');
-const es = parrafosDe(await materialObra(ctx, 'marianela-es', 'B'));
-const en = parrafosDe(await materialObra(ctx, 'marianela-en', 'A'));
+const moEs = await materialObra(ctx, 'marianela-es', 'B'), moEn = await materialObra(ctx, 'marianela-en', 'A');
+const pes = await parrafosDe(ctx, moEs), pen = await parrafosDe(ctx, moEn);
+const tes = await textosDe(ctx, moEs, pes), ten = await textosDe(ctx, moEn, pen);
+const es = pes.map((p) => ({ ...p, texto: tes.get(p.id) ?? '' })), en = pen.map((p) => ({ ...p, texto: ten.get(p.id) ?? '' }));
 // Pares 1-1 traducidos, con párrafos largos: la verdad de cada pregunta.
 const pares = als.filter((x) => x.tipo === 'traducido' && x.a && x.b && !x.a.anclaFin && !x.b.anclaFin).map((x) => ({
   en: en.find((p) => p.unidad === `marianela-en:u${(x.a!.ancla as { fisica: number }).fisica - 1}` && p.caracteres[0] === x.a!.ancla.caracteres?.[0]),

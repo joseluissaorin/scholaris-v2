@@ -10,12 +10,26 @@
 import { nuevoId, type Relacion } from '@scholaris/nucleo';
 import type { EstadoAlineacionVista, ObraRelacionada, RelacionVista } from '@scholaris/contrato';
 import { leerDocumento, leerFichas } from '@scholaris/spdf';
-import { alinearRelacion, leerEstadoAlineacion, transmediaEnProceso, type ContextoComprension } from '@scholaris/ingesta';
+import { alinearRelacion, estadoVigente, leerEstadoAlineacion, transmediaEnProceso, type ContextoComprension } from '@scholaris/ingesta';
 import type { ConfigGemini } from '@scholaris/proveedores';
 import type { PuertosUsuario } from '../puertos.js';
 import { contextoComprension, type ParamsComprension } from './comprension.js';
 
 export const instanciaTransmedia = () => `tmd-${Date.now().toString(36)}${nuevoId().slice(-3)}`;
+
+/**
+ * Plazo de un intento de alineación (segundos). Cada llamada al modelo se acota a lo
+ * que quede; lo hecho queda guardado por grupos, así que un reintento sigue donde quedó.
+ */
+export const PLAZO_ALINEAR_S = 1500;
+
+/** Mensaje de un fallo de la alineación apto para la interfaz (el estado de la relación). */
+export function legibleAlineacion(m: string): string {
+  if (/memory limit|isolate|Durable Object/i.test(m)) return 'La alineación se interrumpió varias veces (la plataforma se quedó sin memoria). Vuelve a pedirla: lo ya hecho se aprovecha.';
+  if (/timed out|WorkflowTimeoutError|plazo/i.test(m)) return 'La alineación tardó más de lo previsto y se detuvo. Vuelve a pedirla: lo ya hecho se aprovecha.';
+  if (/presupuesto/i.test(m)) return m;
+  return 'No he podido terminar la alineación de estas obras. Vuelve a pedirla más tarde: lo ya hecho se aprovecha.';
+}
 
 /**
  * Lanza la detección (y la alineación) de un documento o de toda la biblioteca.
@@ -82,9 +96,13 @@ export async function relacionVista(p: PuertosUsuario, r: Relacion, desde?: stri
   const otro = await obraRelacionada(p, sentido === 'origen' ? r.destino : r.origen);
   const [n] = await p.sql.ejecutar<{ n: number }>('SELECT COUNT(*) AS n FROM alineaciones WHERE relacion = ?', r.id);
   const ficha = o.ficha === false ? undefined : (await leerFichas(p.sql, { objetivo: 'relacion', objetivoId: r.id }))[0];
-  const e = await leerEstadoAlineacion({ sql: p.sql }, r);
+  // Un «en marcha» que lleva demasiado sin moverse está muerto: se enseña como error (nunca «Alineando…» para siempre).
+  const e = estadoVigente(await leerEstadoAlineacion({ sql: p.sql }, r));
   const estadoAlineacion: EstadoAlineacionVista | undefined = e
-    ? { estado: e.estado, alineaciones: e.alineaciones, usd: e.usd, avisos: e.avisos, ...(e.error ? { error: e.error } : {}), actualizado: e.actualizado }
+    ? {
+      estado: e.estado, alineaciones: e.alineaciones, usd: e.usd, avisos: e.avisos, ...(e.error ? { error: e.error } : {}), actualizado: e.actualizado,
+      ...(e.total ? { hechos: e.hechos ?? 0, total: e.total } : {}),
+    }
     : undefined;
   return {
     ...r, otro, sentido, alineaciones: Number(n?.n ?? 0), confirmada: r.fuente === 'usuario',

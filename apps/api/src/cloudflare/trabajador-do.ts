@@ -18,11 +18,11 @@ import { espacioNombresDe } from './indice-vectorize.js';
 import { proxyCF, recortadorCF } from './conversor.js';
 import { UnaVez } from '../compartido/una-vez.js';
 import {
-  alinearRelacion, cerrarComprension, pasoEntidades, pasoFichas, pasoGlobal, pasoIndexado, pasoPersonajes, pasoSegmentos, pasoTransmedia, pasoTransmediaBiblioteca, planificarComprension,
+  alinearRelacion, marcarFalloAlineacion, cerrarComprension, pasoEntidades, pasoFichas, pasoGlobal, pasoIndexado, pasoPersonajes, pasoSegmentos, pasoTransmedia, pasoTransmediaBiblioteca, planificarComprension,
   type ContextoComprension, type PlanComprension, type ResultadoAlinear, type ResultadoTransmedia,
 } from '@scholaris/ingesta';
 import { contextoComprension, registroEnConsola, type ParamsComprension } from '../compartido/comprension.js';
-import { opcionesTransmedia } from '../compartido/transmedia.js';
+import { opcionesTransmedia, PLAZO_ALINEAR_S } from '../compartido/transmedia.js';
 import type { PasoTrabajador } from './flujo-comprension.js';
 
 export class Trabajador extends DurableObject<Env> {
@@ -235,14 +235,35 @@ export class Trabajador extends DurableObject<Env> {
     }, { recordar: true });
   }
 
-  /** Alinea una relación (gruesa, fina y ficha); el cerrojo de la relación evita pagarla dos veces. */
+  /**
+   * Alinea una relación (gruesa, fina y ficha), acotada al plazo del paso. Lo hecho queda
+   * guardado por grupos y el cerrojo de la relación evita pagarla dos veces. Si falla, el
+   * estado de la relación queda en «error» y el error sube: el Workflow reintenta el paso,
+   * y el reintento (la misma instancia) sigue donde quedó.
+   */
   async transmediaAlinear(p: ParamsComprension, relacion: string): Promise<ResultadoAlinear> {
     return this.unaVez.hacer(`tmd:${p.instancia}:${relacion}`, async () => {
-      const ctx = await this.contextoComprension(p);
-      const r = await alinearRelacion(ctx, relacion, opcionesTransmedia(p));
-      await (ctx.sql as SqlRemoto).vaciarPendientes();
-      return r;
+      const ctx = await this.contextoComprension(p, Date.now() + PLAZO_ALINEAR_S * 1000 - 10_000);
+      const t0 = Date.now();
+      console.log(JSON.stringify({ que: 'alineacion', instancia: p.instancia, relacion, estado: 'inicio' }));
+      try {
+        const r = await alinearRelacion(ctx, relacion, opcionesTransmedia(p));
+        await (ctx.sql as SqlRemoto).vaciarPendientes();
+        console.log(JSON.stringify({ que: 'alineacion', instancia: p.instancia, relacion, estado: r.estado, ms: Date.now() - t0, alineaciones: r.alineaciones, usd: r.usd }));
+        return r;
+      } catch (e) {
+        const mensaje = (e as Error)?.message || String(e) || 'error sin mensaje';
+        console.log(JSON.stringify({ que: 'alineacion', instancia: p.instancia, relacion, estado: 'error', ms: Date.now() - t0, error: mensaje.slice(0, 500) }));
+        throw new Error(mensaje.slice(0, 900));
+      }
     });
+  }
+
+  /** Tras agotar los reintentos: la relación queda en «error» (nunca «en marcha» para siempre). */
+  async transmediaFallo(p: ParamsComprension, relacion: string, mensaje: string): Promise<void> {
+    const ctx = await this.contextoComprension(p);
+    await marcarFalloAlineacion(ctx, relacion, mensaje);
+    await (ctx.sql as SqlRemoto).vaciarPendientes();
   }
 
   /** Cierra (bien o mal), avisa al vigilante de que ha terminado y deja seguir a la cola de la biblioteca. */

@@ -10,7 +10,7 @@
 import type { Evidencia, FuenteRelacion, TipoCorrespondencia, TipoRelacion } from '@scholaris/nucleo';
 
 /** Versión del método (detección, alineación y ficha de relación). Si cambia, las alineaciones se rehacen. */
-export const VERSION_TRANSMEDIA = 'transmedia@1';
+export const VERSION_TRANSMEDIA = 'transmedia@2';
 
 /** De dónde sale cada indicio de una relación. */
 export type OrigenSenal = 'metadatos' | 'contenido' | 'wikidata' | 'citas' | 'entidades' | 'fichas' | 'modelo';
@@ -61,7 +61,7 @@ export interface OpcionesAlineacion {
   calidad?: 'alta' | 'rapida';
   /** Llamadas al modelo a la vez (por defecto 4). */
   concurrencia?: number;
-  /** Hasta cuántos caracteres van las dos obras enteras en cada llamada (por defecto 1 200 000). */
+  /** Caracteres de B por grupo de la alineación fina (por defecto 9000); los de A, hasta 40 000. */
   maxCaracteres?: number;
   /** Calidad del modelo en la ficha de la relación (por defecto «alta»: es un ensayo, y el rápido inventa más). */
   calidadFicha?: 'alta' | 'rapida';
@@ -119,6 +119,15 @@ export interface EstadoAlineacion {
   modelo?: string;
   avisos: string[];
   error?: string;
+  /** Por dónde va: la gruesa, los grupos finos (o las ventanas de párrafos), la ficha. */
+  fase?: 'gruesa' | 'fina' | 'ficha' | 'hecho';
+  /** Grupos (o ventanas) terminados y guardados, de cuántos. */
+  hechos?: number;
+  total?: number;
+  /** Intentos que se quedaron sin tiempo: con alguno, lo que falta va con el modelo rápido. */
+  plazos?: number;
+  /** La ficha de la relación ya está escrita. */
+  ficha?: boolean;
   iniciado: string;
   actualizado: string;
 }

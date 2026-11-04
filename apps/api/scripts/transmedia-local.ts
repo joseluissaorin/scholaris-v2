@@ -20,7 +20,7 @@ import { join } from 'node:path';
 import type { PercepcionMedio, Relacion } from '@scholaris/nucleo';
 import { aplicarEsquemaFunciones } from '@scholaris/funciones';
 import {
-  alinearRelacion, alineacionFina, alineacionGruesa, detectarRelaciones, gruposFinos, leerEstadoAlineacion, materialObra, prefijoRelacion, relacionesPorAlinear,
+  alinearRelacion, alineacionFina, alineacionGruesa, cargarTramo, detectarRelaciones, gruposFinos, leerEstadoAlineacion, materialObra, ordenesDe, prefijoRelacion, relacionesPorAlinear,
   type ContextoComprension, type ModeloComprension,
 } from '@scholaris/ingesta';
 import { crearComprensorGemini, crearGemini } from '@scholaris/proveedores';
@@ -80,7 +80,8 @@ if (modo === 'alinear') {
     for (const id of ids) {
       console.log(`\n== Alineando ${id}`);
       const t = Date.now();
-      const r = await alinearRelacion(ctx, id, { forzar: true, calidad: (valor('calidad') as 'alta' | 'rapida' | undefined) ?? 'alta', presupuestoUsd: Number(valor('presupuesto') ?? 4), concurrencia: Number(valor('concurrencia') ?? 4) });
+      const r = await alinearRelacion(ctx, id, { forzar: true, calidad: (valor('calidad') as 'alta' | 'rapida' | undefined) ?? 'alta', presupuestoUsd: Number(valor('presupuesto') ?? 4), concurrencia: Number(valor('concurrencia') ?? 3) })
+        .catch((e: Error) => ({ estado: 'error', alineaciones: 0, gruesas: 0, ficha: false, usd: 0, avisos: [e.message] }));
       console.log(`  ${r.estado}: ${r.alineaciones} alineaciones (${r.gruesas} gruesas), ficha ${r.ficha ? 'sí' : 'no'}, ${r.usd.toFixed(3)} USD, ${Math.round((Date.now() - t) / 1000)} s; avisos: ${r.avisos.join(' | ') || 'ninguno'}`);
     }
   }
@@ -105,7 +106,7 @@ if (modo === 'alinear') {
   const [rel] = (await leerRelaciones(sql)).filter((r) => r.tipo !== 'cita_a' && r.tipo !== 'relacionado');
   if (!rel) throw new Error('No hay relación que alinear');
   const a = await materialObra(ctx, rel.origen, 'A'), b = await materialObra(ctx, rel.destino, 'B');
-  const prefijo = prefijoRelacion(rel, a, b);
+  const prefijo = prefijoRelacion(rel, a, b, { global: true });
   const informe: Record<string, unknown>[] = [];
   const gruesasPor: Record<string, unknown> = {};
   let gruesasBase = null as Awaited<ReturnType<typeof alineacionGruesa>> | null;
@@ -128,7 +129,9 @@ if (modo === 'alinear') {
       const acumulado = { uso: { modelo: '', tokensEntrada: 0, tokensSalida: 0, usd: 0, ms: 0, llamadas: 0 } };
       const t = Date.now();
       try {
-        const r = await alineacionFina(rel, a, b, grupos[gi]!, comprensor(id, id), acumulado, { prefijo: prefijo.texto, largo: prefijo.largo, calidad: 'alta' });
+        const g = grupos[gi]!;
+        const ta = await cargarTramo(ctx, a, ordenesDe(a, g.a)), tb = await cargarTramo(ctx, b, ordenesDe(b, g.b));
+        const r = await alineacionFina(rel, a, b, g, ta, tb, comprensor(id, id), acumulado, { prefijo: prefijo.texto, calidad: 'alta' });
         const ambos = r.alineaciones.filter((x) => x.a && x.b).length;
         const visuales = r.alineaciones.filter((x) => x.a?.ancla.tipo === 'tiempo' && !x.a.ancla.caracteres).length;
         const fila = {

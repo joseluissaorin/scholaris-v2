@@ -7,11 +7,11 @@
  */
 import type { Documento, PercepcionMedio, Segmento, SQL } from '@scholaris/nucleo';
 import { aplicarEsquemaFunciones } from '@scholaris/funciones';
-import { escribirApariciones, escribirDocumento, escribirSegmentos, escribirUnidades, leerAlineaciones, leerFichas, leerRelaciones, type UnidadSpdf } from '@scholaris/spdf';
+import { escribirApariciones, escribirDocumento, escribirFichas, escribirSegmentos, escribirUnidades, leerAlineaciones, leerFichas, leerRelaciones, type UnidadSpdf } from '@scholaris/spdf';
 import { describe, expect, it } from 'vitest';
 import {
-  actualizarEstado, alinearRelacion, alinearTraduccion, confirmarRelacion, crearRelacionUsuario, detectarRelaciones, galeChurch, leerEstadoAlineacion, materialObra,
-  obraDe, obraWikidata, parrafosDe, pasoTransmedia, rechazarRelacion, senalesMetadatos,
+  actualizarEstado, alinearRelacion, alinearTraduccion, confirmarRelacion, crearRelacionUsuario, detectarRelaciones, ErrorAlineacion, estadoVigente, galeChurch, leerEstadoAlineacion,
+  marcarFalloAlineacion, materialObra, obraDe, obraWikidata, parrafosDe, pasoTransmedia, rechazarRelacion, senalesMetadatos,
   type ContextoComprension, type ModeloComprension, type PeticionComprension,
 } from '../src/index.js';
 import { baseReal, embebedorFalso } from './fakes.js';
@@ -360,6 +360,144 @@ describe('transmedia: alineación de una adaptación', () => {
 });
 
 // ---------------------------------------------------------------------------
+// Durable, reanudable y acotada (incidente del 4-11-2026)
+// ---------------------------------------------------------------------------
+
+/** Tres escenas en tres grupos (cada página del cuento, más larga que el tope de un grupo). */
+const respuestasTresGrupos = {
+  'transmedia:gruesa': () => ({
+    correspondencias: [
+      { a: ['a0'], b: ['b0'], tipo: 'transformado', nota: 'Encuentro dramatizado.', confianza: 0.9 },
+      { a: ['a1'], b: ['b1'], tipo: 'condensado', nota: 'Visita condensada.', confianza: 0.8 },
+      { a: ['a3'], b: ['b2'], tipo: 'equivalente', nota: 'Final conservado.', confianza: 0.9 },
+      { a: ['a2'], b: [], tipo: 'anadido', nota: 'Nancy es nueva.', confianza: 0.9 },
+    ],
+  }),
+  'transmedia:fina': (_p: PeticionComprension, texto: string) => {
+    const b = /Segmentos de B: (b\d)/.exec(texto)?.[1];
+    const cita = b === 'b0' ? 'Se sentó frente a mí con su helado de fresa' : b === 'b1' ? 'Diego me enseñó sus libros prohibidos' : 'volví solo a Coppelia y pedí helado de fresa';
+    return { alineaciones: [{ tipo: 'equivalente', b: { u: Number(b?.slice(1) ?? 0), cita }, a: { t0: b === 'b0' ? 100 : b === 'b1' ? 400 : 1100, t1: (b === 'b0' ? 100 : b === 'b1' ? 400 : 1100) + 10, que: 'Diego' }, nota: `Nota de ${b}.`, confianza: 0.9 }] };
+  },
+  'transmedia:ficha': () => ({ texto: 'Ficha.', resumen_es: 'R.', resumen_en: 'R.', modo: 'M.', cambios: [], personajes: [], evidencias: [] }),
+};
+
+describe('transmedia: alineación durable, reanudable y acotada', () => {
+  it('un fallo a mitad deja el estado en «error» (nunca «en marcha»), lanza para que el Workflow reintente, y el reintento no paga dos veces', async () => {
+    const { sql } = await base();
+    await cuento(sql); await pelicula(sql); await comprendidas(sql);
+    // La estantería se reinicia al guardar el segundo grupo (lo que pasó en producción).
+    let grupos = 0;
+    const fragil: SQL = {
+      ejecutar: (q, ...p) => {
+        if (/^DELETE FROM alineaciones WHERE relacion = \? AND id LIKE/.test(q) && String(p[1]).includes(':f') && ++grupos === 2) {
+          return Promise.reject(new Error("Durable Object's isolate exceeded its memory limit and was reset."));
+        }
+        return sql.ejecutar(q, ...p);
+      },
+      transaccion: (fn) => sql.transaccion(fn),
+    };
+    const roto = modeloFalso(respuestasTresGrupos);
+    const ctx = ctxDe(fragil, roto);
+    const { porAlinear: [id] } = await pasoTransmedia(ctxDe(sql, null), 'pelicula', { wikidata: false, modelo: false });
+    await expect(alinearRelacion(ctx, id!, { concurrencia: 1, maxCaracteres: 100, instancia: 'cmp-1' })).rejects.toBeInstanceOf(ErrorAlineacion);
+    const e = await leerEstadoAlineacion(ctx, { id: id!, origen: 'pelicula' });
+    expect(e).toMatchObject({ estado: 'error', fase: 'fina', total: 3, hechos: 1 });
+    expect(e!.error).toMatch(/memory limit/);
+    // Lo hecho ya está guardado: el primer grupo con su alineación.
+    expect((await leerAlineaciones(sql, { relacion: id! })).filter((x) => x.id.includes(':f'))).toHaveLength(1);
+    // El reintento (la misma instancia) reanuda: ni la gruesa ni el primer grupo se vuelven a pagar.
+    const bien = modeloFalso(respuestasTresGrupos);
+    const r = await alinearRelacion(ctxDe(sql, bien), id!, { concurrencia: 1, maxCaracteres: 100, instancia: 'cmp-1', forzar: true });
+    expect(r).toMatchObject({ estado: 'hecho', ficha: true });
+    expect(bien.llamadas.map((x) => x.operacion)).toEqual(['transmedia:fina', 'transmedia:fina', 'transmedia:ficha']);
+    const als = await leerAlineaciones(sql, { relacion: id! });
+    expect(als.filter((x) => x.id.includes(':f')).map((x) => x.nota)).toEqual(['Nota de b0.', 'Nota de b1.', 'Nota de b2.']);
+    expect(als.map((x) => x.orden)).toEqual(als.map((_, i) => i));
+    // Lo pagado: gruesa y dos finas del primer intento (la segunda se pagó y no llegó a guardarse), dos finas y la ficha del segundo.
+    expect(await leerEstadoAlineacion(ctx, { id: id!, origen: 'pelicula' })).toMatchObject({ estado: 'hecho', hechos: 3, total: 3, ficha: true, llamadas: 3 + 3 });
+  });
+
+  it('sin tiempo en el paso: ErrorPlazo, estado «error» con el plazo apuntado, y el siguiente intento va con el modelo rápido', async () => {
+    const { sql } = await base();
+    await cuento(sql); await pelicula(sql); await comprendidas(sql);
+    const modelo = modeloFalso(respuestasTresGrupos);
+    const ctx = ctxDe(sql, modelo);
+    const { porAlinear: [id] } = await pasoTransmedia(ctx, 'pelicula', { wikidata: false, modelo: false });
+    // Quedan 30 s: con el margen del paso no da para ninguna llamada.
+    await expect(alinearRelacion({ ...ctx, limite: Date.now() + 30_000 }, id!, { instancia: 'cmp-2' })).rejects.toThrow(/plazo/);
+    expect(modelo.llamadas).toHaveLength(0);
+    expect(await leerEstadoAlineacion(ctx, { id: id!, origen: 'pelicula' })).toMatchObject({ estado: 'error', plazos: 1 });
+    await alinearRelacion({ ...ctx, limite: Date.now() + 600_000 }, id!, { instancia: 'cmp-2', maxCaracteres: 100, concurrencia: 1 });
+    expect(new Set(modelo.llamadas.map((x) => x.calidad))).toEqual(new Set(['rapida']));
+  });
+
+  it('un «en marcha» que no se mueve se ve como error; y el fallo final lo deja en error', async () => {
+    const { sql } = await base();
+    await cuento(sql); await pelicula(sql); await comprendidas(sql);
+    const ctx = ctxDe(sql, modeloFalso(respuestasTresGrupos));
+    const { porAlinear: [id] } = await pasoTransmedia(ctx, 'pelicula', { wikidata: false, modelo: false });
+    const viejo = { relacion: id!, estado: 'en_marcha' as const, version: 'x', huella: 'h', instancia: 'i', alineaciones: 0, gruesas: 0, descartadas: 0, usd: 0, tokensEntrada: 0, tokensSalida: 0, llamadas: 0, avisos: [], iniciado: ahora, actualizado: '2026-11-04T09:00:00.000Z' };
+    expect(estadoVigente(viejo, Date.parse('2026-11-04T09:05:00.000Z'))!.estado).toBe('en_marcha');
+    expect(estadoVigente(viejo, Date.parse('2026-11-04T10:00:00.000Z'))).toMatchObject({ estado: 'error', error: expect.stringMatching(/se detuvo/) });
+    await sql.ejecutar("INSERT INTO procedencia (documento, fase, proveedor, detalle, ms, cuando) VALUES ('pelicula', ?, NULL, ?, NULL, ?)", `transmedia:alineacion:${id}`, JSON.stringify(viejo), viejo.actualizado);
+    await marcarFalloAlineacion(ctx, id!, 'El paso se reintentó tres veces sin terminar.');
+    expect(await leerEstadoAlineacion(ctx, { id: id!, origen: 'pelicula' })).toMatchObject({ estado: 'error', error: 'El paso se reintentó tres veces sin terminar.' });
+  });
+
+  it('presupuesto de la estantería: una película de dos horas con 600 planos no le pide nunca más de 150 KB de una vez', async () => {
+    const { sql } = await base();
+    await cuento(sql);
+    await escribirDocumento(sql, { ...documento('peli', 'video', 'Otra película', { tipoCSL: 'motion_picture', anio: 1993, autores: [{ nombre: 'Tomás', apellidos: 'Gutiérrez Alea' }] }), duracion: 7200 });
+    // Transcripción inventada: 240 tramos de 30 s.
+    await escribirUnidades(sql, Array.from({ length: 240 }, (_, i): UnidadSpdf => ({
+      id: `peli:u${i}`, documento: 'peli', orden: i, texto: `**Diego:** Frase ${i} de prueba con helado de fresa y libros prohibidos en la Guarida, una y otra vez.`.repeat(4),
+      lector: 'asr', confianza: 1, ancla: { tipo: 'tiempo', t0: i * 30, t1: i * 30 + 30, hablante: 'Diego' },
+    })));
+    const escenas: Segmento[] = Array.from({ length: 60 }, (_, i) => ({ ...segmento('peli', i * 11, `Escena ${i}`, { tipo: 'tiempo', t0: i * 120, t1: i * 120 + 120 }, `peli:u${i * 4}`, `peli:u${i * 4 + 3}`) }));
+    const planos: Segmento[] = Array.from({ length: 600 }, (_, k) => ({ ...segmento('peli', Math.floor(k / 10) * 11 + 1 + (k % 10), `Plano ${k}`, { tipo: 'tiempo', t0: k * 12, t1: k * 12 + 12 }, `peli:u${Math.floor(k / 2.5)}`, `peli:u${Math.floor(k / 2.5)}`), tipo: 'plano' as const, nivel: 2, padre: `peli:sg${Math.floor(k / 10) * 11}` }));
+    await escribirSegmentos(sql, [...escenas, ...planos]);
+    const relleno = 'Descripción larga del plano, la composición, la luz, el color y quién domina el encuadre. '.repeat(30);
+    await escribirFichas(sql, planos.map((s) => ({ id: `${s.id}:plano`, documento: 'peli', objetivo: 'segmento' as const, objetivoId: s.id, lente: 'cine' as const, clase: 'plano', idioma: 'es', texto: relleno, datos: { relleno, resumen: { es: relleno } }, evidencias: [], modelo: 'x', version: 'x', creada: ahora })));
+    await escribirSegmentos(sql, [segmento('cuento', 0, 'Coppelia', { tipo: 'pagina', fisica: 1, impresa: '5', romana: false, origen: 'leido', confianza: 1 }, 'cuento:u0', 'cuento:u2')]);
+    for (const d of ['cuento', 'peli']) await actualizarEstado(sql, d, { estado: 'hecho', lentes: [d === 'cuento' ? 'narrativa' : 'cine'], version: 'comprension@2', huella: 'h' }, ahora);
+    await crearRelacionUsuario(sql, { origen: 'peli', destino: 'cuento', tipo: 'adaptacion_de' }, ahora);
+    const tamanos: number[] = [];
+    const espia: SQL = {
+      ejecutar: async (q, ...p) => {
+        const r = await sql.ejecutar(q, ...p);
+        if (/^\s*SELECT/i.test(q)) tamanos.push((r as Array<Record<string, unknown>>).reduce((t, f) => t + Object.values(f).reduce<number>((x, v) => x + (typeof v === 'string' ? v.length : 8), 0), 0));
+        return r as never;
+      },
+      transaccion: (fn) => sql.transaccion(fn),
+    };
+    const [rel] = await leerRelaciones(sql);
+    const r = await alinearRelacion(ctxDe(espia, modeloFalso({
+      'transmedia:gruesa': () => ({ correspondencias: escenas.slice(0, 20).map((s) => ({ a: [`a${s.orden}`], b: ['b0'], tipo: 'transformado', nota: 'Prueba.', confianza: 0.8 })) }),
+      'transmedia:fina': () => ({ alineaciones: [] }),
+      'transmedia:ficha': () => ({ texto: 'Ficha.', resumen_es: 'R.', resumen_en: 'R.', modo: 'M.', cambios: [], personajes: [], evidencias: [] }),
+    }), { percepcion: async () => null }), rel!.id, { concurrencia: 2 });
+    expect(r.estado).toBe('hecho');
+    // Antes, una sola consulta (las fichas del documento con sus 600 planos) pasaba de 2 MB.
+    expect(Math.max(...tamanos)).toBeLessThan(150_000);
+  });
+
+  it('pide a la estantería solo lo ligero: ni los planos, ni las fichas enteras, ni las apariciones fila a fila', async () => {
+    const { sql } = await base();
+    await cuento(sql); await pelicula(sql); await comprendidas(sql);
+    const consultas: string[] = [];
+    const espia: SQL = { ejecutar: (q, ...p) => { consultas.push(q.replace(/\s+/g, ' ')); return sql.ejecutar(q, ...p); }, transaccion: (fn) => sql.transaccion(fn) };
+    const ctx = ctxDe(espia, modeloFalso(respuestasAlineacion));
+    const { porAlinear: [id] } = await pasoTransmedia(ctxDe(sql, null), 'pelicula', { wikidata: false, modelo: false });
+    await alinearRelacion(ctx, id!, { concurrencia: 1 });
+    const lecturas = consultas.filter((q) => /^\s*SELECT/i.test(q));
+    expect(lecturas.some((q) => /SELECT \* FROM fichas WHERE documento = \?/.test(q))).toBe(false);
+    expect(lecturas.some((q) => /SELECT \* FROM apariciones/.test(q))).toBe(false);
+    expect(lecturas.some((q) => /SELECT \* FROM figuras/.test(q))).toBe(false);
+    expect(lecturas.filter((q) => /FROM segmentos/.test(q)).every((q) => /tipo <> 'plano'/.test(q))).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Traducciones
 // ---------------------------------------------------------------------------
 
@@ -396,8 +534,8 @@ describe('transidioma: traducciones párrafo a párrafo', () => {
     const [rel] = await leerRelaciones(sql);
     expect(rel).toMatchObject({ origen: 'en', destino: 'es', tipo: 'traduccion_de' });
     const a = await materialObra(ctx, 'en', 'A'), b = await materialObra(ctx, 'es', 'B');
-    expect(parrafosDe(b).map((p) => p.id)).toEqual(['B1', 'B2', 'B3']);
-    const sin = await alinearTraduccion(rel!, a, b, null, { uso: { modelo: '', tokensEntrada: 0, tokensSalida: 0, usd: 0, ms: 0, llamadas: 0 } }, { calidad: 'rapida', concurrencia: 1, presupuestoUsd: 1 });
+    expect((await parrafosDe(ctx, b)).map((p) => p.id)).toEqual(['B1', 'B2', 'B3']);
+    const sin = await alinearTraduccion(ctx, rel!, a, b, null, { uso: { modelo: '', tokensEntrada: 0, tokensSalida: 0, usd: 0, ms: 0, llamadas: 0 } }, { calidad: 'rapida' });
     expect(sin.alineaciones.map((x) => x.tipo)).toEqual(['traducido', 'traducido']);
     const segunda = sin.alineaciones[1]!;
     // El segundo párrafo inglés traduce dos del original: ancla y ancla de cierre exactas.

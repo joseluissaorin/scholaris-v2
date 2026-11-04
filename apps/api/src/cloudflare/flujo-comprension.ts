@@ -22,6 +22,7 @@ import type { PlanComprension, ResultadoTransmedia } from '@scholaris/ingesta';
 import type { ParamsComprension } from '../compartido/comprension.js';
 import type { Env } from './env.js';
 import { conLatidoAcotado } from '../compartido/latido.js';
+import { legibleAlineacion, PLAZO_ALINEAR_S } from '../compartido/transmedia.js';
 
 const REINTENTOS = { limit: 4, delay: '20 seconds', backoff: 'exponential' } as const;
 /** Tandas de fichas a la vez (cada una es una llamada larga al modelo). */
@@ -47,8 +48,18 @@ export class FlujoComprension extends WorkflowEntrypoint<Env, ParamsComprension>
     const transmedia = async (): Promise<{ relaciones: number; alineadas: number }> => {
       const r = (await step.do('transmedia', opciones(900), async () => JSON.parse(JSON.stringify(await trabajador('transmedia').transmediaDetectar(p))) as Record<string, never>)) as unknown as ResultadoTransmedia;
       const ids = p.alinear === false ? [] : p.relacion ? r.porAlinear.filter((x) => x === p.relacion) : r.porAlinear;
-      await enParalelo(ids, 2, (id, i) => step.do(`alinear-${i}`, { retries: { limit: 2, delay: '30 seconds', backoff: 'exponential' }, timeout: '2400 seconds' }, async () =>
-        JSON.parse(JSON.stringify(await trabajador(`alinear-${id}`).transmediaAlinear(p, id))) as Record<string, never>));
+      // Cada alineación, acotada a su plazo; si falla, el paso se reintenta y el reintento reanuda lo guardado.
+      // Agotados los reintentos, la relación queda en «error» (nunca «en marcha» para siempre).
+      await enParalelo(ids, 2, async (id, i) => {
+        try {
+          await step.do(`alinear-${i}`, { retries: { limit: 4, delay: '30 seconds', backoff: 'exponential' }, timeout: `${PLAZO_ALINEAR_S + 60} seconds` }, async () =>
+            JSON.parse(JSON.stringify(await conLatido(PLAZO_ALINEAR_S + 60, () => trabajador(`alinear-${id}`).transmediaAlinear(p, id)))) as Record<string, never>);
+        } catch (e) {
+          const mensaje = e instanceof Error ? e.message : String(e);
+          console.error(JSON.stringify({ que: 'alineacion', instancia: p.instancia, relacion: id, estado: 'abandonada', error: mensaje.slice(0, 500) }));
+          await step.do(`alinear-${i}-fallo`, { retries: { limit: 3, delay: '5 seconds' } }, async () => { await trabajador(`fallo-${id}`).transmediaFallo(p, id, legibleAlineacion(mensaje)); });
+        }
+      });
       return { relaciones: r.relaciones, alineadas: ids.length };
     };
     if (p.transmedia) return { transmedia: await transmedia() };

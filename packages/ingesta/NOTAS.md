@@ -93,3 +93,29 @@ El 4-11-2026 el paso de entidades del cuento caducó tres veces seguidas en prod
 - Wikidata: 8 s por petición, 25 s en total y caché en `entidades_wikidata`. El índice: cada envío, acotado; lo que no llegue queda pendiente y se reenvía por la cola.
 - El latido del Workflow se calla al llegar al plazo (`compartido/latido.ts`); el de trabajo real lo da el Trabajador, al empezar y acabar cada parte y cada minuto mientras el modelo responde.
 - Diario: cada parte de cada paso deja una línea JSON (`{"que":"comprension",…}`) que `wrangler tail` enseña. En local, `comprender-local.ts --como-produccion` corre los pasos con sus plazos.
+
+
+## Transmedia: la alineación sin memoria (incidente del 4-11-2026)
+
+La alineación de *Fresa y chocolate* con el cuento (paso `alinear-0` de la comprensión de la
+película) pagó 1,60 USD y terminó con «Durable Object's isolate exceeded its memory limit and
+was reset». El error llegó por la llamada a la estantería (el Trabajador siguió vivo y devolvió
+un resultado «error», así que el paso salió bien y el Workflow no reintentó), y el estado de la
+relación se quedó en «en marcha»: la escritura del error fue a la estantería que se estaba
+reiniciando y su fallo se tragaba. La alineación cargaba de golpe las dos obras enteras, todas
+sus fichas (las 616 de la película, con sus 521 planos: 1,7 MB en una sola consulta), todos los
+segmentos, las apariciones fila a fila y la percepción entera, y lo tenía todo en mano hasta el final.
+
+- Memoria acotada (`transmedia/material.ts`): índice de unidades sin texto, estructura sin planos
+  (`leerSegmentos(…, { sinPlanos: true })`), resúmenes por `json_extract`, inicio de la ficha global,
+  percepción condensada en texto y soltada; el texto se carga por tramos, grupo a grupo, y la ficha de
+  la relación solo carga las unidades que cita. Medido con la película y el cuento de verdad: de 3,5 MB
+  a 0,6 MB pedidos a la estantería por alineación, la consulta mayor de 1,7 MB a 54 KB, y lo retenido
+  por el Trabajador de 5,7 MB a 1 MB (`apps/api/scripts/medir-memoria-alineacion.ts`, `medir-retenido.ts`).
+- Durable y reanudable: la gruesa y cada grupo fino (o ventana de párrafos) se guardan al acabar;
+  un reintento con la misma huella (y, con «forzar», de la misma instancia) sigue donde quedó.
+- Ningún «en marcha» para siempre: el fallo se escribe con reintentos y sube (el paso falla y el
+  Workflow reintenta); agotados los reintentos, un paso `alinear-N-fallo` deja la relación en error; y
+  la vista da por muerto un «en marcha» que no se mueve en 15 minutos (`estadoVigente`).
+- Cada llamada, acotada al plazo del paso (`modeloDelPaso`, 240 s por llamada fina); sin tiempo, se
+  repite con el modelo rápido si queda margen, y los intentos siguientes van con él.
