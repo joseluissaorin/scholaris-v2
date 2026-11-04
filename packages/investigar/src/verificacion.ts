@@ -233,13 +233,13 @@ const SISTEMA = `Compruebas frase a frase una respuesta académica contra sus pr
 3. Lo que la frase dice que alguien nombra, cita o dice tiene que estar literalmente en la prueba. Una afirmación de ausencia («no aparece», «no se menciona») solo se sostiene si la prueba muestra entero el sitio donde debería estar.
 Las erratas de OCR o de transcripción no cuentan. Las notas, en español y breves: qué falta o qué no cuadra.`;
 
-/** El juez de las frases (un modelo barato, por lotes de 12): clase y veredicto de cada marca. */
+/** El juez de las frases (un modelo barato, por lotes de 8 en paralelo): clase y veredicto de cada marca. */
 async function juzgarFrases(ctx: ContextoHerramientas, numerador: Numerador, frases: FraseRespuesta[]): Promise<Map<number, { clase: ClaseFrase; marcas: FraseJuzgada['marcas']; nota?: string }>> {
   const modelo = ctx.p.modelos.verificador ?? ctx.p.modelos.agente;
   const salida = new Map<number, { clase: ClaseFrase; marcas: FraseJuzgada['marcas']; nota?: string }>();
   const indices = frases.map((_, i) => i);
   const lotes: number[][] = [];
-  for (let k = 0; k < indices.length; k += 12) lotes.push(indices.slice(k, k + 12));
+  for (let k = 0; k < indices.length; k += 8) lotes.push(indices.slice(k, k + 8));
   await Promise.all(lotes.map(async (lote) => {
     const ids = [...new Set(lote.flatMap((i) => frases[i]!.evidencias))];
     const pruebas = ids.map((id) => textoDePrueba(numerador, id)).filter(Boolean).join('\n');
@@ -341,7 +341,8 @@ async function mirarSitios(ctx: ContextoHerramientas, numerador: Numerador, fras
   });
   const lista = [...grupos.values()].sort((a, b) => b.frases.length - a.frases.length).slice(0, Math.max(0, sitios));
   let k = 0;
-  await Promise.all(Array.from({ length: Math.min(4, lista.length) }, async () => {
+  // Seis a la vez: cada comprobación es una llamada corta y la verificación espera a la más lenta.
+  await Promise.all(Array.from({ length: Math.min(6, lista.length) }, async () => {
     while (k < lista.length) {
       const g = lista[k++]!;
       try {
@@ -432,7 +433,7 @@ async function corregir(ctx: ContextoHerramientas, numerador: Numerador, markdow
   if (!pendientes.length) return { markdown, cambiadas: [] };
   const extra = new Map(pendientes.map(({ f, i }) => [i, candidatas(ctx, numerador, f)]));
   const lotes: Array<typeof pendientes> = [];
-  for (let k = 0; k < pendientes.length; k += 8) lotes.push(pendientes.slice(k, k + 8));
+  for (let k = 0; k < pendientes.length; k += 6) lotes.push(pendientes.slice(k, k + 6));
   const nuevos = new Map<number, string>();
   await Promise.all(lotes.map(async (lote) => {
     const bloques = lote.map(({ f, i }) => {
@@ -478,6 +479,9 @@ async function corregir(ctx: ContextoHerramientas, numerador: Numerador, markdow
   return { markdown: salida, cambiadas };
 }
 
+/** Milisegundos de cada paso de la verificación (para el registro). */
+export interface TiemposVerificacion { juicio: number; correccion: number; rejuicio: number }
+
 export interface ResultadoVerificacion {
   /** La respuesta corregida (sin la lista de pruebas). */
   markdown: string;
@@ -485,6 +489,7 @@ export interface ResultadoVerificacion {
   detalle: Array<FraseRespuesta & { veredicto: FraseVerificada['veredicto'] | 'interpretacion'; nota?: string; revisada?: boolean }>;
   /** Frases corregidas. */
   correcciones: number;
+  tiempos: TiemposVerificacion;
 }
 
 /**
@@ -494,6 +499,8 @@ export interface ResultadoVerificacion {
  */
 export async function verificar(ctx: ContextoHerramientas, numerador: Numerador, markdown: string, opciones: number | { sitios: number; corregir?: boolean }): Promise<ResultadoVerificacion> {
   const o = typeof opciones === 'number' ? { sitios: opciones, corregir: true } : { corregir: true, ...opciones };
+  const t0 = Date.now();
+  const tiempos: TiemposVerificacion = { juicio: 0, correccion: 0, rejuicio: 0 };
   // Se juzga y, a la vez, se vuelve a mirar lo que parece visual o sonoro.
   const iniciales = frasesDe(markdown);
   const [juzgadasIniciales, miradas] = await Promise.all([
@@ -502,11 +509,14 @@ export async function verificar(ctx: ContextoHerramientas, numerador: Numerador,
   ]);
   let juzgadas = juzgadasIniciales;
   aplicarMiradas(juzgadas, miradas);
+  tiempos.juicio = Date.now() - t0;
   let texto = markdown;
   let correcciones = 0;
   if (o.corregir) {
+    const tc = Date.now();
     const c = await corregir(ctx, numerador, texto, juzgadas);
     texto = c.markdown;
+    tiempos.correccion = Date.now() - tc;
     correcciones = juzgadas.filter((f) => f.corregida).length;
     // Lo que siga con marcas en medio de la frase se parte a mano, una frase por marca.
     for (const f of frasesDe(texto)) {
@@ -517,6 +527,7 @@ export async function verificar(ctx: ContextoHerramientas, numerador: Numerador,
       correcciones++;
     }
     if (correcciones) {
+      const tr = Date.now();
       // Lo corregido se vuelve a juzgar (sin volver a corregir); lo demás conserva su juicio.
       const previas = new Map(juzgadas.filter((f) => !f.corregida).map((f) => [f.original, f]));
       const frases = frasesDe(texto);
@@ -534,6 +545,7 @@ export async function verificar(ctx: ContextoHerramientas, numerador: Numerador,
       aplicarMiradas(nuevasJuzgadas, heredadas);
       const rejuzgadas = new Map(nuevasJuzgadas.map((f) => [f.original, f]));
       juzgadas = frases.map((f) => previas.get(f.original) ?? rejuzgadas.get(f.original) ?? { ...f, clase: 'hecho' as const, marcas: {} });
+      tiempos.rejuicio = Date.now() - tr;
     }
   }
   // Una marca que sigue sin sostener nada se quita: citar una prueba que no dice eso es peor que no
@@ -558,7 +570,7 @@ export async function verificar(ctx: ContextoHerramientas, numerador: Numerador,
   const frases: FraseVerificada[] = detalle
     .filter((d) => d.veredicto !== 'interpretacion')
     .map((d) => ({ frase: d.limpia, evidencias: d.evidencias, veredicto: d.veredicto as FraseVerificada['veredicto'], ...(d.nota ? { nota: d.nota } : {}), ...(d.revisada ? { revisada: true } : {}) }));
-  return { markdown: texto, frases, detalle, correcciones };
+  return { markdown: texto, frases, detalle, correcciones, tiempos };
 }
 
 /** Confianza de la respuesta según la verificación. */

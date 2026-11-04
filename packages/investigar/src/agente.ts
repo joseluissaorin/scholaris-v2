@@ -306,7 +306,12 @@ export async function* investigar(p: PuertosInvestigar, pregunta: string, o: Opc
     // 6. Las páginas citadas sin cita literal, a sus oraciones; la verificación y la corrección.
     afinar(numerador, ctx, cuerpo);
     const regiones = () => regionesDeCitas(ctx, numerador, { vision: () => cuentas.usd < presupuesto.usd }).catch(() => null);
-    const [v, rg] = await Promise.all([verificar(ctx, numerador, cuerpo, { sitios: presupuesto.revisiones }), regiones()]);
+    const tRegiones = reloj();
+    let msRegiones = 0;
+    const [v, rg] = await Promise.all([
+      verificar(ctx, numerador, cuerpo, { sitios: presupuesto.revisiones }),
+      regiones().finally(() => { msRegiones = Math.round(reloj() - tRegiones); }),
+    ]);
     cuerpo = quitarLocalizadores(v.markdown, anclas()).markdown;
     // Lo corregido puede citar pruebas nuevas: a sus oraciones y a su región.
     let rg2: Awaited<ReturnType<typeof regiones>> = null;
@@ -358,7 +363,7 @@ export async function* investigar(p: PuertosInvestigar, pregunta: string, o: Opc
     }
     fase('final');
     const ms = Math.round(reloj() - t0);
-    console.error(JSON.stringify({ nivel: 'info', que: 'investigar_tiempos', id, ms, ...fases, correcciones: v.correcciones, pruebas: evidencias.length, usd: Math.round(cuentas.usd * 1000) / 1000 }));
+    console.error(JSON.stringify({ nivel: 'info', que: 'investigar_tiempos', id, ms, ...fases, ...Object.fromEntries(Object.entries(v.tiempos).map(([k, x]) => [`verificacion_${k}`, x])), regiones: msRegiones, correcciones: v.correcciones, pruebas: evidencias.length, usd: Math.round(cuentas.usd * 1000) / 1000 }));
     const inv: Investigacion = { id, pregunta, plan, markdown, evidencias, frases: frasesFinales, notas: ctx.notas, confianza, modelo: modeloAgente, ms };
 
     // 7. La memoria.
