@@ -145,4 +145,9 @@ export interface PuertosUsuario {
   encolarMantenimiento?(trabajo: 'reindexar' | 'figuras'): Promise<void>;
   /** Recorta una región (0-1) de una imagen: el vector propio de cada figura de página. */
   recortar?: Recortador;
+  /**
+   * Clave y base de Gemini del usuario (la suya o la de la instancia), para lo que
+   * llama a Gemini directamente: el agente de Investigar (herramientas, vídeo). Puede faltar.
+   */
+  gemini?(): Promise<{ clave: string; baseUrl?: string } | undefined>;
 }

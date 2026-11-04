@@ -22,7 +22,7 @@ import {
   type FuenteV1, type ImportacionSpdf, type IngestaIniciada, type ListaDocumentosV1, type MapaFolios, type Pagina, type PreguntarV1, type ResultadoVista,
   type RespuestaBusqueda, type RespuestaBuscarV1, type RespuestaCitarV1, type RespuestaPreguntarV1, type RespuestaVerificarV1,
   type ResumenDocumento, type SubidaCreada, type SubirUrlV1, type Tarea, type TextoV1, type UnidadTextoV1, type UnidadVista,
-  type VerificarV1,
+  type VerificarV1, type EventoInvestigacion, type Investigar, type InvestigarV1,
 } from '@scholaris/contrato';
 import type { Verificacion } from '@scholaris/citas';
 import type { Plataforma } from '../app.js';
@@ -644,6 +644,37 @@ export function montarV1(app: AppPuerta, pl: Plataforma, autenticar: (r: Request
     for await (const ev of eventosSse(r.body)) procesar(ev.evento, ev.datos);
     const salida = final();
     return quiereMarkdown(c, b) ? markdown(c, mdRespuesta(salida)) : c.json(salida);
+  }));
+
+  // POST /investigar { pregunta, documentos?, profundidad? } → el «fin» de la investigación (o sus eventos SSE).
+  app.post(`${V}/investigar`, conClave(async (c, io) => {
+    const b = await cuerpoJsonV1<Partial<InvestigarV1> & { q?: string; formato?: string }>(c);
+    const pregunta = (b.pregunta ?? b.q ?? c.req.query('q') ?? '').trim();
+    if (!pregunta) falla('peticion_invalida', 'Falta «pregunta».', 'Missing «pregunta» (the question).');
+    if (b.profundidad !== undefined && !['rapida', 'normal', 'exhaustiva'].includes(b.profundidad)) {
+      falla('peticion_invalida', '«profundidad» es rapida, normal o exhaustiva.', '«profundidad» must be rapida, normal or exhaustiva.');
+    }
+    const documentos = listaDocs(c, b.documentos);
+    const filtros = { ...(documentos ? { documentos } : {}), ...(b.biblioteca ? { bibliotecas: [b.biblioteca] } : {}) };
+    const cuerpo: Investigar = {
+      pregunta, ...(Object.keys(filtros).length ? { filtros } : {}), ...(b.profundidad ? { profundidad: b.profundidad } : {}),
+      ...(b.idioma ? { idioma: b.idioma } : {}), ...(b.cuaderno === false ? { cuaderno: false } : {}),
+    };
+    const r = await io.llamar('POST', '/busqueda/investigar', { json: cuerpo, acepta: 'text/event-stream' });
+    if (!r.ok || !r.body) throw await errorDe(r);
+    if (b.stream || c.req.query('stream') === 'true' || (c.req.header('accept') ?? '').includes('text/event-stream')) {
+      return streamSSE(c, async (sse) => {
+        for await (const ev of eventosSse(r.body!)) await sse.writeSSE({ event: ev.evento, data: JSON.stringify(ev.datos) });
+      });
+    }
+    let fin: (Extract<EventoInvestigacion, { tipo: 'fin' }>) | null = null;
+    for await (const ev of eventosSse(r.body)) {
+      if (ev.evento === 'fin') fin = ev.datos as Extract<EventoInvestigacion, { tipo: 'fin' }>;
+      if (ev.evento === 'error') throw new ErrorScholaris('proveedor_fallo', String((ev.datos as { mensaje?: string }).mensaje ?? 'No he podido terminar la investigación.'));
+    }
+    if (!fin) throw new ErrorScholaris('interno', 'La investigación terminó sin resultado.');
+    const { tipo: _tipo, ...salida } = fin;
+    return quiereMarkdown(c, b) ? markdown(c, fin.markdown) : c.json({ pregunta, ...salida });
   }));
 
   // POST /citar { texto, estilo } (o un .docx como cuerpo) → el texto con sus citas y la bibliografía.

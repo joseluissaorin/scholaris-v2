@@ -1,6 +1,6 @@
 /**
  * Servidor MCP de tu biblioteca (transporte «Streamable HTTP», sin estado,
- * respuestas JSON). Herramientas: search, cite, open_page, verify_claim.
+ * respuestas JSON). Herramientas: search, cite, open_page, verify_claim, investigate.
  * La puerta lo publica en /mcp con la misma autenticación (token de Clerk o
  * clave de API con el alcance «mcp») y lo entrega aquí, dentro de la
  * estantería del usuario.
@@ -13,6 +13,8 @@ import { obtenerBuscador } from '../compartido/servicios.js';
 import { VERSION } from '../version.js';
 import type { PuertosUsuario } from '../puertos.js';
 import { anclaDePasaje, citaCorta, puertos, type Ctx } from './util.js';
+import type { EventoInvestigacion, Investigar } from '@scholaris/contrato';
+import { prepararInvestigacion } from './investigar.js';
 
 interface PeticionRpc { jsonrpc: '2.0'; id?: string | number | null; method: string; params?: Record<string, unknown> }
 
@@ -37,11 +39,27 @@ const HERRAMIENTAS = [
     description: 'Comprueba si la biblioteca respalda una afirmación y devuelve los pasajes que la apoyan o la contradicen, con su referencia.',
     inputSchema: { type: 'object', properties: { claim: { type: 'string' }, year: { type: 'integer', description: 'Año del texto que hace la afirmación (lógica temporal).' } }, required: ['claim'] },
   },
+  {
+    name: 'investigate',
+    description: 'Investiga a fondo una pregunta difícil sobre la biblioteca (varias obras, medios y lenguas): un agente planifica, busca, lee, mira los vídeos y las páginas y escribe una respuesta académica larga en la que cada afirmación cita una prueba [E1]… con su ancla exacta (página y caracteres, o segundos, región e instante), verificada frase a frase. Tarda de uno a varios minutos («quick», menos). Devuelve la respuesta en Markdown y, en structuredContent, las pruebas, las fuentes, el cuaderno donde quedó guardada y el coste.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        question: { type: 'string', description: 'La pregunta, en cualquier lengua (se responde en la suya).' },
+        documents: { type: 'array', items: { type: 'string' }, description: 'Restringir a estos documentos.' },
+        library: { type: 'string', description: 'Restringir a esta biblioteca.' },
+        depth: { type: 'string', enum: ['quick', 'normal', 'deep'], default: 'normal' },
+      },
+      required: ['question'],
+    },
+  },
 ];
 
 const texto = (t: string) => ({ content: [{ type: 'text', text: t }] });
 
-async function llamar(p: PuertosUsuario, nombre: string, a: Record<string, unknown>): Promise<unknown> {
+const PROFUNDIDAD: Record<string, Investigar['profundidad']> = { quick: 'rapida', rapida: 'rapida', normal: 'normal', deep: 'exhaustiva', exhaustiva: 'exhaustiva' };
+
+async function llamar(c: Ctx, p: PuertosUsuario, nombre: string, a: Record<string, unknown>): Promise<unknown> {
   switch (nombre) {
     case 'search': {
       const b = await obtenerBuscador(p);
@@ -88,6 +106,27 @@ async function llamar(p: PuertosUsuario, nombre: string, a: Record<string, unkno
       const lineas = r.citas.map((x) => `- ${x.citaCorta} [${x.relacion}, respaldo ${x.respaldo.toFixed(2)}]: «${x.pasaje}»`);
       return { ...texto(`Veredicto: ${r.veredicto}\n${lineas.join('\n')}`), structuredContent: r };
     }
+    case 'investigate': {
+      const filtros = { ...(Array.isArray(a.documents) ? { documentos: a.documents as string[] } : {}), ...(typeof a.library === 'string' ? { bibliotecas: [a.library] } : {}) };
+      const b: Investigar = { pregunta: String(a.question ?? ''), ...(Object.keys(filtros).length ? { filtros } : {}), profundidad: PROFUNDIDAD[String(a.depth ?? 'normal')] ?? 'normal' };
+      let fin: Extract<EventoInvestigacion, { tipo: 'fin' }> | null = null;
+      for await (const e of await prepararInvestigacion(c, b)) {
+        if (e.tipo === 'fin') fin = e;
+        if (e.tipo === 'error') return { ...texto(e.mensaje), isError: true };
+      }
+      if (!fin) return { ...texto('La investigación terminó sin resultado.'), isError: true };
+      return {
+        ...texto(fin.markdown),
+        structuredContent: {
+          answer: fin.markdown,
+          evidence: fin.evidencias.map((e) => ({
+            id: e.id, document: e.documento, title: e.titulo, locator: e.etiqueta, citation: e.citaCorta, quote: e.cita ?? '', mode: e.modo, layer: e.capa,
+            anchor: e.ancla, ...(e.anclaFin ? { anchor_end: e.anclaFin } : {}), ...(e.traduccion ? { translation: e.traduccion } : {}),
+          })),
+          sources: fin.fuentes, notebook: fin.cuaderno ?? null, confidence: fin.confianza, cost_usd: fin.coste.usd, warnings: fin.avisos,
+        },
+      };
+    }
     default:
       return { ...texto(`Herramienta desconocida: ${nombre}`), isError: true };
   }
@@ -109,11 +148,11 @@ export function rutasMcp(app: Hono<Entorno>): void {
             protocolVersion: (m.params?.protocolVersion as string) ?? '2025-06-18',
             capabilities: { tools: { listChanged: false } },
             serverInfo: { name: 'scholaris', title: 'Scholaris: tu biblioteca', version: VERSION },
-            instructions: 'Busca en la biblioteca del usuario y cita con página exacta. Cita solo lo que devuelvan las herramientas.',
+            instructions: 'Busca en la biblioteca del usuario y cita con página exacta. Cita solo lo que devuelvan las herramientas. Para preguntas complejas (varias obras, cine y literatura, comparaciones), usa «investigate».',
           };
         } else if (m.method === 'ping') result = {};
         else if (m.method === 'tools/list') result = { tools: HERRAMIENTAS };
-        else if (m.method === 'tools/call') result = await llamar(p, String(m.params?.name ?? ''), (m.params?.arguments as Record<string, unknown>) ?? {});
+        else if (m.method === 'tools/call') result = await llamar(c, p, String(m.params?.name ?? ''), (m.params?.arguments as Record<string, unknown>) ?? {});
         else {
           respuestas.push({ jsonrpc: '2.0', id: m.id, error: { code: -32601, message: `Método no admitido: ${m.method}` } });
           continue;

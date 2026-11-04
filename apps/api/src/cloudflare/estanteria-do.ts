@@ -23,7 +23,7 @@ import { leerDocumento } from '@scholaris/spdf';
 import { SqlDO } from './sql.js';
 import { LIMITES } from '../compartido/planes.js';
 import { cuerpoError } from '../compartido/errores.js';
-import { almacenDesdeEnv, configDesdeEnv, cuentasDesdeEnv, emisorDesdeEnv, indiceDesdeEnv, inteligenciaPara, origenDe } from './puertos-cf.js';
+import { geminiPara, almacenDesdeEnv, configDesdeEnv, cuentasDesdeEnv, emisorDesdeEnv, indiceDesdeEnv, inteligenciaPara, origenDe } from './puertos-cf.js';
 
 const app = crearAppUsuario();
 
@@ -74,6 +74,7 @@ export class Estanteria extends DurableObject<Env> {
       ...(conversorCF(env) ? { convertir: conversorCF(env)! } : {}),
       ...(recortadorCF(env) ? { recortar: recortadorCF(env)! } : {}),
       encolarMantenimiento: async (trabajo) => { await env.COLA.send({ tipo: 'mantenimiento', usuario: usuario.id, trabajo }); },
+      gemini: () => geminiPara(env, cuentas, usuario.id),
     };
     // El índice depende del espacio del embebedor: se resuelve al primer uso.
     Object.defineProperty(p, 'indice', { get: () => (this.indice ??= indicePerezoso(env, inteligencia, this.base)), enumerable: true });

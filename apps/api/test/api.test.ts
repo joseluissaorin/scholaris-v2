@@ -341,7 +341,7 @@ describe('tiempo real y MCP', () => {
     });
     expect(r.status).toBe(200);
     const j = (await r.json()) as { result: { tools: Array<{ name: string }> } };
-    expect(j.result.tools.map((x) => x.name)).toEqual(['search', 'cite', 'open_page', 'verify_claim']);
+    expect(j.result.tools.map((x) => x.name)).toEqual(['search', 'cite', 'open_page', 'verify_claim', 'investigate']);
   });
 });
 

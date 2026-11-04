@@ -33,6 +33,7 @@
     "@scholaris/funciones": "workspace:^",
     "@scholaris/imprenta": "workspace:^",
     "@scholaris/ingesta": "workspace:^",
+    "@scholaris/investigar": "workspace:^",
     "@scholaris/nucleo": "workspace:^",
     "@scholaris/proveedores": "workspace:^",
     "@scholaris/spdf": "workspace:^",
