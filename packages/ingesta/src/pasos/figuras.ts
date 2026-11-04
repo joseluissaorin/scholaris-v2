@@ -8,6 +8,7 @@ import { enParalelo, nuevoId, reintentar, type Ancla, type Redactor } from '@sch
 import type { PaqueteConversion } from '@scholaris/imprenta';
 import type { FiguraPlana, FuentePaquete, Procedencia, UnidadLeida } from '../tipos.js';
 import { Cobertura } from '../cobertura.js';
+import { hablantesDe, marca, transcripcionDeVentana, turnosDe, type Turno } from '../percepcion/ventanas.js';
 
 export interface FiguraConAncla extends FiguraPlana {
   ancla: Ancla;
@@ -88,37 +89,80 @@ const ESQUEMA = {
   required: ['figuras'],
 };
 
-/** Describe en lotes las figuras que no traen descripción (una llamada por lote de imágenes). */
+export interface OpcionesDescribir {
+  lote?: number;
+  concurrencia?: number;
+  idioma?: string;
+  contexto?: string;
+  /**
+   * Unidades del medio (texto con «**Nombre:**» y palabras con su instante): a
+   * cada fotograma se le da lo que se dice alrededor y el reparto, para que lo
+   * describa con lenguaje de cine y con los nombres de quien aparece.
+   */
+  unidades?: Array<Pick<UnidadLeida, 'texto' | 't0' | 't1' | 'hablante' | 'palabras'>>;
+  /** Segundos de transcripción a cada lado del fotograma (por defecto 20). */
+  margenTranscripcion?: number;
+}
+
+const SISTEMA_PAGINAS = (idioma?: string) => `Describes imágenes de documentos y vídeos para un buscador: qué se ve, texto legible relevante (fórmulas, rótulos, títulos de diapositiva), tipo (diagrama, tabla, foto, grabado, plano). Una o dos frases por imagen, sin adornos. Idioma: ${idioma ?? 'el del documento'}.`;
+
+const SISTEMA_FOTOGRAMAS = (idioma?: string) => [
+  'Describes fotogramas de una película o de un vídeo como un analista de cine, para un buscador y para quien estudia la obra.',
+  'Por cada fotograma, en dos o tres frases: escala de plano (gran plano general, plano general, plano entero, plano americano, plano medio, plano medio corto, primer plano, primerísimo primer plano o plano detalle) y angulación; quién aparece, con su nombre si el reparto y lo que se dice alrededor permiten reconocerlo (si no, una descripción breve), y dónde está en el cuadro; quién domina el encuadre; luz y color; objetos significativos y texto en pantalla.',
+  'No inventes lo que no se ve. No cuentes la trama: describe el plano.',
+  `Idioma: ${idioma ?? 'el del documento'}.`,
+].join('\n');
+
+/** Describe en lotes las figuras que no traen descripción (una llamada por lote de imágenes). Los fotogramas de un vídeo van aparte, con lenguaje de cine. */
 export async function describirFiguras(
   figuras: FiguraConAncla[],
   fuente: FuentePaquete,
   redactor: Redactor,
-  opciones: { lote?: number; concurrencia?: number; idioma?: string; contexto?: string } = {},
+  opciones: OpcionesDescribir = {},
 ): Promise<number> {
   const pendientes = figuras.filter((f) => !f.descripcion && (f.parte || f.imagen));
   const lote = opciones.lote ?? 4;
-  const lotes: FiguraConAncla[][] = [];
-  for (let i = 0; i < pendientes.length; i += lote) lotes.push(pendientes.slice(i, i + lote));
+  const esFotograma = (f: FiguraConAncla) => f.t !== undefined && f.ancla.tipo === 'tiempo';
+  const turnos: Turno[] = opciones.unidades?.some((u) => u.t0 !== undefined)
+    ? turnosDe(opciones.unidades.filter((u) => u.t0 !== undefined && u.t1 !== undefined).map((u) => ({ texto: u.texto, t0: u.t0 as number, t1: u.t1 as number, ...(u.hablante ? { hablante: u.hablante } : {}), ...(u.palabras ? { palabras: u.palabras } : {}) })))
+    : [];
+  const reparto = hablantesDe(turnos).slice(0, 20);
+  const margen = opciones.margenTranscripcion ?? 20;
+  const lotes: Array<{ fotogramas: boolean; figuras: FiguraConAncla[] }> = [];
+  for (const clase of [false, true]) {
+    const grupo = pendientes.filter((f) => esFotograma(f) === clase);
+    for (let i = 0; i < grupo.length; i += lote) lotes.push({ fotogramas: clase, figuras: grupo.slice(i, i + lote) });
+  }
   let descritas = 0;
   const cobertura = new Cobertura(12_000, 2);
-  await enParalelo(lotes, opciones.concurrencia ?? 8, async (l) => {
+  await enParalelo(lotes, opciones.concurrencia ?? 8, async ({ fotogramas, figuras: l }) => {
     const partes: Array<{ texto: string } | { bytes: Uint8Array; mime: string }> = [];
     const incluidas: FiguraConAncla[] = [];
     for (const f of l) {
       const b = f.region && f.parte && fuente.recorte ? await fuente.recorte(f.parte, f.region) : await fuente.parte((f.imagen ?? f.parte) as string);
       if (!b) continue;
       incluidas.push(f);
-      partes.push({ texto: `Imagen ${incluidas.length}${f.pie ? ` (pie: ${f.pie})` : ''}${f.t !== undefined ? ` (fotograma en ${Math.round(f.t)} s)` : ''}:` }, { bytes: b.bytes, mime: b.mime });
+      if (fotogramas) {
+        const t = f.t as number;
+        const dicho = transcripcionDeVentana(turnos, t - margen, t + margen, 2_000);
+        partes.push({ texto: `Fotograma ${incluidas.length}, en ${marca(t, false)}.${dicho ? ` Lo que se dice alrededor:\n${dicho}` : ''}` }, { bytes: b.bytes, mime: b.mime });
+      } else {
+        partes.push({ texto: `Imagen ${incluidas.length}${f.pie ? ` (pie: ${f.pie})` : ''}${f.t !== undefined ? ` (fotograma en ${Math.round(f.t)} s)` : ''}:` }, { bytes: b.bytes, mime: b.mime });
+      }
     }
     if (!incluidas.length) return;
+    const cabecera = [
+      ...(opciones.contexto ? [`${fotogramas ? 'Obra' : 'Documento'}: ${opciones.contexto}`] : []),
+      ...(fotogramas && reparto.length ? [`Personas que hablan en la obra: ${reparto.join(', ')}.`] : []),
+    ];
     try {
       const r = await reintentar(() => cobertura.llamar(() => redactor.generar<{ figuras: Array<{ n: number; descripcion: string }> }>({
-        sistema: `Describes imágenes de documentos y vídeos para un buscador: qué se ve, texto legible relevante (fórmulas, rótulos, títulos de diapositiva), tipo (diagrama, tabla, foto, grabado, plano). Una o dos frases por imagen, sin adornos. Idioma: ${opciones.idioma ?? 'el del documento'}.`,
-        mensajes: [{ rol: 'usuario', partes: [...(opciones.contexto ? [{ texto: `Documento: ${opciones.contexto}` }] : []), ...partes] }],
+        sistema: fotogramas ? SISTEMA_FOTOGRAMAS(opciones.idioma) : SISTEMA_PAGINAS(opciones.idioma),
+        mensajes: [{ rol: 'usuario', partes: [...cabecera.map((texto) => ({ texto })), ...partes] }],
         esquema: ESQUEMA,
         temperatura: 0.2,
-        maxTokens: 200 + incluidas.length * 160,
-        calidad: 'rapida',
+        maxTokens: 200 + incluidas.length * (fotogramas ? 260 : 160),
+        calidad: fotogramas ? 'alta' : 'rapida',
       })), { intentos: 3, base: 1500 });
       for (const d of r.json?.figuras ?? []) {
         const f = incluidas[d.n - 1];
@@ -139,6 +183,6 @@ export async function pasoFiguras(
   const reloj = opciones.reloj ?? Date.now;
   const t = reloj();
   const figuras = reunirFiguras(paquete, unidades);
-  const descritas = redactor && opciones.describir !== false ? await describirFiguras(figuras, fuente, redactor, opciones) : 0;
+  const descritas = redactor && opciones.describir !== false ? await describirFiguras(figuras, fuente, redactor, { ...opciones, unidades }) : 0;
   return { figuras, procedencia: { fase: 'figuras', proveedor: redactor?.nombre ?? 'lector', ms: reloj() - t, detalle: { figuras: figuras.length, descritas, conPie: figuras.filter((f) => f.pie).length } } };
 }

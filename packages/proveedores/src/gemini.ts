@@ -46,6 +46,14 @@ export const MODELOS_GEMINI = {
   redactorAlto: 'gemini-3.8-flash',
   embebedor: 'gemini-embedding-2',
   transcriptor: 'gemini-3.5-transcribe',
+  /**
+   * Percepción de audio y vídeo por ventanas, elegida por medición sobre «Fresa y chocolate»
+   * el 4-11-2026 (packages/ingesta/src/percepcion/NOTAS.md): la mejor en cortes sin ayuda
+   * (F1 0,97), regiones (IoU 0,73) y personas, por 2,6 $ la hora de vídeo.
+   */
+  percepcion: 'gemini-4-argon',
+  /** Percepción barata (unas tres veces menos): mismas personas y escalas, cajas peores (IoU 0,54). */
+  percepcionRapida: 'gemini-3.8-flash',
 } as const;
 
 export interface ConfigGemini extends OpcionesComunes {
@@ -98,8 +106,38 @@ export interface ClienteGemini {
   lotes(o?: OpcionesLotesGemini): LotesLectura;
   /** Sube un fichero a la Files API (subida reanudable) y devuelve `{ nombre, uri }`. */
   subirArchivo(bytes: Uint8Array, mime: string, nombreVisible?: string): Promise<{ nombre: string; uri: string }>;
+  /**
+   * Sube un fichero grande a la Files API por trozos, sin tenerlo entero en memoria: `leer`
+   * trae cada trozo (de R2, de disco). Si un trozo falla, pregunta al servidor cuánto recibió y
+   * sigue desde ahí. Un vídeo queda en `PROCESSING` unos segundos: hay que esperar a `ACTIVE`.
+   */
+  subirArchivoPorTrozos(o: SubidaPorTrozos): Promise<ArchivoGemini>;
+  /** Estado de un fichero de la Files API (`files/abc123`); null si ya no existe. */
+  archivo(nombre: string): Promise<ArchivoGemini | null>;
   /** Llamada cruda a generateContent (para el banco y para usos especiales). */
   generar(modelo: string, cuerpo: Record<string, unknown>, operacion: UsoProveedor['operacion'], extra?: Partial<UsoProveedor>): Promise<{ texto: string; fin?: string; uso: UsoProveedor }>;
+}
+
+/** Un fichero de la Files API (vive 48 h). */
+export interface ArchivoGemini {
+  nombre: string;
+  uri: string;
+  mime: string;
+  estado: 'ACTIVE' | 'PROCESSING' | 'FAILED';
+  bytes?: number;
+  /** ISO 8601. */
+  expira?: string;
+}
+
+export interface SubidaPorTrozos {
+  bytes: number;
+  mime: string;
+  nombreVisible?: string;
+  /** Trae los bytes [desde, hasta) del fichero. */
+  leer(desde: number, hasta: number): Promise<Uint8Array>;
+  /** Tamaño de cada trozo (múltiplo de 256 KiB). Por defecto 16 MiB. */
+  trozo?: number;
+  alAvanzar?(enviados: number, total: number): void;
 }
 
 export interface OpcionesLectorGemini extends OpcionesTranscripcion {
@@ -479,6 +517,82 @@ export function crearGemini(config: ConfigGemini): ClienteGemini {
     }, { intentos: 3, base: 1000, esReintentable: (e) => e instanceof ErrorProveedor && e.reintentable });
   }
 
+  const TROZO_SUBIDA = 16 * 1024 * 1024;
+
+  async function subirArchivoPorTrozos(o: SubidaPorTrozos): Promise<ArchivoGemini> {
+    const f = config.fetch ?? globalThis.fetch.bind(globalThis);
+    const trozo = Math.max(256 * 1024, Math.floor((o.trozo ?? TROZO_SUBIDA) / (256 * 1024)) * 256 * 1024);
+    const inicio = await reintentar(async () => {
+      const r = await f(`${base}/upload/v1beta/files`, {
+        method: 'POST',
+        headers: {
+          ...cabeceras, 'content-type': 'application/json', 'X-Goog-Upload-Protocol': 'resumable', 'X-Goog-Upload-Command': 'start',
+          'X-Goog-Upload-Header-Content-Length': String(o.bytes), 'X-Goog-Upload-Header-Content-Type': o.mime,
+        },
+        body: JSON.stringify({ file: { display_name: o.nombreVisible ?? 'scholaris' } }),
+        ...(config.signal ? { signal: config.signal } : {}),
+      });
+      const url = r.headers.get('x-goog-upload-url');
+      if (!r.ok || !url) throw new ErrorProveedor('gemini', `Files API: no se pudo abrir la subida (HTTP ${r.status}) ${(await r.text()).slice(0, 200)}`, { estado: r.status, reintentable: estadoReintentable(r.status) });
+      await r.body?.cancel().catch(() => undefined);
+      return url;
+    }, { intentos: 3, base: 1000, esReintentable: (e) => e instanceof ErrorProveedor && e.reintentable });
+
+    /** Cuánto tiene ya el servidor (tras un trozo fallido). */
+    const recibido = async (): Promise<number | null> => {
+      try {
+        const r = await f(inicio, { method: 'POST', headers: { 'X-Goog-Upload-Command': 'query' } });
+        await r.body?.cancel().catch(() => undefined);
+        const n = Number(r.headers.get('x-goog-upload-size-received'));
+        return Number.isFinite(n) ? n : null;
+      } catch { return null; }
+    };
+
+    let enviados = 0;
+    let fallos = 0;
+    let final: { file?: { name?: string; uri?: string; mimeType?: string; state?: string; sizeBytes?: string; expirationTime?: string } } | null = null;
+    while (!final) {
+      const hasta = Math.min(o.bytes, enviados + trozo);
+      const ultimo = hasta >= o.bytes;
+      try {
+        const datos = await o.leer(enviados, hasta);
+        if (datos.byteLength !== hasta - enviados) throw new ErrorProveedor('gemini', `Files API: el trozo ${enviados}-${hasta} llegó con ${datos.byteLength} bytes`, { reintentable: true });
+        const r = await f(inicio, {
+          method: 'POST',
+          headers: { 'X-Goog-Upload-Offset': String(enviados), 'X-Goog-Upload-Command': ultimo ? 'upload, finalize' : 'upload', 'content-type': o.mime },
+          body: datos as unknown as BodyInit,
+          ...(config.signal ? { signal: config.signal } : {}),
+        });
+        const texto = await r.text().catch(() => '');
+        if (!r.ok) throw new ErrorProveedor('gemini', `Files API: trozo ${enviados}-${hasta} rechazado (HTTP ${r.status}) ${texto.slice(0, 200)}`, { estado: r.status, reintentable: estadoReintentable(r.status) });
+        enviados = hasta;
+        fallos = 0;
+        o.alAvanzar?.(enviados, o.bytes);
+        if (ultimo) final = texto ? JSON.parse(texto) : {};
+      } catch (e) {
+        if (config.signal?.aborted || ++fallos > 4 || (e instanceof ErrorProveedor && !e.reintentable)) throw e;
+        await new Promise((r) => setTimeout(r, 1000 * 2 ** fallos));
+        const n = await recibido();
+        if (n !== null && n <= o.bytes) enviados = n;
+      }
+    }
+    const a = final.file;
+    if (!a?.uri || !a.name) throw new ErrorProveedor('gemini', 'la Files API no devolvió el fichero');
+    return archivoDe(a, o.mime);
+  }
+
+  async function archivo(nombre: string): Promise<ArchivoGemini | null> {
+    try {
+      const r = await pedir<{ name?: string; uri?: string; mimeType?: string; state?: string; sizeBytes?: string; expirationTime?: string }>({
+        proveedor: 'gemini', url: `${base}/v1beta/${nombre.replace(/^\/+/, '')}`, cabeceras,
+      }, { ...config, intentos: 3 });
+      return r.uri && r.name ? archivoDe(r, r.mimeType ?? '') : null;
+    } catch (e) {
+      if (e instanceof ErrorProveedor && (e.estado === 404 || e.estado === 403)) return null;
+      throw e;
+    }
+  }
+
   // -------------------------------------------------------------------------
   // Lotes (Batch API)
   // -------------------------------------------------------------------------
@@ -594,7 +708,7 @@ export function crearGemini(config: ConfigGemini): ClienteGemini {
   }
 
   return {
-    contador, lector, embebedor, redactor, transcriptor, lotes, subirArchivo,
+    contador, lector, embebedor, redactor, transcriptor, lotes, subirArchivo, subirArchivoPorTrozos, archivo,
     generar: (modelo, cuerpo, operacion, extra) => generar(modelo, cuerpo, operacion, extra),
   };
 }
@@ -632,6 +746,14 @@ export function interpretarInteraccion(r: RespuestaInteraccion, desplazamiento: 
       ...(a.speaker ? { hablante: a.speaker.replace(/^spk[:_]?/, 'H') } : {}),
     }));
   return { texto, palabras };
+}
+
+function archivoDe(a: { name?: string; uri?: string; mimeType?: string; state?: string; sizeBytes?: string; expirationTime?: string }, mime: string): ArchivoGemini {
+  const estado = a.state === 'ACTIVE' || a.state === 'FAILED' ? a.state : 'PROCESSING';
+  return {
+    nombre: a.name as string, uri: a.uri as string, mime: a.mimeType ?? mime, estado,
+    ...(a.sizeBytes ? { bytes: Number(a.sizeBytes) } : {}), ...(a.expirationTime ? { expira: a.expirationTime } : {}),
+  };
 }
 
 export function normalizarMime(mime: string): string {

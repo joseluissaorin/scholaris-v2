@@ -32,3 +32,4 @@ export { Cobertura } from './cobertura.js';
 export { planificar as planificarTandas, tandasDePaginas } from './planificar.js';
 export { revisarTranscripcion, aplicarReemplazos, cribarFrases, alinear, sustituir, reescuchar, nombresPropios, type CambioTranscripcion } from './pasos/revision.js';
 export { fichasDe, palabrasCompactas } from './pasos/medios.js';
+export * from './percepcion/index.js';

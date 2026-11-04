@@ -239,7 +239,9 @@ export async function rehacerFiguras(documento: string, puertos: PuertosRehacerF
     // Descripciones que faltan.
     if (sinDescripcion.length && puertos.redactor) {
       const figs: FiguraConAncla[] = sinDescripcion.map((f) => { const a = json<Ancla>(f.ancla, { tipo: 'tiempo', t0: 0, t1: 0 }); return { id: f.id, unidad: 0, fisica: 1, ancla: a, imagen: f.imagen, parte: f.imagen, ...(a.tipo === 'tiempo' ? { t: a.t0 } : {}) }; });
-      await describirFiguras(figs, { parte: (k) => puertos.imagen(k) }, puertos.redactor, { ...(opciones.idioma ? { idioma: opciones.idioma } : {}), ...(opciones.contexto ? { contexto: opciones.contexto } : {}), concurrencia: opciones.concurrencia ?? 6 });
+      // En los medios, cada fotograma con lo que se dice alrededor (los fotogramas se describen con lenguaje de cine).
+      const tramos = unidades.flatMap((u) => { const a = json<Ancla>(u.ancla, { tipo: 'imagen' } as Ancla); return a.tipo === 'tiempo' ? [{ texto: u.texto, t0: a.t0, t1: a.t1, ...(a.hablante ? { hablante: a.hablante } : {}) }] : []; });
+      await describirFiguras(figs, { parte: (k) => puertos.imagen(k) }, puertos.redactor, { ...(opciones.idioma ? { idioma: opciones.idioma } : {}), ...(opciones.contexto ? { contexto: opciones.contexto } : {}), concurrencia: opciones.concurrencia ?? 6, ...(tramos.length ? { unidades: tramos } : {}) });
       for (const g of figs) if (g.descripcion) { const f = sinDescripcion.find((x) => x.id === g.id)!; f.descripcion = g.descripcion; }
     }
     // Cambios de escena por la distancia entre vectores seguidos.

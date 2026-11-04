@@ -9,3 +9,4 @@ export { crearConvertidor, recolectar, type Convertir } from './convertir.js';
 export { detectar, compararNombres, type Deteccion, type Formato } from './detectar.js';
 export type { Plataforma, Lienzo, MotorPdf } from './plataforma.js';
 export { diagnosticar, construirCapa, detectarTitulillos } from './pdf/capa-texto.js';
+export { PARAMETROS_PROXY, interpretarEscenasFfmpeg, cortesDe, argumentosProxy, filtroSilencios, interpretarSilencios, type CortesProxy, type ActividadAudio } from './medios/proxy.js';
