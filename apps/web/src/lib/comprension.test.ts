@@ -165,3 +165,18 @@ describe('alineaciones y relaciones', () => {
     expect(verboRelacion('adaptacion_de', 'destino')).toBe('está adaptada en');
   });
 });
+
+describe('dónde se está', () => {
+  it('el segmento más hondo que contiene una página o un segundo', async () => {
+    const { segmentoEn } = await import('./comprension');
+    const pag = (fisica: number) => ({ tipo: 'pagina' as const, fisica, impresa: String(fisica), romana: false, origen: 'leido' as const, confianza: 1 });
+    const segs = [
+      { ...seg('p1', 'parte', 0, null), ancla: pag(1), anclaFin: pag(6) }, { ...seg('e1', 'escena', 1, 'p1'), ancla: pag(1), anclaFin: pag(3) }, { ...seg('e2', 'escena', 2, 'p1'), ancla: pag(4) },
+    ];
+    expect(segmentoEn(segs, { u: 2 })?.id).toBe('e1');
+    expect(segmentoEn(segs, { u: 4 })?.id).toBe('e2');
+    expect(segmentoEn(segs, { u: 5 })?.id).toBe('p1');
+    expect(segmentoEn(segs, { u: 9 })).toBeUndefined();
+    expect(segmentoEn([seg('a', 'escena', 0, null, 0, 10), seg('b', 'plano', 1, 'a', 0, 5)], { t: 3 })?.id).toBe('a');
+  });
+});

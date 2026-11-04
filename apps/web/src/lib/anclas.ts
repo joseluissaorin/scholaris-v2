@@ -33,6 +33,8 @@ export interface BusquedaLector {
   cr?: string;
   rg?: string;
   it?: number;
+  /** En un vídeo, la vista de la derecha: la película plano a plano en lugar de la transcripción. */
+  v?: 'pelicula';
 }
 
 /** Una búsqueda de pasajes, tal como la guarda la URL de Buscar. */
@@ -87,6 +89,7 @@ export function validarBusquedaLector(s: Record<string, unknown>): BusquedaLecto
     u: n(s.u), t: n(s.t), sec: t(s.sec), par: n(s.par), f: t(s.f), pd: n(s.pd), ph: n(s.ph), q: t(s.q), rb: validarContexto(s.rb), ri: n(s.ri),
     // Lo que no se entienda se cae sin romper el enlace: el lector abre en la unidad, sin marca.
     cr: cr ? caracteresACadena(cr) : undefined, rg: rg ? regionACadena(rg) : undefined, it: it != null && it >= 0 ? it : undefined,
+    v: s.v === 'pelicula' ? 'pelicula' : undefined,
   };
   // Sin claves vacías: la URL queda limpia.
   for (const k of Object.keys(b) as Array<keyof BusquedaLector>) if (b[k] === undefined) delete b[k];

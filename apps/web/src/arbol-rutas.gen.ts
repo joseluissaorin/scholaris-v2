@@ -37,6 +37,8 @@ import { Route as ExplorarPerspectivasRouteImport } from './rutas/explorar.persp
 import { Route as LectorIdRouteImport } from './rutas/lector.$id'
 import { Route as LotesIdRouteImport } from './rutas/lotes.$id'
 import { Route as RecibirTokenRouteImport } from './rutas/recibir.$token'
+import { Route as RelacionesIdRouteImport } from './rutas/relaciones.$id'
+import { Route as DocumentosIdComprensionRouteImport } from './rutas/documentos.$id.comprension'
 import { Route as DocumentosIdContenidoRouteImport } from './rutas/documentos.$id.contenido'
 
 const IndexRoute = IndexRouteImport.update({
@@ -179,6 +181,16 @@ const RecibirTokenRoute = RecibirTokenRouteImport.update({
   path: '/recibir/$token',
   getParentRoute: () => rootRouteImport,
 } as any)
+const RelacionesIdRoute = RelacionesIdRouteImport.update({
+  id: '/relaciones/$id',
+  path: '/relaciones/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DocumentosIdComprensionRoute = DocumentosIdComprensionRouteImport.update({
+  id: '/documentos/$id/comprension',
+  path: '/documentos/$id/comprension',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const DocumentosIdContenidoRoute = DocumentosIdContenidoRouteImport.update({
   id: '/documentos/$id/contenido',
   path: '/documentos/$id/contenido',
@@ -209,11 +221,13 @@ export interface FileRoutesByFullPath {
   '/lector/$id': typeof LectorIdRoute
   '/lotes/$id': typeof LotesIdRoute
   '/recibir/$token': typeof RecibirTokenRoute
+  '/relaciones/$id': typeof RelacionesIdRoute
   '/administracion/': typeof AdministracionIndexRoute
   '/ajustes/': typeof AjustesIndexRoute
   '/buscar/': typeof BuscarIndexRoute
   '/escribir/': typeof EscribirIndexRoute
   '/explorar/': typeof ExplorarIndexRoute
+  '/documentos/$id/comprension': typeof DocumentosIdComprensionRoute
   '/documentos/$id/contenido': typeof DocumentosIdContenidoRoute
 }
 export interface FileRoutesByTo {
@@ -235,11 +249,13 @@ export interface FileRoutesByTo {
   '/lector/$id': typeof LectorIdRoute
   '/lotes/$id': typeof LotesIdRoute
   '/recibir/$token': typeof RecibirTokenRoute
+  '/relaciones/$id': typeof RelacionesIdRoute
   '/administracion': typeof AdministracionIndexRoute
   '/ajustes': typeof AjustesIndexRoute
   '/buscar': typeof BuscarIndexRoute
   '/escribir': typeof EscribirIndexRoute
   '/explorar': typeof ExplorarIndexRoute
+  '/documentos/$id/comprension': typeof DocumentosIdComprensionRoute
   '/documentos/$id/contenido': typeof DocumentosIdContenidoRoute
 }
 export interface FileRoutesById {
@@ -267,11 +283,13 @@ export interface FileRoutesById {
   '/lector/$id': typeof LectorIdRoute
   '/lotes/$id': typeof LotesIdRoute
   '/recibir/$token': typeof RecibirTokenRoute
+  '/relaciones/$id': typeof RelacionesIdRoute
   '/administracion/': typeof AdministracionIndexRoute
   '/ajustes/': typeof AjustesIndexRoute
   '/buscar/': typeof BuscarIndexRoute
   '/escribir/': typeof EscribirIndexRoute
   '/explorar/': typeof ExplorarIndexRoute
+  '/documentos/$id/comprension': typeof DocumentosIdComprensionRoute
   '/documentos/$id/contenido': typeof DocumentosIdContenidoRoute
 }
 export interface FileRouteTypes {
@@ -300,11 +318,13 @@ export interface FileRouteTypes {
     | '/lector/$id'
     | '/lotes/$id'
     | '/recibir/$token'
+    | '/relaciones/$id'
     | '/administracion/'
     | '/ajustes/'
     | '/buscar/'
     | '/escribir/'
     | '/explorar/'
+    | '/documentos/$id/comprension'
     | '/documentos/$id/contenido'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -326,11 +346,13 @@ export interface FileRouteTypes {
     | '/lector/$id'
     | '/lotes/$id'
     | '/recibir/$token'
+    | '/relaciones/$id'
     | '/administracion'
     | '/ajustes'
     | '/buscar'
     | '/escribir'
     | '/explorar'
+    | '/documentos/$id/comprension'
     | '/documentos/$id/contenido'
   id:
     | '__root__'
@@ -357,11 +379,13 @@ export interface FileRouteTypes {
     | '/lector/$id'
     | '/lotes/$id'
     | '/recibir/$token'
+    | '/relaciones/$id'
     | '/administracion/'
     | '/ajustes/'
     | '/buscar/'
     | '/escribir/'
     | '/explorar/'
+    | '/documentos/$id/comprension'
     | '/documentos/$id/contenido'
   fileRoutesById: FileRoutesById
 }
@@ -377,6 +401,8 @@ export interface RootRouteChildren {
   LectorIdRoute: typeof LectorIdRoute
   LotesIdRoute: typeof LotesIdRoute
   RecibirTokenRoute: typeof RecibirTokenRoute
+  RelacionesIdRoute: typeof RelacionesIdRoute
+  DocumentosIdComprensionRoute: typeof DocumentosIdComprensionRoute
   DocumentosIdContenidoRoute: typeof DocumentosIdContenidoRoute
 }
 
@@ -578,6 +604,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof RecibirTokenRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/relaciones/$id': {
+      id: '/relaciones/$id'
+      path: '/relaciones/$id'
+      fullPath: '/relaciones/$id'
+      preLoaderRoute: typeof RelacionesIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/documentos/$id/comprension': {
+      id: '/documentos/$id/comprension'
+      path: '/documentos/$id/comprension'
+      fullPath: '/documentos/$id/comprension'
+      preLoaderRoute: typeof DocumentosIdComprensionRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/documentos/$id/contenido': {
       id: '/documentos/$id/contenido'
       path: '/documentos/$id/contenido'
@@ -682,6 +722,8 @@ const rootRouteChildren: RootRouteChildren = {
   LectorIdRoute: LectorIdRoute,
   LotesIdRoute: LotesIdRoute,
   RecibirTokenRoute: RecibirTokenRoute,
+  RelacionesIdRoute: RelacionesIdRoute,
+  DocumentosIdComprensionRoute: DocumentosIdComprensionRoute,
   DocumentosIdContenidoRoute: DocumentosIdContenidoRoute,
 }
 export const routeTree = rootRouteImport

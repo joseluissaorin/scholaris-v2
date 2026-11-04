@@ -30,8 +30,8 @@ mark {
 ::highlight(pasaje) { background-color: rgb(232 168 56 / 0.34); color: inherit; }
 ::highlight(pasaje-contexto) { background-color: rgb(232 168 56 / 0.09); }
 .oscuro ::highlight(pasaje) { background-color: rgb(232 168 56 / 0.3); }
-/* Respaldo sin la API de resaltados: el párrafo del pasaje, marcado al margen. */
-[data-pasaje-respaldo] { box-shadow: inset 3px 0 0 var(--s-amarillo, #e8a838); padding-left: 0.6em; margin-left: -0.6em; }
+/* Respaldo sin la API de resaltados: el párrafo del pasaje entero, en un recuadro de lápiz amarillo muy suave (nunca una raya al margen). */
+[data-pasaje-respaldo] { background: rgb(232 168 56 / 0.12); box-shadow: 0 0 0 0.35em rgb(232 168 56 / 0.12); border-radius: 4px; }
 /* Buscar · el resultado del que se vuelve. */
 .resultado-destacado { border-color: var(--s-coffee-500, #7a5f4f); box-shadow: var(--levantado), 0 0 0 3px rgb(232 168 56 / 0.45); }
 /* Transcripción · las palabras del pasaje que abrió el lector. */
@@ -326,3 +326,9 @@ html[data-transicion] .backdrop-blur, html[data-transicion] .backdrop-blur-sm { 
 @media (prefers-reduced-motion: no-preference) {
   .recuadro-trazo { animation: s-rodea 0.75s var(--ease-tinta) 0.15s both; }
 }
+
+/* Comprensión · la palabra que suena en un tramo citado y el plano en curso de la película. */
+.palabra-tramo { border-radius: 3px; transition: background-color var(--dur-breve, 120ms) ease-out; }
+.palabra-tramo[data-dentro] { background: rgb(232 168 56 / 0.3); }
+.palabra-tramo[data-ahora] { background: var(--s-coffee-800); color: var(--s-cream-50); }
+.carril-pelicula { background-image: repeating-linear-gradient(90deg, transparent 0 calc(10% - 1px), rgb(74 46 26 / 0.08) calc(10% - 1px) 10%); }

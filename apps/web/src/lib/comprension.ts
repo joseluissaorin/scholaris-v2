@@ -519,3 +519,22 @@ export function ladosPara(al: Alineacion, documento: string): { este?: LadoAline
 export function etiquetaLado(l: LadoAlineacion | undefined): string {
   return l ? etiquetaAncla(l.ancla, l.anclaFin) : 'nada';
 }
+
+/**
+ * El segmento más hondo que contiene un sitio: la página física `u` (por el ancla
+ * de inicio y de cierre de cada segmento) o el segundo `t`. Los planos no cuentan.
+ */
+export function segmentoEn(segmentos: readonly Segmento[], sitio: { u?: number; t?: number }): Segmento | undefined {
+  let mejor: Segmento | undefined;
+  for (const s of segmentos) {
+    if (s.tipo === 'plano') continue;
+    let dentro = false;
+    if (sitio.t != null && s.ancla.tipo === 'tiempo') { const [a, b] = tramoDe(s)!; dentro = sitio.t >= a && sitio.t < b; }
+    else if (sitio.u != null && s.ancla.tipo === 'pagina') {
+      const fin = s.anclaFin?.tipo === 'pagina' ? s.anclaFin.fisica : s.ancla.fisica;
+      dentro = sitio.u >= s.ancla.fisica && sitio.u <= fin;
+    }
+    if (dentro && (!mejor || s.nivel > mejor.nivel || (s.nivel === mejor.nivel && s.orden > mejor.orden))) mejor = s;
+  }
+  return mejor;
+}

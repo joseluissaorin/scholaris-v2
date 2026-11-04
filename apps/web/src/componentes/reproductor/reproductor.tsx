@@ -32,6 +32,8 @@ import { enlaceAlMinuto, useSeleccionTranscripcion } from './citar';
 import { TiraFotogramas, useEscenas } from '../inspector/fotogramas';
 import { textoDeCaracteres } from '../../lib/anclas';
 import { RecuadroMano } from '../comunes/recuadro-mano';
+import { EnCuadroSobreVideo, VistaPelicula } from '../comprension/pelicula';
+import { FotogramaVirtual } from '../comprension/material';
 
 export interface ManejadorMedio { irA: (t: number) => void }
 
@@ -51,10 +53,15 @@ interface Props {
   alVer: (orden: number, t: number) => void;
   /** Tramos que faltan por leer (ingesta en curso). */
   pendientes?: number;
+  /** En un vídeo, la columna de la derecha: la transcripción o la película plano a plano. */
+  vista?: 'transcripcion' | 'pelicula';
+  alCambiarVista?: (v: 'transcripcion' | 'pelicula') => void;
+  /** Lo que se enseña en la vista de la película si el vídeo aún no se ha comprendido. */
+  sinPelicula?: ReactNode;
 }
 
 /** La fuente del motor para un documento: la primera URL de la caché (precargada), las siguientes nuevas. */
-function useFuente(doc: DetalleDocumento): FuenteMedio {
+export function useFuente(doc: DetalleDocumento): FuenteMedio {
   const qc = useQueryClient();
   // YouTube: su reproductor insertado, sin descargar el vídeo; la portada, su miniatura.
   const youtube = doc.mime === 'application/x-youtube' ? idYoutubeDeUrl(doc.metadatos.url) : null;
@@ -76,11 +83,14 @@ function useFuente(doc: DetalleDocumento): FuenteMedio {
   } satisfies FuenteMedio), [doc.id]); // eslint-disable-line react-hooks/exhaustive-deps
 }
 
-export const Reproductor = forwardRef<ManejadorMedio, Props>(function Reproductor({ doc, inicial, resaltar, pasaje: pasajeLlegada, material, alVer, pendientes }, ref) {
+export const Reproductor = forwardRef<ManejadorMedio, Props>(function Reproductor({ doc, inicial, resaltar, pasaje: pasajeLlegada, material, alVer, pendientes, vista: vistaPedida, alCambiarVista, sinPelicula }, ref) {
   const m = motor();
   const inst = useMotor();
   const fuente = useFuente(doc);
   const esVideo = doc.tipo === 'video';
+  const vista = esVideo && vistaPedida === 'pelicula' ? 'pelicula' : 'transcripcion';
+  // En la vista de la película, quién está en cuadro se rodea sobre el vídeo (se puede apagar).
+  const [rodear, setRodear] = useState(true);
   const { transcripcion: tr, unidades } = useTranscripcion(doc);
   // Los caracteres de la prueba, en el tramo que suena en el segundo de llegada: se marcan como el pasaje.
   const pasajeMaterial = useMemo(() => {
@@ -147,15 +157,15 @@ export const Reproductor = forwardRef<ManejadorMedio, Props>(function Reproducto
     for (const c of coincidencias) for (let k = 0; k < c.largo; k++) a[c.desde + k] = 1;
     return a;
   }, [tr, coincidencias, rangoPasaje]);
-  const vista = useRef<ManejadorTranscripcion>(null);
+  const vista_ = useRef<ManejadorTranscripcion>(null);
   const irACoincidencia = (i: number) => {
     if (!coincidencias.length) return;
     const k = ((i % coincidencias.length) + coincidencias.length) % coincidencias.length;
     setIndiceCoincidencia(k);
     setSeguir(false);
-    requestAnimationFrame(() => vista.current?.verPalabra(coincidencias[k]!.desde));
+    requestAnimationFrame(() => vista_.current?.verPalabra(coincidencias[k]!.desde));
   };
-  useEffect(() => { setIndiceCoincidencia(0); if (coincidencias.length) { setSeguir(false); requestAnimationFrame(() => vista.current?.verPalabra(coincidencias[0]!.desde)); } }, [coincidencias]);
+  useEffect(() => { setIndiceCoincidencia(0); if (coincidencias.length) { setSeguir(false); requestAnimationFrame(() => vista_.current?.verPalabra(coincidencias[0]!.desde)); } }, [coincidencias]);
 
   // Al llegar a un pasaje (o pasar al siguiente del mismo medio): al segundo de su primera palabra, con el karaoke en ella.
   const pasajeSituado = useRef<string | null>(null);
@@ -169,7 +179,7 @@ export const Reproductor = forwardRef<ManejadorMedio, Props>(function Reproducto
     const destino = Math.max(0, t0 - ADELANTO + 0.02);
     if (!enFotograma && Math.abs(m.tiempo() - destino) > 0.01) m.irA(destino);
     setSeguir(true);
-    requestAnimationFrame(() => vista.current?.verPalabra(rangoPasaje.desde));
+    requestAnimationFrame(() => vista_.current?.verPalabra(rangoPasaje.desde));
   }, [tr, rangoPasaje, pasaje, propio, m, enFotograma]);
 
   const columnaEscenario = useRef<HTMLDivElement>(null);
@@ -203,7 +213,7 @@ export const Reproductor = forwardRef<ManejadorMedio, Props>(function Reproducto
       <div ref={columnaEscenario} className="sticky top-[7.75rem] z-20 border-b border-cream-300 bg-cream-50 px-3 pb-2 pt-2 shadow-[var(--shadow-soft)] sm:px-5 lg:top-[4.25rem] lg:h-[calc(100dvh-4.25rem)] lg:self-start lg:overflow-y-auto lg:overscroll-contain lg:border-b-0 lg:border-r lg:bg-cream-100/60 lg:px-8 lg:pb-8 lg:pt-6 lg:shadow-none lg:backdrop-blur-none">
         <div ref={pantalla} className={cx('reproductor-pantalla', inst.pantallaCompleta && propio && 'en-pantalla')}>
           {esVideo ? (
-            <EscenarioVideo hueco={hueco} inst={inst} propio={propio} pantalla={pantalla} {...(material?.region ? { region: material.region, instante: material.instante ?? material.t ?? 0 } : {})} />
+            <EscenarioVideo hueco={hueco} inst={inst} propio={propio} pantalla={pantalla} doc={doc} enCuadro={vista === 'pelicula' && rodear} {...(material?.region ? { region: material.region, instante: material.instante ?? material.t ?? 0 } : {})} />
           ) : (
             <EscenarioAudio hueco={hueco} doc={doc} inst={inst} propio={propio} transcripcion={tr} duracion={duracion} />
           )}
@@ -222,16 +232,37 @@ export const Reproductor = forwardRef<ManejadorMedio, Props>(function Reproducto
         {buscarMovil ? <div className="mt-1 lg:hidden">{barraBusqueda}</div> : null}
       </div>
 
-      {/* Transcripción */}
+      {/* Transcripción (o, en un vídeo, la película plano a plano) */}
       <div ref={columnaTexto} className="min-w-0 px-5 md:px-12 lg:px-10 xl:px-14">
-        <div ref={barraDesktop} className="sticky top-[4.25rem] z-10 -mx-2 hidden bg-cream-100/90 px-2 py-3 backdrop-blur lg:block">{barraBusqueda}</div>
-        <div ref={zonaTexto} className="mx-auto max-w-[46rem] pb-24 pt-2" onPointerDown={(e) => { if (e.pointerType === 'mouse' && !(e.target as HTMLElement).closest('button')) setSeguir(false); }}>
-          <TranscripcionVista ref={vista} transcripcion={tr} marcadas={marcadas} foco={coincidencias[indiceCoincidencia]?.desde ?? null} resaltar={resaltar}
-            margenSuperior={margenSuperior} seguir={seguir} alCambiarSeguir={setSeguir} escenas={escenas} pendientes={pendientes ?? (unidades && doc.estado === 'procesando' ? undefined : 0)} />
+        {esVideo ? (
+          <div className="flex flex-wrap items-center gap-2 pt-3 lg:hidden">
+            <SelectorVista vista={vista} alCambiar={alCambiarVista} />
+          </div>
+        ) : null}
+        <div ref={barraDesktop} className="sticky top-[4.25rem] z-10 -mx-2 hidden bg-cream-100/90 px-2 py-3 backdrop-blur lg:block">
+          <div className="flex items-center gap-2">
+            {esVideo ? <SelectorVista vista={vista} alCambiar={alCambiarVista} /> : null}
+            <div className="min-w-0 flex-1">
+              {vista === 'pelicula' ? (
+                <label className="flex w-fit cursor-pointer items-center gap-2 rounded-xl px-2 py-1.5 text-[0.8125rem] font-medium text-coffee-700 hover:bg-cream-200">
+                  <input type="checkbox" checked={rodear} onChange={(e) => setRodear(e.target.checked)} className="h-4 w-4 accent-[var(--s-rojo)]" />
+                  Rodear quién está en cuadro
+                </label>
+              ) : barraBusqueda}
+            </div>
+          </div>
         </div>
+        {vista === 'pelicula' ? (
+          <VistaPelicula doc={doc} sinComprension={sinPelicula} />
+        ) : (
+          <div ref={zonaTexto} className="mx-auto max-w-[46rem] pb-24 pt-2" onPointerDown={(e) => { if (e.pointerType === 'mouse' && !(e.target as HTMLElement).closest('button')) setSeguir(false); }}>
+            <TranscripcionVista ref={vista_} transcripcion={tr} marcadas={marcadas} foco={coincidencias[indiceCoincidencia]?.desde ?? null} resaltar={resaltar}
+              margenSuperior={margenSuperior} seguir={seguir} alCambiarSeguir={setSeguir} escenas={escenas} pendientes={pendientes ?? (unidades && doc.estado === 'procesando' ? undefined : 0)} />
+          </div>
+        )}
       </div>
 
-      {!seguir && propio && (inst.estado === 'sonando' || inst.estado === 'esperando') ? (
+      {vista === 'transcripcion' && !seguir && propio && (inst.estado === 'sonando' || inst.estado === 'esperando') ? (
         <button type="button" onClick={() => setSeguir(true)} className="fixed bottom-[calc(8.5rem+env(safe-area-inset-bottom))] left-1/2 z-30 flex h-10 -translate-x-1/2 items-center gap-2 rounded-full border border-[#1a0f0a] bg-[linear-gradient(180deg,#4a2e1a_0%,#2c1810_100%)] px-4 text-[0.8125rem] font-semibold text-cream-50 shadow-[var(--relieve-oscuro),0_8px_20px_rgb(44_24_16/0.25)] anim-tostada lg:bottom-8 lg:left-[calc(50%+14rem)]">
           <Icono nombre="audio" tam={15} />Volver a la voz
         </button>
@@ -277,12 +308,13 @@ function useCapitulos(doc: DetalleDocumento): Capitulo[] {
 // Escenarios
 // ---------------------------------------------------------------------------
 
-function EscenarioVideo({ hueco, inst, propio, pantalla, region, instante }: { hueco: React.RefObject<HTMLDivElement | null>; inst: Instantanea; propio: boolean; pantalla: React.RefObject<HTMLDivElement | null>; region?: Region; instante?: number }) {
+function EscenarioVideo({ hueco, inst, propio, pantalla, region, instante, doc, enCuadro }: { hueco: React.RefObject<HTMLDivElement | null>; inst: Instantanea; propio: boolean; pantalla: React.RefObject<HTMLDivElement | null>; region?: Region; instante?: number; doc: DetalleDocumento; enCuadro: boolean }) {
   const aspecto = (propio && inst.aspecto) || 16 / 9;
   return (
     <div className="escenario relative mx-auto w-full max-w-[calc(var(--alto-escenario)*var(--aspecto))] overflow-hidden rounded-xl bg-coffee-900 shadow-[var(--levantado)] ring-1 ring-[#1a0f0a]/60 [--alto-escenario:27dvh] lg:[--alto-escenario:52dvh]" style={{ aspectRatio: String(aspecto), ['--aspecto' as string]: String(aspecto) }}>
       <div ref={hueco} className="absolute inset-0" />
-      {propio && inst.virtual ? <LaminaVirtual /> : null}
+      {propio && inst.virtual ? <LaminaVirtual documento={doc.id} /> : null}
+      {propio && enCuadro ? <EnCuadroSobreVideo doc={doc} /> : null}
       {propio && region && instante != null ? <RegionEnFotograma region={region} instante={instante} /> : null}
       <Superposicion inst={inst} propio={propio} pantalla={pantalla} />
     </div>
@@ -303,14 +335,33 @@ function RegionEnFotograma({ region, instante }: { region: Region; instante: num
   );
 }
 
-/** Sin archivo (demostración): una lámina con el cuadrado rojo del vídeo y el reloj. */
-function LaminaVirtual() {
+/**
+ * Sin archivo (demostración): una lámina con el cuadrado rojo del vídeo y el reloj; si el vídeo
+ * tiene fotogramas clave, el del instante (así se ve dónde cae lo que se rodea), con el reloj en una esquina.
+ */
+function LaminaVirtual({ documento }: { documento: string }) {
   const reloj = useRef<HTMLSpanElement>(null);
   useRelojDom(reloj);
+  const { data: figuras } = useQuery(q.figuras(documento));
+  const conFotogramas = !!figuras?.some((f) => f.t != null && f.imagenUrl);
   return (
-    <div className="absolute inset-0 grid place-items-center overflow-hidden bg-azul">
-      <svg viewBox="0 0 160 90" className="absolute inset-0 h-full w-full" aria-hidden><circle cx="122" cy="70" r="46" fill="var(--s-amarillo)" /><rect x="14" y="16" width="62" height="40" fill="#22160f" /></svg>
-      <span ref={reloj} className="relative font-mono text-[2rem] tnum text-cream-50">0:00</span>
+    <div className={cx('absolute inset-0 overflow-hidden bg-azul', !conFotogramas && 'grid place-items-center')}>
+      {conFotogramas ? <FotogramaVirtual documento={documento} /> : <svg viewBox="0 0 160 90" className="absolute inset-0 h-full w-full" aria-hidden><circle cx="122" cy="70" r="46" fill="var(--s-amarillo)" /><rect x="14" y="16" width="62" height="40" fill="#22160f" /></svg>}
+      <span ref={reloj} className={cx('font-mono tnum text-cream-50', conFotogramas ? 'absolute right-2 top-2 rounded-md bg-[rgb(26_15_10/0.7)] px-1.5 text-[0.8125rem]' : 'relative text-[2rem]')}>0:00</span>
+    </div>
+  );
+}
+
+/** En un vídeo, qué se ve a la derecha: la transcripción o la película plano a plano. */
+function SelectorVista({ vista, alCambiar }: { vista: 'transcripcion' | 'pelicula'; alCambiar?: ((v: 'transcripcion' | 'pelicula') => void) | undefined }) {
+  return (
+    <div role="group" aria-label="Qué ver junto al vídeo" className="flex shrink-0 rounded-xl border border-cream-400 bg-cream-200/70 p-1 shadow-[var(--hundido)]">
+      {(['transcripcion', 'pelicula'] as const).map((v) => (
+        <button key={v} type="button" aria-pressed={vista === v} onClick={() => alCambiar?.(v)}
+          className={cx('h-8 rounded-md px-2.5 text-[0.8125rem]', vista === v ? 'bg-cream-50 font-semibold text-coffee-800 shadow-[var(--relieve)]' : 'font-medium text-coffee-500 hover:text-coffee-800')}>
+          {v === 'transcripcion' ? 'Transcripción' : 'Película'}
+        </button>
+      ))}
     </div>
   );
 }
