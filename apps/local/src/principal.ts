@@ -26,6 +26,7 @@ import type { BaseSqlite } from './sql.js';
 import type { MensajeCliente } from '@scholaris/contrato';
 import type { ArchivoConvertir } from '@scholaris/api/compartido/motor-ingesta';
 import { conversorRemoto, recortadorRemoto } from '@scholaris/api/compartido/conversor-remoto';
+import { clavesProxy, guardarPorTrozos, proxyRemoto, TROZO_PROXY, type HacerProxy } from '@scholaris/api/compartido/proxy';
 import { ANFITRIONES_CATALOGOS, configuracionSinConexion, modoSinConexion } from '@scholaris/proveedores';
 import { instalarGuardiaDeRed } from './guardia-red.js';
 
@@ -48,6 +49,47 @@ export async function imprentaNode() {
     const r = await m.recolectar(m.convertir({ nombre: a.nombre, mime: a.mime, bytes: await a.leer() }, a.tipo ? { tipo: a.tipo as never } : {}));
     for (const [id, d] of r.datos) await guardar(id, d, r.paquete.partes.find((x) => x.id === id)?.mime ?? 'application/octet-stream');
     return r.paquete;
+  };
+}
+
+/** El proxy de los medios con ffmpeg en esta máquina: el original a un temporal, el proxy al almacén por trozos. */
+export async function proxyNode(): Promise<HacerProxy> {
+  const m = await import('@scholaris/imprenta/node');
+  const { mkdtemp, rm, open } = await import('node:fs/promises');
+  const { createWriteStream } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const { pipeline } = await import('node:stream/promises');
+  const { Readable } = await import('node:stream');
+  return async (archivo, tipo, { almacen, prefijo }) => {
+    const dir = await mkdtemp(join(tmpdir(), 'original-'));
+    try {
+      const entrada = join(dir, archivo.nombre.replace(/[^\w.-]/g, '_').slice(-80) || 'medio');
+      await pipeline(Readable.fromWeb((await archivo.flujo()) as never), createWriteStream(entrada));
+      const p = await m.crearProxy(entrada, tipo);
+      try {
+        const claves = clavesProxy(prefijo);
+        if (p.cortes) await almacen.poner(claves.cortes, JSON.stringify(p.cortes), 'application/json');
+        const f = await open(p.ruta, 'r');
+        try {
+          async function* trozos() {
+            for (let desde = 0; desde < p.bytes; desde += TROZO_PROXY) {
+              const b = new Uint8Array(Math.min(TROZO_PROXY, p.bytes - desde));
+              await f.read(b, 0, b.length, desde);
+              yield b;
+            }
+          }
+          const bytes = await guardarPorTrozos(almacen, claves.proxy, p.mime, trozos());
+          return { clave: claves.proxy, bytes, mime: p.mime, cortes: p.cortes?.cortes.length ?? 0 };
+        } finally {
+          await f.close();
+        }
+      } finally {
+        await p.borrar();
+      }
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
   };
 }
 
@@ -88,8 +130,9 @@ export async function arrancarNode(opciones: { puerto?: number; datos?: string; 
       ? {
         convertir: conversorRemoto((r) => fetch(new URL(new URL(r.url).pathname + new URL(r.url).search, process.env.SCHOLARIS_CONVERSOR_URL), r)),
         recortar: recortadorRemoto((r) => fetch(new URL(new URL(r.url).pathname + new URL(r.url).search, process.env.SCHOLARIS_CONVERSOR_URL), r)),
+        hacerProxy: proxyRemoto((r) => fetch(new URL(new URL(r.url).pathname + new URL(r.url).search, process.env.SCHOLARIS_CONVERSOR_URL), r)),
       }
-      : process.env.SCHOLARIS_IMPRENTA === '0' ? {} : { convertir: await imprentaNode(), recortar: await recortadorNode() }),
+      : process.env.SCHOLARIS_IMPRENTA === '0' ? {} : { convertir: await imprentaNode(), recortar: await recortadorNode(), hacerProxy: await proxyNode() }),
   });
 
   const http = createServer(getRequestListener((req) => s.fetch(req)));

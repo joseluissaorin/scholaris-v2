@@ -7,10 +7,11 @@
  */
 import { Container, getContainer } from '@cloudflare/containers';
 import { conversorRemoto, recortadorRemoto } from '../compartido/conversor-remoto.js';
+import { proxyRemoto } from '../compartido/proxy.js';
 import type { Env } from './env.js';
 
-/** Más que el plazo del paso «preparar» del Workflow (30 minutos), el más largo que espera al conversor. */
-const MAX_SIN_PETICIONES_MS = 45 * 60_000;
+/** Más que el plazo del paso más largo que espera al conversor: el «proxy» del Workflow (60 minutos). */
+const MAX_SIN_PETICIONES_MS = 75 * 60_000;
 
 export class Conversor extends Container<Env> {
   defaultPort = 8080;
@@ -77,4 +78,11 @@ export function recortadorCF(env: Env) {
   const ns = env.CONVERSOR;
   // Los recortes son pequeños y llegan en ráfagas: siempre a la misma instancia.
   return recortadorRemoto((r) => getContainer(ns, 'instance-0').fetch(r));
+}
+
+/** El proxy de un medio en el contenedor (lo que ven los modelos): `POST /proxy`. */
+export function proxyCF(env: Env) {
+  if (!env.CONVERSOR || env.CONVERSOR_ACTIVO !== '1') return undefined;
+  const ns = env.CONVERSOR;
+  return proxyRemoto(async (r) => (await instanciaLibre(ns, Number(env.CONVERSOR_INSTANCIAS ?? 3))).fetch(r));
 }

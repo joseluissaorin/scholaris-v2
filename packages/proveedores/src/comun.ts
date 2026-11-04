@@ -14,7 +14,7 @@ import { reintentar } from '@scholaris/nucleo';
 // Contabilidad
 // ---------------------------------------------------------------------------
 
-export type OperacionProveedor = 'leer' | 'vectorizar' | 'generar' | 'transcribir' | 'reordenar' | 'juzgar';
+export type OperacionProveedor = 'leer' | 'vectorizar' | 'generar' | 'transcribir' | 'reordenar' | 'juzgar' | 'percibir';
 
 /** Lo que cuesta una llamada. Se emite una vez por petición HTTP que llega a buen puerto. */
 export interface UsoProveedor {

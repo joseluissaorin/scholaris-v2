@@ -16,7 +16,8 @@ import type { Env } from './env.js';
 import { SqlRemoto } from './sql.js';
 import { almacenDesdeEnv, catalogosDesdeEnv, cuentasDesdeEnv, emisorDesdeEnv, geminiPara, indiceDesdeEnv, inteligenciaPara, origenDe } from './puertos-cf.js';
 import { espacioNombresDe } from './indice-vectorize.js';
-import { conversorCF, recortadorCF } from './conversor.js';
+import { conversorCF, proxyCF, recortadorCF } from './conversor.js';
+import { asegurarProxy } from '../compartido/proxy.js';
 import { adelantarMoov, esMp4 } from '../compartido/medio-rapido.js';
 
 const REINTENTOS = { limit: 5, delay: '10 seconds', backoff: 'exponential' } as const;
@@ -177,6 +178,19 @@ export class FlujoIngesta extends WorkflowEntrypoint<Env, ParamsIngesta> {
           try { return (await adelantarMoov(almacenDesdeEnv(this.env, origenDe(this.env)), claveOriginal, mimeOriginal)).estado; }
           catch (e) { return `fallo: ${e instanceof Error ? e.message : String(e)}`.slice(0, 200); }
         });
+      }
+
+      // El proxy ligero para los modelos (percepción, «ver» de Investigar). Si falla, el documento sigue valiendo:
+      // la comprensión lo vuelve a intentar antes de mirar el medio.
+      const hacerProxy = proxyCF(this.env);
+      const tipoMedio = p.tipo === 'audio' || /^audio\//.test(mimeOriginal) ? 'audio' : p.tipo === 'video' || /^video\//.test(mimeOriginal) ? 'video' : null;
+      if (bytesOriginal && claveOriginal && hacerProxy && tipoMedio) {
+        await step.do('proxy', { retries: { limit: 2, delay: '30 seconds' }, timeout: '60 minutes' }, async () => conLatido(async () => {
+          try {
+            const r = await asegurarProxy({ almacen: almacenDesdeEnv(this.env, origenDe(this.env)), hacerProxy }, { prefijo: p.prefijo, original: claveOriginal, mime: mimeOriginal, tipo: tipoMedio, nombre: p.nombre });
+            return r ? `${r.bytes} bytes, ${r.cortes} cortes` : 'sin proxy';
+          } catch (e) { return `fallo: ${e instanceof Error ? e.message : String(e)}`.slice(0, 200); }
+        }));
       }
 
       await step.do('cerrar', { retries: REINTENTOS }, async () => {

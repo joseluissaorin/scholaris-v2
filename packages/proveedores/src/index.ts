@@ -9,6 +9,7 @@ export * from './lectura.js';
 export * from './pdf.js';
 export * from './pliego.js';
 export * from './gemini.js';
+export * from './vidente.js';
 export * from './workersai.js';
 export * from './openrouter.js';
 export * from './jev.js';

@@ -27,6 +27,11 @@ export const PRECIOS: Record<string, PrecioModelo> = {
   'gemini-3.5-flash': { entrada: 1.5, salida: 9, cache: 0.15 },
   'gemini-3.5-flash-lite': { entrada: 0.3, salida: 2.5, cache: 0.03 },
   'gemini-3.1-flash-lite': { entrada: 0.25, salida: 1.5, cache: 0.025, entradaAudio: 0.5 },
+  // Gemini 4 Argon: precio de lanzamiento hasta el 30-11-2026 (después, 4 y 20). Comprobado el 4-11-2026.
+  'gemini-4-argon': { entrada: 2, salida: 10, cache: 0.1 },
+  // Omni 1.1 Flash: la salida de texto a 9 (la de vídeo, 17,5, no se usa). Contexto de 131 072 tokens.
+  'gemini-omni-1.1-flash': { entrada: 1.5, salida: 9 },
+  // 3.1 Pro: hasta 200 000 tokens de entrada; por encima, 4 y 18 (las ventanas de la percepción no llegan).
   'gemini-3.1-pro-preview': { entrada: 2, salida: 12, cache: 0.2 },
   'gemini-pro-latest': { entrada: 2, salida: 12, cache: 0.2 },
   'gemini-3.5-transcribe': { entrada: 2, salida: 12, porMinuto: 0.005 },

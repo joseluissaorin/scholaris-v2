@@ -56,6 +56,8 @@ export interface OpcionesServidor {
   /** Imprenta del servidor (opcional, `@scholaris/imprenta/node`). */
   convertir?: ConstructorParameters<typeof ColaLocal>[0]['convertir'];
   recortar?: ConstructorParameters<typeof ColaLocal>[0]['recortar'];
+  /** Proxy de los medios para los modelos (ffmpeg o el contenedor). */
+  hacerProxy?: ConstructorParameters<typeof ColaLocal>[0]['hacerProxy'];
   /** Fábrica de inteligencia alternativa (pruebas). */
   fabricaInteligencia?: (entorno: EntornoInteligencia) => Inteligencia;
 }
@@ -199,6 +201,7 @@ export async function crearServidorLocal(o: OpcionesServidor): Promise<ServidorL
     },
     ...(o.convertir ? { convertir: o.convertir } : {}),
     ...(o.recortar ? { recortar: o.recortar } : {}),
+    ...(o.hacerProxy ? { hacerProxy: o.hacerProxy } : {}),
     concurrencia: Number(env.SCHOLARIS_CONCURRENCIA ?? 2),
     // Sin conexión, la verificación y el enriquecimiento de metadatos (catálogos en internet) se apagan.
     sinVerificacion: env.SCHOLARIS_SIN_VERIFICACION === '1' || !catalogos,

@@ -13,6 +13,7 @@ import {
 import { cerrarIngesta } from '@scholaris/api/compartido/cierre';
 import { cacheEnAlmacen } from '@scholaris/api/compartido/motor-ingesta';
 import { adelantarMoov, esMp4 } from '@scholaris/api/compartido/medio-rapido';
+import { asegurarProxy, type HacerProxy } from '@scholaris/api/compartido/proxy';
 import { apuntarProgreso, leerTarea } from '@scholaris/api/compartido/estanteria';
 import { LIMITES } from '@scholaris/api/compartido/planes';
 
@@ -22,6 +23,8 @@ export interface DependenciasCola {
   puertosPara(usuario: string, plan: ParamsIngesta['plan']): Promise<PuertosUsuario>;
   convertir?: ContextoMotor['convertir'];
   recortar?: ContextoMotor['recortar'];
+  /** Proxy ligero de los medios (lo que ven los modelos): ffmpeg local o el contenedor. */
+  hacerProxy?: HacerProxy;
   /** Ingestas a la vez (cada una lee varios pliegos en paralelo). */
   concurrencia?: number;
   pliegosEnParalelo?: number;
@@ -160,6 +163,12 @@ export class ColaLocal implements Orquestador {
         // MP4 con el índice al final: se pone delante para que suene al instante.
         if (claveOriginal && bytesOriginal && esMp4(info.mime ?? p.mime, claveOriginal)) {
           await adelantarMoov(puertos.almacen, claveOriginal, info.mime ?? p.mime).catch((e) => console.error(`[medio ${p.documento}]`, e));
+        }
+        // El proxy para los modelos (percepción, «ver» de Investigar). Si falla, el documento sigue valiendo.
+        if (claveOriginal && bytesOriginal && this.d.hacerProxy && (p.tipo === 'video' || p.tipo === 'audio' || /^(video|audio)\//.test(info.mime ?? p.mime))) {
+          const tipo = p.tipo === 'audio' || /^audio\//.test(info.mime ?? p.mime) ? 'audio' : 'video';
+          await asegurarProxy({ almacen: puertos.almacen, hacerProxy: this.d.hacerProxy }, { prefijo: p.prefijo, original: claveOriginal, mime: info.mime ?? p.mime, tipo, nombre: p.nombre })
+            .catch((e) => console.error(`[proxy ${p.documento}]`, e));
         }
         await cerrarIngesta(puertos, {
           tarea: p.tarea, documento: p.documento, ok: true, original: info.original ?? p.original, bibliotecas: p.bibliotecas ?? [], unidades: r.unidades,

@@ -10,15 +10,21 @@
  *       {tipo:'fin', paquete} (o {tipo:'error', mensaje}).
  *   POST /recortar?x=…&y=…&w=…&h=…[&maximo=…]   cuerpo: la imagen
  *     → image/jpeg con la región (0-1) recortada: el recorte de una figura para su vector.
+ *   POST /proxy?tipo=video|audio&nombre=…   cuerpo: el original (va a disco, no a memoria)
+ *     → tramas: {tipo:'parte', id:'proxy.cortes.json'} con los cortes de plano,
+ *       {tipo:'trozo', id:'proxy.mp4', desde, total} con el proxy en pedazos de 8 MiB
+ *       y {tipo:'fin', bytes}. Lo que ven los modelos (percepción e Investigar).
  *   GET  /salud
  */
-import { createServer } from 'node:http';
+import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { execFile } from 'node:child_process';
-import { mkdtemp, readFile, rm, writeFile, readdir } from 'node:fs/promises';
+import { createWriteStream } from 'node:fs';
+import { mkdtemp, open, readFile, rm, writeFile, readdir } from 'node:fs/promises';
+import { pipeline } from 'node:stream/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
-import { convertir, recolectar, recortarImagen, type PaqueteConversion } from '@scholaris/imprenta/node';
+import { convertir, crearProxy, recolectar, recortarImagen, type PaqueteConversion } from '@scholaris/imprenta/node';
 import { codificarTrama } from '@scholaris/api/compartido/tramas';
 
 const ejecutar = promisify(execFile);
@@ -69,6 +75,45 @@ async function convertirTodo(nombre: string, mime: string, tipo: string | undefi
   return paquete;
 }
 
+/** Trozos del proxy: 8 MiB (R2 pide partes iguales de 5 MiB como mínimo, salvo la última). */
+const TROZO = 8 * 1024 * 1024;
+
+/** El proxy de un medio: el original va a un temporal (puede pesar gigas) y el proxy sale por trozos. */
+async function servirProxy(req: IncomingMessage, res: ServerResponse, url: URL): Promise<void> {
+  const tipo = url.searchParams.get('tipo') === 'audio' ? 'audio' : 'video';
+  const dir = await mkdtemp(join(tmpdir(), 'original-'));
+  const entrada = join(dir, (url.searchParams.get('nombre') ?? 'medio').replace(/[^\w.-]/g, '_').slice(-80) || 'medio');
+  try {
+    await pipeline(req, createWriteStream(entrada));
+    res.writeHead(200, { 'content-type': 'application/x-scholaris-tramas' });
+    const t0 = Date.now();
+    const p = await crearProxy(entrada, tipo);
+    try {
+      if (p.cortes) res.write(codificarTrama({ tipo: 'parte', id: 'proxy.cortes.json', mime: 'application/json' }, new TextEncoder().encode(JSON.stringify(p.cortes))));
+      const f = await open(p.ruta, 'r');
+      try {
+        for (let desde = 0; desde < p.bytes; desde += TROZO) {
+          const b = Buffer.alloc(Math.min(TROZO, p.bytes - desde));
+          await f.read(b, 0, b.length, desde);
+          // Contrapresión: no se lee el siguiente trozo hasta que el anterior ha salido.
+          if (!res.write(codificarTrama({ tipo: 'trozo', id: 'proxy.mp4', mime: p.mime, desde, total: p.bytes }, b))) await new Promise((r) => { res.once('drain', r); res.once('close', r); });
+        }
+      } finally {
+        await f.close();
+      }
+      res.end(codificarTrama({ tipo: 'fin', bytes: p.bytes, mime: p.mime, ms: Date.now() - t0 }));
+    } finally {
+      await p.borrar();
+    }
+  } catch (e) {
+    console.error(e);
+    if (!res.headersSent) res.writeHead(200, { 'content-type': 'application/x-scholaris-tramas' });
+    res.end(codificarTrama({ tipo: 'error', mensaje: (e as Error).message }));
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}
+
 const puerto = Number(process.env.PORT ?? 8080);
 createServer(async (req, res) => {
   const url = new URL(req.url ?? '/', 'http://conversor');
@@ -85,6 +130,7 @@ createServer(async (req, res) => {
     }
     return;
   }
+  if (url.pathname === '/proxy' && req.method === 'POST') { await servirProxy(req, res, url); return; }
   if (url.pathname !== '/convertir' || req.method !== 'POST') { res.statusCode = 404; res.end(); return; }
   const trozos: Buffer[] = [];
   for await (const t of req) trozos.push(t as Buffer);
