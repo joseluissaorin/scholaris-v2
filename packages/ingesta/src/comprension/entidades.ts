@@ -105,7 +105,7 @@ export async function extraerEntidadesDelModelo(
     const r = await llamar<{ entidades: EntidadModelo[] }>(modelo, {
       sistema: `${REGLAS_COMUNES}\n\n${def.instrucciones}\n\nTarea: reconocer las entidades de la obra con correferencia en todo el documento: cada persona, personaje, lugar, obra, organización, objeto significativo, motivo, acontecimiento o concepto, una sola vez, con todas las formas en que aparece. Tipos que importan en esta lente, por orden: ${def.entidades.join(', ')}.`,
       partes: [
-        { texto: `${fichaDocumento(m.documento)}${guia ? `\n\n${guia}` : ''}\n\nMaterial${o.largo ? '' : ` (unidades ${desde} a ${hasta})`}:\n\n${textoParaModelo(m, { desde, hasta, fotogramas: m.medio, maxCaracteres: o.maxCaracteres })}${vistas}` },
+        { texto: `${fichaDocumento(m.documento)}${guia ? `\n\n${guia}` : ''}\n\nMaterial${o.largo ? '' : ` (unidades ${desde} a ${hasta})`}:\n\n${textoParaModelo(m, { desde, hasta, fotogramas: m.medio && !o.percepcion, maxCaracteres: o.maxCaracteres })}${vistas}` },
         { texto: 'Devuelve las entidades. Las formas, literales y completas (son las que se buscarán en el texto). Las alusiones, solo si no son ambiguas. Responde solo con el JSON.' },
       ],
       esquema: ESQUEMA_ENTIDADES, calidad: o.calidad, maxTokens: 30_000, operacion: 'entidades',

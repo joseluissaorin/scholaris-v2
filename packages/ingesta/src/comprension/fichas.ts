@@ -59,7 +59,8 @@ export function prefijoMaterial(m: Material, segmentos: readonly Segmento[], o: 
     const t = (x: number) => etiquetaUnidad({ tipo: 'tiempo', t0: x, t1: x });
     partes.push(`Tramos sin transcripción (no se sabe si son silencio, música o huecos de la transcripción): ${huecos.map(([a, b]) => `${t(a)}-${t(b)}`).join(', ')}. Lo que pase ahí solo se conoce por la percepción y los fotogramas; nunca concluyas que algo no se dice o no ocurre porque no esté en la transcripción.`);
   }
-  if (o.largo) partes.push(`Material completo:\n\n${textoParaModelo(m, { fotogramas: m.medio, maxCaracteres: o.maxCaracteres })}`);
+  // Con la percepción, los fotogramas sueltos de la ingesta sobran (la percepción ve la obra entera): fuera, y el material pesa menos.
+  if (o.largo) partes.push(`Material completo:\n\n${textoParaModelo(m, { fotogramas: m.medio && !o.percepcion, maxCaracteres: o.maxCaracteres })}`);
   return partes.join('\n\n');
 }
 
@@ -123,7 +124,7 @@ export async function fichasDeLote(
     const partes: string[] = [];
     if (!o.largo) {
       const d = m.porId.get(s.unidadDesde)?.orden, h = m.porId.get(s.unidadHasta)?.orden;
-      partes.push(textoParaModelo(m, { ...(d !== undefined ? { desde: d } : {}), ...(h !== undefined ? { hasta: h } : {}), fotogramas: m.medio }));
+      partes.push(textoParaModelo(m, { ...(d !== undefined ? { desde: d } : {}), ...(h !== undefined ? { hasta: h } : {}), fotogramas: m.medio && !o.percepcion }));
     }
     if (s.ancla.tipo === 'tiempo' && escenasPercibidas.length) {
       const a = s.ancla;
