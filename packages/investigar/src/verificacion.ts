@@ -126,14 +126,18 @@ export async function verificar(ctx: ContextoHerramientas, numerador: Numerador,
   const modelo = ctx.p.modelos.verificador ?? ctx.p.modelos.agente;
   const pendientes = frases.map((f, i) => ({ f, i })).filter(({ i }) => !veredictos.has(i));
   const lotes: Array<typeof pendientes> = [];
-  for (let k = 0; k < pendientes.length; k += 24) lotes.push(pendientes.slice(k, k + 24));
+  for (let k = 0; k < pendientes.length; k += 16) lotes.push(pendientes.slice(k, k + 16));
   await Promise.all(lotes.map(async (lote) => {
     const ids = [...new Set(lote.flatMap(({ f }) => f.evidencias))];
     const pruebas = ids.map((id) => {
       const x = numerador.marcada(id);
       if (!x) return '';
       const e = x.evidencia;
-      return `[${id}] ${e.citaCorta} · ${e.modo}${e.nota ? ` (${recortar(e.nota, 160)})` : ''}: ${recortar(e.cita ?? '', 900)}`;
+      // La cita exacta y, si la prueba es una página o un tramo, su texto entero: una frase puede
+      // apoyarse en otra parte de la misma página (y el principio no basta para juzgarla).
+      const amb = x.prueba.ambito?.texto;
+      const contexto = amb && amb.length > (e.cita?.length ?? 0) + 40 ? `\n   Texto de la unidad: ${recortar(amb, 6000)}` : '';
+      return `[${id}] ${e.citaCorta} · ${e.modo}${e.nota ? ` (${recortar(e.nota, 160)})` : ''}: ${recortar(e.cita ?? '', 900)}${contexto}`;
     }).filter(Boolean).join('\n');
     const lista = lote.map(({ f, i }) => `${i}. ${f.limpia}${f.evidencias.length ? ` [cita: ${f.evidencias.join(', ')}]` : ' [sin citas]'}`).join('\n');
     try {

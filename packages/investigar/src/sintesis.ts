@@ -100,8 +100,8 @@ export class Numerador {
 
 /**
  * Una página o un tramo citado sin cita literal es un ancla gruesa (una página entera, a
- * veces dos). Se estrecha a las oraciones de esa unidad que casan con las frases que la
- * citan (de una a tres, con al menos dos términos en común); si no casan, se queda entera.
+ * veces dos). Si la cita una sola frase, se estrecha a las oraciones de esa unidad que casan
+ * con ella (de una a tres, con al menos dos términos en común); si no, se queda entera.
  */
 export function afinar(numerador: Numerador, ctx: ContextoHerramientas, markdown: string): number {
   const frases = frasesDe(markdown);
@@ -109,7 +109,10 @@ export function afinar(numerador: Numerador, ctx: ContextoHerramientas, markdown
   for (const m of numerador.marcadas) {
     const amb = m.prueba.ambito;
     if (m.estrechada || !amb || amb.texto.length < 400) continue;
-    const citan = frases.filter((f) => f.evidencias.includes(m.id)).map((f) => f.limpia).join(' ');
+    // Solo si la cita una frase: si varias la citan por cosas distintas de la página, la página entera es lo honrado.
+    const deEsta = frases.filter((f) => f.evidencias.includes(m.id));
+    if (deEsta.length !== 1) continue;
+    const citan = deEsta[0]!.limpia;
     const ts = [...new Set(terminos(citan))];
     if (ts.length < 2) continue;
     const p = pasajeSiResponde(amb.texto, ts);
