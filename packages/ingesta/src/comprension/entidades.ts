@@ -306,6 +306,9 @@ export async function aparicionesDePercepcion(
 // Reparto: quién interpreta a quién
 // ---------------------------------------------------------------------------
 
+/** Marca de las relaciones de reparto que pone la comprensión (en lugar del fragmento de donde sale la relación). */
+export const FRAGMENTO_REPARTO = 'comprension:reparto';
+
 export interface Papel {
   personaje: string;
   personajeId: string;
@@ -340,6 +343,8 @@ export async function enlazarReparto(
   }
   for (const r of o.percepcion?.reparto ?? []) if (r.actor && r.ficticia !== false) candidatos.push({ personaje: r.nombre, actor: r.actor, fuente: 'percepcion' });
   for (const e of ents) if (e.actor && e.tipo === 'personaje') candidatos.push({ personaje: e.nombre, actor: e.actor, fuente: 'material' });
+  // Las relaciones de reparto de una pasada anterior de este documento se sustituyen (las del resto del grafo, no).
+  await sql.ejecutar('DELETE FROM entidades_relaciones WHERE documento = ? AND fragmento = ?', m.documento.id, FRAGMENTO_REPARTO);
   const papeles: Papel[] = [];
   const hechos = new Set<string>();
   for (const c of candidatos) {
@@ -353,7 +358,7 @@ export async function enlazarReparto(
     const [a, b] = actorId < p.id ? [actorId, p.id] : [p.id, actorId];
     await sql.ejecutar(
       'INSERT OR REPLACE INTO entidades_relaciones (a, b, etiqueta, documento, fragmento, creada) VALUES (?, ?, ?, ?, ?, ?)',
-      a, b, `${c.actor.trim()} interpreta a ${p.nombre}`, m.documento.id, null, o.ahora,
+      a, b, `${c.actor.trim()} interpreta a ${p.nombre}`, m.documento.id, FRAGMENTO_REPARTO, o.ahora,
     );
     hechos.add(p.id);
     papeles.push({ personaje: p.nombre, personajeId: p.id, actor: c.actor.trim(), actorId, fuente: c.fuente, ...(c.qidActor ? { qidActor: c.qidActor } : {}) });

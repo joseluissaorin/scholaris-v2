@@ -411,6 +411,10 @@ describe('comprensión: una película con su percepción', () => {
     expect(llamadas.some((x) => x.includes('wbsearchentities'))).toBe(true);
     const filas = await sql.ejecutar<{ etiqueta: string }>('SELECT etiqueta FROM entidades_relaciones ORDER BY etiqueta');
     expect(filas.map((f) => f.etiqueta)).toEqual(['Jorge Perugorría interpreta a Diego', 'Vladimir Cruz interpreta a David']);
+    // Rehacerla sustituye el reparto de este documento (no se acumulan variantes de una pasada anterior).
+    await sql.ejecutar("UPDATE entidades_relaciones SET etiqueta = 'Jorge Perugoría interpreta a Diego' WHERE etiqueta LIKE 'Jorge%'");
+    await comprenderDocumento(contexto(sql, modelo, { fetch: fetchFalso }), 'pelicula', { forzar: true });
+    expect((await sql.ejecutar<{ etiqueta: string }>('SELECT etiqueta FROM entidades_relaciones ORDER BY etiqueta')).map((f) => f.etiqueta)).toEqual(['Jorge Perugorría interpreta a Diego', 'Vladimir Cruz interpreta a David']);
     const [actor] = await sql.ejecutar<{ wikidata: string; ficticia: number }>("SELECT wikidata, ficticia FROM entidades WHERE clave = 'jorge perugorria'");
     expect(actor).toMatchObject({ wikidata: 'Q10', ficticia: 0 });
     const [diego] = await sql.ejecutar<{ wikidata: string }>("SELECT wikidata FROM entidades WHERE tipo = 'persona' AND clave = 'diego'");
