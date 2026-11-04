@@ -274,6 +274,16 @@ adaptación; `gemini-3.1-pro-preview`, 6 y 10, más someras; `gemini-3.8-flash` 
 una (salida cortada) y escribe notas más cortas. La alineación y la ficha van con
 `comprension` (argon); las ventanas de párrafos de una traducción, con `comprensionRapida`.
 
+Prueba real del 4-11-2026. *Fresa y chocolate* y el cuento: la detección da `adaptacion_de`
+con confianza 0,99 (P144 de Wikidata y los créditos de 7:18, «guion… basado en su cuento»);
+la alineación, 139 correspondencias (128 finas, 83 con los dos lados anclados) y una ficha de
+1 600 palabras con 76 pruebas, por 1,07 USD; 106 de los 112 puntos de la rúbrica de las
+preguntas transmedia del banco tienen una alineación fina en sus anclas. *Marianela*
+(capítulos I-V) y la traducción de Clara Bell: 240 pares de párrafos y la ficha por 0,24 USD,
+y las preguntas en inglés, francés e italiano sobre el original encuentran su párrafo por
+vectores (de 24 a 26 de 30 en primer lugar, 30 de 30 entre los cinco primeros) frente a 5-8 de
+30 por la búsqueda léxica.
+
 Modelos: el de comprensión es el mejor disponible, elegido por medición en el banco
 (candidatos a 4-11-2026: `gemini-4-argon`, `gemini-3.1-pro-preview`, `gemini-pro-latest`
 y `gemini-3.8-flash`). Las ventanas pueden ir con uno rápido si el banco lo permite.

@@ -64,7 +64,7 @@ const [id] = await relacionesPorAlinear(ctx);
 if (!id) throw new Error('No hay relación que alinear');
 console.log('\n== Alineación por párrafos');
 const t0 = Date.now();
-const r = await alinearRelacion(ctx, id, { calidad: (valor('calidad') as 'alta' | 'rapida' | undefined) ?? 'rapida', concurrencia: 6, presupuestoUsd: 3 });
+const r = await alinearRelacion(ctx, id, { calidad: (valor('calidad') as 'alta' | 'rapida' | undefined) ?? 'rapida', calidadFicha: 'alta', concurrencia: 6, presupuestoUsd: 3 });
 console.log(`  ${r.estado}: ${r.alineaciones} alineaciones, ficha ${r.ficha ? 'sí' : 'no'}, ${r.usd.toFixed(3)} USD, ${Math.round((Date.now() - t0) / 1000)} s; ${r.avisos.join(' | ')}`);
 const als = await leerAlineaciones(sql, { relacion: id });
 const conteo: Record<string, number> = {};
