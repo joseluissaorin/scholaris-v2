@@ -97,7 +97,31 @@ Argon admite como mucho 32 768 de salida. Una ventana muy cortada (más de unos 
 
 ## Película completa
 
-`~/tmp/scholaris-fresa/percepcion/fresa-y-chocolate.json` (fuera del repositorio), hecho con `scripts/pelicula.ts`. La medición y el oro están en `~/tmp/scholaris-fresa/percepcion/` (`oro/`, `resultados/`, `scripts/`).
+Todo está fuera del repositorio, en `~/tmp/scholaris-fresa/percepcion/`.
+
+**`fresa-y-chocolate.json`**
+
+- Hecho con `scripts/pelicula.ts`: Argon, prompt 2, 15 ventanas de 8 min, cinco a la vez.
+- Costó 4,07 $ y 50 min de reloj.
+- Contiene:
+  - 62 escenas que tilan los 6638 s.
+  - 521 planos. ffmpeg da 496 cortes con 0,3 o más; el resto son rótulos de créditos y fundidos.
+  - 686 personas localizadas, todas con región e instante, y 144 objetos.
+  - 102 sonidos: 40 de música o canción, con 8 obras identificadas.
+  - 377 frases clave.
+  - Un reparto de 32, con los actores de Diego, David, Nancy, Vivian y Miguel. A Germán no le pone actor, porque Joel Angelino no está en el P161 de Wikidata.
+- Los hablantes de las frases clave se tomaron después de la transcripción revisada (`hablantesDeDialogos`): 19 cambios.
+
+**`fresa-y-chocolate.transcripcion.json`**
+
+- La `RevisionTranscripcion` con sus correcciones: 36 huecos (172 segmentos), 161 hablantes y 11 desfases.
+- Las `unidadesRevisadas`: de 120 unidades se pasa a 153.
+- Coste: huecos con Flash, 1,14 $ en 96 llamadas; hablantes con Argon, 1,71 $ en 15 ventanas.
+- Contra Whisper, los segmentos que no tiene la transcripción bajan de 191 (328 s) a 58 (108 s). Lo que queda es sobre todo letra de canciones y frases sueltas.
+- Las palabras añadidas coinciden en un 76 % con las de Whisper. El inicio difiere 0,28 s de mediana y 2,3 s en el percentil 90.
+- Hablantes en las 101 frases del oro: del 52 % al 98 % (46 cambios buenos y 1 malo).
+
+La medición y el oro están en `oro/`, `resultados/`, `revision/` y `scripts/`.
 
 ## Anclaje material
 
@@ -136,7 +160,7 @@ La transcripción de la película en producción (`dmw21xnomjseg07mi`) tiene hue
 - **Actividad de la voz.** El conversor la calcula en la misma pasada del proxy: `silencedetect` a -35 dB en la banda de 150 a 4000 Hz, guardado en `proxy.voz.json`. Cubre el 97 % de lo que habla Whisper (a -38 dB, el 99 %, pero marca como activo el 88 % de la película). Para un proxy antiguo está `actividadDeAudio` (Node).
 - **Tiempos frente a la actividad.** Ninguna de las 6980 palabras con duración válida cae en silencio (a -35 dB), así que en esta película los tiempos malos no se ven con la energía del audio. Se ven por las duraciones rotas y por la revisión con vídeo de cada frase.
 - **Cobertura** (`coberturaTranscripcion`). Un hueco es un tramo con sonido sin palabras válidas a menos de 1,2 s, de 3 s o más. Las unidades con un cuarto o más de palabras rotas cuentan como huecos de `tiempos_rotos`. Sin mapa de actividad, solo se ven los silencios de transcripción de más de 25 s. En la película salen 124 huecos (2551 s) en 96 subventanas.
-- **Huecos** (`revisarTranscripcionConVideo`). Cada subventana, de 75 s como mucho, se transcribe con Flash mirando el proxy. Con las mismas marcas absolutas de `videoMetadata`, el hablante sale por la voz y por la imagen, y el modelo recibe lo transcrito alrededor para orientarse. Si la llamada falla, entra la reserva: Whisper de Workers AI con el tramo de audio del paquete, o en local `mlx_whisper` con large-v3-turbo. Lo que ya estaba no se repite, y las unidades con el tiempo roto se sustituyen por lo que se oye en su tramo (`reemplaza`).
+- **Huecos** (`revisarTranscripcionConVideo`). Cada subventana, de 75 s como mucho, se transcribe con Flash mirando el proxy, a unos 0,012 $ cada una. Con las mismas marcas absolutas de `videoMetadata`, el hablante sale por la voz y por la imagen, y el modelo recibe lo transcrito alrededor para orientarse. Si la llamada falla, entra la reserva: Whisper de Workers AI con el tramo de audio del paquete, o en local `mlx_whisper` con large-v3-turbo. Lo que ya estaba no se repite, y las unidades con el tiempo roto se sustituyen por lo que se oye en su tramo (`reemplaza`).
 - **Hablantes y tiempos.** Argon ve cada ventana de 8 min con sus frases numeradas y dice quién dice cada una, si se le ve decirla y, si su marca está a más de 2 s, cuándo empieza de verdad.
   - Sobre las 101 frases del oro: del 52 % de aciertos al **99 %**, con 47 cambios buenos y ninguno malo, por 0,128 $ por ventana.
   - Flash llega al 96 %, con 3 cambios malos, por 0,069 $.
