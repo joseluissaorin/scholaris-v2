@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Ancla, Redactor } from '@scholaris/nucleo';
-import { anclarMaterial, buscarCita, describirFiguras, esqueleto, regionPorLineas, regionPorVision, textoEn, type AlmacenTrabajo, type FiguraConAncla, type LineaPagina } from '../src/index.js';
+import { anclarMaterial, buscarCita, cajasPrincipales, describirFiguras, esqueleto, regionPorLineas, regionPorVision, textoEn, type AlmacenTrabajo, type FiguraConAncla, type LineaPagina } from '../src/index.js';
 
 const pagina: Ancla = { tipo: 'pagina', fisica: 3, impresa: '6', romana: false, origen: 'leido', confianza: 1 };
 
@@ -83,6 +83,14 @@ describe('región por visión', () => {
     await regionPorVision(p, 'paginas/0003.jpg', 'me encanta la fresa');
     expect(redactor.llamadas.length).toBe(1);
     expect(cache.datos.size).toBe(1);
+  });
+
+  it('en un pliego, una cita que cruza de página se queda con la página donde está casi toda', async () => {
+    // Las dos últimas líneas de la página izquierda y la primera de la derecha (box_2d: ymin, xmin, ymax, xmax).
+    const redactor = redactorCajas({ encontrada: true, cajas: [[880, 60, 905, 470], [905, 60, 930, 470], [70, 530, 95, 760]] });
+    const r = await regionPorVision({ redactor, imagen: async () => ({ bytes: new Uint8Array([1]), mime: 'image/jpeg' }) }, 'pliego.jpg', 'una cita que cruza');
+    expect(r?.region).toEqual({ x: 0.06, y: 0.88, w: 0.41, h: 0.05 });
+    expect(cajasPrincipales([{ x: 0.1, y: 0.1, w: 0.3, h: 0.02 }, { x: 0.1, y: 0.12, w: 0.35, h: 0.02 }])).toHaveLength(2);
   });
 
   it('si no la encuentra, null (y también se recuerda)', async () => {

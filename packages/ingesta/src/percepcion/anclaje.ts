@@ -115,6 +115,27 @@ export function unirRegiones(rs: Region[]): Region | undefined {
 }
 
 /**
+ * Las cajas de una cita que cruza de una página a otra de un pliego (el final de
+ * la izquierda y el principio de la derecha): su unión taparía media imagen. Se
+ * parten por el hueco vertical que las separa y se queda el grupo con más texto.
+ * Si no hay hueco (una sola columna), son todas.
+ */
+export function cajasPrincipales(cajas: Region[], hueco = 0.03): Region[] {
+  if (cajas.length < 2) return cajas;
+  const orden = [...cajas].sort((a, b) => a.x - b.x);
+  const grupos: Region[][] = [[orden[0]!]];
+  let derecha = orden[0]!.x + orden[0]!.w;
+  for (const c of orden.slice(1)) {
+    if (c.x > derecha + hueco) grupos.push([c]);
+    else grupos.at(-1)!.push(c);
+    derecha = Math.max(derecha, c.x + c.w);
+  }
+  if (grupos.length < 2) return cajas;
+  const area = (g: Region[]) => g.reduce((s, r) => s + r.w * r.h, 0);
+  return grupos.sort((a, b) => area(b) - area(a))[0]!;
+}
+
+/**
  * La región de una cita en una página con capa de texto. Las líneas se unen por
  * su esqueleto, así que da igual cómo se partieran las palabras con guion o cómo
  * quedara el Markdown de la unidad.
@@ -201,7 +222,8 @@ export async function regionPorVision(p: PuertosAnclaje, claveImagen: string, ci
     calidad: 'alta',
   });
   const cajas = (r.json?.encontrada !== false ? r.json?.cajas ?? [] : []).map(regionDeCaja).filter((x): x is Region => !!x);
-  const region = unirRegiones(cajas) ?? null;
+  // En un pliego, la cita que cruza de página daría una caja enorme: se queda con la página donde está casi toda.
+  const region = unirRegiones(cajasPrincipales(cajas)) ?? null;
   await p.cache?.escribir(clave, JSON.stringify({ region, cajas })).catch(() => undefined);
   return region ? { region, cajas } : null;
 }

@@ -85,7 +85,9 @@ export function rutasTranscripcion(app: Hono<Entorno>): void {
       exigir(!b.percepcion, 'Con una revisión hecha fuera no se percibe el medio: pide la percepción aparte.');
       pedido.rehacer = false;
     }
-    const estimacion = (await estimarMedios(p, [id], pedido)).documentos[0] ?? null;
+    const estimada = (await estimarMedios(p, [id], pedido)).documentos[0] ?? null;
+    // Con una revisión hecha fuera no se revisa nada: solo se reescribe (el contexto y los vectores de lo nuevo, céntimos).
+    const estimacion = estimada && b.revision !== undefined ? { ...estimada, hara: ['reescritura' as const], usd: 0 } : estimada;
     if (b.simular) return c.json({ documento: id, lanzada: false, estimacion, precios: preciosHora() });
     if (await tareaDeDocumento(p.sql, id)) fallo('conflicto', 'El documento ya se está procesando.');
     if (b.revision !== undefined) {
@@ -103,7 +105,13 @@ export function rutasTranscripcion(app: Hono<Entorno>): void {
     const d = await leerDocumento(p.sql, id);
     if (!d) noEncontrado('El documento');
     const r = await leerRevision(p.almacen, prefijoDocumento(p.usuario.id, id));
-    if (!r) noEncontrado('La revisión de la transcripción');
+    // La última tarea de revisión (o de percepción) de este medio y los avisos que dejó: para quien espera a que termine.
+    const tareas = await p.sql.ejecutar<{ id: string; estado: string; error: string | null; params: string | null; actualizada: string }>('SELECT id, estado, error, params, actualizada FROM pl_tareas WHERE documento = ? ORDER BY creada DESC LIMIT 20', id);
+    const t = tareas.find((x) => { try { return ((x.params ? JSON.parse(x.params) : {}) as { fases?: string[] }).fases?.some((f) => f === 'transcripcion' || f === 'percepcion'); } catch { return false; } });
+    const tarea = t ? { id: t.id, estado: t.estado, actualizada: t.actualizada, ...(t.error ? { error: t.error } : {}) } : null;
+    const avisosDoc = (await p.sql.ejecutar<{ codigo: string; mensaje: string }>("SELECT codigo, mensaje FROM pl_avisos WHERE documento = ? AND codigo LIKE 'transcripcion%'", id)).map((x) => ({ codigo: x.codigo, mensaje: x.mensaje }));
+    if (!r && !tarea) noEncontrado('La revisión de la transcripción');
+    if (!r) return c.json({ documento: id, aplicada: null, tarea, avisosDocumento: avisosDoc });
     const cuenta = (tipo: string, reemplaza?: boolean) => r.correcciones.filter((x) => x.tipo === tipo && (reemplaza === undefined || (x.tipo === 'hueco' && !!x.reemplaza?.length) === reemplaza)).length;
     const sinTexto = (cb: RevisionTranscripcion['cobertura']) => ({
       activo: cb.activo, cubierto: cb.cubierto, huecos: cb.huecos.length,
@@ -113,7 +121,7 @@ export function rutasTranscripcion(app: Hono<Entorno>): void {
       documento: id, version: r.version, modelo: r.modelo, aplicada: r.aplicada ?? null,
       correcciones: { huecos: cuenta('hueco', false), tiemposRotos: cuenta('hueco', true), hablantes: cuenta('hablante'), desfases: cuenta('desfase') },
       cobertura: { antes: sinTexto(r.cobertura), ...(r.coberturaFinal ? { despues: sinTexto(r.coberturaFinal) } : {}) },
-      usd: r.coste?.usd ?? 0, avisos: r.avisos.slice(0, 50),
+      usd: r.coste?.usd ?? 0, avisos: r.avisos.slice(0, 50), tarea, avisosDocumento: avisosDoc,
     });
   });
 
