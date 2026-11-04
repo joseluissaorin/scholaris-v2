@@ -34,6 +34,8 @@ import { textoDeCaracteres } from '../../lib/anclas';
 import { RecuadroMano } from '../comunes/recuadro-mano';
 import { EnCuadroSobreVideo, VistaPelicula } from '../comprension/pelicula';
 import { FotogramaVirtual } from '../comprension/material';
+import { RevisionTranscripcion } from '../medios/revision';
+import { huecosDeRevision, qm } from '../../datos/medios';
 
 /** `sonar`: seguir reproduciendo (por defecto); sin él, el medio se queda en ese fotograma (una región que mirar). */
 export interface ManejadorMedio { irA: (t: number, sonar?: boolean) => void }
@@ -112,6 +114,9 @@ export const Reproductor = forwardRef<ManejadorMedio, Props>(function Reproducto
   // Lo que se ve en cada escena, marcado en la transcripción.
   const escenas = useEscenas(doc.id, doc.tipo === 'video');
   const capitulos = useCapitulos(doc);
+  // La revisión de la transcripción: sus huecos van marcados en la línea del tiempo.
+  const { data: revision } = useQuery({ ...qm.revision(doc.id), enabled: doc.estado === 'listo' });
+  const huecos = useMemo(() => huecosDeRevision(revision), [revision]);
   const propio = inst.documento === doc.id;
   const duracion = (propio && inst.duracion) || doc.duracion || 0;
 
@@ -218,12 +223,13 @@ export const Reproductor = forwardRef<ManejadorMedio, Props>(function Reproducto
           ) : (
             <EscenarioAudio hueco={hueco} doc={doc} inst={inst} propio={propio} transcripcion={tr} duracion={duracion} />
           )}
-          <Controles inst={inst} propio={propio} duracion={duracion} esVideo={esVideo} transcripcion={tr} capitulos={capitulos} fotogramas={fotogramas}
+          <Controles inst={inst} propio={propio} duracion={duracion} esVideo={esVideo} transcripcion={tr} capitulos={capitulos} fotogramas={fotogramas} huecos={huecos}
             marca={instanteInicial.current && instanteInicial.current > 0 ? instanteInicial.current : null} pantalla={pantalla} documento={doc.id} alAyuda={abrirAyuda} buscar={buscarMovil} alBuscar={() => setBuscarMovil((x) => !x)} />
         </div>
         <div className="hidden lg:block">
           {tr && tr.hablantes.length ? <Hablantes tr={tr} /> : null}
           {capitulos.length ? <Capitulos capitulos={capitulos} /> : null}
+          {doc.estado === 'listo' ? <RevisionTranscripcion doc={doc} className="mt-6" /> : null}
           {esVideo ? <TiraFotogramas documento={doc.id} cargar={propio && inst.estado !== 'vacio' && inst.estado !== 'cargando'} /> : null}
           <p className="mt-6 flex flex-wrap items-center gap-x-2 gap-y-1 text-[0.75rem] text-apagado">
             <Teclas>Espacio</Teclas> reproduce · <Teclas>J</Teclas><Teclas>L</Teclas> 10 s · <Teclas>[</Teclas><Teclas>]</Teclas> velocidad ·
@@ -240,6 +246,7 @@ export const Reproductor = forwardRef<ManejadorMedio, Props>(function Reproducto
             <SelectorVista vista={vista} alCambiar={alCambiarVista} />
           </div>
         ) : null}
+        {doc.estado === 'listo' && vista === 'transcripcion' ? <RevisionTranscripcion doc={doc} compacta className="mt-3 lg:hidden" /> : null}
         <div ref={barraDesktop} className="sticky top-[4.25rem] z-10 -mx-2 hidden bg-cream-100/90 px-2 py-3 backdrop-blur lg:block">
           <div className="flex items-center gap-2">
             {esVideo ? <SelectorVista vista={vista} alCambiar={alCambiarVista} /> : null}
@@ -560,8 +567,8 @@ function BotonMando({ etiqueta, alPulsar, children, activo, deshabilitado, class
   );
 }
 
-function Controles({ inst, propio, duracion, esVideo, transcripcion, capitulos, fotogramas, marca, pantalla, documento, alAyuda, buscar, alBuscar }: {
-  inst: Instantanea; propio: boolean; duracion: number; esVideo: boolean; transcripcion: Transcripcion | null; capitulos: Capitulo[];
+function Controles({ inst, propio, duracion, esVideo, transcripcion, capitulos, fotogramas, huecos, marca, pantalla, documento, alAyuda, buscar, alBuscar }: {
+  inst: Instantanea; propio: boolean; duracion: number; esVideo: boolean; transcripcion: Transcripcion | null; capitulos: Capitulo[]; huecos: ReturnType<typeof huecosDeRevision>;
   fotogramas: ReturnType<typeof useFotogramas>; marca: number | null; pantalla: React.RefObject<HTMLDivElement | null>; documento: string; alAyuda: () => void;
   buscar: boolean; alBuscar: () => void;
 }) {
@@ -573,7 +580,7 @@ function Controles({ inst, propio, duracion, esVideo, transcripcion, capitulos, 
   const anuncio = !propio ? '' : inst.estado === 'cargando' ? 'Cargando' : inst.estado === 'esperando' ? 'Esperando datos' : inst.estado === 'error' ? (inst.error ?? 'Error') : inst.estado === 'terminado' ? 'Terminado' : '';
   return (
     <div className={cx('controles mt-2', oscuro && 'controles-oscuros')}>
-      <LineaTiempo duracion={duracion} transcripcion={transcripcion} capitulos={capitulos} fotogramas={esVideo ? fotogramas : null} marca={marca} oscura={oscuro} />
+      <LineaTiempo duracion={duracion} transcripcion={transcripcion} capitulos={capitulos} fotogramas={esVideo ? fotogramas : null} marca={marca} huecos={huecos} oscura={oscuro} />
       <div className={cx('-mt-2.5 mb-1 flex justify-between font-mono text-[0.75rem] tnum', oscuro ? 'text-cream-200' : 'text-coffee-600')}>
         <span ref={reloj}>0:00</span><span className={oscuro ? 'text-cream-300' : 'text-apagado'}>{tiempoACadena(duracion)}</span>
       </div>

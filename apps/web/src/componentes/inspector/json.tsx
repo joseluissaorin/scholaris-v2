@@ -61,7 +61,7 @@ export function VerJson({ abierto, alCambiar, doc, contenido }: { abierto: boole
               <Dialog.Close className="grid h-9 w-9 place-items-center rounded-lg text-coffee-400 hover:bg-cream-200 hover:text-coffee-800" aria-label="Cerrar"><Icono nombre="cerrar" tam={16} /></Dialog.Close>
             </div>
           </div>
-          {pestana === 'volcado' ? <p className="border-b border-cream-300 bg-cream-100 px-5 py-2 text-[0.75rem] text-coffee-600">{cargando ? 'Leyendo el volcado…' : volcado ? `Todo lo que va en el .spdf (${bytes(volcado.bytes)} en JSON). Los vectores van recortados y los binarios, como enlaces firmados.` : ''}</p> : null}
+          {pestana === 'volcado' ? <p className="border-b border-cream-300 bg-cream-100 px-5 py-2 text-[0.75rem] text-coffee-600">{cargando ? 'Leyendo el volcado…' : volcado ? `La capa literal del .spdf (${bytes(volcado.bytes)} en JSON): unidades, fragmentos, figuras, vectores recortados y binarios como enlaces firmados. La comprensión (estructura, fichas, apariciones, relaciones) también va en el .spdf que se descarga, pero no en este volcado.` : ''}</p> : null}
           <pre className="min-h-0 flex-1 overflow-auto bg-coffee-900 p-4 font-mono text-[0.75rem] leading-relaxed text-cream-100">{texto || (cargando ? '…' : '')}</pre>
         </Dialog.Content>
       </Dialog.Portal>

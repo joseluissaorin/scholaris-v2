@@ -11,7 +11,7 @@ import { useQuery, useQueryClient, useSuspenseQuery } from '@tanstack/react-quer
 import type { Segmento } from '@scholaris/nucleo';
 import { avisar, Boton, Composicion, Consejo, cx, Esqueleto, Icono, Vacio } from '@scholaris/ui';
 import { q } from '../datos/consultas';
-import { confirmarRelacion, fichaGlobal, qc } from '../datos/comprension';
+import { fichaGlobal, qc } from '../datos/comprension';
 import { anioVisible, autores, esMedio, NOMBRE_TIPO } from '../lib/formato';
 import { numero } from '../lib/numero';
 import { cuentaCorrespondencias, cuentaLegible, cuentaPorTipo, NOMBRE_CORRESPONDENCIA, NOMBRE_RELACION, verboRelacion, type RelacionVista } from '../lib/comprension';
@@ -19,6 +19,7 @@ import { EstadoComprension } from '../componentes/comprension/estado';
 import { ArbolEstructura, FichaGlobal, FichaSegmento } from '../componentes/comprension/mapa';
 import { PanelEntidades } from '../componentes/comprension/entidades';
 import { FormaCorrespondencia } from '../componentes/comprension/alineaciones';
+import { AccionesRelacion, DetectarBiblioteca, EstadoAlineacion, NuevaRelacion } from '../componentes/comprension/relaciones';
 
 type Vista = 'mapa' | 'entidades' | 'relaciones';
 const VISTAS: Vista[] = ['mapa', 'entidades', 'relaciones'];
@@ -123,7 +124,7 @@ function Comprension() {
             ) : ver === 'entidades' ? (
               hecho ? <PanelEntidades documento={id} apariciones={apariciones} motivos={motivos} {...(entidadInicial ? { inicial: entidadInicial } : {})} className="max-w-3xl" /> : <SinComprension medio={medio} />
             ) : (
-              <Relaciones documento={id} relaciones={relaciones} />
+              <Relaciones documento={id} titulo={doc.metadatos.titulo} relaciones={relaciones} />
             )}
         </div>
       </div>
@@ -139,32 +140,37 @@ function SinComprension({ medio }: { medio: boolean }) {
   );
 }
 
-/** Las obras con que se relaciona: el verbo desde este lado, la ficha de la relación y la vista lado a lado. */
-function Relaciones({ documento, relaciones }: { documento: string; relaciones: RelacionVista[] | undefined }) {
-  if (!relaciones) return <Esqueleto className="h-40 rounded-2xl" />;
-  if (!relaciones.length) {
-    return (
-      <Vacio forma="triangulo" titulo="Sin relaciones con otras obras">
-        Cuando en tu biblioteca haya una adaptación, una traducción u otra edición de esta obra, aparecerá aquí con sus correspondencias, pasaje a pasaje.
-      </Vacio>
-    );
-  }
+/** Las obras con que se relaciona: el verbo desde este lado, la ficha de la relación y la vista lado a lado; y ponerlas a mano. */
+function Relaciones({ documento, titulo, relaciones }: { documento: string; titulo: string; relaciones: RelacionVista[] | undefined }) {
+  const [nueva, setNueva] = useState(false);
+  const [detectar, setDetectar] = useState(false);
+  const acciones = (
+    <div className="flex flex-wrap gap-2">
+      <Boton variante="linea" tam="p" icono="mas" onClick={() => setNueva(true)}>Añadir una relación</Boton>
+      <Boton variante="fantasma" tam="p" icono="pila" onClick={() => setDetectar(true)}>Buscar en toda la biblioteca</Boton>
+    </div>
+  );
   return (
-    <ul className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-      {relaciones.map((r) => <TarjetaRelacion key={r.id} r={r} documento={documento} />)}
-    </ul>
+    <>
+      {!relaciones ? <Esqueleto className="h-40 rounded-2xl" /> : !relaciones.length ? (
+        <Vacio forma="triangulo" titulo="Sin relaciones con otras obras" accion={acciones}>
+          Cuando en tu biblioteca haya una adaptación, una traducción u otra edición de esta obra, aparecerá aquí con sus correspondencias, pasaje a pasaje. Si la detección no la ve, ponla a mano.
+        </Vacio>
+      ) : (
+        <>
+          <div className="mb-4">{acciones}</div>
+          <ul className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            {relaciones.map((r) => <TarjetaRelacion key={r.id} r={r} documento={documento} />)}
+          </ul>
+        </>
+      )}
+      <NuevaRelacion documento={documento} titulo={titulo} abierto={nueva} alCambiar={setNueva} />
+      <DetectarBiblioteca abierto={detectar} alCambiar={setDetectar} />
+    </>
   );
 }
 
 function TarjetaRelacion({ r, documento }: { r: RelacionVista; documento: string }) {
-  const qcl = useQueryClient();
-  const [confirmando, setConfirmando] = useState(false);
-  const confirmar = async () => {
-    setConfirmando(true);
-    try { await confirmarRelacion(qcl, r.id); avisar('Relación confirmada: la detección ya no la cambia.', { tono: 'exito' }); }
-    catch (e) { avisar(e instanceof Error && e.message ? e.message : 'No se pudo confirmar la relación.', { tono: 'error' }); }
-    finally { setConfirmando(false); }
-  };
   const { data: als } = useQuery(qc.alineaciones(r.id));
   const [abierta, setAbierta] = useState(false);
   const resumen = (r.ficha?.datos.resumen as { es?: string } | undefined)?.es;
@@ -178,8 +184,7 @@ function TarjetaRelacion({ r, documento }: { r: RelacionVista; documento: string
         {autoria ? <span className="text-coffee-600"> ({autoria})</span> : null}
       </h3>
       {resumen ? <p className="mt-2 text-[0.875rem] text-coffee-700">{resumen}</p> : null}
-      {r.estadoAlineacion?.estado === 'en_marcha' ? <p role="status" className="mt-2 flex items-center gap-2 text-[0.8125rem] text-coffee-700"><span aria-hidden className="h-2 w-2 rounded-full bg-rojo anim-pulso" />Alineando las dos obras…</p> : null}
-      {r.estadoAlineacion?.estado === 'error' ? <p role="alert" className="mt-2 text-[0.8125rem] text-rojo">{r.estadoAlineacion.error ?? 'La alineación se detuvo con un error.'}</p> : null}
+      <EstadoAlineacion r={r} documento={documento} className="mt-3" />
       {r.ficha?.texto ? (
         <>
           <p className={cx('lectura mt-2 text-[0.875rem] leading-relaxed text-coffee-800', !abierta && 'line-clamp-4')}>{r.ficha.texto}</p>
@@ -194,12 +199,12 @@ function TarjetaRelacion({ r, documento }: { r: RelacionVista; documento: string
         </ul>
       ) : null}
       <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-cream-200 pt-3">
-        <Boton variante="tinta" tam="p" comoHijo>
+        <Boton variante="tinta" tam="p" comoHijo className={r.alineaciones ? undefined : 'opacity-60'}>
           <Link to="/relaciones/$id" params={{ id: r.id }} search={{ desde: documento }}><Icono nombre="pila" tam={15} />Ver lado a lado{r.alineaciones ? ` (${r.alineaciones})` : ''}</Link>
         </Boton>
-        {!r.confirmada ? <Boton variante="fantasma" tam="p" icono="hecho" cargando={confirmando} onClick={() => void confirmar()}>Confirmar</Boton> : null}
-        <span className="text-[0.75rem] text-apagado">Confianza {Math.round(r.confianza * 100)} %, {r.fuente === 'modelo' ? 'propuesta por el modelo' : r.fuente === 'wikidata' ? 'según Wikidata' : r.fuente === 'metadatos' ? 'por los metadatos' : 'marcada a mano'}</span>
+        <span className="text-[0.75rem] text-apagado">Confianza {Math.round(r.confianza * 100)} %, {r.fuente === 'modelo' ? 'propuesta por el modelo' : r.fuente === 'wikidata' ? 'según Wikidata' : r.fuente === 'metadatos' ? 'por los metadatos' : 'puesta a mano'}</span>
       </div>
+      <AccionesRelacion r={r} documento={documento} className="mt-2" />
     </li>
   );
 }

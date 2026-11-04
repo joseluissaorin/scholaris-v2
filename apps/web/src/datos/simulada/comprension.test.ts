@@ -66,3 +66,37 @@ describe('las obras inventadas de la demostración', () => {
     }
   });
 });
+
+describe('la demostración: relaciones a mano y medios', () => {
+  const enviar = async <T,>(metodo: string, ruta: string, cuerpo?: unknown) => {
+    const r = await fetchSimulado(`/api/v2${ruta}`, { method: metodo, ...(cuerpo ? { body: JSON.stringify(cuerpo), headers: { 'content-type': 'application/json' } } : {}) });
+    return { estado: r.status, datos: (await r.json()) as T };
+  };
+
+  it('poner, rechazar y no repetir una relación; alinear con su avance', async () => {
+    const nueva = await enviar<{ id: string; confirmada: boolean; sentido: string }>('POST', '/relaciones', { origen: ID_CUENTO, destino: 'd-quijote', tipo: 'comenta_a' });
+    expect(nueva.estado).toBe(201);
+    expect(nueva.datos).toMatchObject({ confirmada: true, sentido: 'origen' });
+    expect((await enviar('POST', '/relaciones', { origen: 'd-quijote', destino: ID_CUENTO, tipo: 'relacionado' })).estado).toBe(400);
+    expect((await enviar('POST', '/relaciones', { origen: ID_CUENTO, destino: 'd-quijote', tipo: 'otra' })).estado).toBe(400);
+    const lanzada = await enviar<{ relaciones: number }>('POST', `/documentos/${ID_CUENTO}/alinear`, { relacion: nueva.datos.id, forzar: true });
+    expect(lanzada.estado).toBe(202);
+    const r = await enviar<{ estadoAlineacion: { estado: string; hechos: number; total: number } }>('GET', `/relaciones/${nueva.datos.id}`);
+    expect(r.datos.estadoAlineacion).toMatchObject({ estado: 'en_marcha', hechos: 0, total: 4 });
+    expect((await enviar('DELETE', `/relaciones/${nueva.datos.id}`)).datos).toEqual({ borrada: true });
+    expect((await enviar('GET', `/relaciones/${nueva.datos.id}`)).estado).toBe(404);
+  });
+
+  it('la revisión de la transcripción: simular no lanza nada; la película, aplicada con sus huecos', async () => {
+    const sim = await enviar<{ lanzada: boolean; estimacion: { hara: string[]; usd: number } }>('POST', '/documentos/d-rice/transcripcion/revisar', { simular: true });
+    expect(sim.datos.lanzada).toBe(false);
+    expect(sim.datos.estimacion.hara).toEqual(['proxy', 'huecos', 'reescritura']);
+    expect(sim.datos.estimacion.usd).toBeGreaterThan(0);
+    expect((await enviar('GET', '/documentos/d-rice/transcripcion/revision')).estado).toBe(404);
+    const peli = await enviar<{ aplicada: string; cobertura: { antes: { lista: unknown[] }; despues: { lista: unknown[] } } }>('GET', `/documentos/${ID_PELICULA}/transcripcion/revision`);
+    expect(peli.datos.aplicada).toBeTruthy();
+    expect(peli.datos.cobertura.despues.lista.length).toBeLessThan(peli.datos.cobertura.antes.lista.length);
+    const tope = await enviar('POST', '/medios/percibir', { confirmar: true, presupuestoUsd: 0.01 });
+    expect(tope.estado).toBe(409);
+  });
+});

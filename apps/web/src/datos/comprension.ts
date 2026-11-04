@@ -5,15 +5,15 @@
  * el canal de tiempo real (evento «comprension») y, si no llega, se consulta cada
  * pocos segundos mientras está en marcha.
  *
- * Las relaciones y las alineaciones (ola 2, transmedia) todavía no tienen método
- * en el cliente tipado: se piden con `api().pedir` y el tipo de lib/comprension.
+ * Las relaciones y las alineaciones son las de transmedia (contrato/transmedia.ts):
+ * crearlas a mano, confirmarlas, rechazarlas y alinearlas, con su avance.
  */
 import { useEffect, useState, useSyncExternalStore } from 'react';
 import { queryOptions, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import type { Alineacion, Ficha, TipoCorrespondencia } from '@scholaris/nucleo';
-import type { AparicionVista, MapaComprension, Pagina, PedirComprension } from '@scholaris/contrato';
+import type { AparicionVista, MapaComprension, Pagina, PedirComprension, PedirRelacion, PedirTransmediaBiblioteca, RelacionVista, TransmediaLanzada } from '@scholaris/contrato';
 import { api, escucharTiempoReal } from './api';
-import type { AvanceVivo, RelacionVista } from '../lib/comprension';
+import type { AvanceVivo } from '../lib/comprension';
 
 /** Las páginas de una lista hasta el final (o hasta `max`). */
 async function todas<T>(pedir: (desde: number) => Promise<Pagina<T> | T[]>, max = 20_000): Promise<T[]> {
@@ -62,19 +62,22 @@ export const qc = {
   estados: () => queryOptions({ queryKey: ['comprension', 'estados'], queryFn: () => api().comprension.estados(), staleTime: 30_000 }),
   relaciones: (id: string) => queryOptions({
     queryKey: ['comprension', 'relaciones', id],
-    queryFn: async () => { try { return await api().pedir<RelacionVista[]>('GET', `/documentos/${encodeURIComponent(id)}/relaciones`); } catch (e) { if ((e as { estado?: number }).estado === 404) return []; throw e; } },
-    staleTime: 5 * 60_000,
+    queryFn: async () => { try { return await api().relaciones.deDocumento(id); } catch (e) { if ((e as { estado?: number }).estado === 404) return []; throw e; } },
+    staleTime: 60_000,
     retry: 0,
+    // Mientras alguna se alinea, se mira cada pocos segundos (el avance va en `estadoAlineacion`).
+    refetchInterval: (q) => (q.state.data?.some((r) => r.estadoAlineacion?.estado === 'en_marcha') ? 5000 : false),
   }),
   relacion: (id: string) => queryOptions({
     queryKey: ['comprension', 'relacion', id],
-    queryFn: () => api().pedir<RelacionVista>('GET', `/relaciones/${encodeURIComponent(id)}`),
-    staleTime: 5 * 60_000,
+    queryFn: () => api().relaciones.obtener(id),
+    staleTime: 60_000,
     retry: (n, e) => (e as { estado?: number })?.estado !== 404 && n < 1,
+    refetchInterval: (q) => (q.state.data?.estadoAlineacion?.estado === 'en_marcha' ? 5000 : false),
   }),
   alineaciones: (relacion: string, tipo?: TipoCorrespondencia) => queryOptions({
     queryKey: ['comprension', 'alineaciones', relacion, tipo ?? ''],
-    queryFn: () => todas<Alineacion>((desde) => api().pedir<Pagina<Alineacion> | Alineacion[]>('GET', `/relaciones/${encodeURIComponent(relacion)}/alineaciones`, undefined, { desde, limite: 500, ...(tipo ? { tipo } : {}) })),
+    queryFn: () => todas<Alineacion>((desde) => api().relaciones.alineaciones(relacion, { desde, limite: 500, ...(tipo ? { tipo } : {}) })),
     staleTime: 5 * 60_000,
   }),
 };
@@ -151,10 +154,45 @@ export function aparicionesFuera(documentos: string[], entidad: string) {
   });
 }
 
+/** Lo que cambia al tocar una relación: la lista de cada documento, la propia relación y sus alineaciones. */
+async function refrescarRelaciones(qcl: QueryClient, id?: string) {
+  await qcl.invalidateQueries({ queryKey: ['comprension', 'relaciones'] });
+  if (id) { await qcl.invalidateQueries({ queryKey: ['comprension', 'relacion', id] }); await qcl.invalidateQueries({ queryKey: ['comprension', 'alineaciones', id] }); }
+}
+
 /** Confirma que una relación detectada es cierta (pasa a ser del usuario y la detección no la toca). */
 export async function confirmarRelacion(qcl: QueryClient, id: string): Promise<RelacionVista> {
-  const r = await api().pedir<RelacionVista>('POST', `/relaciones/${encodeURIComponent(id)}/confirmar`);
-  qcl.setQueryData(qc.relacion(id).queryKey, (x) => (x ? { ...x, confirmada: true, fuente: 'usuario' as const } : x));
+  const r = await api().relaciones.confirmar(id);
+  qcl.setQueryData(qc.relacion(id).queryKey, r);
+  await refrescarRelaciones(qcl, id);
+  return r;
+}
+
+/** Pone una relación a mano (la alineación se pide aparte). */
+export async function crearRelacion(qcl: QueryClient, p: PedirRelacion): Promise<RelacionVista> {
+  const r = await api().relaciones.crear(p);
+  await refrescarRelaciones(qcl);
+  return r;
+}
+
+/** Rechaza una relación: se borra con sus alineaciones y la detección no la vuelve a proponer. */
+export async function rechazarRelacion(qcl: QueryClient, id: string): Promise<void> {
+  await api().relaciones.rechazar(id);
+  qcl.removeQueries({ queryKey: ['comprension', 'relacion', id] });
+  qcl.removeQueries({ queryKey: ['comprension', 'alineaciones', id] });
   await qcl.invalidateQueries({ queryKey: ['comprension', 'relaciones'] });
+}
+
+/** Vuelve a alinear una relación (o detecta y alinea todas las de un documento). */
+export async function alinear(qcl: QueryClient, documento: string, relacion?: string, forzar = true): Promise<TransmediaLanzada> {
+  const r = await api().relaciones.alinear(documento, { ...(relacion ? { relacion } : {}), ...(forzar ? { forzar: true } : {}) });
+  await refrescarRelaciones(qcl, relacion);
+  return r;
+}
+
+/** Detecta (y, si se pide, alinea) las relaciones de toda la biblioteca. */
+export async function detectarEnBiblioteca(qcl: QueryClient, p: PedirTransmediaBiblioteca = {}): Promise<TransmediaLanzada> {
+  const r = await api().relaciones.biblioteca(p);
+  await refrescarRelaciones(qcl);
   return r;
 }

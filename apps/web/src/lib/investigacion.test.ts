@@ -104,3 +104,28 @@ describe('copiar con citas', () => {
     expect(markdownConCitas('Algo [E9].', m)).toBe('Algo.');
   });
 });
+
+describe('respuestas incompletas y errores', () => {
+  it('un error a media respuesta deja la investigación en error con lo que había (y nada más cambia luego)', async () => {
+    const { aplicarEvento, estadoInicial } = await import('./investigacion');
+    let e = estadoInicial('¿Qué pasa con el reloj?', 0);
+    e = aplicarEvento(e, { tipo: 'inicio', id: 'i', modelo: 'm', presupuesto: { pasos: 8, segundos: 90, usd: 0.1 } }, 1);
+    e = aplicarEvento(e, { tipo: 'texto', delta: 'El reloj ' }, 2);
+    e = aplicarEvento(e, { tipo: 'error', mensaje: '' }, 3);
+    expect(e.fase).toBe('error');
+    expect(e.error).toBe('La investigación falló.');
+    expect(e.texto).toBe('El reloj ');
+    expect(aplicarEvento(e, { tipo: 'texto', delta: 'más' }, 4).texto).toBe('El reloj ');
+  });
+
+  it('una respuesta final con frases sin marcas: ninguna prueba citada y todas las reunidas, aparte', async () => {
+    const { aplicarEvento, estadoInicial, pruebasCitadas, pruebasSinCitar } = await import('./investigacion');
+    const prueba = { id: 'P1', documento: 'd', titulo: 'T', ancla: { tipo: 'pagina' as const, fisica: 3, impresa: '3', romana: false, origen: 'leido' as const, confianza: 1 }, modo: 'texto' as const, capa: 'literal' as const, herramienta: 'buscar', etiqueta: 'p. 3', citaCorta: '(T, p. 3)' };
+    let e = estadoInicial('x', 0);
+    e = aplicarEvento(e, { tipo: 'evidencia', evidencia: prueba }, 1);
+    e = aplicarEvento(e, { tipo: 'fin', markdown: 'Una frase sin marca. Otra tampoco.', evidencias: [], fuentes: [], confianza: 'baja', coste: { usd: 0, tokensEntrada: 0, tokensSalida: 0, llamadas: 1, pasos: 1, ms: 1, modelo: 'm' }, avisos: [], ms: 1 }, 2);
+    expect(e.fase).toBe('hecho');
+    expect(pruebasCitadas(e).size).toBe(0);
+    expect(pruebasSinCitar(e).map((p) => p.id)).toEqual(['P1']);
+  });
+});

@@ -82,7 +82,7 @@ describe('estructura', () => {
     expect(avanceComprension(null)).toEqual({ valor: 0, texto: 'En cola' });
     expect(avanceComprension({ estado: 'en_marcha', pasos: {} }).texto).toBe('Leyendo la estructura de la obra');
     const medio = avanceComprension({ estado: 'en_marcha', pasos: { estructura: { hecho: '', ms: 1, usd: 0, detalle: { lotes: 4 } }, 'fichas:0': { hecho: '', ms: 1, usd: 0 }, 'fichas:1': { hecho: '', ms: 1, usd: 0 } } });
-    expect(medio.valor).toBeCloseTo(0.4);
+    expect(medio.valor).toBeCloseTo(0.375);
     expect(medio.texto).toBe('Escribiendo las fichas: 2 de 4 tandas');
     expect(avanceComprension({ estado: 'en_marcha', pasos: {} }, { paso: 'global', avance: 0.75, mensaje: 'Escribiendo la ficha global de la obra' })).toEqual({ valor: 0.75, texto: 'Escribiendo la ficha global de la obra' });
     expect(avanceComprension({ estado: 'hecho', pasos: {} }).valor).toBe(1);
@@ -193,5 +193,24 @@ describe('la ficha de una relación', () => {
     expect(cambiosPorAspecto(cs).map(([a]) => a)).toEqual(['estructura', 'final']);
     expect(personajesDeFicha(f)).toEqual([{ nombre: 'Nieves', cambio: 'anadido', nota: 'Vecina.', pruebas: { a: [2], b: [] } }]);
     expect(cambiosDeFicha(undefined)).toEqual([]);
+  });
+});
+
+describe('los pasos de la comprensión', () => {
+  it('cada paso con su estado, las fichas por tandas y los personajes aparte', async () => {
+    const { pasosDeComprension, textoAlineacion, pedidoRelacion } = await import('./comprension');
+    const pasos = { estructura: { hecho: 'x', ms: 1000, usd: 0.1, detalle: { lotes: 2 } }, 'fichas:0': { hecho: 'x', ms: 2000, usd: 0.2 }, entidades: { hecho: 'x', ms: 500, usd: 0.05 } };
+    const l = pasosDeComprension({ estado: 'en_marcha', pasos });
+    expect(l.map((p) => [p.paso, p.estado])).toEqual([['estructura', 'hecho'], ['fichas', 'en_marcha'], ['entidades', 'hecho'], ['personajes', 'pendiente'], ['global', 'pendiente'], ['indexado', 'pendiente']]);
+    expect(l[1]!.detalle).toBe('1 de 2 tandas');
+    // El aviso en vivo manda: si dice «personajes», ese es el que está en marcha.
+    expect(pasosDeComprension({ estado: 'en_marcha', pasos }, { paso: 'personajes', avance: 0.6, mensaje: '' }).find((p) => p.estado === 'en_marcha')?.paso).toBe('personajes');
+    expect(pasosDeComprension({ estado: 'hecho', pasos: {} }).every((p) => p.estado === 'hecho')).toBe(true);
+    expect(pasosDeComprension({ estado: 'error', pasos }).some((p) => p.estado === 'en_marcha')).toBe(false);
+    expect(textoAlineacion({ estado: 'en_marcha', alineaciones: 0, usd: 0, avisos: [], actualizado: '', hechos: 3, total: 9 })).toEqual({ texto: 'Alineando 3 de 9 grupos', valor: 1 / 3, tono: 'marcha' });
+    expect(textoAlineacion({ estado: 'error', alineaciones: 0, usd: 0, avisos: [], actualizado: '', error: 'Sin memoria.' })?.texto).toBe('Sin memoria.');
+    expect(pedidoRelacion('peli', 'cuento', 'adaptacion_de', 'origen')).toEqual({ origen: 'peli', destino: 'cuento', tipo: 'adaptacion_de' });
+    expect(pedidoRelacion('cuento', 'peli', 'adaptacion_de', 'destino', ' guion de la autora ')).toEqual({ origen: 'peli', destino: 'cuento', tipo: 'adaptacion_de', nota: 'guion de la autora' });
+    expect(pedidoRelacion('a', 'b', 'misma_obra', 'destino')).toMatchObject({ origen: 'a', destino: 'b' });
   });
 });

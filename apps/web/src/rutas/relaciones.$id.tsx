@@ -19,6 +19,7 @@ import { qc } from '../datos/comprension';
 import { esNoEncontrado } from '../componentes/comunes/errores';
 import { cuentaCorrespondencias, NOMBRE_CORRESPONDENCIA, NOMBRE_RELACION, SENTIDO_CORRESPONDENCIA, verboRelacion } from '../lib/comprension';
 import { CambiosRelacion, FilaAlineacion, FormaCorrespondencia, VisorLado } from '../componentes/comprension/alineaciones';
+import { AccionesRelacion, EstadoAlineacion } from '../componentes/comprension/relaciones';
 
 interface BusquedaRelacion { desde?: string; al?: string; tipo?: TipoCorrespondencia }
 // Aquí y no de lib/comprension: la validación va en el trozo inicial y no debe arrastrar la biblioteca entera.
@@ -54,7 +55,8 @@ function LadoALado() {
   const der = izq === r.origen ? r.destino : r.origen;
   const { data: docIzq } = useQuery(q.documento(izq));
   const { data: docDer } = useQuery(q.documento(der));
-  const { data: todas, isPending } = useQuery(qc.alineaciones(id));
+  // Mientras se alinea, las correspondencias van llegando: se piden de nuevo cada pocos segundos.
+  const { data: todas, isPending } = useQuery({ ...qc.alineaciones(id), refetchInterval: r.estadoAlineacion?.estado === 'en_marcha' ? 6000 : false });
   const { data: segIzq } = useQuery(qc.segmentos(izq));
   const { data: segDer } = useQuery(qc.segmentos(der));
   const segmentos = useMemo(() => new Map<string, Segmento>([...(segIzq ?? []), ...(segDer ?? [])].map((s) => [s.id, s])), [segIzq, segDer]);
@@ -109,8 +111,8 @@ function LadoALado() {
           {resumen ? <p className="mt-2 text-[1rem] text-coffee-700">{resumen}</p> : null}
           {ficha?.texto ? <p className="lectura mt-3 text-[0.9375rem] leading-relaxed text-coffee-800">{ficha.texto}</p> : null}
           {ficha ? <CambiosRelacion ficha={ficha} tituloA={r.origen === izq ? tituloIzq : tituloDer} tituloB={r.destino === izq ? tituloIzq : tituloDer} className="mt-4" /> : null}
-          {r.estadoAlineacion?.estado === 'en_marcha' ? <p role="status" className="mt-3 flex items-center gap-2 text-[0.875rem] text-coffee-700"><span aria-hidden className="h-2 w-2 rounded-full bg-rojo anim-pulso" />Alineando las dos obras: las correspondencias aparecen según se calculan.</p> : null}
-          {r.estadoAlineacion?.estado === 'error' ? <p role="alert" className="mt-3 text-[0.875rem] text-rojo">{r.estadoAlineacion.error ?? 'La alineación se detuvo con un error.'}</p> : null}
+          <EstadoAlineacion r={r} documento={izq} className="mt-4 max-w-xl" />
+          <AccionesRelacion r={r} documento={izq} className="mt-3" alRechazar={() => void navegar({ to: '/documentos/$id/comprension', params: { id: izq }, search: { ver: 'relaciones' } })} />
         </header>
 
         {todas?.length ? (

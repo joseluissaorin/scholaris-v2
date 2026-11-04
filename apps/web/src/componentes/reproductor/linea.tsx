@@ -25,13 +25,15 @@ interface Props {
   fotogramas?: Fotogramas | null;
   /** El instante citado (?t=): un triángulo amarillo encima del trazo. */
   marca?: number | null;
+  /** Huecos de la transcripción (suena y no hay palabras, o sus tiempos están rotos): una raya roja a trazos bajo la línea. */
+  huecos?: ReadonlyArray<{ t0: number; t1: number; motivo: 'sin_texto' | 'tiempos_rotos' }>;
   oscura?: boolean;
   className?: string;
 }
 
 const fraccion = (t: number, d: number) => (d > 0 ? Math.max(0, Math.min(1, t / d)) : 0);
 
-export const LineaTiempo = memo(function LineaTiempo({ duracion, transcripcion, capitulos = [], fotogramas, marca, oscura, className }: Props) {
+export const LineaTiempo = memo(function LineaTiempo({ duracion, transcripcion, capitulos = [], fotogramas, marca, huecos, oscura, className }: Props) {
   const raiz = useRef<HTMLDivElement>(null);
   const oido = useRef<HTMLDivElement>(null);
   const cabezal = useRef<HTMLDivElement>(null);
@@ -130,6 +132,9 @@ export const LineaTiempo = memo(function LineaTiempo({ duracion, transcripcion, 
       {/* Turnos de palabra */}
       {transcripcion && duracion ? <Turnos transcripcion={transcripcion} duracion={duracion} /> : null}
 
+      {/* Huecos de la transcripción: rayas rojas a trazos bajo el trazo */}
+      {huecos?.length && duracion ? <Huecos huecos={huecos} duracion={duracion} /> : null}
+
       {/* Capítulos: círculos sobre el trazo */}
       {capitulos.map((c) => (
         <span key={`${c.t0}-${c.titulo}`} className="pointer-events-none absolute top-[11px] h-[10px] w-[10px] -translate-x-1/2 rounded-full border-2 border-azul bg-[var(--linea-fondo)]" style={{ left: `${fraccion(c.t0, duracion) * 100}%` }} />
@@ -149,8 +154,20 @@ export const LineaTiempo = memo(function LineaTiempo({ duracion, transcripcion, 
         </span>
       </div>
 
-      {vista ? <Vista {...vista} duracion={duracion} transcripcion={transcripcion} capitulos={capitulos} fotogramas={fotogramas ?? null} /> : null}
+      {vista ? <Vista {...vista} duracion={duracion} transcripcion={transcripcion} capitulos={capitulos} fotogramas={fotogramas ?? null} hueco={huecos?.find((h) => vista.t >= h.t0 && vista.t < h.t1) ?? null} /> : null}
     </div>
+  );
+});
+
+/** Los huecos de la transcripción: un SVG estático, a trazos (lo roto, más claro). */
+const Huecos = memo(function Huecos({ huecos, duracion }: { huecos: NonNullable<Props['huecos']>; duracion: number }) {
+  return (
+    <svg viewBox="0 0 1000 1" preserveAspectRatio="none" className="pointer-events-none absolute inset-x-0 top-[29px] h-[3px] w-full overflow-visible" aria-hidden>
+      {huecos.map((h, i) => (
+        <line key={i} x1={(h.t0 / duracion) * 1000} x2={Math.max((h.t0 / duracion) * 1000 + 1.2, (h.t1 / duracion) * 1000)} y1="0.5" y2="0.5"
+          stroke="var(--s-rojo)" strokeWidth="1" strokeDasharray="5 3" opacity={h.motivo === 'sin_texto' ? 0.85 : 0.45} vectorEffect="non-scaling-stroke" style={{ strokeWidth: 3 }} />
+      ))}
+    </svg>
   );
 });
 
@@ -174,7 +191,7 @@ const Turnos = memo(function Turnos({ transcripcion, duracion }: { transcripcion
   );
 });
 
-function Vista({ x, t, ancho, duracion, transcripcion, capitulos, fotogramas }: { x: number; t: number; ancho: number; duracion: number; transcripcion: Transcripcion | null; capitulos: Capitulo[]; fotogramas: Fotogramas | null }) {
+function Vista({ x, t, ancho, duracion, transcripcion, capitulos, fotogramas, hueco }: { x: number; t: number; ancho: number; duracion: number; transcripcion: Transcripcion | null; capitulos: Capitulo[]; fotogramas: Fotogramas | null; hueco: { motivo: 'sin_texto' | 'tiempos_rotos' } | null }) {
   const turno = transcripcion?.turnos[Math.max(0, buscarIndice(transcripcion.iniciosTurno, t))];
   const capitulo = [...capitulos].reverse().find((c) => c.t0 <= t);
   const f = fotogramas ? fotogramaEn(fotogramas, t) : -1;
@@ -191,6 +208,7 @@ function Vista({ x, t, ancho, duracion, transcripcion, capitulos, fotogramas }: 
             <p className="mt-0.5 flex items-center gap-1.5 truncate text-[0.75rem] text-coffee-600"><FormaHablante h={turno.h} tam={8} />{transcripcion.hablantes[turno.h]}</p>
           ) : null}
           {capitulo ? <p className="mt-0.5 truncate text-[0.75rem] text-apagado">{capitulo.titulo}</p> : null}
+          {hueco ? <p className="mt-0.5 text-[0.75rem] font-medium text-rojo">{hueco.motivo === 'sin_texto' ? 'Hueco: se oye y no está transcrito' : 'Hueco: tiempos de las palabras rotos'}</p> : null}
         </div>
       </div>
     </>

@@ -116,6 +116,8 @@ export function rutasTranscripcion(app: Hono<Entorno>): void {
     const sinTexto = (cb: RevisionTranscripcion['cobertura']) => ({
       activo: cb.activo, cubierto: cb.cubierto, huecos: cb.huecos.length,
       segundosSinTexto: Math.round(cb.huecos.filter((h) => h.motivo === 'sin_texto').reduce((s, h) => s + h.activo, 0)), palabrasRotas: cb.palabrasRotas,
+      // Dónde están (los primeros 400): la web los marca en la línea del tiempo del reproductor.
+      lista: cb.huecos.slice(0, 400).map((h) => ({ t0: Math.round(h.t0 * 10) / 10, t1: Math.round(h.t1 * 10) / 10, motivo: h.motivo, activo: Math.round(h.activo * 10) / 10 })),
     });
     return c.json({
       documento: id, version: r.version, modelo: r.modelo, aplicada: r.aplicada ?? null,

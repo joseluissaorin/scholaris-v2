@@ -465,3 +465,25 @@ La demostración trae un cuento y su película **inventados** para esto
 (`datos/simulada/obras-inventadas.ts`): las páginas del cuento se dibujan
 renglón a renglón, justificadas, y la región de cada ancla sale de ese dibujo;
 los fotogramas son un guion gráfico con cada personaje en su región.
+
+**Lo que gasta modelo se confirma con su coste delante.** Comprender un documento
+abre un diálogo con lo que costaría (aproximado: `lib/estimacion.ts` hace la misma
+cuenta que el flujo al planificar, con los precios de los modelos; la API todavía
+no la da) y la opción del modelo rápido; durante, cada paso con su estado
+(estructura, tandas de fichas, entidades, personajes, ficha global, índice) y,
+después, lo que tardó y costó cada uno y los avisos del flujo. En **Ajustes ›
+Biblioteca**: comprender lo que falta de la biblioteca, percibir los audios y
+vídeos (o solo revisar sus transcripciones) con la estimación de la API documento
+a documento, un tope de gasto y el avance de cada medio, y buscar relaciones.
+
+**Relaciones a mano**: añadir una (con quién es quién en palabras: «*A* está
+adaptada en *B*»), confirmarla, rechazarla (con confirmación: la detección no la
+vuelve a proponer) y volver a alinear; la alineación enseña su avance («Alineando
+3 de 9 grupos»), se refresca sola y, si falla, dice por qué con «Volver a
+alinear».
+
+**La transcripción de un medio** (`componentes/medios/revision.tsx`, en la
+columna del reproductor): cuánto de lo que suena está transcrito, antes y después
+de la revisión, los huecos que quedan (marcados en rojo, a trazos, bajo la línea
+del tiempo, con su motivo al pasar por encima) y «Revisar la transcripción», que
+simula primero y enseña lo que se hará y lo que costaría.

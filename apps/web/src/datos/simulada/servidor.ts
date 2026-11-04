@@ -14,6 +14,7 @@ import type {
 import { anclaDe, BIBLIOTECAS, DOCUMENTOS, LIBRO_EN_CURSO, textoDe, type DocDemo } from './corpus';
 import { BIBLIOTECA_INVENTADA, CUENTO, PELICULA } from './obras-inventadas';
 import { figurasInventadas, mencionesInventadas, pruebaVisualInventada, regionDeCaracteres, registrarComprension } from './comprension';
+import { registrarMedios } from './medios';
 
 export const configSimulada: ConfigPublica = {
   modo: 'local', version: '2.0.0-demo', requiereAutenticacion: false,
@@ -340,6 +341,16 @@ async function* investigar(p: Investigar): AsyncGenerator<EventoInvestigacion> {
     return;
   }
   const corta = p.pregunta.length > 70 ? `${p.pregunta.slice(0, 68).replace(/\s+\S*$/, '')}…` : p.pregunta;
+  // Para ver cómo se porta la interfaz cuando la investigación se corta: una pregunta que diga «error» falla a media respuesta.
+  if (/\berror\b/i.test(p.pregunta)) {
+    yield { tipo: 'plan', plan: { enfoque: 'Comprobar cómo se ve una investigación que se corta.', documentos: elegidos.slice(0, 1).map((r) => ({ id: r.documento.id, titulo: r.documento.metadatos.titulo, papel: 'la obra de prueba' })), subpreguntas: [{ pregunta: p.pregunta, pruebas: ['literal'] }], idiomas: ['es'], idiomaRespuesta: 'es' } };
+    await espera(600 * f);
+    yield { tipo: 'paso', n: 1, herramienta: 'buscar', entrada: { consulta: p.pregunta }, resumen: `${res.length} pasajes`, ms: 320, evidencias: [] };
+    await espera(500 * f);
+    for (const trozo of ['La ', 'investigación ', 'empezaba ', 'a ', 'escribir ', 'cuando…']) { await espera(60); yield { tipo: 'texto', delta: trozo }; }
+    yield { tipo: 'error', mensaje: 'No he podido terminar la investigación. Vuelve a intentarlo.' };
+    return;
+  }
 
   yield {
     tipo: 'plan',
@@ -971,6 +982,21 @@ ruta('POST', '/subidas/url', (_m, c) => {
 ruta('DELETE', '/subidas/:id', () => ok());
 // La comprensión: mapa, segmentos, fichas, apariciones, relaciones y alineaciones (comprension.ts).
 registrarComprension({ ruta, json, error, emitir, documento: (id) => { const d = docs.get(id); return d && !d.borrado ? d : undefined; } });
+
+/** Una tarea de reproceso de la demo (revisar o percibir un medio) que termina sola al cabo de `ms`. */
+function tareaSimulada(documento: string, ms: number, alTerminar: () => void): string {
+  const id = `tarea-medio-${documento}-${Date.now().toString(36)}`;
+  const t: Tarea = { id, tipo: 'reproceso', estado: 'procesando', documento, creada: ahora(), actualizada: ahora() };
+  tareas.set(id, t);
+  setTimeout(() => {
+    t.estado = 'listo'; t.terminada = ahora(); t.actualizada = ahora();
+    alTerminar();
+    emitir({ tipo: 'fin', tarea: id, documento, estado: 'listo' });
+  }, ms);
+  return id;
+}
+// La transcripción revisada y la percepción de los medios (medios.ts).
+registrarMedios({ ruta, json, error, emitir, documento: (id) => { const d = docs.get(id); return d && !d.borrado ? d : undefined; }, documentos: () => [...docs.values()], tarea: tareaSimulada });
 ruta('POST', '/tiempo-real/billete', () => json({ billete: 'demo', url: 'simulado:', caduca: ahora() }));
 
 function estimarUnidades(tipo: TipoEntrada, bytes: number) {

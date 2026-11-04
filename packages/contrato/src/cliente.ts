@@ -6,7 +6,7 @@
  *   const { elementos } = await api.documentos.listar({ orden: 'anio' });
  */
 
-import type { Ficha, Filtros, Lente, MetadatosDocumento, ObjetivoFicha, RolAparicion, Segmento, TipoSegmento } from '@scholaris/nucleo';
+import type { Alineacion, Ficha, Filtros, Lente, MetadatosDocumento, ObjetivoFicha, RolAparicion, Segmento, TipoCorrespondencia, TipoSegmento } from '@scholaris/nucleo';
 import { ErrorApi, PREFIJO_API, type CodigoError, type CuerpoError, type Ok, type Pagina, type ParamsPagina, type RefTarea } from './comun.js';
 import type {
   Ajustes, CanjearCupon, ClaveApi, ClaveApiCreada, Concesion, ConcederPlan, ConfigPublica, CrearClaveApi, CrearLoteCupones, CuponAdmin,
@@ -20,6 +20,10 @@ import type {
   ParcheMetadatos, PedirPartesImportacion, RehacerFolios,
   Reprocesar, ResumenDocumento, SeccionVista, UnidadVista, VolcadoDocumento,
 } from './documentos.js';
+import type { PedirAlineacion, PedirRelacion, PedirTransmediaBiblioteca, RelacionVista, TransmediaLanzada } from './transmedia.js';
+import type {
+  EstimacionMedios, MediosLanzados, PedirMediosBiblioteca, RevisarTranscripcion, RevisionLanzada, RevisionSimulada, RevisionTranscripcionVista,
+} from './medios.js';
 import type {
   AparicionVista, ComprensionBiblioteca, ComprensionLanzada, EstadoComprensionVista, MapaComprension, PedirComprension, PedirComprensionBiblioteca,
 } from './comprension.js';
@@ -254,6 +258,32 @@ export function crearCliente(opciones: OpcionesCliente) {
       biblioteca: (p: PedirComprensionBiblioteca = {}) => post<ComprensionBiblioteca>('/comprension/biblioteca', p),
       /** El estado de la comprensión de cada documento que la tiene o la tuvo en marcha. */
       estados: () => get<EstadoComprensionVista[]>('/comprension'),
+    },
+
+    /**
+     * Relaciones entre obras y sus alineaciones (contrato/transmedia.ts): leerlas,
+     * crearlas a mano, confirmarlas, rechazarlas (la detección no las vuelve a
+     * proponer) y pedir que se detecten y se alineen.
+     */
+    relaciones: {
+      deDocumento: (documento: string) => get<RelacionVista[]>(`/documentos/${e(documento)}/relaciones`),
+      obtener: (id: string) => get<RelacionVista>(`/relaciones/${e(id)}`),
+      alineaciones: (id: string, p: { tipo?: TipoCorrespondencia; desde?: number; limite?: number } = {}) => get<Pagina<Alineacion>>(`/relaciones/${e(id)}/alineaciones`, p),
+      crear: (p: PedirRelacion) => post<RelacionVista>('/relaciones', p),
+      confirmar: (id: string) => post<RelacionVista>(`/relaciones/${e(id)}/confirmar`),
+      rechazar: (id: string) => del<{ borrada: true }>(`/relaciones/${e(id)}`),
+      /** Detecta y alinea las relaciones de un documento (o rehace una, con `relacion` y `forzar`). */
+      alinear: (documento: string, p: PedirAlineacion = {}) => post<TransmediaLanzada>(`/documentos/${e(documento)}/alinear`, p),
+      biblioteca: (p: PedirTransmediaBiblioteca = {}) => post<TransmediaLanzada>('/transmedia/biblioteca', p),
+    },
+
+    /** La transcripción revisada de los medios y la percepción de los que ya están (contrato/medios.ts). */
+    medios: {
+      revision: (documento: string) => get<RevisionTranscripcionVista>(`/documentos/${e(documento)}/transcripcion/revision`),
+      /** Con `simular`, solo la estimación; sin él, lanza el trabajo. */
+      revisar: (documento: string, p: RevisarTranscripcion = {}) => post<RevisionSimulada | RevisionLanzada>(`/documentos/${e(documento)}/transcripcion/revisar`, p),
+      revisarBiblioteca: (p: PedirMediosBiblioteca = {}) => post<EstimacionMedios | MediosLanzados>('/transcripcion/revisar', p),
+      percibir: (p: PedirMediosBiblioteca = {}) => post<EstimacionMedios | MediosLanzados>('/medios/percibir', p),
     },
 
     /** Figuras e imágenes de toda la biblioteca (láminas, diagramas, fotogramas). */

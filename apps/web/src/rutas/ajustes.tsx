@@ -7,6 +7,7 @@ export const Route = createFileRoute('/ajustes')({
       <Cabecera antetitulo="Tu cuenta, tus claves, tus datos" titulo="Ajustes" forma="circulo" color="var(--s-amarillo)" compacta />
       <Pestanas etiqueta="Ajustes" elementos={[
         { a: '/ajustes', texto: 'Cuenta y plan', exacta: true },
+        { a: '/ajustes/biblioteca', texto: 'Biblioteca' },
         { a: '/ajustes/claves', texto: 'Claves' },
         { a: '/ajustes/privacidad', texto: 'Privacidad' },
         { a: '/ajustes/apariencia', texto: 'Apariencia' },

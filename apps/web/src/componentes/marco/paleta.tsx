@@ -69,10 +69,12 @@ export default function Paleta({ abierta, alCambiar }: { abierta: boolean; alCam
       ['Historial de búsquedas', 'historial', () => void navegar({ to: '/buscar/historial' })],
       ['Ajustes', 'ajustes', () => void navegar({ to: '/ajustes' })],
       ['Claves de API y MCP', 'llave', () => void navegar({ to: '/ajustes/claves' })],
+      ['Comprender la biblioteca, percibir los medios y buscar relaciones', 'chispa', () => void navegar({ to: '/ajustes/biblioteca' })],
     ];
     const enLector = /^\/lector\/([^/]+)/.exec(ruta)?.[1];
     const acciones: Array<[string, NombreIcono, () => void]> = [
       ...(enLector ? [['Copiar referencia de este documento', 'citar', () => void copiarReferencia(decodeURIComponent(enLector))] as [string, NombreIcono, () => void]] : []),
+      ...(enLector ? [['Ver la comprensión de este documento', 'chispa', () => void navegar({ to: '/documentos/$id/comprension', params: { id: decodeURIComponent(enLector) } })] as [string, NombreIcono, () => void]] : []),
       ['Añadir archivos', 'subir', () => disparar('archivos')],
       ['Añadir desde un enlace', 'enlace', () => disparar('enlace')],
       ['Fotografiar páginas', 'camara', () => disparar('camara')],

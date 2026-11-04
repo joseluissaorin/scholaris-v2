@@ -5,8 +5,9 @@ import { api } from '../datos/api';
 export const nombreFichero = (titulo: string) => titulo.replace(/[\\/:*?"<>|]+/g, ' ').trim().slice(0, 80) || 'documento';
 
 /**
- * Descarga el .spdf que arma el servidor: el 4.1 de la estantería o, con
- * `version: 5`, el SPDF 5.0 abierto. Si algo se quedó fuera, el servidor lo
+ * Descarga el .spdf que arma el servidor: el 4.x de la estantería (con la capa de
+ * comprensión: estructura, fichas, apariciones y relaciones) o, con `version: 5`,
+ * el SPDF 5.0 abierto con la extensión `scholaris_comprension`. Si algo se quedó fuera, el servidor lo
  * dice en `x-scholaris-aviso` (con encodeURIComponent) junto a
  * `x-scholaris-omitidos: N`; se enseña en un aviso que no bloquea.
  */
@@ -14,7 +15,8 @@ export async function descargarSpdfServidor(id: string, titulo: string, opciones
   const v5 = opciones.version === 5;
   avisar(v5 ? `Preparando «${titulo}.spdf» en SPDF 5.0…` : `Preparando «${titulo}.spdf»…`);
   try {
-    const res = await api().bruto('GET', `/documentos/${encodeURIComponent(id)}/spdf`, undefined, v5 ? { version: '5' } : undefined);
+    // El 4.x lo arma el servidor con la capa de comprensión (SPDF 4.2); se pide explícito para no depender del valor por defecto.
+    const res = await api().bruto('GET', `/documentos/${encodeURIComponent(id)}/spdf`, undefined, { version: v5 ? '5' : '4' });
     const datos = await res.blob();
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob([datos], { type: v5 ? 'application/vnd.spdf+sqlite3' : 'application/x-spdf' }));

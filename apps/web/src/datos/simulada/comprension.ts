@@ -11,12 +11,12 @@
  * cae sobre las palabras que señala.
  */
 import { anclaACita, type Alineacion, type AnclaMaterial, type Aparicion, type Evidencia, type Ficha, type LadoAlineacion, type Lente, type Region, type Relacion, type Segmento, type TipoCorrespondencia, type TipoSegmento } from '@scholaris/nucleo';
-import type { AparicionVista, EstadoComprensionVista, EventoTiempoReal, EvidenciaInvestigacion, FiguraVista, MapaComprension } from '@scholaris/contrato';
+import type { AparicionVista, EstadoAlineacionVista, EstadoComprensionVista, EventoTiempoReal, EvidenciaInvestigacion, FiguraVista, MapaComprension } from '@scholaris/contrato';
 import { anclaDe, textoDe, type DocDemo } from './corpus';
 import {
   CUENTO, ENTIDADES_INVENTADAS, ESCENAS_CUENTO, ID_CUENTO, ID_PELICULA, PELICULA, SECUENCIAS, type EscenaInventada, type PlanoInventado, type Visto,
 } from './obras-inventadas';
-import type { RelacionVista } from '../../lib/comprension';
+import type { RelacionVista } from '@scholaris/contrato';
 
 const CREADA = '2026-10-22T09:14:00Z';
 const MODELO = 'gemini-4-argon';
@@ -676,6 +676,9 @@ interface Ayudas {
   documento: (id: string) => DocDemo | undefined;
 }
 
+/** Estado de una relación de la demo: la relación, sus alineaciones y cómo va su alineación. */
+interface RelacionDemo { r: Relacion & { ficha?: Ficha }; als: Alineacion[]; estado?: EstadoAlineacionVista; confirmada: boolean }
+
 const estados = new Map<string, EstadoDemo>();
 let preparado = false;
 function preparar() {
@@ -768,14 +771,13 @@ export function registrarComprension(h: Ayudas): void {
     return json({ elementos: lista.slice(desde, desde + limite), total: lista.length, ...(desde + limite < lista.length ? { siguiente: String(desde + limite) } : {}) });
   });
   ruta('GET', '/comprension', () => json([...estados.values()].map((e) => e.estado).sort((a, b) => b.actualizado.localeCompare(a.actualizado))));
-  ruta('POST', '/comprension/biblioteca', () => json({ encolados: 0, lanzados: 0 }, 200, 202));
-  ruta('POST', '/documentos/:id/comprender', (m, c: { forzar?: boolean; lentes?: Lente[] }) => {
-    const id = m[1]!;
+  /** Lanza la comprensión simulada de un documento (o dice que ya está hecha o en marcha). */
+  const comprender = (id: string, c: { forzar?: boolean; lentes?: Lente[] } = {}): { estado: 'hecho' | 'en_marcha'; instancia: string | null } | null => {
     const d = h.documento(id);
-    if (!d) return error(404, 'no_encontrado', 'El documento no existe.');
+    if (!d) return null;
     const previo = estados.get(id);
-    if (previo?.estado.estado === 'hecho' && !c.forzar) return json({ documento: id, instancia: null, estado: 'hecho' }, 200, 202);
-    if (previo?.estado.estado === 'en_marcha') return json({ documento: id, instancia: `demo-${id}`, estado: 'en_marcha' }, 200, 202);
+    if (previo?.estado.estado === 'hecho' && !c.forzar) return { estado: 'hecho', instancia: null };
+    if (previo?.estado.estado === 'en_marcha') return { estado: 'en_marcha', instancia: `demo-${id}` };
     const inventada = id === ID_PELICULA || id === ID_CUENTO;
     const lente = c.lentes?.[0] ?? (inventada ? previo!.estado.lentes[0]! : LENTE_DE[id] ?? 'general');
     const ahora = new Date().toISOString();
@@ -783,8 +785,9 @@ export function registrarComprension(h: Ayudas): void {
     const guardado = previo;
     estados.set(id, { estado: vacio, segmentos: inventada ? guardado!.segmentos : [], fichas: inventada ? guardado!.fichas.filter((f) => f.clase !== 'global') : [], apariciones: inventada ? guardado!.apariciones : [] });
     const pasos: Array<[string, number, string, number]> = [
-      ['estructura', 0.15, 'Leyendo la estructura de la obra', 1400], ['fichas', 0.4, 'Fichas: tanda 1 de 2', 1500], ['fichas', 0.65, 'Fichas: tanda 2 de 2', 1500],
-      ['entidades', 0.7, 'Reconociendo personajes, lugares y motivos', 1200], ['global', 0.75, 'Escribiendo la ficha global de la obra', 1600], ['indexado', 0.92, 'Indexando las fichas para la búsqueda', 900],
+      ['estructura', 0.15, 'Leyendo la estructura de la obra', 1400], ['fichas', 0.4, 'Fichas: tanda 1 de 2', 1500], ['fichas', 0.6, 'Fichas: tanda 2 de 2', 1500],
+      ['entidades', 0.62, 'Reconociendo personajes, lugares, obras y motivos', 1200], ['personajes', 0.7, 'Analizando los personajes y los motivos principales', 1300],
+      ['global', 0.75, 'Escribiendo la ficha global de la obra', 1600], ['indexado', 0.92, 'Indexando las fichas para la búsqueda', 900],
     ];
     let espera = 300;
     for (const [paso, avance, mensaje, ms] of pasos) {
@@ -803,33 +806,97 @@ export function registrarComprension(h: Ayudas): void {
       const x = estados.get(id);
       if (!x) return;
       if (inventada) { x.estado = { ...guardado!.estado, actualizado: new Date().toISOString() }; x.fichas = guardado!.fichas; }
-      else { const s = estructuraSimulada(d, lente); x.segmentos = s.segmentos; x.fichas = s.fichas; x.estado = { ...estadoHecho(id, [lente], 0.03, 2, new Date().toISOString()), avisos: ['Demostración: solo se ha rehecho la estructura desde el índice.'] }; }
+      else {
+        const s = estructuraSimulada(d, lente); x.segmentos = s.segmentos; x.fichas = s.fichas;
+        x.estado = { ...estadoHecho(id, [lente], 0.03, 2, new Date().toISOString()), avisos: ['Demostración: solo se ha rehecho la estructura desde el índice.', 'Los vectores de las fichas no llegaron al índice: se buscan por texto y se reenviarán.'] };
+      }
       emitir({ tipo: 'comprension', documento: id, paso: 'fin', avance: 1, mensaje: 'Comprensión terminada', estado: 'hecho' });
     }, espera + 700);
-    return json({ documento: id, instancia: `demo-${id}`, estado: 'en_marcha' }, 200, 202);
+    return { estado: 'en_marcha', instancia: `demo-${id}` };
+  };
+  ruta('POST', '/comprension/biblioteca', (_m, c: { documentos?: string[]; forzar?: boolean; lentes?: Lente[] }) => {
+    const ids = (c.documentos ?? []).filter((id) => h.documento(id) && (estados.get(id)?.estado.estado !== 'hecho' || c.forzar));
+    // Como la API: unos pocos a la vez; el resto, en cola (aquí, escalonados).
+    ids.forEach((id, i) => setTimeout(() => comprender(id, c), Math.floor(i / 2) * 9000));
+    return json({ encolados: ids.length, lanzados: Math.min(2, ids.length) }, 200, 202);
+  });
+  ruta('POST', '/documentos/:id/comprender', (m, c: { forzar?: boolean; lentes?: Lente[] }) => {
+    const r = comprender(m[1]!, c);
+    return r ? json({ documento: m[1], ...r }, 200, 202) : error(404, 'no_encontrado', 'El documento no existe.');
   });
 
-  // Relaciones y alineaciones (contrato de transmedia).
-  const vistaRelacion = (lado: string): RelacionVista | null => {
-    const r = relacion();
-    if (lado !== r.origen && lado !== r.destino) return null;
-    const otro = h.documento(lado === r.origen ? r.destino : r.origen)!;
-    return {
-      ...r, sentido: lado === r.origen ? 'origen' : 'destino', alineaciones: ALINEACIONES.length, confirmada,
-      estadoAlineacion: { estado: 'hecho', alineaciones: ALINEACIONES.length, usd: 0.38, avisos: [], actualizado: CREADA },
-      otro: { id: otro.id, titulo: otro.meta.titulo, autores: otro.meta.autores.map((x) => `${x.nombre} ${x.apellidos}`), ...(otro.meta.anioOriginal ?? otro.meta.anio ? { anio: (otro.meta.anioOriginal ?? otro.meta.anio)! } : {}), tipo: otro.tipo },
-    };
+  // Relaciones y alineaciones (contrato de transmedia): la inventada y las que se pongan a mano.
+  const relaciones = new Map<string, RelacionDemo>();
+  const inventada = relacion();
+  relaciones.set(ID_RELACION, { r: inventada, als: alineaciones(), confirmada: false, estado: { estado: 'hecho', alineaciones: ALINEACIONES.length, usd: 0.38, avisos: [], actualizado: CREADA, hechos: 6, total: 6 } });
+  const obra = (id: string) => {
+    const d = h.documento(id)!;
+    return { id: d.id, titulo: d.meta.titulo, autores: d.meta.autores.map((x) => `${x.nombre} ${x.apellidos}`.trim()), ...(d.meta.anioOriginal ?? d.meta.anio ? { anio: (d.meta.anioOriginal ?? d.meta.anio)! } : {}), tipo: d.tipo };
   };
-  ruta('GET', '/documentos/:id/relaciones', (m) => { const v = vistaRelacion(m[1]!); return json(v ? [v] : []); });
-  ruta('POST', '/relaciones/:id/confirmar', (m) => { if (m[1] !== ID_RELACION) return error(404, 'no_encontrado', 'Esa relación no existe.'); confirmada = true; return json(vistaRelacion(ID_PELICULA)); });
-  ruta('GET', '/relaciones/:id', (m) => (m[1] === ID_RELACION ? json(vistaRelacion(ID_PELICULA)) : error(404, 'no_encontrado', 'Esa relación no existe.')));
+  const vista = (x: RelacionDemo, lado: string): RelacionVista => ({
+    ...x.r, fuente: x.confirmada ? 'usuario' : x.r.fuente, sentido: lado === x.r.origen ? 'origen' : 'destino', alineaciones: x.als.length, confirmada: x.confirmada,
+    ...(x.estado ? { estadoAlineacion: { ...x.estado, alineaciones: x.als.length } } : {}), otro: obra(lado === x.r.origen ? x.r.destino : x.r.origen),
+  });
+  const comprendido = (id: string) => estados.get(id)?.estado.estado === 'hecho';
+  /** Alinea en la demo: avanza grupo a grupo; la inventada recupera sus correspondencias según avanza, las demás terminan sin ellas o con error. */
+  const alinearDemo = (x: RelacionDemo) => {
+    const total = x.r.id === ID_RELACION ? 6 : 4;
+    const todas = x.r.id === ID_RELACION ? alineaciones() : [];
+    x.als = [];
+    x.estado = { estado: 'en_marcha', alineaciones: 0, usd: 0, avisos: [], actualizado: new Date().toISOString(), hechos: 0, total };
+    for (let k = 1; k <= total; k++) {
+      setTimeout(() => {
+        if (!relaciones.has(x.r.id) || !x.estado) return;
+        const falta = [x.r.origen, x.r.destino].find((id) => !comprendido(id));
+        if (falta && k === 2) {
+          x.estado = { ...x.estado, estado: 'error', hechos: 1, error: `Falta comprender «${h.documento(falta)?.meta.titulo ?? falta}»: la alineación necesita la estructura de las dos obras.`, actualizado: new Date().toISOString() };
+          return;
+        }
+        if (x.estado.estado !== 'en_marcha') return;
+        x.als = todas.slice(0, Math.ceil((todas.length * k) / total));
+        x.estado = { ...x.estado, hechos: k, usd: Math.round(0.065 * k * 100) / 100, actualizado: new Date().toISOString(), ...(k === total ? { estado: 'hecho' as const, avisos: todas.length ? [] : ['Demostración: las correspondencias solo están escritas para el cuento y la película inventados.'] } : {}) };
+      }, k * 1400);
+    }
+  };
+  const sinRelacion = () => error(404, 'no_encontrado', 'La relación no existe.');
+  ruta('GET', '/documentos/:id/relaciones', (m) => {
+    const id = m[1]!;
+    if (!h.documento(id)) return error(404, 'no_encontrado', 'El documento no existe.');
+    return json([...relaciones.values()].filter((x) => x.r.origen === id || x.r.destino === id).map((x) => vista(x, id)));
+  });
+  ruta('GET', '/relaciones/:id', (m) => { const x = relaciones.get(m[1]!); return x ? json(vista(x, x.r.origen)) : sinRelacion(); });
   ruta('GET', '/relaciones/:id/alineaciones', (m, _c, q) => {
-    if (m[1] !== ID_RELACION) return error(404, 'no_encontrado', 'Esa relación no existe.');
+    const x = relaciones.get(m[1]!);
+    if (!x) return sinRelacion();
     const tipo = q.get('tipo');
-    const lista = alineaciones().filter((x) => !tipo || x.tipo === tipo);
-    const desde = Number(q.get('desde') ?? 0), limite = Number(q.get('limite') ?? 200);
+    const lista = x.als.filter((y) => !tipo || y.tipo === tipo);
+    const desde = Number(q.get('desde') ?? 0), limite = Number(q.get('limite') ?? 500);
     return json({ elementos: lista.slice(desde, desde + limite), total: lista.length, ...(desde + limite < lista.length ? { siguiente: String(desde + limite) } : {}) });
   });
+  ruta('POST', '/relaciones', (_m, c: { origen?: string; destino?: string; tipo?: string; nota?: string }) => {
+    if (!c.origen || !c.destino || !h.documento(c.origen) || !h.documento(c.destino)) return error(404, 'no_encontrado', 'El documento no existe.');
+    if (c.origen === c.destino) return error(400, 'peticion_invalida', 'Una obra no se relaciona consigo misma.');
+    const tipos = ['adaptacion_de', 'traduccion_de', 'edicion_de', 'version_de', 'cita_a', 'comenta_a', 'responde_a', 'parte_de', 'misma_obra', 'relacionado'];
+    if (!c.tipo || !tipos.includes(c.tipo)) return error(400, 'peticion_invalida', `«tipo» admite: ${tipos.join(', ')}.`);
+    if ([...relaciones.values()].some((x) => (x.r.origen === c.origen && x.r.destino === c.destino) || (x.r.origen === c.destino && x.r.destino === c.origen))) {
+      return error(400, 'peticion_invalida', 'Esas dos obras ya están relacionadas.');
+    }
+    const id = `r-${Date.now().toString(36)}`;
+    const x: RelacionDemo = { r: { id, origen: c.origen, destino: c.destino, tipo: c.tipo as Relacion['tipo'], ...(c.nota ? { nota: c.nota } : {}), evidencias: [], confianza: 1, fuente: 'usuario', creada: new Date().toISOString() }, als: [], confirmada: true };
+    relaciones.set(id, x);
+    return json(vista(x, x.r.origen), 120, 201);
+  });
+  ruta('POST', '/relaciones/:id/confirmar', (m) => { const x = relaciones.get(m[1]!); if (!x) return sinRelacion(); x.confirmada = true; if (x.r.id === ID_RELACION) confirmada = true; return json(vista(x, x.r.origen)); });
+  ruta('DELETE', '/relaciones/:id', (m) => { if (!relaciones.delete(m[1]!)) return sinRelacion(); return json({ borrada: true }); });
+  ruta('POST', '/documentos/:id/alinear', (m, c: { relacion?: string; forzar?: boolean }) => {
+    const id = m[1]!;
+    if (!h.documento(id)) return error(404, 'no_encontrado', 'El documento no existe.');
+    const suyas = [...relaciones.values()].filter((x) => (x.r.origen === id || x.r.destino === id) && (!c.relacion || x.r.id === c.relacion));
+    if (c.relacion && !suyas.length) return error(400, 'peticion_invalida', 'Esa relación no es de este documento.');
+    for (const x of suyas) if (c.forzar || !x.estado || x.estado.estado === 'error') alinearDemo(x);
+    return json({ instancia: `demo-alinear-${id}`, relaciones: suyas.length }, 150, 202);
+  });
+  ruta('POST', '/transmedia/biblioteca', () => json({ instancia: 'demo-transmedia', relaciones: relaciones.size }, 300, 202));
 }
 
 export { ID_RELACION };
