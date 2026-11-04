@@ -12,27 +12,55 @@
  * y las entidades, a la vez); `comprenderDocumento` los encadena en local.
  */
 import { enParalelo, type Aparicion, type Ficha, type Lente, type PercepcionMedio, type Segmento } from '@scholaris/nucleo';
-import { borrarComprension, escribirApariciones, escribirFichas, leerFichas, leerSegmentos } from '@scholaris/spdf';
+import { borrarComprension, escribirApariciones, escribirFichas, leerApariciones, leerFichas, leerSegmentos } from '@scholaris/spdf';
 import { ESQUEMA_ELECCION, SISTEMA_ELECCION, elegirLentes, lente, VERSION_COMPRENSION, versionDe } from './lentes/index.js';
 import {
   agruparSecuencias, construirArbol, estructuraDelModelo, guardarEstructura, segmentosDePercepcion, segmentosDeSecciones, unidadesEnTramo, type Borrador,
 } from './estructura.js';
-import { aparicionesDePercepcion, aparicionesDeTemas, aparicionesDeTexto, conocidasEnBiblioteca, enlazarReparto, extraerEntidadesDelModelo, fichasDeEntidades, resolverEntidades } from './entidades.js';
-import { actualizarEstado, apuntarPaso, borrarPasos, gastado, leerEstadoComprension, pasoHecho, usoVacio } from './estado.js';
+import {
+  analizarEntidades, aparicionesDePercepcion, aparicionesDeTemas, aparicionesDeTexto, conocidasEnBiblioteca, enlazarReparto, extraerEntidadesDelModelo, fichasDeEntidades,
+  principalesDe, resolverEntidades, type EntidadResuelta, type Papel,
+} from './entidades.js';
+import { actualizarEstado, apuntarPaso, borrarPasos, gastado, guardarDatosPaso, leerDatosPaso, leerEstadoComprension, pasoHecho, usoVacio } from './estado.js';
 import { fichaGlobal, fichasDeLote, lotesDeFichas } from './fichas.js';
 import { indexarFichas } from './indexado.js';
 import { hablantesDe, leerMaterial, muestraDe, tokensDe, type Material, type VozPercibida } from './material.js';
 import { fichasDePlanos } from './medios.js';
-import { llamar } from './modelo.js';
+import { llamar, modeloDelPaso } from './modelo.js';
 import { huella } from './util.js';
-import type { ContextoComprension, EstadoComprension, OpcionesComprension, PasoComprension, PlanComprension, UsoModelo } from './tipos.js';
+import type { ContextoComprension, EstadoComprension, ModeloComprension, OpcionesComprension, PasoComprension, PlanComprension, UsoModelo } from './tipos.js';
 
 const ahoraDe = (ctx: ContextoComprension) => (ctx.ahora?.() ?? new Date()).toISOString();
 /** Un SQL remoto (el del Workflow, por RPC) junta las escrituras: al acabar cada paso se mandan. */
 const vaciar = async (ctx: ContextoComprension) => { await (ctx.sql as { vaciarPendientes?(): Promise<void> }).vaciarPendientes?.(); };
+
+/** El modelo de un paso: acotado a su plazo, con diario y con latido mientras responde. */
+function modeloDe(ctx: ContextoComprension, documento: string, paso: string): ModeloComprension {
+  return modeloDelPaso(ctx.modelo!, {
+    documento, paso, ...(ctx.limite ? { limite: ctx.limite } : {}),
+    ...(ctx.registro ? { registro: ctx.registro.bind(ctx) } : {}), ...(ctx.latido ? { latido: ctx.latido.bind(ctx) } : {}),
+  });
+}
+
+/** Mide una parte de un paso y la deja en el diario (inicio, fin o error, con su duración). */
+async function parte<T>(ctx: ContextoComprension, documento: string, paso: string, sub: string, fn: () => Promise<T>, detalle?: (r: T) => Record<string, unknown>): Promise<T> {
+  const t0 = Date.now();
+  ctx.registro?.({ documento, paso, sub, estado: 'inicio' });
+  try {
+    const r = await fn();
+    ctx.registro?.({ documento, paso, sub, estado: 'fin', ms: Date.now() - t0, ...(detalle ? { detalle: detalle(r) } : {}) });
+    await Promise.resolve(ctx.latido?.()).catch(() => undefined);
+    return r;
+  } catch (e) {
+    ctx.registro?.({ documento, paso, sub, estado: 'error', ms: Date.now() - t0, detalle: { error: ((e as Error)?.message || String(e)).slice(0, 300) } });
+    throw e;
+  }
+}
 const PRESUPUESTO = 4;
 const MAX_CONTEXTO = 2_400_000;
 const POR_LLAMADA = 6;
+/** En los medios cada escena lleva su percepción (planos, sonido): tandas más pequeñas, llamadas más cortas. */
+const POR_LLAMADA_MEDIO = 4;
 
 async function avisar(ctx: ContextoComprension, documento: string, paso: PasoComprension, avance: number, mensaje: string): Promise<void> {
   try { await ctx.alProgreso?.({ documento, paso, avance, mensaje }); } catch (e) {
@@ -69,16 +97,19 @@ const r2 = (x: number) => Math.round(x * 100) / 100;
 
 /** Plazos de cada paso según el tamaño (segundos): lo que puede tardar el modelo con margen. */
 export function plazosDe(tokens: number, largo: boolean): PlanComprension['plazos'] {
-  // Medido el 4-11-2026 con gemini-4-argon: una tanda de seis escenas de una película con la obra
-  // entera delante tarda de 3 a 6 minutos; la ficha global de un cuento de 15 000 tokens, unos 4.
+  // Medido el 4-11-2026 con gemini-4-argon (pensamiento medio): una tanda de seis escenas de una
+  // película con la obra entera delante, de 3 a 6 minutos; la lista de entidades de un cuento de
+  // 16 000 tokens, unos 2 minutos, y cada tanda de análisis de cinco principales, 1-2; la ficha
+  // global, 3-4. El plazo deja holgura para un reintento dentro del paso.
   const k = tokens / 1000;
   const acotar = (s: number) => Math.round(Math.min(3600, Math.max(300, s)));
   return {
     estructura: acotar(300 + k * (largo ? 3 : 5)),
     fichas: acotar(600 + k * (largo ? 2 : 0.5)),
-    entidades: acotar(400 + k * 3),
-    global: acotar(600 + k * 3),
-    indexado: acotar(120 + k * 0.3),
+    entidades: acotar(600 + k * 6),
+    personajes: acotar(600 + k * 3),
+    global: acotar(600 + k * 4),
+    indexado: acotar(240 + k * 0.5),
   };
 }
 
@@ -135,7 +166,7 @@ export async function planificarComprension(ctx: ContextoComprension, documento:
     documento, lentes, version, medio: m.medio, caracteres, tokensAprox, largo, conPercepcion: !!percepcion,
     plazos: plazosDe(tokensAprox, largo), presupuestoUsd: o.presupuestoUsd ?? PRESUPUESTO, estimacionUsd, economico, calidades, huella: huellaMaterial, hecha: false,
     reusar: { estructura: false, fichas: false },
-    opciones: { segmentosPorLlamada: o.segmentosPorLlamada ?? POR_LLAMADA, ...(o.wikidata !== undefined ? { wikidata: o.wikidata } : {}), maxCaracteresContexto: maxCaracteres },
+    opciones: { segmentosPorLlamada: o.segmentosPorLlamada ?? (m.medio ? POR_LLAMADA_MEDIO : POR_LLAMADA), ...(o.wikidata !== undefined ? { wikidata: o.wikidata } : {}), maxCaracteresContexto: maxCaracteres },
   };
   if (!ctx.modelo) {
     await actualizarEstado(ctx.sql, documento, { estado: 'sin_modelo', lentes, version, iniciado: t }, t);
@@ -214,13 +245,13 @@ export async function pasoSegmentos(ctx: ContextoComprension, plan: PlanComprens
   const borradores: Borrador[] = [...leidos];
   if (percepcion) {
     let secuencias: Awaited<ReturnType<typeof agruparSecuencias>> = [];
-    try { secuencias = await agruparSecuencias(m, percepcion, ctx.modelo, l, acumulado); } catch (e) { avisos.push(`Sin secuencias: ${(e as Error).message}`.slice(0, 200)); }
+    try { secuencias = await agruparSecuencias(m, percepcion, modeloDe(ctx, doc, 'estructura'), l, acumulado); } catch (e) { avisos.push(`Sin secuencias: ${(e as Error).message}`.slice(0, 200)); }
     borradores.push(...segmentosDePercepcion(m, percepcion, secuencias));
   } else {
     const rangoMax = leidos.reduce((x, b) => Math.max(x, b.rango), -1);
     const finos = def.segmentos.filter((s) => s !== 'plano').length;
     if (!leidos.length || rangoMax < finos - 1) {
-      const delModelo = await estructuraDelModelo(m, l, ctx.modelo, acumulado, { leidos, maxCaracteres: Math.min(plan.opciones.maxCaracteresContexto ?? MAX_CONTEXTO, 1_200_000), calidad: plan.calidades.estructura });
+      const delModelo = await estructuraDelModelo(m, l, modeloDe(ctx, doc, 'estructura'), acumulado, { leidos, maxCaracteres: Math.min(plan.opciones.maxCaracteresContexto ?? MAX_CONTEXTO, 1_200_000), calidad: plan.calidades.estructura });
       borradores.push(...(leidos.length ? delModelo.filter((b) => b.rango > rangoMax && b.tipo !== 'otro') : delModelo));
     }
   }
@@ -276,7 +307,7 @@ export async function pasoFichas(ctx: ContextoComprension, plan: PlanComprension
       if (typeof f.datos.huellaEntrada === 'string') previas.set(f.datos.huellaEntrada, f);
     }
   }
-  const r = await fichasDeLote(m, l, segmentos, ids, ctx.modelo, acumulado, {
+  const r = await fichasDeLote(m, l, segmentos, ids, modeloDe(ctx, doc, paso), acumulado, {
     previas,
     largo: plan.largo, calidad: yaGastado > plan.presupuestoUsd * 0.7 ? 'rapida' : plan.calidades.fichas, maxCaracteres: plan.opciones.maxCaracteresContexto ?? MAX_CONTEXTO,
     percepcion, idioma: m.documento.metadatos.idioma ?? 'es', creada: ahoraDe(ctx),
@@ -292,9 +323,21 @@ export async function pasoFichas(ctx: ContextoComprension, plan: PlanComprension
 // Entidades y apariciones
 // ---------------------------------------------------------------------------
 
+/** Lo que el paso de entidades deja para el de personajes. */
+interface DatosEntidades {
+  entidades: Array<Pick<EntidadResuelta, 'id' | 'nombre' | 'tipo' | 'formas' | 'alusiones' | 'descripcion' | 'ficticia' | 'importancia' | 'actor' | 'grafo'>>;
+  papeles: Papel[];
+}
+
+/**
+ * Entidades y apariciones: la lista del modelo (sin análisis: corta y rápida), su
+ * resolución en el grafo, las apariciones en el material y en la percepción y el
+ * reparto (Wikidata acotado). El análisis de las principales es el paso siguiente.
+ */
 export async function pasoEntidades(ctx: ContextoComprension, plan: PlanComprension): Promise<{ entidades: number; apariciones: number }> {
   const doc = plan.documento;
-  if (plan.hecha || !ctx.modelo || await pasoHecho(ctx.sql, doc, 'entidades')) return { entidades: 0, apariciones: 0 };
+  const paso = 'entidades';
+  if (plan.hecha || !ctx.modelo || await pasoHecho(ctx.sql, doc, paso)) return { entidades: 0, apariciones: 0 };
   const inicio = Date.now();
   const t = ahoraDe(ctx);
   await avisar(ctx, doc, 'entidades', 0.5, 'Reconociendo personajes, lugares, obras y motivos');
@@ -303,38 +346,85 @@ export async function pasoEntidades(ctx: ContextoComprension, plan: PlanComprens
   const segmentos = await leerSegmentos(ctx.sql, doc);
   const acumulado = { uso: usoVacio() };
   const avisos: string[] = [];
-  const conocidas = await conocidasEnBiblioteca(ctx.sql, doc);
-  const delModelo = await extraerEntidadesDelModelo(m, l, ctx.modelo, acumulado, {
+  const conocidas = await parte(ctx, doc, paso, 'conocidas', () => conocidasEnBiblioteca(ctx.sql, doc));
+  const delModelo = await extraerEntidadesDelModelo(m, l, modeloDe(ctx, doc, paso), acumulado, {
     largo: plan.largo, calidad: plan.calidades.entidades, maxCaracteres: Math.min(plan.opciones.maxCaracteresContexto ?? MAX_CONTEXTO, 1_200_000), percepcion, conocidas,
   });
-  const ents = await resolverEntidades(ctx.sql, delModelo);
-  // Primero lo percibido (puede añadir personas al reparto: las voces de la transcripción se casan con ellas).
-  const apariciones = percepcion ? (await aparicionesDePercepcion(ctx.sql, m, percepcion, ents, segmentos)).apariciones : [];
-  const deTexto = aparicionesDeTexto(m, ents, segmentos);
-  // Una línea de diálogo percibida que ya está como turno de la transcripción (misma voz, mismo tramo) no se cuenta dos veces.
-  const turnos = deTexto.filter((a) => a.rol === 'habla' && a.ancla.tipo === 'tiempo');
-  const repetida = (a: Aparicion) => a.rol === 'habla' && a.ancla.tipo === 'tiempo'
-    && turnos.some((x) => x.entidad === a.entidad && x.ancla.tipo === 'tiempo' && a.ancla.tipo === 'tiempo' && a.ancla.t0 >= x.ancla.t0 - 1 && a.ancla.t0 <= x.ancla.t1 + 1);
-  for (let i = apariciones.length - 1; i >= 0; i--) if (repetida(apariciones[i]!)) apariciones.splice(i, 1);
-  apariciones.push(...deTexto);
-  const reparto = await enlazarReparto(ctx.sql, m, ents, { ...(ctx.fetch ? { fetch: ctx.fetch } : {}), ...(plan.opciones.wikidata !== undefined ? { wikidata: plan.opciones.wikidata } : {}), percepcion, ahora: t });
+  const ents = await parte(ctx, doc, paso, 'resolver', () => resolverEntidades(ctx.sql, delModelo), (r) => ({ entidades: r.length }));
+  const apariciones = await parte(ctx, doc, paso, 'apariciones', async () => {
+    // Primero lo percibido (puede añadir personas al reparto: las voces de la transcripción se casan con ellas).
+    const aps = percepcion ? (await aparicionesDePercepcion(ctx.sql, m, percepcion, ents, segmentos)).apariciones : [];
+    const deTexto = aparicionesDeTexto(m, ents, segmentos);
+    // Una línea de diálogo percibida que ya está como turno de la transcripción (misma voz, mismo tramo) no se cuenta dos veces.
+    const turnos = deTexto.filter((a) => a.rol === 'habla' && a.ancla.tipo === 'tiempo');
+    const repetida = (a: Aparicion) => a.rol === 'habla' && a.ancla.tipo === 'tiempo'
+      && turnos.some((x) => x.entidad === a.entidad && x.ancla.tipo === 'tiempo' && a.ancla.tipo === 'tiempo' && a.ancla.t0 >= x.ancla.t0 - 1 && a.ancla.t0 <= x.ancla.t1 + 1);
+    for (let i = aps.length - 1; i >= 0; i--) if (repetida(aps[i]!)) aps.splice(i, 1);
+    aps.push(...deTexto);
+    return aps;
+  }, (r) => ({ apariciones: r.length }));
+  const reparto = await parte(ctx, doc, paso, 'reparto', () => enlazarReparto(ctx.sql, m, ents, {
+    ...(ctx.fetch ? { fetch: ctx.fetch } : {}), ...(plan.opciones.wikidata !== undefined ? { wikidata: plan.opciones.wikidata } : {}), percepcion, ahora: t,
+  }), (r) => ({ papeles: r.papeles.length, avisos: r.avisos.length }));
   avisos.push(...reparto.avisos);
-  const fe = fichasDeEntidades(m, l, ents, apariciones, reparto.papeles, { modelo: ctx.modelo.modelo(plan.calidades.entidades), idioma: m.documento.metadatos.idioma ?? 'es', creada: t });
-  // Sustituye lo de una pasada anterior (salvo los temas, que son de la ficha global).
-  await ctx.sql.ejecutar('DELETE FROM apariciones WHERE documento = ? AND id NOT LIKE ?', doc, `${doc}:ap:t:%`);
-  const viejas = (await ctx.sql.ejecutar<{ id: string }>("SELECT id FROM fichas WHERE documento = ? AND objetivo = 'entidad'", doc)).map((f) => String(f.id));
-  const nuevas = new Set(fe.fichas.map((f) => f.id));
-  for (const id of viejas) if (!nuevas.has(id)) {
-    await ctx.sql.ejecutar('DELETE FROM fichas WHERE id = ?', id);
-    await ctx.sql.ejecutar("DELETE FROM vectores WHERE objetivo = 'ficha' AND id = ?", id);
-  }
-  for (let i = 0; i < apariciones.length; i += 500) await escribirApariciones(ctx.sql, apariciones.slice(i, i + 500));
-  await escribirFichas(ctx.sql, fe.fichas);
-  await apuntarPaso(ctx.sql, doc, 'entidades', acumulado.uso, Date.now() - inicio, ahoraDe(ctx), {
-    entidades: ents.length, apariciones: apariciones.length, papeles: reparto.papeles.length, fichas: fe.fichas.length, citasDescartadas: fe.descartadas,
+  await parte(ctx, doc, paso, 'escribir', async () => {
+    // Sustituye lo de una pasada anterior (salvo los temas, que son de la ficha global).
+    await ctx.sql.ejecutar('DELETE FROM apariciones WHERE documento = ? AND id NOT LIKE ?', doc, `${doc}:ap:t:%`);
+    for (let i = 0; i < apariciones.length; i += 500) await escribirApariciones(ctx.sql, apariciones.slice(i, i + 500));
+    const datos: DatosEntidades = {
+      entidades: ents.map(({ id, nombre, tipo, formas, alusiones, descripcion, ficticia, importancia, actor, grafo }) => ({
+        id, nombre, tipo, formas, grafo, ...(alusiones ? { alusiones } : {}), ...(descripcion ? { descripcion } : {}), ...(ficticia !== undefined ? { ficticia } : {}),
+        ...(importancia !== undefined ? { importancia } : {}), ...(actor ? { actor } : {}),
+      })),
+      papeles: reparto.papeles,
+    };
+    await guardarDatosPaso(ctx.sql, doc, 'entidades', datos, ahoraDe(ctx));
+  });
+  await apuntarPaso(ctx.sql, doc, paso, acumulado.uso, Date.now() - inicio, ahoraDe(ctx), {
+    entidades: ents.length, apariciones: apariciones.length, papeles: reparto.papeles.length,
   }, avisos);
   await vaciar(ctx);
   return { entidades: ents.length, apariciones: apariciones.length };
+}
+
+/**
+ * Las fichas de entidad: el análisis de las principales (en tandas pequeñas y a la
+ * vez) y una línea para las de importancia media. Necesita el paso de entidades.
+ */
+export async function pasoPersonajes(ctx: ContextoComprension, plan: PlanComprension): Promise<{ fichas: number }> {
+  const doc = plan.documento;
+  const paso = 'personajes';
+  if (plan.hecha || !ctx.modelo || await pasoHecho(ctx.sql, doc, paso)) return { fichas: 0 };
+  const datos = await leerDatosPaso<DatosEntidades>(ctx.sql, doc, 'entidades');
+  if (!datos) throw new Error('Faltan las entidades del documento: el paso de entidades no ha terminado.');
+  const inicio = Date.now();
+  const t = ahoraDe(ctx);
+  await avisar(ctx, doc, 'personajes', 0.6, 'Analizando los personajes y los motivos principales');
+  const l = plan.lentes[0]!;
+  const { m, percepcion } = await materialDe(ctx, doc);
+  const acumulado = { uso: usoVacio() };
+  const ents = datos.entidades as EntidadResuelta[];
+  const analisis = await analizarEntidades(m, l, principalesDe(ents), modeloDe(ctx, doc, paso), acumulado, {
+    largo: plan.largo, calidad: plan.calidades.entidades, maxCaracteres: Math.min(plan.opciones.maxCaracteresContexto ?? MAX_CONTEXTO, 1_200_000), percepcion,
+  });
+  const conAnalisis = ents.map((e) => {
+    const a = analisis.get(e.nombre);
+    return a ? { ...e, analisis: a.analisis, evidencias: a.evidencias } : e;
+  });
+  const apariciones = await leerApariciones(ctx.sql, { documento: doc, limite: 100_000 });
+  const fe = fichasDeEntidades(m, l, conAnalisis, apariciones, datos.papeles, { modelo: ctx.modelo.modelo(plan.calidades.entidades), idioma: m.documento.metadatos.idioma ?? 'es', creada: t });
+  await parte(ctx, doc, paso, 'escribir', async () => {
+    const viejas = (await ctx.sql.ejecutar<{ id: string }>("SELECT id FROM fichas WHERE documento = ? AND objetivo = 'entidad'", doc)).map((f) => String(f.id));
+    const nuevas = new Set(fe.fichas.map((f) => f.id));
+    for (const id of viejas) if (!nuevas.has(id)) {
+      await ctx.sql.ejecutar('DELETE FROM fichas WHERE id = ?', id);
+      await ctx.sql.ejecutar("DELETE FROM vectores WHERE objetivo = 'ficha' AND id = ?", id);
+    }
+    await escribirFichas(ctx.sql, fe.fichas);
+  });
+  await apuntarPaso(ctx.sql, doc, paso, acumulado.uso, Date.now() - inicio, ahoraDe(ctx), { fichas: fe.fichas.length, analizadas: analisis.size, citasDescartadas: fe.descartadas });
+  await vaciar(ctx);
+  return { fichas: fe.fichas.length };
 }
 
 // ---------------------------------------------------------------------------
@@ -364,13 +454,17 @@ export async function pasoGlobal(ctx: ContextoComprension, plan: PlanComprension
   const fichasVigentes = fichasSegmento.filter((f) => vigentes.has(f.objetivoId));
   let temas = 0, descartadas = 0;
   const fichas: Ficha[] = [];
-  for (const [i, l] of plan.lentes.entries()) {
-    const r = await fichaGlobal(m, l, segmentos, fichasVigentes, ctx.modelo, acumulado, {
-      largo: plan.largo, calidad, maxCaracteres: plan.opciones.maxCaracteresContexto ?? MAX_CONTEXTO, percepcion, idioma: m.documento.metadatos.idioma ?? 'es', creada: t, secundaria: i > 0,
-    });
+  // Una ficha global por lente, a la vez (cada una es una llamada larga): el paso dura lo que la más lenta.
+  const modelo = modeloDe(ctx, doc, 'global');
+  const globales = await Promise.all(plan.lentes.map((l, i) => fichaGlobal(m, l, segmentos, fichasVigentes, modelo, acumulado, {
+    largo: plan.largo, calidad, maxCaracteres: plan.opciones.maxCaracteresContexto ?? MAX_CONTEXTO, percepcion, idioma: m.documento.metadatos.idioma ?? 'es', creada: t, secundaria: i > 0,
+  })));
+  for (const r of globales) {
     descartadas += r.descartadas;
-    const ta = await aparicionesDeTemas(ctx.sql, m, r.temas, 'tema', segmentos);
-    const mo = await aparicionesDeTemas(ctx.sql, m, r.motivos, 'motivo', segmentos);
+    const { ta, mo } = await parte(ctx, doc, 'global', 'temas', async () => ({
+      ta: await aparicionesDeTemas(ctx.sql, m, r.temas, 'tema', segmentos),
+      mo: await aparicionesDeTemas(ctx.sql, m, r.motivos, 'motivo', segmentos),
+    }), (x) => ({ temas: x.ta.entidades.length, motivos: x.mo.entidades.length }));
     descartadas += ta.descartadas + mo.descartadas;
     const enlazar = (lista: unknown, ents: Array<{ nombre: string; id: string; apariciones: number }>) => (Array.isArray(lista) ? lista : []).map((x: { nombre: string; descripcion: string }) => {
       const e = ents.find((y) => y.nombre.toLowerCase() === x.nombre.trim().toLowerCase()) ?? ents.find((y) => y.nombre.toLowerCase().includes(x.nombre.trim().toLowerCase().slice(0, 12)));
@@ -398,7 +492,7 @@ export async function pasoIndexado(ctx: ContextoComprension, plan: PlanComprensi
   if (plan.hecha || !ctx.modelo || await pasoHecho(ctx.sql, doc, 'indexado')) return { vectores: 0, pendientes: false };
   const inicio = Date.now();
   await avisar(ctx, doc, 'indexado', 0.92, 'Indexando las fichas para la búsqueda');
-  const r = await indexarFichas(ctx, doc);
+  const r = await parte(ctx, doc, 'indexado', 'vectores', () => indexarFichas(ctx, doc), (x) => ({ vectores: x.vectores, pendientes: x.pendientes }));
   await apuntarPaso(ctx.sql, doc, 'indexado', usoVacio(ctx.embebedor?.espacio.modelo ?? ''), Date.now() - inicio, ahoraDe(ctx), { vectores: r.vectores, pendientes: r.pendientes ? 1 : 0 },
     r.pendientes ? ['Los vectores de las fichas no llegaron al índice: se buscan por texto y se reenviarán.'] : []);
   await vaciar(ctx);
@@ -428,7 +522,7 @@ export async function comprenderDocumento(ctx: ContextoComprension, documento: s
         hechas++;
         await avisar(ctx, documento, 'fichas', 0.15 + 0.5 * (hechas / Math.max(1, lotes)), `Fichas: tanda ${hechas} de ${lotes}`);
       }),
-      pasoEntidades(ctx, plan),
+      (async () => { await pasoEntidades(ctx, plan); await pasoPersonajes(ctx, plan); })(),
     ]);
     await pasoGlobal(ctx, plan);
     await pasoIndexado(ctx, plan);

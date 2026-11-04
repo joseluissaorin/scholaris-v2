@@ -9,6 +9,7 @@ import { leerDocumento, leerFichas, leerSegmentos } from '@scholaris/spdf';
 import { entradasIndice, escribirEspacio, escribirVectores } from '../pasos/indexado.js';
 import { vectorizar } from '../pasos/vectores.js';
 import type { ContextoComprension } from './tipos.js';
+import { conLimite } from './util.js';
 
 /** El texto que se vectoriza: clase y título, los resúmenes en las dos lenguas y la prosa. */
 export function textoVectorFicha(f: Ficha): string {
@@ -40,7 +41,13 @@ export async function indexarFichas(ctx: ContextoComprension, documento: string)
   if (ctx.indice && ctx.espacioNombres) {
     const base = vectores.filter((v) => v.espacio === ctx.indice!.espacio.id);
     for (let i = 0; i < base.length; i += 200) {
-      try { await ctx.indice.insertar(ctx.espacioNombres, entradasIndice(doc, base.slice(i, i + 200), t0)); } catch { pendientes = true; }
+      // El índice puede hacer esperar (cupo de Vectorize): lo que no quepa en el plazo queda en la
+      // estantería y se reenvía después (`pendientes`), en vez de colgar el paso.
+      const resto = ctx.limite ? ctx.limite - Date.now() - 5_000 : undefined;
+      if (resto !== undefined && resto < 1_000) { pendientes = true; break; }
+      const envio = ctx.indice.insertar(ctx.espacioNombres, entradasIndice(doc, base.slice(i, i + 200), t0));
+      try { await (resto !== undefined ? conLimite(envio, resto, 'el índice no contestó a tiempo') : envio); } catch { pendientes = true; }
+      await Promise.resolve(ctx.latido?.()).catch(() => undefined);
     }
   }
   return { vectores: vectores.length, pendientes };

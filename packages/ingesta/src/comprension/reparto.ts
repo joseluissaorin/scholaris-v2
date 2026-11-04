@@ -27,11 +27,27 @@ interface EntidadWd {
   claims?: Record<string, Afirmacion[]>;
 }
 
-async function pedir<T>(f: typeof fetch, params: Record<string, string>): Promise<T> {
-  const url = `${API}?${new URLSearchParams({ format: 'json', origin: '*', ...params })}`;
-  const r = await f(url, { headers: { 'user-agent': AGENTE, 'api-user-agent': AGENTE } });
+/** Caché de respuestas de Wikidata (la plataforma usa la tabla `entidades_wikidata` de las funciones). */
+export interface CacheWikidata {
+  leer(clave: string): Promise<string | null>;
+  guardar(clave: string, valor: string): Promise<void>;
+}
+
+/** Cada petición a Wikidata, como mucho esto: desde Workers a veces no contesta o tarda. */
+export const ESPERA_WIKIDATA_MS = 8_000;
+
+async function pedir<T>(f: typeof fetch, params: Record<string, string>, cache?: CacheWikidata | null): Promise<T> {
+  const consulta = new URLSearchParams({ format: 'json', origin: '*', ...params }).toString();
+  const clave = `wd:${consulta}`;
+  const guardada = await cache?.leer(clave).catch(() => null);
+  if (guardada) return JSON.parse(guardada) as T;
+  // Agente propio (Wikimedia rechaza o frena las peticiones sin él) y tiempo acotado: nunca bloquea el paso.
+  const r = await f(`${API}?${consulta}`, { headers: { 'user-agent': AGENTE, 'api-user-agent': AGENTE }, signal: AbortSignal.timeout(ESPERA_WIKIDATA_MS) });
   if (!r.ok) throw new Error(`Wikidata respondió ${r.status}`);
-  return (await r.json()) as T;
+  const texto = await r.text();
+  const json = JSON.parse(texto) as T;
+  await cache?.guardar(clave, texto.slice(0, 200_000)).catch(() => undefined);
+  return json;
 }
 
 const etiqueta = (e: EntidadWd | undefined, idiomas: string[]) => {
@@ -39,10 +55,10 @@ const etiqueta = (e: EntidadWd | undefined, idiomas: string[]) => {
   return Object.values(e?.labels ?? {})[0]?.value;
 };
 
-async function entidades(f: typeof fetch, ids: string[], props: string, idiomas: string[]): Promise<Map<string, EntidadWd>> {
+async function entidades(f: typeof fetch, ids: string[], props: string, idiomas: string[], cache?: CacheWikidata | null): Promise<Map<string, EntidadWd>> {
   const salida = new Map<string, EntidadWd>();
   for (let i = 0; i < ids.length; i += 50) {
-    const r = await pedir<{ entities?: Record<string, EntidadWd> }>(f, { action: 'wbgetentities', ids: ids.slice(i, i + 50).join('|'), props, languages: idiomas.join('|') });
+    const r = await pedir<{ entities?: Record<string, EntidadWd> }>(f, { action: 'wbgetentities', ids: ids.slice(i, i + 50).join('|'), props, languages: idiomas.join('|') }, cache);
     for (const [k, v] of Object.entries(r.entities ?? {})) salida.set(k, v);
   }
   return salida;
@@ -55,14 +71,14 @@ const ANIO = (e: EntidadWd) => {
 };
 
 /** Busca la obra audiovisual en Wikidata por título y año (y, si hace falta, por director). */
-export async function buscarObraAudiovisual(f: typeof fetch, doc: Pick<Documento, 'metadatos'>): Promise<string | null> {
+export async function buscarObraAudiovisual(f: typeof fetch, doc: Pick<Documento, 'metadatos'>, cache?: CacheWikidata | null): Promise<string | null> {
   const titulo = doc.metadatos.titulo?.trim();
   if (!titulo) return null;
   const idioma = doc.metadatos.idioma?.slice(0, 2) || 'es';
-  const r = await pedir<{ search?: Array<{ id: string; description?: string }> }>(f, { action: 'wbsearchentities', search: titulo, language: idioma, uselang: idioma, type: 'item', limit: '10' });
+  const r = await pedir<{ search?: Array<{ id: string; description?: string }> }>(f, { action: 'wbsearchentities', search: titulo, language: idioma, uselang: idioma, type: 'item', limit: '10' }, cache);
   const candidatas = (r.search ?? []).filter((c) => /pel[ií]cula|film|movie|serie|documental|cortometraje|largometraje/i.test(c.description ?? ''));
   if (!candidatas.length) return null;
-  const datos = await entidades(f, candidatas.map((c) => c.id), 'claims', [idioma, 'en']);
+  const datos = await entidades(f, candidatas.map((c) => c.id), 'claims', [idioma, 'en'], cache);
   const anio = doc.metadatos.anio;
   const apellidos = (doc.metadatos.autores ?? []).map((a) => (a.apellidos || a.nombre || '').toLowerCase()).filter(Boolean);
   let mejor: { id: string; puntos: number } | null = null;
@@ -79,8 +95,8 @@ export async function buscarObraAudiovisual(f: typeof fetch, doc: Pick<Documento
 }
 
 /** El reparto con los papeles de una obra (P161 + P453/P4633). */
-export async function repartoWikidata(f: typeof fetch, qid: string, idiomas = ['es', 'en']): Promise<PapelWikidata[]> {
-  const obra = (await entidades(f, [qid], 'claims', idiomas)).get(qid);
+export async function repartoWikidata(f: typeof fetch, qid: string, idiomas = ['es', 'en'], cache?: CacheWikidata | null): Promise<PapelWikidata[]> {
+  const obra = (await entidades(f, [qid], 'claims', idiomas, cache)).get(qid);
   const reparto = obra?.claims?.P161 ?? [];
   const filas: Array<{ actor: string; papel?: string; nombrePapel?: string }> = [];
   for (const a of reparto) {
@@ -93,7 +109,7 @@ export async function repartoWikidata(f: typeof fetch, qid: string, idiomas = ['
     if (!papeles.length) for (const n of nombres) filas.push({ actor, nombrePapel: n });
   }
   const ids = [...new Set(filas.flatMap((x) => [x.actor, ...(x.papel ? [x.papel] : [])]))];
-  const nombres = await entidades(f, ids, 'labels', idiomas);
+  const nombres = await entidades(f, ids, 'labels', idiomas, cache);
   return filas.map((x) => {
     const actor = { qid: x.actor, nombre: etiqueta(nombres.get(x.actor), idiomas) ?? x.actor };
     const nombrePapel = x.nombrePapel ?? (x.papel ? etiqueta(nombres.get(x.papel), idiomas) : undefined);

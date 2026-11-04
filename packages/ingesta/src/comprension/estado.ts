@@ -107,9 +107,25 @@ export async function apuntarPaso(
   );
 }
 
-/** Borra la procedencia de los pasos (al rehacer de cero). */
+/** Borra la procedencia de los pasos y lo que se pasaban entre ellos (al rehacer). */
 export async function borrarPasos(sql: SQL, documento: string): Promise<void> {
   await sql.ejecutar("DELETE FROM procedencia WHERE documento = ? AND fase LIKE 'comprension:%'", documento);
+  await sql.ejecutar("DELETE FROM procedencia WHERE documento = ? AND fase LIKE 'comprension-datos:%'", documento);
+}
+
+/**
+ * Lo que un paso deja para otro (la lista de entidades resueltas para el análisis de
+ * las principales): en la procedencia del documento, fuera de los totales.
+ */
+export async function guardarDatosPaso(sql: SQL, documento: string, clave: string, valor: unknown, ahora: string): Promise<void> {
+  await sql.ejecutar('DELETE FROM procedencia WHERE documento = ? AND fase = ?', documento, `comprension-datos:${clave}`);
+  await sql.ejecutar('INSERT INTO procedencia (documento, fase, proveedor, detalle, ms, cuando) VALUES (?, ?, ?, ?, ?, ?)', documento, `comprension-datos:${clave}`, null, JSON.stringify(valor), null, ahora);
+}
+
+export async function leerDatosPaso<T>(sql: SQL, documento: string, clave: string): Promise<T | null> {
+  const [f] = await sql.ejecutar<{ detalle: string | null }>('SELECT detalle FROM procedencia WHERE documento = ? AND fase = ? ORDER BY rowid DESC LIMIT 1', documento, `comprension-datos:${clave}`);
+  if (!f?.detalle) return null;
+  try { return JSON.parse(String(f.detalle)) as T; } catch { return null; }
 }
 
 /** ¿Está hecho este paso en la ejecución vigente? */

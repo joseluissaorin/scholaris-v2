@@ -7,7 +7,7 @@
  *   npx tsx apps/api/scripts/comprender-local.ts --salida DIR --spdf a.spdf --spdf b.spdf \
  *     [--percepcion DOC=ruta.json] [--lentes DOC=cine,documental] [--alto MODELO] [--rapido MODELO] \
  *     [--presupuesto 6] [--solo DOC] [--sin-vectores] [--sin-wikidata] [--forzar] [--estanteria pasada-anterior.sqlite]
- *     [--unidades DOC=transcripcion-revisada.json]
+ *     [--unidades DOC=transcripcion-revisada.json] [--como-produccion]
  *
  *   npx tsx apps/api/scripts/comprender-local.ts evaluar --salida DIR --spdf … --modelos a,b,c [--segmentos 3]
  *     Hace la estructura una vez (con --alto) y después las fichas de los primeros
@@ -20,7 +20,8 @@ import { join } from 'node:path';
 import type { Lente, PercepcionMedio } from '@scholaris/nucleo';
 import { aplicarEsquemaFunciones } from '@scholaris/funciones';
 import {
-  comprenderDocumento, fichasDeLote, leerEstadoComprension, leerMaterial, lente, lotesDeFichas, pasoSegmentos, planificarComprension,
+  cerrarComprension, comprenderDocumento, fichasDeLote, leerEstadoComprension, leerMaterial, lente, lotesDeFichas, pasoEntidades, pasoFichas, pasoGlobal, pasoIndexado,
+  pasoPersonajes, pasoSegmentos, planificarComprension, type PlanComprension,
   type ContextoComprension, type ModeloComprension,
 } from '@scholaris/ingesta';
 import { crearComprensorGemini, crearGemini } from '@scholaris/proveedores';
@@ -119,6 +120,32 @@ async function volcar(doc: string, carpeta: string): Promise<Record<string, unkn
   return { documento: doc, estado: estado?.estado, lentes: estado?.lentes, usd: estado?.usd, segmentos: segmentos.length, fichas: porClase, entidades: entidades.length, apariciones: porRol, relaciones: relaciones.length };
 }
 
+async function comoProduccion(modelo: ModeloComprension, doc: string, o: Parameters<typeof planificarComprension>[2]) {
+  const ctxPaso = (segundos?: number) => ({
+    ...contexto(modelo), ...(segundos ? { limite: Date.now() + segundos * 1000 - 5_000 } : {}),
+    registro: (r: object) => console.log(JSON.stringify({ que: 'comprension', ...r })),
+  });
+  const medir = async <T>(paso: string, segundos: number, fn: () => Promise<T>): Promise<T> => {
+    const t0 = Date.now();
+    const r = await fn();
+    console.log(JSON.stringify({ que: 'paso', paso, ms: Date.now() - t0, plazo: segundos * 1000, holgura: Math.round((segundos * 1000 - (Date.now() - t0)) / 1000) }));
+    return r;
+  };
+  const plan: PlanComprension = await planificarComprension(ctxPaso(), doc, o);
+  const pz = plan.plazos;
+  const { lotes } = await medir('estructura', pz.estructura, () => pasoSegmentos(ctxPaso(pz.estructura), plan));
+  await Promise.all([
+    Promise.all(Array.from({ length: lotes }, (_, i) => medir(`fichas-${i}`, pz.fichas, () => pasoFichas(ctxPaso(pz.fichas), plan, i)))),
+    (async () => {
+      await medir('entidades', pz.entidades, () => pasoEntidades(ctxPaso(pz.entidades), plan));
+      await medir('personajes', pz.personajes, () => pasoPersonajes(ctxPaso(pz.personajes), plan));
+    })(),
+  ]);
+  await medir('global', pz.global, () => pasoGlobal(ctxPaso(pz.global), plan));
+  await medir('indexado', pz.indexado, () => pasoIndexado(ctxPaso(pz.indexado), plan));
+  return cerrarComprension(ctxPaso(), plan, { ok: true });
+}
+
 if (modo === 'comprender') {
   const modelo = comprensor(valor('alto'), valor('rapido'));
   const resumen: Record<string, unknown>[] = [];
@@ -127,9 +154,9 @@ if (modo === 'comprender') {
     const t0 = Date.now();
     console.log(`\n== Comprendiendo ${doc}`);
     const lentes = lentesFijas.get(doc)?.split(',') as Lente[] | undefined;
-    const e = await comprenderDocumento(contexto(modelo), doc, {
-      ...(lentes ? { lentes } : {}), presupuestoUsd: Number(valor('presupuesto') ?? 6), forzar: bandera('forzar'), concurrencia: 4,
-    });
+    const opcionesDoc = { ...(lentes ? { lentes } : {}), presupuestoUsd: Number(valor('presupuesto') ?? 6), forzar: bandera('forzar'), concurrencia: 4 };
+    // --como-produccion: los pasos como los corre el Workflow, cada uno con su plazo (limite) y su diario en JSON.
+    const e = bandera('como-produccion') ? await comoProduccion(modelo, doc, opcionesDoc) : await comprenderDocumento(contexto(modelo), doc, opcionesDoc);
     console.log(`  ${e.estado} en ${Math.round((Date.now() - t0) / 1000)} s · ${e.usd.toFixed(3)} USD · ${e.llamadas} llamadas · avisos: ${e.avisos.join(' | ') || 'ninguno'}`);
     resumen.push({ ...(await volcar(doc, join(salida, doc))), segundos: Math.round((Date.now() - t0) / 1000) });
   }
