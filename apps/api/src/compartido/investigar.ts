@@ -15,6 +15,7 @@ import { claveDe } from '../rutas/util.js';
 import { prefijoDocumento } from '../rutas/subidas.js';
 import { fallo } from './errores.js';
 import { obtenerBuscador } from './servicios.js';
+import { fuenteGeminiDocumento } from './percepcion.js';
 
 /**
  * Modelos del agente, elegidos con el banco de Investigar (packages/investigar/banco,
@@ -43,7 +44,8 @@ export const MODELOS_INVESTIGAR = {
 /** Modelos que una petición puede pedir para el agente (el banco compara con ellos). */
 export const CANDIDATOS_AGENTE = ['gemini-4-argon', 'gemini-3.1-pro-preview', 'gemini-3.1-pro-preview-customtools', 'gemini-pro-latest', 'gemini-3.8-flash'];
 
-const MAX_GEMINI = 2 * 1024 * 1024 * 1024;
+/** Lo que cabe en una sola petición de subida a Gemini (más arriba, 413). */
+const MAX_ORIGINAL_SIN_PROXY = 16 * 1024 * 1024;
 const SEIS_HORAS = 6 * 3600_000;
 
 interface CacheFuente { uri: string; nombre: string; mime: string; bytes: number; subido: string; expira?: string; etag?: string; clave?: string }
@@ -61,6 +63,12 @@ export async function fuenteMedio(p: PuertosUsuario, cfg: ConfigGeminiAgente, do
       const claveCache = `${prefijo}proxy.gemini.json`;
       const proxy = `${prefijo}proxy.mp4`;
       const cabProxy = await p.almacen.cabecera(proxy).catch(() => null);
+      // Con proxy, la subida por trozos de la percepción (la de una sola petición da 413 con
+      // cientos de MB); la caché es la misma, «proxy.gemini.json».
+      if (cabProxy) {
+        const f = await fuenteGeminiDocumento(p.almacen, { clave: cfg.clave, ...(cfg.baseUrl ? { baseUrl: cfg.baseUrl } : {}), ...(cfg.cabeceras ? { cabeceras: cfg.cabeceras } : {}) }, prefijo);
+        return { uri: f.uri, mime: f.mime };
+      }
       const original = d.original ? claveDe(p.usuario.id, documento, d.original) : '';
       const cabOriginal = !cabProxy && original ? await p.almacen.cabecera(original).catch(() => null) : null;
       const fuente = cabProxy ? { clave: proxy, cab: cabProxy, mime: d.tipo === 'audio' ? 'audio/mp4' : 'video/mp4' } : cabOriginal ? { clave: original, cab: cabOriginal, mime: d.mime } : null;
@@ -74,7 +82,8 @@ export async function fuenteMedio(p: PuertosUsuario, cfg: ConfigGeminiAgente, do
         }
       }
       if (!fuente) return null;
-      if (fuente.cab.bytes > MAX_GEMINI) fallo('demasiado_grande', 'El vídeo pesa más de 2 GB y aún no tiene versión ligera: no lo puedo mirar.');
+      // Sin proxy, el original solo se sube de una vez si es pequeño; si no, hace falta la versión ligera.
+      if (fuente.cab.bytes > MAX_ORIGINAL_SIN_PROXY) fallo('demasiado_grande', 'Este medio aún no tiene versión ligera y el original es demasiado grande para mirarlo: vuelve a procesarlo para crearla.');
       if (!p.almacen.flujoRango) return null;
       const flujo = await p.almacen.flujoRango(fuente.clave, 0, fuente.cab.bytes - 1);
       if (!flujo) return null;
