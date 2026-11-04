@@ -194,6 +194,7 @@ export function crearModeloGemini(cfg: ConfigGeminiAgente, modelo: string): Mode
       const lector = res.body.pipeThrough(new TextDecoderStream()).getReader();
       let resto = '';
       let final: RespuestaGemini = {};
+      let fin: string | undefined;
       for (;;) {
         const { value, done } = await lector.read();
         if (done) break;
@@ -206,12 +207,14 @@ export function crearModeloGemini(cfg: ConfigGeminiAgente, modelo: string): Mode
           let j: RespuestaGemini;
           try { j = JSON.parse(linea.slice(5).trim()) as RespuestaGemini; } catch { continue; }
           if (j.usageMetadata) final = j;
+          if (j.promptFeedback?.blockReason) throw new ErrorProveedor('gemini', `petición bloqueada: ${j.promptFeedback.blockReason}`, { reintentable: false });
+          if (j.candidates?.[0]?.finishReason) fin = j.candidates[0].finishReason;
           for (const parte of j.candidates?.[0]?.content?.parts ?? []) {
             if (typeof parte.text === 'string' && !parte.thought && parte.text) yield { delta: parte.text };
           }
         }
       }
-      yield { uso: usoDe(modelo, final, Date.now() - t0) };
+      yield { uso: usoDe(modelo, final, Date.now() - t0), ...(fin ? { fin } : {}) };
     },
   };
 }

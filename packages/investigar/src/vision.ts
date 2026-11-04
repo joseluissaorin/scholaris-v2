@@ -118,7 +118,7 @@ async function mirar(args: Record<string, unknown>, ctx: ContextoHerramientas, m
       modo === 'ver'
         ? 'Analiza como un especialista en cine: planos (escala, angulación, movimiento de cámara), composición y quién domina el encuadre, profundidad de campo, luz y color, montaje, objetos y símbolos, texto en pantalla. Una observación por plano o hecho relevante para la pregunta, con su instante y la caja de lo descrito en el fotograma de ese instante.'
         : 'Analiza el sonido: música (diegética o no, qué pieza si la reconoces), canciones, silencios, ruido ambiente, tono y prosodia de las voces, quién habla. Una observación por hecho sonoro relevante, con su instante.',
-      'Los instantes, SIEMPRE contados desde el principio de la obra completa. Solo lo que se ve o se oye de verdad; si algo no se distingue, dilo en la respuesta. Escribe en español.',
+      'Los instantes, SIEMPRE contados desde el principio de la obra completa. Solo lo que se ve o se oye de verdad; si algo no se distingue, dilo en la respuesta. No identifiques un objeto, una persona, un gesto o una pieza musical con más precisión de la que se distingue (si no se ve bien si es un disco o un casete, di «un soporte de música»; si no se sabe quién canta, no lo nombres); en las observaciones, quién es cada persona solo si se la reconoce sin duda. Escribe en español.',
     ].filter(Boolean).join('\n\n');
   } else {
     if (modo === 'escuchar') return fallo('Este documento no tiene sonido: usa «ver» o «leer».');
@@ -264,3 +264,55 @@ export async function volverAMirar(ctx: ContextoHerramientas, p: Prueba, frase: 
   return { veredicto: v, nota: texto(j.nota) };
 }
 
+
+/** El tramo que se vuelve a mirar para comprobar una prueba de un medio: el de la cita, con margen. */
+export function tramoDeComprobacion(a: { t0: number; t1: number; instante?: number }): [number, number] {
+  const centro = a.instante ?? a.t0;
+  const desde = Math.max(0, Math.min(a.t0, centro) - 2);
+  // Como en el banco: al menos 8 s desde el principio, y como mucho 45 s.
+  const hasta = Math.min(desde + 45, Math.max(a.t1 + 2, desde + 10));
+  return [Math.round(desde * 10) / 10, Math.round(hasta * 10) / 10];
+}
+
+/**
+ * Comprueba varias afirmaciones a la vez en el sitio de una prueba: el tramo del vídeo o del
+ * audio (con margen) o la imagen de la página. Para cada una: «si» (se ve o se oye tal
+ * cual), «no» (no es así) o «dudoso». Null si ese sitio no se puede mirar.
+ */
+export async function comprobarEnSitio(ctx: ContextoHerramientas, p: Prueba, afirmaciones: string[], sentido: 'ver' | 'escuchar', o: { signal?: AbortSignal } = {}): Promise<Array<{ veredicto: 'si' | 'no' | 'dudoso'; nota: string }> | null> {
+  if (!afirmaciones.length) return [];
+  const modelo = ctx.p.modelos.revisor ?? ctx.p.modelos.agente;
+  const e = p.evidencia;
+  const a = e.ancla;
+  const partes: ParteMensaje[] = [];
+  const lista = afirmaciones.map((x, i) => `${i + 1}. ${x}`).join('\n');
+  const reglas = 'Para cada afirmación responde «si» solo si TODO lo que afirma se ve o se oye tal cual (quién es cada persona, qué hace, qué objeto, cuántos, qué música, qué gesto, la escala del plano si la dice); «no» si algo no es así (otra persona, otro objeto, otra acción, otra música, o no ocurre aquí); «dudoso» si no se distingue. Sé estricto con cada detalle. Una nota breve en español para cada una que diga qué detalle falla.';
+  if (a.tipo === 'tiempo') {
+    const fuente = ctx.p.medios ? await ctx.p.medios.fuente(e.documento).catch(() => null) : null;
+    if (!fuente) return null;
+    const [desde, hasta] = tramoDeComprobacion(a);
+    partes.push({ tipo: 'medio', uri: fuente.uri, mime: fuente.mime, desde, hasta, fps: 1 });
+    partes.push({ tipo: 'texto', texto: `Tramo ${tiempoACadena(desde)}-${tiempoACadena(hasta)} (${sentido === 'escuchar' ? 'escucha con atención el sonido: música, voces, ruidos' : 'mira y escucha'}). Afirmaciones sobre este tramo:\n${lista}\n\n${reglas}` });
+  } else if (a.tipo === 'pagina' && p.imagen && ctx.p.medios) {
+    const img = await ctx.p.medios.imagen(e.documento, p.imagen).catch(() => null);
+    if (!img) return null;
+    partes.push({ tipo: 'bytes', bytes: img.bytes, mime: img.mime });
+    partes.push({ tipo: 'texto', texto: `Afirmaciones sobre esta página:\n${lista}\n\n${reglas}` });
+  } else return null;
+  const r = await modelo.turno({
+    mensajes: [{ rol: 'usuario', partes }], pensamiento: 'bajo', temperatura: 0, maxTokens: 1500, resolucion: 'media',
+    esquema: {
+      type: 'object',
+      properties: { juicios: { type: 'array', items: { type: 'object', properties: { n: { type: 'integer' }, veredicto: { type: 'string', enum: ['si', 'no', 'dudoso'] }, nota: { type: 'string' } }, required: ['n', 'veredicto', 'nota'] } } },
+      required: ['juicios'],
+    },
+    ...(o.signal ?? ctx.signal ? { signal: o.signal ?? ctx.signal } : {}),
+  });
+  ctx.cuentas.apuntar(r.uso);
+  const juicios = ((r.json ?? {}) as { juicios?: Array<{ n: number; veredicto?: string; nota?: string }> }).juicios ?? [];
+  return afirmaciones.map((_, i) => {
+    const j = juicios.find((x) => x.n === i + 1);
+    const v = j?.veredicto === 'si' || j?.veredicto === 'no' ? j.veredicto : 'dudoso';
+    return { veredicto: v, nota: texto(j?.nota) };
+  });
+}

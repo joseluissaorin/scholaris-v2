@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { EventoInvestigacion } from '@scholaris/contrato';
 import { listarSintesis, listarTarjetas } from '@scholaris/funciones';
 import { investigar, investigarCompleto } from '../src/agente.js';
@@ -45,6 +45,11 @@ describe('investigar', () => {
     const pagina = evidencias.find((e) => e.evidencia.documento === CUENTO);
     expect(pagina?.evidencia.imagenUrl).toMatch(/^https:\/\/img\/doc-cuento\/paginas\//);
 
+    // Quiso terminar pronto (6 de 16 pasos): se le pidió una vez repasar el plan antes de dejarlo.
+    const turnos = modelo.peticiones.filter((x) => x.herramientas?.length);
+    expect(turnos).toHaveLength(5);
+    expect(textoDe(turnos.at(-1)!).match(/repasa el plan/g)).toHaveLength(1);
+
     // El modelo de visión recibió el tramo recortado del vídeo.
     const peticionVer = modelo.peticiones.find((p) => JSON.stringify(p.esquema ?? {}).includes('observaciones'))!;
     expect(peticionVer.mensajes[0]!.partes[0]).toMatchObject({ tipo: 'medio', uri: 'https://archivos/fresa', desde: 590, hasta: 645 });
@@ -60,9 +65,9 @@ describe('investigar', () => {
     if (fin?.tipo !== 'fin') throw new Error('sin fin');
     expect(fin.markdown).toContain('## Pruebas');
     expect(fin.markdown).not.toContain('P999');
-    // E4: la misma página citada sin cita literal (en la tabla) es la página entera, otra evidencia.
-    expect(fin.evidencias.map((e) => e.id)).toEqual(['E1', 'E2', 'E3', 'E4']);
-    expect(fin.evidencias[3]!.ancla.caracteres).toBeUndefined();
+    // La tabla resume sin marcas (una fila se juzga entera): la página que solo citaba la tabla ya no es prueba.
+    expect(fin.evidencias.map((e) => e.id)).toEqual(['E1', 'E2', 'E3']);
+    expect(fin.markdown).toContain('| Cuento | marca a Diego |');
     const e1 = fin.evidencias[0]!;
     expect(e1).toMatchObject({ documento: CUENTO, etiqueta: 'p. 4', citaCorta: '(Paz, 1991/1994, p. 4)' });
     expect(e1.cita).toBe('habiendo chocolate, había pedido fresa.');
@@ -81,7 +86,7 @@ describe('investigar', () => {
     // La memoria: un cuaderno con una tarjeta verificada por prueba, la nota y la síntesis; y el historial.
     expect(fin.cuaderno).toBeDefined();
     const tarjetas = await listarTarjetas(sql, fin.cuaderno!);
-    expect(tarjetas.filter((t) => t.cita).length).toBe(4);
+    expect(tarjetas.filter((t) => t.cita).length).toBe(3);
     expect(tarjetas.find((t) => t.tipo === 'nota')?.contenido).toMatchObject({ clase: 'hallazgo' });
     expect(tarjetas.find((t) => t.tipo === 'tramo')).toBeDefined();
     const [s] = await listarSintesis(sql, fin.cuaderno!);
@@ -139,5 +144,74 @@ describe('investigar', () => {
     const r = await investigarCompleto(puertos(sql, new ModeloGuion(guionCompleto())), 'fresa', { filtros: { documentos: [CUENTO] }, cuaderno: false, sinHistorial: true });
     expect(r.evidencias.every((e) => e.documento === CUENTO)).toBe(true);
     expect(r.plan?.documentos.map((d) => d.id)).toEqual([CUENTO]);
+  });
+});
+
+describe('una redacción vacía o cortada nunca llega a «fin»', () => {
+  /** El guion completo, pero la redacción falla las primeras `fallos` veces de la forma indicada. */
+  function conRedaccionFallida(fallos: number, forma: 'vacia' | 'cortada' | 'error') {
+    const base = guionCompleto();
+    let redacciones = 0;
+    const modelo = new ModeloGuion(base);
+    const original = modelo.flujo.bind(modelo);
+    modelo.flujo = async function* (p) {
+      // La redacción es la única petición sin esquema ni herramientas.
+      if (!p.esquema && !p.herramientas?.length && redacciones++ < fallos) {
+        if (forma === 'error') throw new Error('el flujo se cortó');
+        if (forma === 'cortada') { yield { delta: 'En el cuento, Diego llega a la mesa del narrador y pide fresa, pero el texto se corta aquí sin' }; yield { uso: { modelo: 'guion', entrada: 1, salida: 1, cache: 0, usd: 0, ms: 1 }, fin: 'MAX_TOKENS' }; return; }
+        yield { uso: { modelo: 'guion', entrada: 1, salida: 0, cache: 0, usd: 0, ms: 1 }, fin: 'STOP' };
+        return;
+      }
+      yield* original(p);
+    };
+    return { modelo, redacciones: () => redacciones };
+  }
+
+  for (const forma of ['vacia', 'cortada', 'error'] as const) {
+    it(`si la primera sale ${forma}, se vuelve a escribir y la interfaz descarta lo recibido`, async () => {
+      const sql = crearSQL();
+      await sembrar(sql);
+      const { modelo, redacciones } = conRedaccionFallida(1, forma);
+      const avisos: string[] = [];
+      const espia = vi.spyOn(console, 'error').mockImplementation((x: unknown) => { avisos.push(String(x)); });
+      const eventos = await todo(investigar(puertos(sql, modelo), '¿Cómo cambia Coppelia?', { cuaderno: false, sinHistorial: true }));
+      espia.mockRestore();
+      expect(redacciones()).toBe(2);
+      expect(eventos.some((e) => e.tipo === 'texto' && e.reinicio)).toBe(true);
+      const fin = eventos.at(-1);
+      expect(fin?.tipo).toBe('fin');
+      if (fin?.tipo === 'fin') expect(fin.markdown).toContain('[E1]');
+      expect(avisos.some((a) => JSON.parse(a).que === 'investigar_redaccion_fallida')).toBe(true);
+    });
+  }
+
+  it('si falla en todos los intentos, termina en error (sin «fin») y lo deja escrito en el registro', async () => {
+    const sql = crearSQL();
+    await sembrar(sql);
+    const { modelo, redacciones } = conRedaccionFallida(99, 'vacia');
+    const avisos: string[] = [];
+    const espia = vi.spyOn(console, 'error').mockImplementation((x: unknown) => { avisos.push(String(x)); });
+    const eventos = await todo(investigar(puertos(sql, modelo), '¿Cómo cambia Coppelia?', { cuaderno: false }));
+    espia.mockRestore();
+    // Con un solo modelo para todo, el redactor se intenta dos veces.
+    expect(redacciones()).toBe(2);
+    expect(eventos.some((e) => e.tipo === 'fin')).toBe(false);
+    expect(eventos.at(-1)).toMatchObject({ tipo: 'error', mensaje: expect.stringMatching(/vacía o cortada/) });
+    expect(avisos.map((a) => { try { return JSON.parse(a).que; } catch { return ''; } })).toContain('investigar_sin_respuesta');
+    // Queda en el historial como error, no como respuesta.
+    const [h] = await sql.ejecutar<{ estado: string }>('SELECT estado FROM historial');
+    expect(h?.estado).toBe('error');
+  });
+
+  it('con un redactor propio, el tercer intento es con otro modelo', async () => {
+    const sql = crearSQL();
+    await sembrar(sql);
+    const p = puertos(sql, new ModeloGuion(guionCompleto()));
+    const roto = new ModeloGuion(() => ({ texto: '' }));
+    Object.defineProperty(roto, 'nombre', { value: 'redactor-roto' });
+    p.modelos.redactor = roto;
+    const eventos = await todo(investigar(p, '¿Cómo cambia Coppelia?', { cuaderno: false, sinHistorial: true }));
+    expect(roto.peticiones.filter((x) => !x.esquema && !x.herramientas?.length)).toHaveLength(2);
+    expect(eventos.at(-1)?.tipo).toBe('fin');
   });
 });

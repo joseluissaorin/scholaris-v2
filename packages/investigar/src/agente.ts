@@ -15,11 +15,12 @@ import type { Filtros } from '@scholaris/nucleo';
 import { recortar, type ContextoHerramientas, type Herramienta, type ResultadoHerramienta } from './contexto.js';
 import { HERRAMIENTAS_LECTURA } from './herramientas.js';
 import { guardarEnCuaderno, guardarEnHistorial, HERRAMIENTAS_MEMORIA, type Investigacion } from './memoria.js';
-import { Contabilidad, type MensajeAgente, type ParteMensaje } from './modelo.js';
+import { Contabilidad, type MensajeAgente, type ModeloAgente, type ParteMensaje } from './modelo.js';
 import { candidatas, catalogo, planificar } from './plan.js';
 import { presupuestoDe, type OpcionesInvestigar, type PuertosInvestigar } from './puertos.js';
 import { CuadernoPruebas, fichaDocumento, vistaPrueba, type Prueba } from './pruebas.js';
 import { regionesDeCitas } from './regiones.js';
+import { quitarLocalizadores, renumerar, tablasSinMarcas } from './prosa.js';
 import { afinar, nombreIdioma, Numerador, redactar } from './sintesis.js';
 import { confianzaDe, marcarSinPrueba, verificar } from './verificacion.js';
 import { escuchar, ver } from './vision.js';
@@ -58,6 +59,32 @@ export function compactar(mensajes: MensajeAgente[], limite = 160_000, conservar
     });
     if (tam() <= limite) return;
   }
+}
+
+/** La redacción no llegó: ningún `fin` con una respuesta vacía o cortada. */
+export class ErrorRedaccion extends Error {
+  constructor(mensaje: string) {
+    super(mensaje);
+    this.name = 'ErrorRedaccion';
+  }
+}
+
+/**
+ * ¿Falló la redacción? Vacía (o casi), o cortada: el proveedor no terminó con STOP (se quedó
+ * sin tokens, la bloqueó, la cortó). Devuelve el motivo, o null si está bien.
+ */
+export function redaccionFallida(texto: string, fin?: string): string | null {
+  const limpio = texto.replace(/\[E\d+\]/g, '').trim();
+  if (limpio.length < 120) return `vacía (${limpio.length} caracteres)`;
+  if (fin && !/^(STOP|FINISH_REASON_UNSPECIFIED)$/.test(fin)) return `cortada (${fin})`;
+  return null;
+}
+
+/** Con qué modelos se intenta redactar: el redactor dos veces y, después, otro distinto. */
+export function modelosRedaccion(p: PuertosInvestigar): ModeloAgente[] {
+  const principal = p.modelos.redactor ?? p.modelos.agente;
+  const otro = [p.modelos.agente, p.modelos.verificador, p.modelos.vision].find((m) => m && m !== principal && m.nombre !== principal.nombre);
+  return [principal, principal, ...(otro ? [otro] : [])];
 }
 
 /** Ejecuta varias promesas con un tope de concurrencia, conservando el orden. */
@@ -185,6 +212,7 @@ export async function* investigar(p: PuertosInvestigar, pregunta: string, o: Opc
     }];
     let pasos = 0;
     let empujado = false;
+    let repasado = false;
     let reflexion = '';
     const agotado = () => pasos >= presupuesto.pasos || reloj() - t0 > presupuesto.segundos * 1000 || cuentas.usd >= presupuesto.usd;
     while (!agotado()) {
@@ -198,6 +226,14 @@ export async function* investigar(p: PuertosInvestigar, pregunta: string, o: Opc
         if (!ctx.pruebas.tamano && !empujado) {
           empujado = true;
           mensajes.push({ rol: 'usuario', partes: [{ tipo: 'texto', texto: 'Aún no hay ninguna prueba en el cuaderno: usa las herramientas para reunirlas antes de terminar.' }] });
+          continue;
+        }
+        // Terminar muy pronto suele dejar partes sin cubrir (en el banco, una tabla de diálogos se quedó
+        // a la mitad): una vez, antes de dejarlo, se repasa el plan subpregunta por subpregunta.
+        if (!repasado && plan.subpreguntas.length && pasos < presupuesto.pasos * 0.6 && reloj() - t0 < presupuesto.segundos * 600) {
+          repasado = true;
+          const lista = plan.subpreguntas.map((sp, i) => `${i + 1}. ${sp.pregunta}${sp.documentos?.length ? ` (obras: ${sp.documentos.join(', ')})` : ''}`).join('\n');
+          mensajes.push({ rol: 'usuario', partes: [{ tipo: 'texto', texto: `Antes de terminar, repasa el plan. Para cada subpregunta, ¿tienes pruebas de cada obra que interviene y de cada caso que pide la pregunta (cada diálogo, cada escena, cada motivo)? Si falta algo, sigue buscando; si está todo, termina.\n${lista}` }] });
           continue;
         }
         reflexion = r.texto;
@@ -223,47 +259,106 @@ export async function* investigar(p: PuertosInvestigar, pregunta: string, o: Opc
     }
     if (agotado()) avisos.push(`La investigación agotó su presupuesto (${pasos} pasos, ${Math.round((reloj() - t0) / 1000)} s, ${cuentas.usd.toFixed(3)} $).`);
 
-    // 4. La redacción.
-    const numerador = new Numerador(ctx, (x) => (x.imagen ? urls.get(`${x.evidencia.documento}|${x.imagen}`) : undefined));
+    const fases: Record<string, number> = { bucle: Math.round(reloj() - t0) };
+    let marca = reloj();
+    const fase = (nombre: string) => { fases[nombre] = Math.round(reloj() - marca); marca = reloj(); };
+    // 4. La redacción. Una redacción vacía o cortada (un flujo que se cae, un modelo que no
+    // devuelve nada) nunca llega a «fin»: se vuelve a escribir (otra vez con el mismo modelo y
+    // después con otro) y, si sigue fallando, la investigación termina en error.
+    const urlNumerador = (x: Prueba) => (x.imagen ? urls.get(`${x.evidencia.documento}|${x.imagen}`) : undefined);
+    let numerador = new Numerador(ctx, urlNumerador);
     for (const x of ctx.pruebas.todas()) await urlDe(x);
     let texto = '';
     if (!ctx.pruebas.tamano) {
       texto = idioma.startsWith('en') ? 'I could not find evidence in your library to answer this question.' : 'No he encontrado en tu biblioteca pruebas con que responder a esta pregunta.';
       yield { tipo: 'texto', delta: texto };
     } else {
-      for await (const t of redactar(ctx, numerador, pregunta, plan, ctx.notas, reflexion, idioma)) {
-        texto += t.delta;
-        yield { tipo: 'texto', delta: t.delta, ...(Object.keys(t.marcas).length ? { marcas: t.marcas } : {}) };
+      let lista = false;
+      const intentos = modelosRedaccion(p);
+      for (const [i, modelo] of intentos.entries()) {
+        if (i) {
+          numerador = new Numerador(ctx, urlNumerador);
+          yield { tipo: 'texto', delta: '', reinicio: true };
+        }
+        texto = '';
+        const estado: { fin?: string } = {};
+        let fallo: string | undefined;
+        try {
+          for await (const t of redactar(ctx, numerador, pregunta, plan, ctx.notas, reflexion, idioma, { modelo, estado })) {
+            texto += t.delta;
+            yield { tipo: 'texto', delta: t.delta, ...(Object.keys(t.marcas).length ? { marcas: t.marcas } : {}) };
+          }
+        } catch (e) {
+          if (o.signal?.aborted) throw e;
+          fallo = (e as Error).message ?? String(e);
+        }
+        const problema = fallo ? `error: ${fallo.slice(0, 200)}` : redaccionFallida(texto, estado.fin);
+        if (!problema) { lista = true; break; }
+        console.error(JSON.stringify({ nivel: 'aviso', que: 'investigar_redaccion_fallida', id, intento: i + 1, de: intentos.length, modelo: modelo.nombre, problema, longitud: texto.length, fin: estado.fin ?? null }));
+      }
+      if (!lista) {
+        console.error(JSON.stringify({ nivel: 'error', que: 'investigar_sin_respuesta', id, intentos: intentos.length, pruebas: ctx.pruebas.tamano }));
+        throw new ErrorRedaccion('La redacción salió vacía o cortada en todos los intentos.');
       }
     }
     if (numerador.descartadas.length) avisos.push(`Se quitaron ${numerador.descartadas.length} marcas que no correspondían a ninguna prueba.`);
 
-    // 5. Las páginas citadas sin cita literal, a sus oraciones; y la verificación.
-    afinar(numerador, ctx, texto);
-    // Mientras se verifica, las citas en páginas reciben su región en la imagen (anclaje material).
+    fase('redaccion');
+    // 5. La prosa, sin páginas ni minutos escritos a mano (el sitio lo dan las marcas) y sin
+    // marcas en las tablas (una fila se juzga entera y casi ninguna marca la sostiene entera).
+    const anclas = () => numerador.marcadas.map((m) => m.evidencia);
+    const sinTablas = tablasSinMarcas(texto);
+    const loc = quitarLocalizadores(sinTablas.markdown, anclas());
+    let cuerpo = loc.markdown;
+    if (loc.quitados) avisos.push(`Se quitaron ${loc.quitados} páginas o minutos escritos en la prosa: el sitio lo dan las marcas${loc.convertidos ? ` (${loc.convertidos} pasaron a ser marcas)` : ''}.`);
+
+    // 6. Las páginas citadas sin cita literal, a sus oraciones; la verificación y la corrección.
+    afinar(numerador, ctx, cuerpo);
+    const regiones = () => regionesDeCitas(ctx, numerador, { vision: () => cuentas.usd < presupuesto.usd }).catch(() => null);
+    const tRegiones = reloj();
+    let msRegiones = 0;
     const [v, rg] = await Promise.all([
-      verificar(ctx, numerador, texto, presupuesto.revisiones),
-      regionesDeCitas(ctx, numerador, { vision: () => cuentas.usd < presupuesto.usd }).catch(() => null),
+      verificar(ctx, numerador, cuerpo, { sitios: presupuesto.revisiones }),
+      regiones().finally(() => { msRegiones = Math.round(reloj() - tRegiones); }),
     ]);
-    if (rg?.uso.llamadas) {
+    cuerpo = quitarLocalizadores(v.markdown, anclas()).markdown;
+    // Lo corregido puede citar pruebas nuevas: a sus oraciones y a su región.
+    let rg2: Awaited<ReturnType<typeof regiones>> = null;
+    fase('verificacion');
+    // Las citas nuevas de la corrección, a su región sin visión (gratis y al momento; en un escaneo se quedan con sus caracteres).
+    if (v.correcciones) { afinar(numerador, ctx, cuerpo); rg2 = await regionesDeCitas(ctx, numerador, { vision: false }).catch(() => null); }
+    for (const r of [rg, rg2]) {
+      if (!r?.uso.llamadas) continue;
       // Una entrada por localización, con el total en la primera.
-      for (let i = 0; i < rg.uso.llamadas; i++) cuentas.apuntar({ modelo: rg.uso.modelo, entrada: i ? 0 : rg.uso.tokensEntrada, salida: i ? 0 : rg.uso.tokensSalida, cache: 0, usd: i ? 0 : rg.uso.usd, ms: 0 });
+      for (let i = 0; i < r.uso.llamadas; i++) cuentas.apuntar({ modelo: r.uso.modelo, entrada: i ? 0 : r.uso.tokensEntrada, salida: i ? 0 : r.uso.tokensSalida, cache: 0, usd: i ? 0 : r.uso.usd, ms: 0 });
     }
-    for (const x of rg?.pruebas ?? []) {
+    for (const x of [...(rg?.pruebas ?? []), ...(rg2?.pruebas ?? [])]) {
       const url = await urlDe(x);
       yield { tipo: 'evidencia', evidencia: vistaPrueba(x, ctx.fichas.get(x.evidencia.documento), url ? { imagenUrl: url } : {}) };
     }
-    const respaldadas = v.frases.filter((f) => f.veredicto === 'respaldada').length;
-    yield { tipo: 'verificacion', frases: v.frases, respaldadas, total: v.frases.length };
-    const confianza = numerador.marcadas.length ? confianzaDe(v.frases) : 'baja';
 
-    // 6. El resultado: traducciones, pruebas, fuentes.
-    const trad = traducciones(texto);
-    const evidencias = numerador.marcadas.map((m) => {
+    // 7. El resultado: traducciones, pruebas renumeradas por orden de aparición (solo las citadas), fuentes.
+    const trad = traducciones(cuerpo);
+    const todas = numerador.marcadas.map((m) => {
       const t = trad.get(m.id);
       return t && m.evidencia.idioma && !idioma.startsWith(m.evidencia.idioma.slice(0, 2)) ? { ...m.evidencia, traduccion: t } : m.evidencia;
     });
-    markdown = `${marcarSinPrueba(texto.trim(), v.detalle)}${listaPruebas(evidencias, idioma)}`;
+    // Si la corrección dejara la respuesta vacía (no debería), vale la redacción sin corregir.
+    if (!cuerpo.trim()) {
+      console.error(JSON.stringify({ nivel: 'aviso', que: 'investigar_correccion_vacia', id, longitud: texto.length }));
+      cuerpo = texto;
+    }
+    const final = renumerar(marcarSinPrueba(cuerpo.trim(), v.detalle), todas);
+    if (!final.markdown.trim()) {
+      console.error(JSON.stringify({ nivel: 'error', que: 'investigar_sin_respuesta', id, fase: 'final' }));
+      throw new ErrorRedaccion('La respuesta final quedó vacía.');
+    }
+    const evidencias = final.evidencias;
+    const frasesFinales = v.frases.map((f) => ({ ...f, evidencias: f.evidencias.map((id) => final.mapa.get(id)).filter((x): x is string => !!x) }));
+    const respaldadas = frasesFinales.filter((f) => f.veredicto === 'respaldada').length;
+    yield { tipo: 'verificacion', frases: frasesFinales, respaldadas, total: frasesFinales.length };
+    const confianza = evidencias.length ? confianzaDe(frasesFinales) : 'baja';
+    markdown = `${final.markdown}${listaPruebas(evidencias, idioma)}`;
     const fuentes: FuenteInvestigacion[] = [];
     for (const e of evidencias) {
       let f = fuentes.find((x) => x.documento === e.documento);
@@ -275,8 +370,10 @@ export async function* investigar(p: PuertosInvestigar, pregunta: string, o: Opc
       }
       f.evidencias.push(e.id);
     }
+    fase('final');
     const ms = Math.round(reloj() - t0);
-    const inv: Investigacion = { id, pregunta, plan, markdown, evidencias, frases: v.frases, notas: ctx.notas, confianza, modelo: modeloAgente, ms };
+    console.error(JSON.stringify({ nivel: 'info', que: 'investigar_tiempos', id, ms, ...fases, ...Object.fromEntries(Object.entries(v.tiempos).map(([k, x]) => [`verificacion_${k}`, x])), regiones: msRegiones, correcciones: v.correcciones, filasCorregidas: v.filasCorregidas, pruebas: evidencias.length, usd: Math.round(cuentas.usd * 1000) / 1000, usdPorModelo: Object.fromEntries([...cuentas.porModelo].map(([m, x]) => [m, Math.round(x.usd * 1000) / 1000])) }));
+    const inv: Investigacion = { id, pregunta, plan, markdown, evidencias, frases: frasesFinales, notas: ctx.notas, confianza, modelo: modeloAgente, ms };
 
     // 7. La memoria.
     let cuaderno: string | undefined;
@@ -297,7 +394,12 @@ export async function* investigar(p: PuertosInvestigar, pregunta: string, o: Opc
       await guardarEnHistorial(p.sql, { id, pregunta, plan, markdown, evidencias: [], frases: [], notas: ctx.notas, confianza: 'baja', modelo: modeloAgente, ms: Math.round(reloj() - t0) }, { filtros, error: m, eventos });
     }
     console.error(JSON.stringify({ que: 'investigar', id, error: m }));
-    yield { tipo: 'error', mensaje: /cancelada/.test(m) ? 'Investigación cancelada.' : 'No he podido terminar la investigación. Vuelve a intentarlo.' };
+    yield {
+      tipo: 'error',
+      mensaje: /cancelada/.test(m) ? 'Investigación cancelada.'
+        : e instanceof ErrorRedaccion ? 'No he podido redactar la respuesta: el modelo la devolvió vacía o cortada. Vuelve a intentarlo.'
+          : 'No he podido terminar la investigación. Vuelve a intentarlo.',
+    };
   }
 }
 

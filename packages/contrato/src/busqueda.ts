@@ -265,8 +265,10 @@ export type EventoInvestigacion =
   /**
    * La respuesta mientras se escribe (Markdown con marcas [E1]). La definitiva es la de «fin».
    * `marcas`: las marcas nuevas de este trozo y la prueba de donde salen ({ E3: 'P7' }).
+   * `reinicio`: la redacción anterior falló (vacía o cortada) y se vuelve a escribir: lo
+   * recibido hasta aquí se descarta.
    */
-  | { tipo: 'texto'; delta: string; marcas?: Record<string, string> }
+  | { tipo: 'texto'; delta: string; marcas?: Record<string, string>; reinicio?: boolean }
   | { tipo: 'verificacion'; frases: FraseVerificada[]; respaldadas: number; total: number }
   | {
     tipo: 'fin';
