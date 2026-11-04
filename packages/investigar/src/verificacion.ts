@@ -245,54 +245,88 @@ async function juzgar(ctx: ContextoHerramientas, numerador: Numerador, frases: F
   });
 }
 
+const VISUAL = /\b(?:planos?|encuadr\w*|cámara|contrapicad\w*|picad\w*|travelling|panorámica|zoom|fotogramas?|se ve[n]?|vemos|en pantalla|mira\w*|gesto\w*|sonr[íi]\w*|llor\w*|viste\w*|ropa|vestid\w*|colores?|luz|ilumina\w*|sombras?|composición|escorzo|fondo|primer término)\b/i;
+const SONORA = /\b(?:música|musical|canci[óo]n\w*|suena\w*|se oye\w*|oímos|silencio\w*|ruido\w*|disco\w*|ópera|aria|melodía|piano|tararea\w*|cant[aó]\w*|voz en off|banda sonora|sonido\w*)\b/i;
+
 /**
- * Vuelve a mirar o a escuchar el sitio de las pruebas de las frases visuales y sonoras (y
- * de las que dicen quién habla, cuando solo se apoyan en la transcripción). Agrupa por
- * sitio: una llamada comprueba todas las frases de un tramo. Como mucho `sitios` sitios.
+ * Clase de una frase antes de juzgarla, para poder volver a mirar a la vez que se juzga: visual
+ * o sonora si alguna de sus pruebas es de lo que se vio u oyó, o si habla de planos, gestos,
+ * música…; si no, un hecho (que se revisa también si dice quién habla).
  */
-async function revisarMirando(ctx: ContextoHerramientas, numerador: Numerador, juzgadas: FraseJuzgada[], sitios: number): Promise<void> {
-  const grupos = new Map<string, { prueba: Prueba; sentido: 'ver' | 'escuchar'; frases: Array<{ f: FraseJuzgada; marca: string }> }>();
-  for (const f of juzgadas) {
-    if (f.tabla) continue;
-    const habla = f.clase === 'hecho' ? f.evidencias.find((id) => {
+export function claseProvisional(f: FraseRespuesta, numerador: Numerador): ClaseFrase {
+  if (!f.evidencias.length) return 'interpretacion';
+  const ms = f.evidencias.map((id) => numerador.marcada(id)).filter((x): x is NonNullable<typeof x> => !!x);
+  if (SONORA.test(f.limpia) || ms.some((m) => m.prueba.capa === 'percepcion' && m.evidencia.modo === 'audio')) return 'sonora';
+  if (VISUAL.test(f.limpia) || ms.some((m) => m.prueba.capa === 'percepcion' && (m.evidencia.modo === 'video' || m.evidencia.modo === 'imagen'))) return 'visual';
+  return 'hecho';
+}
+
+type Miradas = Map<number, Record<string, { veredicto: 'si' | 'no' | 'dudoso'; nota: string; sentido: 'ver' | 'escuchar' }>>;
+
+/**
+ * Vuelve a mirar o a escuchar el sitio de las pruebas de las frases visuales y sonoras (y de
+ * las que dicen quién habla, cuando solo se apoyan en la transcripción). Agrupa por sitio:
+ * una llamada comprueba todas las frases de un tramo. Como mucho `sitios` sitios.
+ */
+async function mirarSitios(ctx: ContextoHerramientas, numerador: Numerador, frases: FraseRespuesta[], clases: ClaseFrase[], sitios: number): Promise<Miradas> {
+  const salida: Miradas = new Map();
+  const grupos = new Map<string, { prueba: Prueba; sentido: 'ver' | 'escuchar'; frases: Array<{ i: number; marca: string }> }>();
+  frases.forEach((f, i) => {
+    if (f.tabla) return;
+    const clase = clases[i];
+    const habla = clase === 'hecho' ? f.evidencias.find((id) => {
       const a = numerador.marcada(id)?.evidencia.ancla;
       return a?.tipo === 'tiempo' && !!a.hablante && f.limpia.toLowerCase().includes(a.hablante.toLowerCase());
     }) : undefined;
-    if (f.clase !== 'visual' && f.clase !== 'sonora' && !habla) continue;
+    if (clase !== 'visual' && clase !== 'sonora' && !habla) return;
     for (const id of habla ? [habla] : f.evidencias) {
       const m = numerador.marcada(id);
-      if (!m || m.evidencia.ancla.tipo !== 'tiempo' && !(f.clase === 'visual' && m.evidencia.ancla.tipo === 'pagina' && m.prueba.imagen)) continue;
-      if (f.marcas[id]?.veredicto === 'no_sostiene' && f.marcas[id]?.nota?.startsWith('La cita')) continue;
+      if (!m || (m.evidencia.ancla.tipo !== 'tiempo' && !(clase === 'visual' && m.evidencia.ancla.tipo === 'pagina' && m.prueba.imagen))) continue;
       const a = m.evidencia.ancla;
       const clave = a.tipo === 'tiempo' ? `${m.evidencia.documento}|${tramoDeComprobacion(a).join('-')}` : `${m.evidencia.documento}|p${a.tipo === 'pagina' ? a.fisica : ''}`;
-      const sentido = f.clase === 'sonora' ? 'escuchar' : 'ver';
+      const sentido = clase === 'sonora' ? 'escuchar' : 'ver';
       const g = grupos.get(clave) ?? { prueba: { ...m.prueba, evidencia: m.evidencia }, sentido, frases: [] };
-      if (sentido === 'escuchar' && g.sentido === 'ver') g.sentido = 'ver'; // mirar también oye
-      g.frases.push({ f, marca: id });
+      if (g.sentido !== sentido) g.sentido = 'ver'; // mirar también oye
+      g.frases.push({ i, marca: id });
       grupos.set(clave, g);
     }
-  }
+  });
   const lista = [...grupos.values()].sort((a, b) => b.frases.length - a.frases.length).slice(0, Math.max(0, sitios));
   let k = 0;
   await Promise.all(Array.from({ length: Math.min(4, lista.length) }, async () => {
     while (k < lista.length) {
       const g = lista[k++]!;
       try {
-        const r = await comprobarEnSitio(ctx, g.prueba, g.frases.map((x) => x.f.limpia), g.sentido);
+        const r = await comprobarEnSitio(ctx, g.prueba, g.frases.map((x) => frases[x.i]!.limpia), g.sentido);
         if (!r) continue;
-        r.forEach((v, i) => {
-          const { f, marca } = g.frases[i]!;
-          f.revisada = true;
-          const antes = f.marcas[marca];
-          if (v.veredicto === 'no') f.marcas[marca] = { veredicto: 'no_sostiene', nota: `Al volver a ${g.sentido === 'ver' ? 'mirar' : 'escuchar'}: ${v.nota}` };
-          else if (v.veredicto === 'dudoso' && antes?.veredicto === 'sostiene') f.marcas[marca] = { veredicto: 'parcial', nota: `Al volver a mirar: ${v.nota}` };
-          else if (v.veredicto === 'si' && antes?.veredicto !== 'no_sostiene') f.marcas[marca] = { veredicto: 'sostiene', nota: `Comprobado al volver a mirar: ${v.nota}` };
+        r.forEach((v, n) => {
+          const { i, marca } = g.frases[n]!;
+          const m = salida.get(i) ?? {};
+          m[marca] = { ...v, sentido: g.sentido };
+          salida.set(i, m);
         });
       } catch (e) {
         ctx.avisos.push(`No se pudo volver a mirar: ${(e as Error).message}`);
       }
     }
   }));
+  return salida;
+}
+
+/** Lo visto manda: «no» quita el respaldo, «dudoso» lo rebaja y «sí» lo confirma (salvo lo literal, que no se arregla mirando). */
+function aplicarMiradas(juzgadas: FraseJuzgada[], miradas: Miradas): void {
+  for (const [i, ms] of miradas) {
+    const f = juzgadas[i];
+    if (!f) continue;
+    f.revisada = true;
+    for (const [marca, v] of Object.entries(ms)) {
+      const antes = f.marcas[marca];
+      const verbo = v.sentido === 'ver' ? 'mirar' : 'escuchar';
+      if (v.veredicto === 'no') f.marcas[marca] = { veredicto: 'no_sostiene', nota: `Al volver a ${verbo}: ${v.nota}` };
+      else if (v.veredicto === 'dudoso' && antes?.veredicto === 'sostiene') f.marcas[marca] = { veredicto: 'parcial', nota: `Al volver a ${verbo}: ${v.nota}` };
+      else if (v.veredicto === 'si' && antes && antes.veredicto !== 'no_sostiene') f.marcas[marca] = { veredicto: 'sostiene', nota: `Comprobado al volver a ${verbo}: ${v.nota}` };
+    }
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -409,8 +443,14 @@ export interface ResultadoVerificacion {
  */
 export async function verificar(ctx: ContextoHerramientas, numerador: Numerador, markdown: string, opciones: number | { sitios: number; corregir?: boolean }): Promise<ResultadoVerificacion> {
   const o = typeof opciones === 'number' ? { sitios: opciones, corregir: true } : { corregir: true, ...opciones };
-  let juzgadas = await juzgar(ctx, numerador, frasesDe(markdown));
-  await revisarMirando(ctx, numerador, juzgadas, o.sitios);
+  // Se juzga y, a la vez, se vuelve a mirar lo que parece visual o sonoro.
+  const iniciales = frasesDe(markdown);
+  const [juzgadasIniciales, miradas] = await Promise.all([
+    juzgar(ctx, numerador, iniciales),
+    mirarSitios(ctx, numerador, iniciales, iniciales.map((f) => claseProvisional(f, numerador)), o.sitios),
+  ]);
+  let juzgadas = juzgadasIniciales;
+  aplicarMiradas(juzgadas, miradas);
   let texto = markdown;
   let correcciones = 0;
   if (o.corregir) {
