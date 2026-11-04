@@ -129,7 +129,8 @@ export function rutasComprension(app: Hono<Entorno>): void {
     exigir(d.estado === 'listo', 'El documento todavía no está listo: la comprensión empieza sola cuando termina la ingesta.');
     const b = await cuerpoJson<PedirComprension>(c);
     const lentes = lentesValidas(b.lentes);
-    const r = await lanzarComprension(p, id, { ...(b.forzar ? { forzar: true } : {}), ...(lentes ? { lentes } : {}), ...(b.economico ? { economico: true } : {}) });
+    const tope = typeof b.presupuestoUsd === 'number' && Number.isFinite(b.presupuestoUsd) ? Math.min(20, Math.max(0.05, b.presupuestoUsd)) : undefined;
+    const r = await lanzarComprension(p, id, { ...(b.forzar ? { forzar: true } : {}), ...(lentes ? { lentes } : {}), ...(b.economico ? { economico: true } : {}), ...(tope !== undefined ? { presupuestoUsd: tope } : {}) });
     const salida: ComprensionLanzada = { documento: id, instancia: r.instancia, estado: r.estado };
     return c.json(salida, 202);
   });

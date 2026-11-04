@@ -27,6 +27,7 @@ export interface ParamsComprension {
   forzar?: boolean;
   lentes?: Lente[];
   economico?: boolean;
+  presupuestoUsd?: number;
   relanzamientos?: number;
   /**
    * Solo transmedia (docs/COMPRENSION.md, paso 7): detectar las relaciones del documento
@@ -119,7 +120,7 @@ const ahora = () => new Date().toISOString();
  * rehacer), no lanza otra. Sin orquestador que la lleve, la deja «pendiente».
  */
 export async function lanzarComprension(
-  p: PuertosUsuario, documento: string, o: { forzar?: boolean; lentes?: Lente[]; economico?: boolean; soloEncolar?: boolean } = {},
+  p: PuertosUsuario, documento: string, o: { forzar?: boolean; lentes?: Lente[]; economico?: boolean; presupuestoUsd?: number; soloEncolar?: boolean } = {},
 ): Promise<{ instancia: string | null; estado: EstadoComprension['estado'] }> {
   const previo = await leerEstadoComprension(p.sql, documento);
   const viva = previo && (previo.estado === 'en_marcha' || previo.estado === 'pendiente') && previo.instancia && Date.now() - Date.parse(previo.actualizado) < 30 * 60_000;
@@ -129,6 +130,7 @@ export async function lanzarComprension(
     usuario: p.usuario.id, plan: p.usuario.plan, documento, instancia,
     ...(o.forzar ? { forzar: true } : {}), ...(o.lentes?.length ? { lentes: o.lentes } : {}),
     ...(o.economico || p.usuario.plan === 'gratis' ? { economico: true } : {}),
+    ...(o.presupuestoUsd !== undefined ? { presupuestoUsd: o.presupuestoUsd } : {}),
   };
   const t = ahora();
   // Una comprensión hecha no se da por perdida al relanzarla sin «forzar» (al cerrar otra vez la

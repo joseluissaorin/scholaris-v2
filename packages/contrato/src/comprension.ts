@@ -55,6 +55,11 @@ export interface PedirComprension {
   lentes?: Lente[];
   /** Solo el modelo rápido. */
   economico?: boolean;
+  /**
+   * Tope de gasto de esta comprensión en dólares. Al llegar a él no se hacen más fichas de partes, y la
+   * estructura, las entidades y la ficha global se terminan con el modelo rápido.
+   */
+  presupuestoUsd?: number;
 }
 
 export interface PedirComprensionBiblioteca extends PedirComprension {

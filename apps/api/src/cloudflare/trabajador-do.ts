@@ -183,6 +183,7 @@ export class Trabajador extends DurableObject<Env> {
   async comprensionPlan(p: ParamsComprension): Promise<PlanComprension> {
     return this.unaVez.hacer(`cmp-plan:${p.instancia}`, async () => planificarComprension(await this.contextoComprension(p), p.documento, {
       ...(p.forzar ? { forzar: true } : {}), ...(p.lentes?.length ? { lentes: p.lentes } : {}), ...(p.economico ? { economico: true } : {}),
+      ...(p.presupuestoUsd !== undefined ? { presupuestoUsd: p.presupuestoUsd } : {}),
     }), { recordar: true });
   }
 
