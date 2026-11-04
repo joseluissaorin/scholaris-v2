@@ -15,6 +15,8 @@ WORKDIR /app
 COPY pnpm-workspace.yaml package.json pnpm-lock.yaml tsconfig.base.json ./
 COPY packages ./packages
 COPY apps ./apps
+# spdf-format va como tarball en vendor/ (lo pide @scholaris/spdf desde SPDF 5.0).
+COPY vendor ./vendor
 RUN pnpm install --prod --frozen-lockfile=false --filter "@scholaris/local..."
 
 FROM base
