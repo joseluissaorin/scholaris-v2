@@ -89,6 +89,7 @@ El 4-11-2026 el paso de entidades del cuento caducó tres veces seguidas en prod
 
 - La lista de entidades va sin análisis (unos 11 000 tokens, 95 s medidos) y el análisis de las principales, aparte (`pasoPersonajes`), en tandas de cinco a la vez (40-70 s cada una).
 - Cada llamada al modelo se acota a lo que queda del plazo del paso (`ctx.limite`, `modeloDelPaso`, `limiteMs` hasta el adaptador de Gemini, que corta también los reintentos). Sin tiempo para una llamada, `ErrorPlazo`, que no se reintenta dentro del paso.
+- Si un intento se quedó sin tiempo, el siguiente intento del paso va con el modelo rápido (`calidadDelPaso`): medido el 4-11-2026, la misma lista de 6 600 tokens tardó 95 s sola y 278 s con dos tandas de fichas a la vez; la latencia de Gemini no se puede prever.
 - Wikidata: 8 s por petición, 25 s en total y caché en `entidades_wikidata`. El índice: cada envío, acotado; lo que no llegue queda pendiente y se reenvía por la cola.
 - El latido del Workflow se calla al llegar al plazo (`compartido/latido.ts`); el de trabajo real lo da el Trabajador, al empezar y acabar cada parte y cada minuto mientras el modelo responde.
 - Diario: cada parte de cada paso deja una línea JSON (`{"que":"comprension",…}`) que `wrangler tail` enseña. En local, `comprender-local.ts --como-produccion` corre los pasos con sus plazos.

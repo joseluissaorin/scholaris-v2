@@ -26,7 +26,7 @@ import { fichaGlobal, fichasDeLote, lotesDeFichas } from './fichas.js';
 import { indexarFichas } from './indexado.js';
 import { hablantesDe, leerMaterial, muestraDe, tokensDe, type Material, type VozPercibida } from './material.js';
 import { fichasDePlanos } from './medios.js';
-import { llamar, modeloDelPaso } from './modelo.js';
+import { ErrorPlazo, llamar, modeloDelPaso } from './modelo.js';
 import { huella } from './util.js';
 import type { ContextoComprension, EstadoComprension, ModeloComprension, OpcionesComprension, PasoComprension, PlanComprension, UsoModelo } from './tipos.js';
 
@@ -40,6 +40,31 @@ function modeloDe(ctx: ContextoComprension, documento: string, paso: string): Mo
     documento, paso, ...(ctx.limite ? { limite: ctx.limite } : {}),
     ...(ctx.registro ? { registro: ctx.registro.bind(ctx) } : {}), ...(ctx.latido ? { latido: ctx.latido.bind(ctx) } : {}),
   });
+}
+
+/**
+ * Si un intento anterior de este paso se quedó sin tiempo, el siguiente va con el modelo
+ * rápido: es mejor una ficha algo menos fina que un paso que nunca termina.
+ */
+async function calidadDelPaso(ctx: ContextoComprension, documento: string, clave: string, calidad: 'alta' | 'rapida'): Promise<'alta' | 'rapida'> {
+  const plazos = (await leerDatosPaso<number>(ctx.sql, documento, `plazos:${clave}`)) ?? 0;
+  if (plazos > 0 && calidad === 'alta') ctx.registro?.({ documento, paso: clave, sub: 'calidad', estado: 'fin', detalle: { calidad: 'rapida', plazosAgotados: plazos } });
+  return plazos > 0 ? 'rapida' : calidad;
+}
+
+/** Apunta que un intento se quedó sin tiempo (lo lee `calidadDelPaso` en el siguiente) y deja seguir al error. */
+async function conRegistroDePlazo<T>(ctx: ContextoComprension, documento: string, clave: string, fn: () => Promise<T>): Promise<T> {
+  try {
+    return await fn();
+  } catch (e) {
+    const m = (e as Error)?.message ?? '';
+    if (e instanceof ErrorPlazo || /plazo|tiempo agotado/i.test(m)) {
+      const previos = (await leerDatosPaso<number>(ctx.sql, documento, `plazos:${clave}`).catch(() => 0)) ?? 0;
+      await guardarDatosPaso(ctx.sql, documento, `plazos:${clave}`, previos + 1, ahoraDe(ctx)).catch(() => undefined);
+      await vaciar(ctx).catch(() => undefined);
+    }
+    throw e;
+  }
 }
 
 /** Mide una parte de un paso y la deja en el diario (inicio, fin o error, con su duración). */
@@ -251,7 +276,8 @@ export async function pasoSegmentos(ctx: ContextoComprension, plan: PlanComprens
     const rangoMax = leidos.reduce((x, b) => Math.max(x, b.rango), -1);
     const finos = def.segmentos.filter((s) => s !== 'plano').length;
     if (!leidos.length || rangoMax < finos - 1) {
-      const delModelo = await estructuraDelModelo(m, l, modeloDe(ctx, doc, 'estructura'), acumulado, { leidos, maxCaracteres: Math.min(plan.opciones.maxCaracteresContexto ?? MAX_CONTEXTO, 1_200_000), calidad: plan.calidades.estructura });
+      const calidad = await calidadDelPaso(ctx, doc, 'estructura', plan.calidades.estructura);
+      const delModelo = await conRegistroDePlazo(ctx, doc, 'estructura', () => estructuraDelModelo(m, l, modeloDe(ctx, doc, 'estructura'), acumulado, { leidos, maxCaracteres: Math.min(plan.opciones.maxCaracteresContexto ?? MAX_CONTEXTO, 1_200_000), calidad }));
       borradores.push(...(leidos.length ? delModelo.filter((b) => b.rango > rangoMax && b.tipo !== 'otro') : delModelo));
     }
   }
@@ -307,11 +333,12 @@ export async function pasoFichas(ctx: ContextoComprension, plan: PlanComprension
       if (typeof f.datos.huellaEntrada === 'string') previas.set(f.datos.huellaEntrada, f);
     }
   }
-  const r = await fichasDeLote(m, l, segmentos, ids, modeloDe(ctx, doc, paso), acumulado, {
+  const calidadFichas = yaGastado > plan.presupuestoUsd * 0.7 ? 'rapida' : await calidadDelPaso(ctx, doc, paso, plan.calidades.fichas);
+  const r = await conRegistroDePlazo(ctx, doc, paso, () => fichasDeLote(m, l, segmentos, ids, modeloDe(ctx, doc, paso), acumulado, {
     previas,
-    largo: plan.largo, calidad: yaGastado > plan.presupuestoUsd * 0.7 ? 'rapida' : plan.calidades.fichas, maxCaracteres: plan.opciones.maxCaracteresContexto ?? MAX_CONTEXTO,
+    largo: plan.largo, calidad: calidadFichas, maxCaracteres: plan.opciones.maxCaracteresContexto ?? MAX_CONTEXTO,
     percepcion, idioma: m.documento.metadatos.idioma ?? 'es', creada: ahoraDe(ctx),
-  });
+  }));
   await escribirFichas(ctx.sql, r.fichas);
   await apuntarPaso(ctx.sql, doc, paso, acumulado.uso, Date.now() - inicio, ahoraDe(ctx), { fichas: r.fichas.length, reutilizadas: r.reutilizadas, citasDescartadas: r.descartadas, sinFicha: r.faltan },
     r.faltan ? [`${r.faltan} segmentos se quedaron sin ficha en la tanda ${lote + 1}.`] : []);
@@ -347,9 +374,10 @@ export async function pasoEntidades(ctx: ContextoComprension, plan: PlanComprens
   const acumulado = { uso: usoVacio() };
   const avisos: string[] = [];
   const conocidas = await parte(ctx, doc, paso, 'conocidas', () => conocidasEnBiblioteca(ctx.sql, doc));
-  const delModelo = await extraerEntidadesDelModelo(m, l, modeloDe(ctx, doc, paso), acumulado, {
-    largo: plan.largo, calidad: plan.calidades.entidades, maxCaracteres: Math.min(plan.opciones.maxCaracteresContexto ?? MAX_CONTEXTO, 1_200_000), percepcion, conocidas,
-  });
+  const calidad = await calidadDelPaso(ctx, doc, paso, plan.calidades.entidades);
+  const delModelo = await conRegistroDePlazo(ctx, doc, paso, () => extraerEntidadesDelModelo(m, l, modeloDe(ctx, doc, paso), acumulado, {
+    largo: plan.largo, calidad, maxCaracteres: Math.min(plan.opciones.maxCaracteresContexto ?? MAX_CONTEXTO, 1_200_000), percepcion, conocidas,
+  }));
   const ents = await parte(ctx, doc, paso, 'resolver', () => resolverEntidades(ctx.sql, delModelo), (r) => ({ entidades: r.length }));
   const apariciones = await parte(ctx, doc, paso, 'apariciones', async () => {
     // Primero lo percibido (puede añadir personas al reparto: las voces de la transcripción se casan con ellas).
@@ -404,9 +432,10 @@ export async function pasoPersonajes(ctx: ContextoComprension, plan: PlanCompren
   const { m, percepcion } = await materialDe(ctx, doc);
   const acumulado = { uso: usoVacio() };
   const ents = datos.entidades as EntidadResuelta[];
-  const analisis = await analizarEntidades(m, l, principalesDe(ents), modeloDe(ctx, doc, paso), acumulado, {
-    largo: plan.largo, calidad: plan.calidades.entidades, maxCaracteres: Math.min(plan.opciones.maxCaracteresContexto ?? MAX_CONTEXTO, 1_200_000), percepcion,
-  });
+  const calidad = await calidadDelPaso(ctx, doc, paso, plan.calidades.entidades);
+  const analisis = await conRegistroDePlazo(ctx, doc, paso, () => analizarEntidades(m, l, principalesDe(ents), modeloDe(ctx, doc, paso), acumulado, {
+    largo: plan.largo, calidad, maxCaracteres: Math.min(plan.opciones.maxCaracteresContexto ?? MAX_CONTEXTO, 1_200_000), percepcion,
+  }));
   const conAnalisis = ents.map((e) => {
     const a = analisis.get(e.nombre);
     return a ? { ...e, analisis: a.analisis, evidencias: a.evidencias } : e;
@@ -441,7 +470,7 @@ export async function pasoGlobal(ctx: ContextoComprension, plan: PlanComprension
   const segmentos = await leerSegmentos(ctx.sql, doc);
   const fichasSegmento = await leerFichas(ctx.sql, { documento: doc, objetivo: 'segmento' });
   const acumulado = { uso: usoVacio() };
-  const calidad = (await gastado(ctx.sql, doc)) > plan.presupuestoUsd ? 'rapida' : plan.calidades.global;
+  const calidad = (await gastado(ctx.sql, doc)) > plan.presupuestoUsd ? 'rapida' : await calidadDelPaso(ctx, doc, 'global', plan.calidades.global);
   await ctx.sql.ejecutar('DELETE FROM apariciones WHERE documento = ? AND id LIKE ?', doc, `${doc}:ap:t:%`);
   // Fichas de segmentos que ya no existen (la estructura cambió al rehacer): fuera, también del índice.
   const vigentes = new Set(segmentos.map((s) => s.id));
@@ -456,9 +485,9 @@ export async function pasoGlobal(ctx: ContextoComprension, plan: PlanComprension
   const fichas: Ficha[] = [];
   // Una ficha global por lente, a la vez (cada una es una llamada larga): el paso dura lo que la más lenta.
   const modelo = modeloDe(ctx, doc, 'global');
-  const globales = await Promise.all(plan.lentes.map((l, i) => fichaGlobal(m, l, segmentos, fichasVigentes, modelo, acumulado, {
+  const globales = await conRegistroDePlazo(ctx, doc, 'global', () => Promise.all(plan.lentes.map((l, i) => fichaGlobal(m, l, segmentos, fichasVigentes, modelo, acumulado, {
     largo: plan.largo, calidad, maxCaracteres: plan.opciones.maxCaracteresContexto ?? MAX_CONTEXTO, percepcion, idioma: m.documento.metadatos.idioma ?? 'es', creada: t, secundaria: i > 0,
-  })));
+  }))));
   for (const r of globales) {
     descartadas += r.descartadas;
     const { ta, mo } = await parte(ctx, doc, 'global', 'temas', async () => ({

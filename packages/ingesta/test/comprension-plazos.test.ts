@@ -81,6 +81,14 @@ describe('comprensión: plazos, diario y latido', () => {
     await expect(pasoEntidades(ctx, plan)).rejects.toThrow(/dentro del plazo \(\d+ s\) en entidades/);
     expect(llamadas).toBe(1);
     expect(registro.filter((r) => r.paso === 'entidades').map((r) => `${r.sub}:${r.estado}`)).toEqual(['conocidas:inicio', 'conocidas:fin', 'modelo:entidades:inicio', 'modelo:entidades:error']);
+    // El intento siguiente del paso va con el modelo rápido: mejor algo menos fino que un paso que nunca termina.
+    const calidades: string[] = [];
+    const repuesto: ModeloComprension = {
+      nombre: 'repuesto', modelo: (c) => c,
+      async generar<T>(p: PeticionComprension) { calidades.push(`${p.operacion}:${p.calidad}`); return { json: { entidades: [{ nombre: 'Diego', tipo: 'personaje', formas: ['Diego'], importancia: 2 }] } as T, uso: uso() }; },
+    };
+    await pasoEntidades({ ...ctx, modelo: repuesto, limite: Date.now() + 300_000 }, plan);
+    expect(calidades).toEqual(['entidades:rapida']);
     archivo.cerrar();
   });
 
