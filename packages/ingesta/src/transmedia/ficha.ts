@@ -4,18 +4,19 @@
  * suprimidos o fundidos, punto de vista, tiempo, espacio, final, ideología y
  * tono, con cada afirmación anclada en los dos lados cuando los dos existen.
  *
- * El modelo lee el mismo prefijo que la alineación (las dos obras enteras si
- * caben), la alineación gruesa y la fina ya ancladas y la comparación de
- * entidades del grafo (quién aparece en cada obra y cuánto).
+ * Memoria acotada: el modelo lee las cabeceras de las dos obras (con el inicio de
+ * sus fichas globales), la alineación gruesa, la fina con lo literal de cada lado
+ * (las citas ya comprobadas) y la comparación de entidades del grafo agregada en la
+ * propia consulta. Para anclar sus pruebas se cargan solo las unidades que cita.
  */
-import type { Alineacion, Evidencia, Ficha, Lente, Relacion, TipoCorrespondencia } from '@scholaris/nucleo';
+import type { Alineacion, Evidencia, Ficha, LadoAlineacion, Lente, Relacion, TipoCorrespondencia } from '@scholaris/nucleo';
 import { anclaACita } from '@scholaris/nucleo';
-import { leerApariciones } from '@scholaris/spdf';
 import { anclarReferencia, modoDe } from '../comprension/anclaje.js';
+import type { Material } from '../comprension/material.js';
 import { llamar } from '../comprension/modelo.js';
 import type { ContextoComprension, ModeloComprension, UsoModelo } from '../comprension/tipos.js';
 import { anclarLado, TIPOS_CORRESPONDENCIA } from './alineacion.js';
-import { idCortoDe, limpiarMarcas, type MaterialObra } from './material.js';
+import { cargarTramo, idCortoDe, limpiarMarcas, type MaterialObra } from './material.js';
 import { idFichaRelacion } from './relaciones.js';
 import { rotulo } from './obras.js';
 import { VERSION_TRANSMEDIA, type CorrespondenciaGruesa, type LadoModelo } from './tipos.js';
@@ -75,24 +76,20 @@ const ESQUEMA_FICHA = {
   required: ['texto', 'resumen_es', 'resumen_en', 'modo', 'cambios', 'personajes', 'evidencias'],
 };
 
-/** Quién aparece en cada obra y cuánto (entidades del grafo comunes y propias). */
+/** Quién aparece en cada obra y cuánto (entidades del grafo comunes y propias), agregado en la consulta. */
 async function comparacionEntidades(ctx: ContextoComprension, a: MaterialObra, b: MaterialObra): Promise<string> {
   const cuenta = async (mo: MaterialObra) => {
     const m = new Map<string, { nombre: string; n: number; roles: Set<string> }>();
-    const aps = await leerApariciones(ctx.sql, { documento: mo.m.documento.id, limite: 20_000 }).catch(() => []);
-    const ids = [...new Set(aps.map((x) => x.entidad))];
-    const nombres = new Map<string, { nombre: string; tipo: string; ficticia: number | null; canon: string }>();
-    for (let i = 0; i < ids.length; i += 90) {
-      const filas = await ctx.sql.ejecutar<{ id: string; nombre: string; tipo: string; ficticia: number | null; fusionada_en: string | null }>(
-        'SELECT id, nombre, tipo, ficticia, fusionada_en FROM entidades WHERE id IN (SELECT value FROM json_each(?))', JSON.stringify(ids.slice(i, i + 90))).catch(() => []);
-      for (const f of filas) nombres.set(String(f.id), { nombre: String(f.nombre), tipo: String(f.tipo), ficticia: f.ficticia === null ? null : Number(f.ficticia), canon: String(f.fusionada_en ?? f.id) });
-    }
-    for (const ap of aps) {
-      const e = nombres.get(ap.entidad);
-      if (!e || (e.tipo !== 'persona' && e.tipo !== 'lugar' && e.tipo !== 'obra')) continue;
-      const x = m.get(e.canon) ?? { nombre: e.nombre, n: 0, roles: new Set<string>() };
-      x.n++; x.roles.add(ap.rol);
-      m.set(e.canon, x);
+    const filas = await ctx.sql.ejecutar<{ canon: string; nombre: string; rol: string; n: number }>(
+      `SELECT coalesce(e.fusionada_en, e.id) AS canon, e.nombre AS nombre, x.rol AS rol, COUNT(*) AS n
+         FROM apariciones x JOIN entidades e ON e.id = x.entidad
+        WHERE x.documento = ? AND e.tipo IN ('persona', 'lugar', 'obra')
+        GROUP BY canon, x.rol ORDER BY n DESC LIMIT 400`, mo.documento.id).catch(() => []);
+    for (const f of filas) {
+      const k = String(f.canon);
+      const x = m.get(k) ?? { nombre: String(f.nombre), n: 0, roles: new Set<string>() };
+      x.n += Number(f.n); x.roles.add(String(f.rol));
+      m.set(k, x);
     }
     return m;
   };
@@ -106,23 +103,42 @@ async function comparacionEntidades(ctx: ContextoComprension, a: MaterialObra, b
   return `Entidades del grafo en cada obra (apariciones y roles; 0 = no aparece con ese nombre, puede estar con otro):\n${claves.map(linea).join('\n')}`;
 }
 
-function textoAlineaciones(a: MaterialObra, b: MaterialObra, gruesas: readonly CorrespondenciaGruesa[], alineaciones: readonly Alineacion[]): string {
+/** La unidad (su orden) donde cae un lado, para darle al modelo la marca que tiene que citar. */
+function ordenDeLado(mo: MaterialObra, l: LadoAlineacion): number | undefined {
+  const a = l.ancla;
+  if (a.tipo === 'tiempo') return mo.indice.find((u) => u.t0 !== undefined && u.t1 !== undefined && u.t0 <= a.t0 + 0.5 && a.t0 < u.t1 + 0.5 && u.largo > 0)?.orden;
+  if (a.tipo === 'pagina') return mo.indice.find((u) => u.ancla.tipo === 'pagina' && u.ancla.fisica === a.fisica)?.orden;
+  return undefined;
+}
+
+/** Lo literal de cada alineación fina (guardado al alinear), por id. */
+export type Literales = ReadonlyMap<string, { a?: string; b?: string }>;
+
+function textoAlineaciones(a: MaterialObra, b: MaterialObra, gruesas: readonly CorrespondenciaGruesa[], alineaciones: readonly Alineacion[], literales: Literales): string {
   const porA = new Map(a.hojas.map((s) => [idCortoDe('A', s), s.titulo]));
   const porB = new Map(b.hojas.map((s) => [idCortoDe('B', s), s.titulo]));
   const g = gruesas.map((c) => `- ${c.a.map((x) => `${x} «${porA.get(x)}»`).join(', ') || '∅'} ↔ ${c.b.map((x) => `${x} «${porB.get(x)}»`).join(', ') || '∅'} (${c.tipo}): ${c.nota}`);
-  const f = alineaciones.filter((x) => x.id.includes(':f')).slice(0, 220).map((x) => `- ${x.a ? `A ${anclaACita(x.a.ancla, x.a.anclaFin)}` : 'A ∅'} ↔ ${x.b ? `B ${anclaACita(x.b.ancla, x.b.anclaFin)}` : 'B ∅'} (${x.tipo}): ${x.nota}`);
-  return `Alineación gruesa:\n${g.join('\n')}\n\nAlineación fina (ya comprobada contra el material):\n${f.join('\n')}`;
+  const lado = (mo: MaterialObra, l: LadoAlineacion | undefined, lit: string | undefined) => {
+    if (!l) return `${mo.letra} ∅`;
+    const u = ordenDeLado(mo, l);
+    return `${u !== undefined ? `⟦${mo.letra}${u} · ${anclaACita(l.ancla, l.anclaFin)}⟧` : `${mo.letra} ${anclaACita(l.ancla, l.anclaFin)}`}${lit ? ` «${lit}»` : ''}`;
+  };
+  const f = alineaciones.filter((x) => !x.id.includes(':g')).slice(0, 220).map((x) => {
+    const lit = literales.get(x.id);
+    return `- ${lado(a, x.a, lit?.a)} ↔ ${lado(b, x.b, lit?.b)} (${x.tipo}): ${x.nota}`;
+  });
+  return `Alineación gruesa:\n${g.join('\n')}\n\nAlineación fina, ya comprobada contra el material (con la marca de la unidad y lo literal de cada lado: cita de ahí):\n${f.join('\n')}`;
 }
 
-/** Una referencia del modelo, anclada como prueba en su obra. */
-function anclarRef(mo: MaterialObra, r: LadoModelo): Evidencia | null {
+/** Una referencia del modelo, anclada como prueba en su obra (con las unidades que cita ya cargadas en `m`). */
+function anclarRef(mo: MaterialObra, m: Material, r: LadoModelo): Evidencia | null {
   if (r.cita?.trim()) {
-    const ev = anclarReferencia(mo.m, { ...(r.u !== undefined ? { u: r.u } : {}), cita: r.cita });
+    const ev = anclarReferencia(m, { ...(r.u !== undefined ? { u: r.u } : {}), cita: r.cita });
     if (ev) return ev;
   }
-  if (mo.m.medio && typeof r.t0 === 'number') {
-    const l = anclarLado(mo, r, mo.hojas);
-    if (l) return { documento: mo.m.documento.id, ancla: l.lado.ancla, modo: modoDe(mo.m), cita: (r.que ?? '').slice(0, 400) || 'Lo que se ve en ese tramo.' };
+  if (mo.medio && typeof r.t0 === 'number') {
+    const l = anclarLado(mo, m, { ...r, cita: '' }, mo.hojas);
+    if (l) return { documento: mo.documento.id, ancla: l.lado.ancla, modo: modoDe(m), cita: (r.que ?? '').slice(0, 400) || 'Lo que se ve en ese tramo.' };
   }
   return null;
 }
@@ -130,7 +146,7 @@ function anclarRef(mo: MaterialObra, r: LadoModelo): Evidencia | null {
 /** La ficha de la relación, o null si no hay modelo. */
 export async function fichaRelacion(
   ctx: ContextoComprension, rel: Relacion, a: MaterialObra, b: MaterialObra, gruesas: readonly CorrespondenciaGruesa[], alineaciones: readonly Alineacion[],
-  modelo: ModeloComprension, acumulado: { uso: UsoModelo }, o: { prefijo: string; calidad: 'alta' | 'rapida'; creada: string },
+  modelo: ModeloComprension, acumulado: { uso: UsoModelo }, o: { prefijo: string; calidad: 'alta' | 'rapida'; creada: string; literales?: Literales; limiteMs?: number },
 ): Promise<{ ficha: Ficha; descartadas: number }> {
   const traduccion = rel.tipo === 'traduccion_de';
   const tarea = traduccion
@@ -151,17 +167,22 @@ Escritura: español impecable (tildes, eñes, ¿ y ¡), registro académico, voc
 Tarea: ${tarea}`,
     partes: [
       { texto: o.prefijo },
-      { texto: `${await comparacionEntidades(ctx, a, b)}\n\n${textoAlineaciones(a, b, gruesas, alineaciones)}\n\nEscribe la ficha. Responde solo con el JSON.` },
+      { texto: `${await comparacionEntidades(ctx, a, b)}\n\n${textoAlineaciones(a, b, gruesas, alineaciones, o.literales ?? new Map())}\n\nEscribe la ficha. Responde solo con el JSON.` },
     ],
-    esquema: ESQUEMA_FICHA, calidad: o.calidad, maxTokens: 32_000, operacion: 'transmedia:ficha',
+    esquema: ESQUEMA_FICHA, calidad: o.calidad, maxTokens: 32_000, operacion: 'transmedia:ficha', ...(o.limiteMs ? { limiteMs: o.limiteMs } : {}),
   }, acumulado);
+  // Solo las unidades que citan sus pruebas (con sus vecinas), cargadas de una vez por obra.
+  const citadas = (mo: MaterialObra, refs: Array<LadoModelo | undefined>) => refs.flatMap((x) => (typeof x?.u === 'number' ? [x.u - 1, x.u, x.u + 1] : [])).filter((u) => mo.porOrden.has(u));
+  const refsA = [...(r.cambios ?? []).flatMap((c) => c.a ?? []), ...(r.personajes ?? []).flatMap((p) => p.a ?? []), ...(r.evidencias ?? []).filter((e) => e.obra !== 'B')];
+  const refsB = [...(r.cambios ?? []).flatMap((c) => c.b ?? []), ...(r.personajes ?? []).flatMap((p) => p.b ?? []), ...(r.evidencias ?? []).filter((e) => e.obra === 'B')];
+  const ma = await cargarTramo(ctx, a, citadas(a, refsA)), mb = await cargarTramo(ctx, b, citadas(b, refsB));
   const evidencias: Evidencia[] = [];
   const claves = new Map<string, number>();
   let descartadas = 0;
   const anclar = (mo: MaterialObra, refs: readonly LadoModelo[] | undefined): number[] => {
     const idx: number[] = [];
     for (const x of refs ?? []) {
-      const ev = anclarRef(mo, x);
+      const ev = anclarRef(mo, mo === a ? ma : mb, x);
       if (!ev) { descartadas++; continue; }
       const k = JSON.stringify([ev.documento, ev.unidad, ev.ancla]);
       if (!claves.has(k)) { claves.set(k, evidencias.length); evidencias.push(ev); }
@@ -181,7 +202,7 @@ Tarea: ${tarea}`,
   for (const e of r.evidencias ?? []) anclar(e.obra === 'B' ? b : a, [e]);
   const conteo: Partial<Record<TipoCorrespondencia, number>> = {};
   for (const x of alineaciones) conteo[x.tipo] = (conteo[x.tipo] ?? 0) + 1;
-  const lente: Lente = traduccion ? (b.global?.lente ?? 'general') : (a.global?.lente ?? (a.m.medio ? 'cine' : 'narrativa'));
+  const lente: Lente = traduccion ? (b.global?.lente ?? 'general') : (a.global?.lente ?? (a.medio ? 'cine' : 'narrativa'));
   const ficha: Ficha = {
     id: idFichaRelacion(rel.id), documento: null, objetivo: 'relacion', objetivoId: rel.id, lente, clase: CLASE_FICHA[rel.tipo],
     idioma: a.o.idioma || b.o.idioma || 'es', texto: limpio(r.texto ?? ''),

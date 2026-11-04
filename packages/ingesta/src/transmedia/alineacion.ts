@@ -16,15 +16,18 @@
  *
  * El lado A es siempre el origen de la relación (la obra derivada: la película,
  * la traducción) y el B, el destino (la obra de partida).
+ *
+ * Memoria acotada: la gruesa trabaja con la estructura, los resúmenes y la ficha
+ * global de las dos obras; cada grupo fino, con el texto de sus segmentos (cargado
+ * en un tramo) y la percepción condensada de sus escenas. Nunca las dos obras enteras.
  */
-import { enParalelo, type Alineacion, type LadoAlineacion, type Region, type Relacion, type Segmento, type TipoCorrespondencia } from '@scholaris/nucleo';
+import type { Alineacion, LadoAlineacion, Region, Relacion, Segmento, TipoCorrespondencia } from '@scholaris/nucleo';
 import { anclarReferencia } from '../comprension/anclaje.js';
-import { coberturaDelMaterial } from '../comprension/material.js';
-import { textoEscena } from '../comprension/medios.js';
+import type { Material } from '../comprension/material.js';
 import { llamar } from '../comprension/modelo.js';
 import type { ModeloComprension, UsoModelo } from '../comprension/tipos.js';
-import { localizadorSegmentos } from '../comprension/util.js';
-import { cabeceraObra, idCortoDe, limpiarMarcas, textoMarcado, type MaterialObra } from './material.js';
+import { posicion } from '../comprension/util.js';
+import { cabeceraObra, cobertura, idCortoDe, limpiarMarcas, textoMarcado, type MaterialObra } from './material.js';
 import { normalizar, rotulo } from './obras.js';
 import type { AlineacionModelo, CorrespondenciaGruesa, LadoModelo } from './tipos.js';
 
@@ -60,7 +63,7 @@ const TIPOS_EXPLICADOS = `Tipos de correspondencia (A es la obra derivada; B, la
 function sistema(rel: Relacion, a: MaterialObra, b: MaterialObra, tarea: string): string {
   return `Eres un especialista en literatura comparada y en estudios de adaptación y de traducción. Comparas dos obras de una biblioteca académica que cita con página y segundo exactos: ${rotulo(a.o)} (obra A, la derivada) y ${rotulo(b.o)} (obra B, la de partida). Relación: A ${rel.tipo.replace('_de', ' de').replace('_', ' ')} B.
 
-Material: cada obra llega troceada en unidades citables. Las de A van marcadas «⟦A12 · …⟧» y las de B «⟦B3 · …⟧»; el número tras la letra es el que pones en «u». Los segmentos tienen ids cortos («a52», «b3»).
+Material: de cada obra llegan su ficha, su estructura con el resumen de cada segmento y, cuando hace falta, el texto de unos segmentos, troceado en unidades citables. Las de A van marcadas «⟦A12 · …⟧» y las de B «⟦B3 · …⟧»; el número tras la letra es el que pones en «u». Los segmentos tienen ids cortos («a52», «b3»).
 
 ${TIPOS_EXPLICADOS}
 
@@ -138,18 +141,12 @@ export const ESQUEMA_FINA = {
 };
 
 // ---------------------------------------------------------------------------
-// El prefijo común (lo estable va delante: la caché implícita lo aprovecha)
+// La cabecera común (lo estable va delante: la caché implícita lo aprovecha)
 // ---------------------------------------------------------------------------
 
-export function prefijoRelacion(rel: Relacion, a: MaterialObra, b: MaterialObra, o: { maxCaracteres?: number } = {}): { texto: string; largo: boolean } {
-  const max = o.maxCaracteres ?? 1_200_000;
-  const largo = a.m.caracteres + b.m.caracteres <= max;
-  const partes = [
-    `Relación: ${rotulo(a.o)} (A) ${rel.tipo} ${rotulo(b.o)} (B).${rel.nota ? ` ${rel.nota}` : ''}`,
-    cabeceraObra(a), cabeceraObra(b),
-  ];
-  if (largo) partes.push(`Material completo de A:\n\n${textoMarcado(a)}`, `Material completo de B:\n\n${textoMarcado(b)}`);
-  return { texto: partes.join('\n\n'), largo };
+/** Lo que va delante en todas las llamadas de una relación: las dos cabeceras (sin el texto de las obras). */
+export function prefijoRelacion(rel: Relacion, a: MaterialObra, b: MaterialObra, o: { global?: boolean } = {}): { texto: string } {
+  return { texto: [`Relación: ${rotulo(a.o)} (A) ${rel.tipo} ${rotulo(b.o)} (B).${rel.nota ? ` ${rel.nota}` : ''}`, cabeceraObra(a, o), cabeceraObra(b, o)].join('\n\n') };
 }
 
 // ---------------------------------------------------------------------------
@@ -157,12 +154,12 @@ export function prefijoRelacion(rel: Relacion, a: MaterialObra, b: MaterialObra,
 // ---------------------------------------------------------------------------
 
 export async function alineacionGruesa(
-  rel: Relacion, a: MaterialObra, b: MaterialObra, modelo: ModeloComprension, acumulado: { uso: UsoModelo }, o: { prefijo: string; calidad: 'alta' | 'rapida' },
+  rel: Relacion, a: MaterialObra, b: MaterialObra, modelo: ModeloComprension, acumulado: { uso: UsoModelo }, o: { prefijo: string; calidad: 'alta' | 'rapida'; limiteMs?: number },
 ): Promise<CorrespondenciaGruesa[]> {
   const r = await llamar<{ correspondencias: Array<{ a?: string[]; b?: string[]; tipo: TipoCorrespondencia; nota: string; confianza?: number }> }>(modelo, {
-    sistema: sistema(rel, a, b, `alineación gruesa. Recorre los segmentos de las dos obras y di qué segmentos de A corresponden a qué segmentos de B. Cada segmento narrativo de A y de B tiene que aparecer al menos una vez: si no tiene correspondencia, va solo (añadido o suprimido). Un segmento puede corresponder a varios del otro lado (una escena que condensa dos capítulos, un capítulo repartido en tres escenas). Los paratextos (portada, créditos, colofón) no se alinean. La nota dice qué cambia y con qué efecto.`),
+    sistema: sistema(rel, a, b, `alineación gruesa. Con la estructura de las dos obras, el resumen de cada segmento, sus fichas globales y la percepción escena a escena, di qué segmentos de A corresponden a qué segmentos de B. Cada segmento narrativo de A y de B tiene que aparecer al menos una vez: si no tiene correspondencia, va solo (añadido o suprimido). Un segmento puede corresponder a varios del otro lado (una escena que condensa dos capítulos, un capítulo repartido en tres escenas, un pasaje que la otra obra lleva a otro lugar). Los paratextos (portada, créditos, colofón) no se alinean. La nota dice qué cambia y con qué efecto.`),
     partes: [{ texto: o.prefijo }, { texto: 'Haz la alineación gruesa con los ids de los segmentos. Responde solo con el JSON.' }],
-    esquema: ESQUEMA_GRUESA, calidad: o.calidad, maxTokens: 24_000, operacion: 'transmedia:gruesa',
+    esquema: ESQUEMA_GRUESA, calidad: o.calidad, maxTokens: 24_000, operacion: 'transmedia:gruesa', ...(o.limiteMs ? { limiteMs: o.limiteMs } : {}),
   }, acumulado);
   const ida = new Set(a.hojas.map((s) => idCortoDe('A', s))), idb = new Set(b.hojas.map((s) => idCortoDe('B', s)));
   const salida: CorrespondenciaGruesa[] = [];
@@ -182,8 +179,8 @@ export async function alineacionGruesa(
 /** Sin modelo: la correspondencia gruesa por orden y proporción (las dos obras en paralelo). */
 export function alineacionGruesaProporcional(a: MaterialObra, b: MaterialObra): CorrespondenciaGruesa[] {
   const pos = (mo: MaterialObra) => {
-    const total = Math.max(1, mo.m.unidades.length);
-    return mo.hojas.map((s) => ({ s, x: ((mo.m.porId.get(s.unidadDesde)?.orden ?? 0) + (mo.m.porId.get(s.unidadHasta)?.orden ?? 0)) / 2 / total }));
+    const total = Math.max(1, mo.indice.length);
+    return mo.hojas.map((s) => ({ s, x: ((mo.porId.get(s.unidadDesde)?.orden ?? 0) + (mo.porId.get(s.unidadHasta)?.orden ?? 0)) / 2 / total }));
   };
   const pa = pos(a), pb = pos(b);
   const salida: CorrespondenciaGruesa[] = [];
@@ -198,66 +195,76 @@ export function alineacionGruesaProporcional(a: MaterialObra, b: MaterialObra): 
 // Anclar un lado
 // ---------------------------------------------------------------------------
 
-/** El tramo (en segundos) que cubren unos segmentos de un medio. */
-function tramoDe(segs: readonly Segmento[]): [number, number] | null {
-  const ts = segs.filter((s) => s.ancla.tipo === 'tiempo').map((s) => [(s.ancla as { t0: number }).t0, s.anclaFin?.tipo === 'tiempo' ? s.anclaFin.t1 : (s.ancla as { t1: number }).t1] as [number, number]);
-  if (!ts.length) return null;
-  return [Math.min(...ts.map((x) => x[0])), Math.max(...ts.map((x) => x[1]))];
+/** El tramo (en segundos) de un segmento de un medio. */
+function tramoDe(s: Segmento): [number, number] | null {
+  if (s.ancla.tipo !== 'tiempo') return null;
+  return [s.ancla.t0, s.anclaFin?.tipo === 'tiempo' ? s.anclaFin.t1 : s.ancla.t1];
 }
 
 /** La región de quien (o lo que) nombra «que» en el plano percibido del instante `t`. */
 function regionEn(mo: MaterialObra, t: number, que: string): { region: Region; instante: number } | null {
-  if (!mo.percepcion || !que) return null;
-  const plano = mo.percepcion.escenas.flatMap((e) => e.planos).find((p) => p.t0 <= t && t < p.t1);
+  if (!que) return null;
+  const plano = mo.planos.find((p) => p.t0 <= t && t < p.t1);
   if (!plano) return null;
   const q = ` ${normalizar(que)} `;
   // Gana quien (o lo que) tenga más palabras de su nombre en la descripción: «la copa de helado de Diego» es la copa.
-  let mejor: { loc: (typeof plano.personas)[number]; puntos: number } | null = null;
-  for (const loc of [...plano.objetos, ...plano.personas]) {
-    if (!loc.region) continue;
+  let mejor: { loc: (typeof plano.locs)[number]; puntos: number } | null = null;
+  for (const loc of plano.locs) {
     const puntos = normalizar(loc.nombre).split(' ').filter((w) => w.length >= 3 && q.includes(` ${w} `)).length;
     if (puntos && (!mejor || puntos > mejor.puntos)) mejor = { loc, puntos };
   }
-  return mejor ? { region: mejor.loc.region!, instante: mejor.loc.instante ?? t } : null;
+  return mejor ? { region: mejor.loc.region, instante: mejor.loc.instante ?? t } : null;
+}
+
+/** El segmento más hondo (sin planos) que contiene una posición de texto o un instante. */
+export function segmentoEn(mo: MaterialObra, ancla: LadoAlineacion['ancla'], unidad?: string): string | undefined {
+  if (mo.provisionales) return undefined;
+  const hondos = [...mo.segmentos].sort((x, y) => y.nivel - x.nivel);
+  if (ancla.tipo === 'tiempo') {
+    const t = ancla.instante ?? ancla.t0;
+    return hondos.find((s) => { const r = tramoDe(s); return r && r[0] <= t && t < r[1]; })?.id;
+  }
+  const u = unidad ? mo.porId.get(unidad) : undefined;
+  if (!u) return undefined;
+  const p = posicion(u.orden, ancla.caracteres?.[0] ?? 0);
+  return hondos.find((s) => {
+    const d = mo.porId.get(s.unidadDesde)?.orden ?? 0, h = mo.porId.get(s.unidadHasta)?.orden ?? d;
+    return posicion(d, s.ancla.caracteres?.[0] ?? 0) <= p && p < posicion(h, s.anclaFin?.caracteres?.[1] ?? 9e6);
+  })?.id;
 }
 
 export interface LadoAnclado {
   lado: LadoAlineacion;
   /** La prueba es la cita literal encontrada (o el tramo validado), no el segmento de reserva. */
   exacto: boolean;
+  /** Lo que dice o muestra ese lado (la cita literal o lo que se ve), para la ficha de la relación. */
+  literal?: string;
 }
 
-/** El lado de la alineación a partir de lo que dijo el modelo; si no se puede anclar, null. */
-export function anclarLado(mo: MaterialObra, l: LadoModelo | undefined, segmentosDelGrupo: readonly Segmento[]): LadoAnclado | null {
+/** El lado de la alineación a partir de lo que dijo el modelo; si no se puede anclar, null. `m` es el tramo cargado. */
+export function anclarLado(mo: MaterialObra, m: Material, l: LadoModelo | undefined, segmentosDelGrupo: readonly Segmento[]): LadoAnclado | null {
   if (!l) return null;
-  const documento = mo.m.documento.id;
-  const loc = localizadorSegmentos(mo.m, mo.segmentos);
-  const segmentoDe = (ancla: LadoAlineacion['ancla']): string | undefined => {
-    if (mo.provisionales) return undefined;
-    if (ancla.tipo === 'tiempo') return loc.enTiempo(ancla.instante ?? ancla.t0);
-    return undefined;
-  };
+  const documento = mo.documento.id;
   if (l.cita?.trim()) {
-    const ev = anclarReferencia(mo.m, { ...(l.u !== undefined ? { u: l.u } : {}), cita: l.cita });
+    const ev = anclarReferencia(m, { ...(l.u !== undefined ? { u: l.u } : {}), cita: l.cita });
     if (ev) {
       const lado: LadoAlineacion = { documento, ancla: ev.ancla };
       if (l.cita_fin?.trim()) {
-        const fin = anclarReferencia(mo.m, { u: l.u_fin ?? l.u ?? 0, cita: l.cita_fin });
-        const u0 = mo.m.porId.get(ev.unidad ?? '')?.orden ?? 0, u1 = mo.m.porId.get(fin?.unidad ?? '')?.orden ?? -1;
+        const fin = anclarReferencia(m, { u: l.u_fin ?? l.u ?? 0, cita: l.cita_fin });
+        const u0 = mo.porId.get(ev.unidad ?? '')?.orden ?? 0, u1 = mo.porId.get(fin?.unidad ?? '')?.orden ?? -1;
         if (fin && (u1 > u0 || (u1 === u0 && (fin.ancla.caracteres?.[0] ?? 0) >= (ev.ancla.caracteres?.[1] ?? 0)))) lado.anclaFin = fin.ancla;
       }
       if (lado.ancla.tipo === 'tiempo' && typeof l.t === 'number' && l.t >= lado.ancla.t0 - 2 && l.t <= lado.ancla.t1 + 2) lado.ancla = { ...lado.ancla, instante: l.t };
-      const u = mo.m.porId.get(ev.unidad ?? '');
-      const seg = lado.ancla.tipo === 'tiempo' ? segmentoDe(lado.ancla) : u && !mo.provisionales ? loc.enTexto(u.orden, lado.ancla.caracteres?.[0] ?? 0) : undefined;
+      const seg = segmentoEn(mo, lado.ancla, ev.unidad);
       if (seg) lado.segmento = seg;
-      return { lado, exacto: true };
+      return { lado, exacto: true, ...(ev.cita ? { literal: ev.cita.slice(0, 300) } : {}) };
     }
   }
-  if (mo.m.medio && typeof l.t0 === 'number') {
-    const dur = mo.m.documento.duracion ?? Number.MAX_SAFE_INTEGER;
+  if (mo.medio && typeof l.t0 === 'number') {
+    const dur = mo.documento.duracion ?? Number.MAX_SAFE_INTEGER;
     let t0 = Math.max(0, l.t0), t1 = Math.min(dur, typeof l.t1 === 'number' && l.t1 > t0 ? l.t1 : t0 + 4);
     // Un tramo fuera de las escenas del grupo (con margen) no se cree: se recorta a la escena que toca o se descarta.
-    const tramos = segmentosDelGrupo.map((s) => tramoDe([s])).filter((x): x is [number, number] => !!x);
+    const tramos = segmentosDelGrupo.map(tramoDe).filter((x): x is [number, number] => !!x);
     if (tramos.length) {
       const toca = tramos.find(([x, y]) => t0 < y + 20 && t1 > x - 20);
       if (!toca) return null;
@@ -267,14 +274,14 @@ export function anclarLado(mo: MaterialObra, l: LadoModelo | undefined, segmento
     const r = regionEn(mo, instante, l.que ?? '');
     const ancla: LadoAlineacion['ancla'] = { tipo: 'tiempo', t0: Math.round(t0 * 10) / 10, t1: Math.round(t1 * 10) / 10, instante: Math.round((r?.instante ?? instante) * 10) / 10, ...(r ? { region: r.region } : {}) };
     const lado: LadoAlineacion = { documento, ancla };
-    const seg = segmentoDe(ancla);
+    const seg = segmentoEn(mo, ancla);
     if (seg) lado.segmento = seg;
-    return { lado, exacto: true };
+    return { lado, exacto: true, ...(l.que ? { literal: `(lo que se ve) ${l.que.slice(0, 280)}` } : {}) };
   }
-  if (typeof l.u === 'number' && mo.m.porOrden.has(l.u) && !l.cita?.trim()) {
-    const u = mo.m.porOrden.get(l.u)!;
+  if (typeof l.u === 'number' && mo.porOrden.has(l.u) && !l.cita?.trim()) {
+    const u = mo.porOrden.get(l.u)!;
     const lado: LadoAlineacion = { documento, ancla: u.ancla };
-    const seg = !mo.provisionales ? loc.enTexto(u.orden, 0) : undefined;
+    const seg = segmentoEn(mo, u.ancla, u.id);
     if (seg) lado.segmento = seg;
     return { lado, exacto: false };
   }
@@ -286,7 +293,7 @@ export function ladoDeSegmentos(mo: MaterialObra, segs: readonly Segmento[]): La
   if (!segs.length) return undefined;
   const orden = [...segs].sort((x, y) => x.orden - y.orden);
   const a = orden[0]!, z = orden.at(-1)!;
-  const lado: LadoAlineacion = { documento: mo.m.documento.id, ancla: a.ancla };
+  const lado: LadoAlineacion = { documento: mo.documento.id, ancla: a.ancla };
   const fin = z.anclaFin ?? z.ancla;
   if (a.ancla.tipo === 'tiempo' && fin.tipo === 'tiempo') lado.ancla = { ...a.ancla, t1: fin.t1 };
   else if (z !== a || z.anclaFin) lado.anclaFin = fin;
@@ -300,66 +307,91 @@ export function ladoDeSegmentos(mo: MaterialObra, segs: readonly Segmento[]): La
 
 /** Un grupo para la alineación fina: unos segmentos de B y los de A que les corresponden. */
 export interface GrupoFino {
+  /** Clave estable (de los ids de sus segmentos): con ella se guarda y se reanuda. */
+  clave: string;
   b: Segmento[];
   a: Segmento[];
   gruesas: CorrespondenciaGruesa[];
 }
 
-/** Agrupa las correspondencias gruesas por los segmentos de B (los de A se suman), juntando los pequeños. */
-export function gruposFinos(a: MaterialObra, b: MaterialObra, gruesas: readonly CorrespondenciaGruesa[], o: { maxCaracteres?: number } = {}): GrupoFino[] {
+const caracteresDe = (mo: MaterialObra, s: Segmento) => {
+  if (mo.medio && s.ancla.tipo === 'tiempo') {
+    const [t0, t1] = tramoDe(s)!;
+    return mo.indice.filter((u) => u.t0 !== undefined && u.t1 !== undefined && u.t0 < t1 && u.t1 > t0).reduce((t, u) => t + u.largo, 0);
+  }
+  const d = mo.porId.get(s.unidadDesde)?.orden ?? 0, h = mo.porId.get(s.unidadHasta)?.orden ?? d;
+  return mo.indice.filter((u) => u.orden >= d && u.orden <= h).reduce((t, u) => t + u.largo, 0);
+};
+
+/**
+ * Agrupa las correspondencias gruesas por los segmentos de B (los de A se suman),
+ * juntando los pequeños y partiendo los que traen demasiado texto de A: ningún grupo
+ * pasa de unos `maxCaracteres` de material (memoria y tamaño de la llamada acotados).
+ */
+export function gruposFinos(a: MaterialObra, b: MaterialObra, gruesas: readonly CorrespondenciaGruesa[], o: { maxCaracteres?: number; maxA?: number } = {}): GrupoFino[] {
   const porA = new Map(a.hojas.map((s) => [idCortoDe('A', s), s]));
   const porB = new Map(b.hojas.map((s) => [idCortoDe('B', s), s]));
-  const grupos = new Map<string, GrupoFino>();
+  const grupos = new Map<string, Omit<GrupoFino, 'clave'>>();
   for (const c of gruesas) {
     if (!c.a.length || !c.b.length) continue;
     for (const idb of c.b) {
-      const sb = porB.get(idb)!;
+      const sb = porB.get(idb);
+      if (!sb) continue;
       const g = grupos.get(sb.id) ?? { b: [sb], a: [], gruesas: [] };
-      for (const ida of c.a) { const sa = porA.get(ida)!; if (!g.a.includes(sa)) g.a.push(sa); }
+      for (const ida of c.a) { const sa = porA.get(ida); if (sa && !g.a.includes(sa)) g.a.push(sa); }
       g.gruesas.push(c);
       grupos.set(sb.id, g);
     }
   }
-  const caracteres = (mo: MaterialObra, s: Segmento) => {
-    const d = mo.m.porId.get(s.unidadDesde)?.orden ?? 0, h = mo.m.porId.get(s.unidadHasta)?.orden ?? d;
-    return mo.m.unidades.filter((u) => u.orden >= d && u.orden <= h).reduce((t, u) => t + u.texto.length, 0);
-  };
-  const max = o.maxCaracteres ?? 9000;
+  const max = o.maxCaracteres ?? 9000, maxA = o.maxA ?? 40_000;
   const ordenados = [...grupos.values()].sort((x, y) => x.b[0]!.orden - y.b[0]!.orden);
-  const salida: GrupoFino[] = [];
+  const juntos: Array<Omit<GrupoFino, 'clave'>> = [];
+  const pesoB = (x: Omit<GrupoFino, 'clave'>) => x.b.reduce((t, s) => t + caracteresDe(b, s), 0);
+  const pesoA = (x: Omit<GrupoFino, 'clave'>) => x.a.reduce((t, s) => t + caracteresDe(a, s), 0);
   for (const g of ordenados) {
-    const ultimo = salida.at(-1);
-    const peso = (x: GrupoFino) => x.b.reduce((t, s) => t + caracteres(b, s), 0);
-    if (ultimo && peso(ultimo) + peso(g) <= max && ultimo.a.length + g.a.length <= 8) {
+    const ultimo = juntos.at(-1);
+    if (ultimo && pesoB(ultimo) + pesoB(g) <= max && pesoA(ultimo) + pesoA(g) <= maxA && ultimo.a.length + g.a.length <= 8) {
       ultimo.b.push(...g.b);
       for (const s of g.a) if (!ultimo.a.includes(s)) ultimo.a.push(s);
       ultimo.gruesas.push(...g.gruesas);
-    } else salida.push({ b: [...g.b], a: [...g.a], gruesas: [...g.gruesas] });
+    } else juntos.push({ b: [...g.b], a: [...g.a], gruesas: [...g.gruesas] });
   }
-  for (const g of salida) g.a.sort((x, y) => x.orden - y.orden);
+  // Un segmento de B con demasiado material de A se parte: los de A, en tandas.
+  const salida: GrupoFino[] = [];
+  for (const g of juntos) {
+    g.a.sort((x, y) => x.orden - y.orden);
+    const tandas: Segmento[][] = [[]];
+    let peso = 0;
+    for (const s of g.a) {
+      const p = caracteresDe(a, s);
+      if (tandas.at(-1)!.length && peso + p > maxA) { tandas.push([]); peso = 0; }
+      tandas.at(-1)!.push(s); peso += p;
+    }
+    for (const t of tandas) {
+      const ids = new Set(t.map((s) => idCortoDe('A', s)));
+      const gr = g.gruesas.filter((c) => c.a.some((x) => ids.has(x)));
+      salida.push({ clave: [...g.b.map((s) => idCortoDe('B', s)), ...t.map((s) => idCortoDe('A', s))].join('-'), b: g.b, a: t, gruesas: gr.length ? gr : g.gruesas });
+    }
+  }
   return salida;
 }
 
-/** Lo que el modelo necesita además del prefijo para un grupo: la percepción detallada y la cobertura de cada escena. */
-function detalleGrupo(a: MaterialObra, b: MaterialObra, g: GrupoFino, largo: boolean): string {
+/** Lo que el modelo necesita de un grupo: el texto de sus segmentos, la percepción detallada y la cobertura de cada escena. */
+function detalleGrupo(a: MaterialObra, b: MaterialObra, g: GrupoFino, ta: Material, tb: Material): string {
   const partes: string[] = [];
-  const orden = (mo: MaterialObra, id: string) => mo.m.porId.get(id)?.orden ?? 0;
+  const orden = (mo: MaterialObra, id: string) => mo.porId.get(id)?.orden ?? 0;
   partes.push(`Segmentos de B: ${g.b.map((s) => `${idCortoDe('B', s)} «${s.titulo}» (B${orden(b, s.unidadDesde)}-B${orden(b, s.unidadHasta)})`).join('; ')}.`);
   partes.push(`Segmentos de A que les corresponden: ${g.a.map((s) => `${idCortoDe('A', s)} «${s.titulo}»${s.ancla.tipo === 'tiempo' ? ` [${tiempo(s.ancla.t0)}-${tiempo(s.ancla.t1)}, ${Math.round(s.ancla.t0)}-${Math.round(s.ancla.t1)} s]` : ''} (A${orden(a, s.unidadDesde)}-A${orden(a, s.unidadHasta)})`).join('; ')}.`);
   partes.push(`Correspondencias gruesas que hay que detallar:\n${g.gruesas.map((c) => `- ${c.a.join(', ')} ↔ ${c.b.join(', ')} (${c.tipo}): ${c.nota}`).join('\n')}`);
-  if (!largo) {
-    for (const [mo, segs] of [[b, g.b], [a, g.a]] as const) {
-      for (const s of segs) partes.push(`Texto de ${idCortoDe(mo.letra, s)}:\n${textoMarcado(mo, { desde: orden(mo, s.unidadDesde), hasta: orden(mo, s.unidadHasta) })}`);
-    }
-  }
-  for (const mo of [a, b]) {
-    if (!mo.percepcion) continue;
-    const escenas = [...mo.percepcion.escenas].sort((x, y) => x.t0 - y.t0);
-    const tramos = (mo === a ? g.a : g.b).filter((s) => s.ancla.tipo === 'tiempo').map((s) => [(s.ancla as { t0: number }).t0, (s.ancla as { t1: number }).t1] as const);
-    escenas.forEach((e, i) => { if (tramos.some(([x, y]) => e.t0 < y && e.t1 > x)) partes.push(`Percepción detallada de ${mo.letra}:\n${textoEscena(mo.percepcion!, i)}`); });
-    for (const s of mo === a ? g.a : g.b) {
-      if (s.ancla.tipo !== 'tiempo') continue;
-      const c = coberturaDelMaterial(mo.m, s.ancla.t0, s.ancla.t1);
+  partes.push(`Texto de B (${g.b.map((s) => idCortoDe('B', s)).join(', ')}):\n${textoMarcado(b, tb)}`);
+  partes.push(`Texto de A (${g.a.map((s) => idCortoDe('A', s)).join(', ')}):\n${textoMarcado(a, ta)}`);
+  for (const [mo, segs] of [[a, g.a], [b, g.b]] as const) {
+    const tramos = segs.map(tramoDe).filter((x): x is [number, number] => !!x);
+    for (const e of mo.escenas) if (tramos.some(([x, y]) => e.t0 < y && e.t1 > x)) partes.push(`Percepción detallada de ${mo.letra}:\n${e.detalle}`);
+    for (const s of segs) {
+      const r = tramoDe(s);
+      if (!r || !mo.medio) continue;
+      const c = cobertura(mo, r[0], r[1]);
       if (c.cobertura < 0.9) partes.push(`Transcripción de ${idCortoDe(mo.letra, s)}: ${Math.round(c.cobertura * 100)} %${c.huecos.length ? ` (sin transcripción: ${c.huecos.map(([x, y]) => `${tiempo(x)}-${tiempo(y)}`).join(', ')})` : ''}. No afirmes que ahí falta un diálogo.`);
     }
   }
@@ -378,29 +410,33 @@ function correspondientes(lado: LadoAlineacion | undefined, origen: MaterialObra
   return segs.length ? segs : todos;
 }
 
+/** Una alineación fina antes de ponerle id y orden, con lo literal de cada lado (para la ficha de la relación). */
+export type AlineacionSinId = Omit<Alineacion, 'id' | 'relacion' | 'orden'> & { literales?: { a?: string; b?: string } };
+
 export interface ResultadoFino {
-  alineaciones: Array<Omit<Alineacion, 'id' | 'relacion' | 'orden'>>;
+  alineaciones: AlineacionSinId[];
   descartadas: number;
   exactas: number;
 }
 
 /** La cobertura mínima de la transcripción en los segmentos de A del grupo (1 si A no es un medio). */
 function coberturaA(a: MaterialObra, g: GrupoFino): number {
-  if (!a.m.medio) return 1;
-  const cs = g.a.filter((s) => s.ancla.tipo === 'tiempo').map((s) => coberturaDelMaterial(a.m, (s.ancla as { t0: number }).t0, (s.ancla as { t1: number }).t1).cobertura);
+  if (!a.medio) return 1;
+  const cs = g.a.map(tramoDe).filter((x): x is [number, number] => !!x).map(([x, y]) => cobertura(a, x, y).cobertura);
   return cs.length ? Math.min(...cs) : 1;
 }
 
+/** La alineación fina de un grupo, con el texto de sus segmentos ya cargado (`ta`, `tb`). */
 export async function alineacionFina(
-  rel: Relacion, a: MaterialObra, b: MaterialObra, g: GrupoFino, modelo: ModeloComprension, acumulado: { uso: UsoModelo },
-  o: { prefijo: string; largo: boolean; calidad: 'alta' | 'rapida' },
+  rel: Relacion, a: MaterialObra, b: MaterialObra, g: GrupoFino, ta: Material, tb: Material, modelo: ModeloComprension, acumulado: { uso: UsoModelo },
+  o: { prefijo: string; calidad: 'alta' | 'rapida'; limiteMs?: number },
 ): Promise<ResultadoFino> {
   const r = await llamar<{ alineaciones: AlineacionModelo[] }>(modelo, {
     sistema: sistema(rel, a, b, `alineación fina de unos segmentos de B con los de A que les corresponden. Recorre B en orden, pasaje a pasaje (un párrafo, un intercambio de diálogo, una descripción, un resumen narrativo, un monólogo interior), y di qué le corresponde en A, con las dos pruebas. Incluye también lo que A añade en esas escenas (lado b vacío) y lo de B que A no recoge (lado a vacío, con la cautela sobre los huecos de la transcripción). Entre 8 y 30 correspondencias por segmento de B, según su riqueza, en el orden de B.`),
-    partes: [{ texto: o.prefijo }, { texto: `${detalleGrupo(a, b, g, o.largo)}\n\nHaz la alineación fina. Responde solo con el JSON.` }],
-    esquema: ESQUEMA_FINA, calidad: o.calidad, maxTokens: 32_000, operacion: 'transmedia:fina',
+    partes: [{ texto: o.prefijo }, { texto: `${detalleGrupo(a, b, g, ta, tb)}\n\nHaz la alineación fina. Responde solo con el JSON.` }],
+    esquema: ESQUEMA_FINA, calidad: o.calidad, maxTokens: 32_000, operacion: 'transmedia:fina', ...(o.limiteMs ? { limiteMs: o.limiteMs } : {}),
   }, acumulado);
-  const cobertura = coberturaA(a, g);
+  const cob = coberturaA(a, g);
   const salida: ResultadoFino = { alineaciones: [], descartadas: 0, exactas: 0 };
   const vistas = new Set<string>();
   for (const x of r.alineaciones ?? []) {
@@ -408,20 +444,20 @@ export async function alineacionFina(
     const quiereA = tipo !== 'suprimido' && !!x.a && (x.a.cita || x.a.t0 !== undefined || x.a.u !== undefined);
     const quiereB = tipo !== 'anadido' && !!x.b && (x.b.cita || x.b.u !== undefined);
     if (!quiereA && !quiereB) { salida.descartadas++; continue; }
-    let la = quiereA ? anclarLado(a, x.a, g.a) : null;
-    let lb = quiereB ? anclarLado(b, x.b, g.b) : null;
+    let la = quiereA ? anclarLado(a, ta, x.a, g.a) : null;
+    let lb = quiereB ? anclarLado(b, tb, x.b, g.b) : null;
     let confianza = Math.max(0, Math.min(1, x.confianza ?? 0.7));
-    // Un lado que el modelo dio y no se encuentra: los segmentos que corresponden al otro lado (o los del grupo), con menos confianza.
     // Si no queda ningún lado probado, la correspondencia entera se descarta.
     if ((quiereA && !la) || (quiereB && !lb)) salida.descartadas++;
     if ((quiereA && !la && !lb?.exacto) || (quiereB && !lb && !la?.exacto)) continue;
+    // Un lado que el modelo dio y no se encuentra: los segmentos que corresponden al otro lado, con menos confianza.
     if (quiereA && !la) { const l = ladoDeSegmentos(a, correspondientes(lb?.lado, b, a, g)); if (l) la = { lado: l, exacto: false }; confianza *= 0.6; }
     if (quiereB && !lb) { const l = ladoDeSegmentos(b, correspondientes(la?.lado, a, b, g)); if (l) lb = { lado: l, exacto: false }; confianza *= 0.6; }
     if (!la && !lb) continue;
     if (!lb && tipo !== 'anadido') tipo = 'anadido';
     if (!la && tipo !== 'suprimido') tipo = 'suprimido';
     let nota = limpiarMarcas(x.nota ?? '', a, b);
-    if (tipo === 'suprimido' && a.m.medio && cobertura < 0.9) {
+    if (tipo === 'suprimido' && a.medio && cob < 0.9) {
       confianza = Math.min(confianza, 0.45);
       nota = `${nota.replace(/\.?$/, '.')} Cautela: la transcripción de las escenas correspondientes tiene huecos, así que la ausencia de un diálogo no está comprobada.`;
     }
@@ -429,17 +465,17 @@ export async function alineacionFina(
     if (vistas.has(clave)) continue;
     vistas.add(clave);
     if ((la?.exacto ?? true) && (lb?.exacto ?? true)) salida.exactas++;
-    salida.alineaciones.push({ tipo, ...(la ? { a: la.lado } : {}), ...(lb ? { b: lb.lado } : {}), nota, confianza: Math.round(confianza * 100) / 100 });
+    const literales = { ...(la?.literal ? { a: la.literal } : {}), ...(lb?.literal ? { b: lb.literal } : {}) };
+    salida.alineaciones.push({
+      tipo, ...(la ? { a: la.lado } : {}), ...(lb ? { b: lb.lado } : {}), nota, confianza: Math.round(confianza * 100) / 100,
+      ...(Object.keys(literales).length ? { literales } : {}),
+    });
   }
   return salida;
 }
 
-// ---------------------------------------------------------------------------
-// Juntarlo todo
-// ---------------------------------------------------------------------------
-
 /** Posición de un lado para ordenar (segundo, o página y carácter). */
-export function posicionLado(l: LadoAlineacion | undefined): number {
+export function posicionLado(l: Pick<LadoAlineacion, 'ancla'> | undefined): number {
   if (!l) return Number.MAX_SAFE_INTEGER;
   const a = l.ancla;
   if (a.tipo === 'tiempo') return a.t0 * 1000;
@@ -447,73 +483,13 @@ export function posicionLado(l: LadoAlineacion | undefined): number {
   return base * 1e7 + (a.caracteres?.[0] ?? 0);
 }
 
-export interface OpcionesAlinear {
-  calidad: 'alta' | 'rapida';
-  concurrencia: number;
-  presupuestoUsd: number;
-  maxCaracteres?: number;
-  /** Con la alineación gruesa ya hecha (la reutiliza). */
-  gruesas?: CorrespondenciaGruesa[];
-}
-
-export interface ResultadoAlineacion {
-  alineaciones: Alineacion[];
-  gruesas: CorrespondenciaGruesa[];
-  descartadas: number;
-  exactas: number;
-  avisos: string[];
-  prefijo: { texto: string; largo: boolean };
-}
-
-/**
- * La alineación entera de una relación (gruesa y fina). Devuelve las alineaciones
- * con ids deterministas; quien llama las guarda (sustituyendo las anteriores).
- */
-export async function alinearObras(rel: Relacion, a: MaterialObra, b: MaterialObra, modelo: ModeloComprension | null, acumulado: { uso: UsoModelo }, o: OpcionesAlinear): Promise<ResultadoAlineacion> {
-  const avisos: string[] = [];
-  const prefijo = prefijoRelacion(rel, a, b, o.maxCaracteres !== undefined ? { maxCaracteres: o.maxCaracteres } : {});
-  let gruesas = o.gruesas ?? [];
-  if (!gruesas.length) {
-    if (modelo) {
-      try { gruesas = await alineacionGruesa(rel, a, b, modelo, acumulado, { prefijo: prefijo.texto, calidad: o.calidad }); } catch (e) {
-        avisos.push(`La alineación gruesa falló (${(e as Error).message.slice(0, 120)}): queda la aproximada por posición.`);
-      }
-    }
-    if (!gruesas.length) gruesas = alineacionGruesaProporcional(a, b);
-  }
-  const grupos = gruposFinos(a, b, gruesas);
-  const conFinas = new Set<CorrespondenciaGruesa>();
-  const finas: Array<Omit<Alineacion, 'id' | 'relacion' | 'orden'>> = [];
-  let descartadas = 0, exactas = 0;
-  if (modelo) {
-    await enParalelo(grupos, Math.max(1, o.concurrencia), async (g) => {
-      if (acumulado.uso.usd > o.presupuestoUsd) {
-        if (!avisos.some((x) => x.startsWith('Presupuesto'))) avisos.push(`Presupuesto agotado (${acumulado.uso.usd.toFixed(2)} USD): parte de la relación queda solo con la alineación gruesa.`);
-        return;
-      }
-      try {
-        const r = await alineacionFina(rel, a, b, g, modelo, acumulado, { prefijo: prefijo.texto, largo: prefijo.largo, calidad: o.calidad });
-        descartadas += r.descartadas; exactas += r.exactas;
-        if (r.alineaciones.length) { finas.push(...r.alineaciones); for (const c of g.gruesas) conFinas.add(c); }
-      } catch (e) {
-        avisos.push(`Un tramo no se pudo alinear en detalle (${g.b.map((s) => s.titulo).join(', ').slice(0, 80)}): ${(e as Error).message.slice(0, 100)}`);
-      }
-    });
-  }
-  // Las gruesas sin detalle (añadidos, supresiones y las que no dieron alineación fina) se guardan como tales.
+/** Las correspondencias gruesas que no se detallaron (añadidos, supresiones y grupos sin fina) como alineaciones. */
+export function alineacionesGruesas(a: MaterialObra, b: MaterialObra, gruesas: readonly CorrespondenciaGruesa[]): AlineacionSinId[] {
   const porA = new Map(a.hojas.map((s) => [idCortoDe('A', s), s]));
   const porB = new Map(b.hojas.map((s) => [idCortoDe('B', s), s]));
-  const soloGruesas = gruesas.filter((c) => !conFinas.has(c)).map((c) => {
+  return gruesas.map((c) => {
     const la = ladoDeSegmentos(a, c.a.map((x) => porA.get(x)!).filter(Boolean));
     const lb = ladoDeSegmentos(b, c.b.map((x) => porB.get(x)!).filter(Boolean));
-    return { tipo: c.tipo, ...(la ? { a: la } : {}), ...(lb ? { b: lb } : {}), nota: c.nota, confianza: c.confianza, gruesa: true };
+    return { tipo: c.tipo, ...(la ? { a: la } : {}), ...(lb ? { b: lb } : {}), nota: c.nota, confianza: c.confianza };
   });
-  const todas = [...finas.map((x) => ({ ...x, gruesa: false })), ...soloGruesas]
-    .map((x) => ({ x, pa: posicionLado(x.a), pb: posicionLado(x.b) }))
-    .sort((p, q) => (p.pa === q.pa ? p.pb - q.pb : p.pa - q.pa));
-  const alineaciones: Alineacion[] = todas.map(({ x }, i) => {
-    const { gruesa, ...resto } = x;
-    return { id: `${rel.id}:${gruesa ? 'g' : 'f'}${String(i).padStart(4, '0')}`, relacion: rel.id, orden: i, ...resto };
-  });
-  return { alineaciones, gruesas, descartadas, exactas, avisos, prefijo };
 }

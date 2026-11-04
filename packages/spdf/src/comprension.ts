@@ -70,10 +70,12 @@ function filaASegmento(f: Fila): Segmento {
   return s;
 }
 
-export async function leerSegmentos(sql: SQL, documento: string, filtro: { tipo?: TipoSegmento; nivelMaximo?: number } = {}): Promise<Segmento[]> {
+export async function leerSegmentos(sql: SQL, documento: string, filtro: { tipo?: TipoSegmento; nivelMaximo?: number; sinPlanos?: boolean } = {}): Promise<Segmento[]> {
   const condiciones = ['documento = ?'];
   const p: ValorSQL[] = [documento];
   if (filtro.tipo) { condiciones.push('tipo = ?'); p.push(filtro.tipo); }
+  // Una película tiene cientos de planos: quien no los necesita no los pide (la estantería no los serializa).
+  if (filtro.sinPlanos) condiciones.push("tipo <> 'plano'");
   if (filtro.nivelMaximo !== undefined) { condiciones.push('nivel <= ?'); p.push(filtro.nivelMaximo); }
   return (await sql.ejecutar<Fila>(`SELECT * FROM segmentos WHERE ${condiciones.join(' AND ')} ORDER BY orden`, ...p)).map(filaASegmento);
 }

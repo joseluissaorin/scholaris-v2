@@ -251,13 +251,23 @@ documento o para la biblioteca entera (`ParamsComprension.transmedia`).
   vuelven (`transmedia:rechazo` en la procedencia).
 - **Alineación** (`alinearRelacion`), con un cerrojo por relación y una huella de las dos obras
   y de su comprensión: si no cambian, no se repite. El lado `a` es siempre el origen. Gruesa:
-  segmentos ↔ segmentos, con lo que se añade y lo que se suprime. Fina: por cada segmento de la
-  obra de partida, pasaje ↔ pasaje, con las dos obras enteras delante cuando caben; cada lado
-  se ancla contra el material (caracteres en el texto; tramo, instante y región del fotograma
-  percibido en el vídeo) y lo que no se encuentra no es prueba. Una supresión en un tramo con
-  huecos de transcripción baja de confianza y lo dice en la nota. Las traducciones entre
-  textos se alinean párrafo a párrafo (Gale y Church por longitudes y revisión del modelo por
-  ventanas), con anclas exactas de párrafo en las dos lenguas y sin necesidad de comprensión.
+  segmentos ↔ segmentos, con lo que se añade y lo que se suprime, a partir de la estructura, los
+  resúmenes y las fichas globales. Fina: por cada grupo (segmentos de la obra de partida y los
+  de la derivada que les corresponden), pasaje ↔ pasaje, con el texto de esos segmentos y la
+  percepción de sus escenas; cada lado se ancla contra el material (caracteres en el texto;
+  tramo, instante y región del fotograma percibido en el vídeo) y lo que no se encuentra no es
+  prueba. Una supresión en un tramo con huecos de transcripción baja de confianza y lo dice en
+  la nota. Las traducciones entre textos se alinean párrafo a párrafo (Gale y Church por
+  longitudes y revisión del modelo por ventanas), con anclas exactas de párrafo en las dos
+  lenguas y sin necesidad de comprensión. Memoria acotada (un Durable Object tiene 128 MB): de
+  cada obra solo se tiene en mano lo ligero (índice de unidades sin texto, estructura sin
+  planos, resúmenes, percepción condensada) y el texto se carga grupo a grupo; ninguna consulta
+  pide las fichas enteras, los planos ni las apariciones fila a fila. Durable: la gruesa y cada
+  grupo (o ventana) se guardan al acabar (`transmedia:gruesa:…`, `transmedia:grupo:…`), y un
+  reintento con la misma huella sigue donde quedó sin pagar dos veces. Cada llamada se acota al
+  plazo del paso, con el modelo rápido de respaldo; cualquier fallo deja el estado en `error` y
+  sube para que el Workflow reintente, y un `en_marcha` que no se mueve en 15 minutos se ve como
+  error.
 - **Ficha de la relación** (objetivo `relacion`, clase `adaptacion`, `traduccion`…, sin
   documento): el ensayo de la transformación entera, con `datos.cambios` y `datos.personajes`
   anclados en los dos lados (índices a `evidencias`; `inferido` si falta prueba) y el mapa de

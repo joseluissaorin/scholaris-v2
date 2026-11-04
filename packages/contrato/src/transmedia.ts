@@ -34,6 +34,9 @@ export interface EstadoAlineacionVista {
   avisos: string[];
   error?: string;
   actualizado: string;
+  /** Avance: grupos (o ventanas de párrafos) guardados de cuántos. */
+  hechos?: number;
+  total?: number;
 }
 
 export interface RelacionVista extends Relacion {
