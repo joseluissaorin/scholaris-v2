@@ -7,6 +7,7 @@
  *   npx tsx apps/api/scripts/comprender-local.ts --salida DIR --spdf a.spdf --spdf b.spdf \
  *     [--percepcion DOC=ruta.json] [--lentes DOC=cine,documental] [--alto MODELO] [--rapido MODELO] \
  *     [--presupuesto 6] [--solo DOC] [--sin-vectores] [--sin-wikidata] [--forzar] [--estanteria pasada-anterior.sqlite]
+ *     [--unidades DOC=transcripcion-revisada.json]
  *
  *   npx tsx apps/api/scripts/comprender-local.ts evaluar --salida DIR --spdf … --modelos a,b,c [--segmentos 3]
  *     Hace la estructura una vez (con --alto) y después las fichas de los primeros
@@ -61,6 +62,18 @@ for (const ruta of valores('spdf')) {
   a.cerrar();
   documentos.push(d.id);
   console.log(`· ${d.id}: «${d.metadatos.titulo}» (${d.tipo}, ${d.unidades} unidades)`);
+}
+// --unidades DOC=ruta.json: sustituye las unidades del medio por otras (la transcripción revisada por la
+// percepción: `unidadesRevisadas`, o una lista de unidades con orden, texto, t0, t1, hablante y palabras).
+for (const [doc, ruta] of pares('unidades')) {
+  const crudo = JSON.parse(readFileSync(ruta, 'utf8')) as { unidadesRevisadas?: unknown[] } | unknown[];
+  const lista = (Array.isArray(crudo) ? crudo : crudo.unidadesRevisadas ?? []) as Array<{ orden: number; texto: string; t0: number; t1: number; hablante?: string; palabras?: { v: 1; t0: number; cs: number[] } }>;
+  await sql.ejecutar('DELETE FROM unidades WHERE documento = ?', doc);
+  await escribirUnidades(sql, lista.map((u) => ({
+    id: `${doc}:u${u.orden}`, documento: doc, orden: u.orden, texto: u.texto, lector: 'revision', confianza: 1,
+    ancla: { tipo: 'tiempo' as const, t0: u.t0, t1: u.t1, ...(u.hablante ? { hablante: u.hablante } : {}) }, ...(u.palabras ? { palabras: u.palabras } : {}),
+  })));
+  console.log(`· ${doc}: ${lista.length} unidades revisadas en lugar de las de la ingesta`);
 }
 const solo = valor('solo');
 const percepciones = pares('percepcion');
