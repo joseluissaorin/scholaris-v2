@@ -3,7 +3,7 @@ import { createFileRoute, Link, notFound, useNavigate, useRouter, useRouterState
 import { esNoEncontrado } from '../componentes/comunes/errores';
 import { useQuery, useQueryClient, useSuspenseQuery } from '@tanstack/react-query';
 import type { DetalleDocumento, MapaFolios, ResultadoVista, ResumenDocumento } from '@scholaris/contrato';
-import { enmascarar, textoDePasaje } from '@scholaris/nucleo';
+import { enmascarar, textoDePasaje, type AnclaMaterial } from '@scholaris/nucleo';
 import { Dialog } from 'radix-ui';
 import {
   avisar, Boton, cx, Dialogo, Esqueleto, Folio, Icono, MenuContenido, MenuDisparador, MenuElemento, MenuRaiz, MenuRotulo, Rotulo, Consejo, Teclas,
@@ -11,7 +11,10 @@ import {
 import { BLOQUE, precargarLector, q } from '../datos/consultas';
 import { api } from '../datos/api';
 import { useIngestas } from '../datos/ingesta';
-import { materialDeBusqueda, validarBusquedaLector, type BusquedaLector, type ContextoBusqueda, type MaterialLector } from '../lib/anclas';
+import { busquedaDePrueba, materialDeBusqueda, validarBusquedaLector, type BusquedaLector, type ContextoBusqueda, type MaterialLector } from '../lib/anclas';
+import { PanelComprension, PanelEntidadesLector } from '../componentes/comprension/panel-lector';
+import { EstadoComprension } from '../componentes/comprension/estado';
+import { qc as qcComprension } from '../datos/comprension';
 import { anotarVenida, busquedaDeResultado, contextoLimpio, opcionesDeContexto, precargarResultado, sembrarFragmento } from '../datos/recorrido';
 import { claveDePasaje, pedirDesplazamiento } from '../componentes/lector/subrayado';
 import { anotarReciente, ponerPreferencia, preferencia } from '../lib/acciones';
@@ -62,7 +65,7 @@ function EsperaLector() {
   );
 }
 
-type Panel = 'indice' | 'figuras' | 'ficha';
+type Panel = 'indice' | 'mapa' | 'entidades' | 'figuras' | 'ficha';
 
 function Lector() {
   const { id } = Route.useParams();
@@ -220,6 +223,20 @@ function Lector() {
   const alVer = useCallback((o: number) => setActual(o), []);
   const alVerMedio = useCallback((o: number, t: number) => { setActual(o); setTiempo(t); }, []);
 
+  // Ir a un ancla de este documento sin salir del lector (desde la estructura, las entidades o una prueba):
+  // la página con sus caracteres subrayados y su región rodeada, o el segundo con la región sobre el fotograma.
+  const irAAncla = useCallback((a: AnclaMaterial) => {
+    const b = busquedaDePrueba({ ancla: a });
+    const m = materialDeBusqueda(b);
+    setMaterial(m ? { ...m, u: b.u, t: b.t, llegada: Date.now() } : null);
+    void navegar({ search: (x) => ({ ...x, u: b.u, t: b.t, cr: b.cr, rg: b.rg, it: b.it, sec: b.sec, par: b.par }), replace: true, resetScroll: false });
+    // Con región, el vídeo se queda quieto en el fotograma, para verla; sin ella, suena desde ahí.
+    if (medio) { if (b.t != null) reproductor.current?.irA(b.t, !m?.region); }
+    else if (b.u) { flujo.current?.irA(b.u, Math.abs(b.u - actual) <= 3); if (Math.abs(b.u - actual) > 3) hojear(zona.current, b.u >= actual); }
+  }, [navegar, medio, actual]);
+  const cambiarVista = useCallback((v: 'transcripcion' | 'pelicula') => void navegar({ search: (x) => ({ ...x, v: v === 'pelicula' ? 'pelicula' as const : undefined }), replace: true, resetScroll: false }), [navegar]);
+  const { data: mapaComprension } = useQuery({ ...qcComprension.mapa(id), enabled: medio && busqueda.v === 'pelicula' });
+
   const folioActual = folios?.folios[actual - 1];
   const etiquetaActual = medio ? tiempoACadena(tiempo) : folioActual?.impresa ? `p. ${folioActual.impresa}` : doc.tipo === 'presentacion' ? `diap. ${actual}` : paginado ? `[${actual}]` : `§ ${actual}`;
 
@@ -286,11 +303,15 @@ function Lector() {
           ) : null}
 
           <BotonReferencia documento={doc.id} className="hidden md:flex" />
+          <Consejo texto="La comprensión del documento: estructura, fichas, entidades y relaciones">
+            <Link to="/documentos/$id/comprension" params={{ id: doc.id }} aria-label="Ver la comprensión" className="flex h-9 shrink-0 items-center gap-1.5 rounded-xl px-2.5 text-[0.8125rem] font-medium text-coffee-500 hover:bg-cream-200 hover:text-coffee-800"><Icono nombre="chispa" tam={16} /><span className="hidden 2xl:inline">Comprensión</span></Link>
+          </Consejo>
           <Consejo texto="Todo lo que contiene el .spdf: páginas, fragmentos, figuras, vectores, procedencia">
             <Link to="/documentos/$id/contenido" params={{ id: doc.id }} aria-label="Ver todo el SPDF" className="flex h-9 shrink-0 items-center gap-1.5 rounded-xl px-2.5 text-[0.8125rem] font-medium text-coffee-500 hover:bg-cream-200 hover:text-coffee-800 md:flex"><Icono nombre="pila" tam={16} /><span className="hidden 2xl:inline">Todo el SPDF</span></Link>
           </Consejo>
           <div className="hidden items-center gap-1 sm:flex">
             <BotonPanel activo={panel === 'indice'} icono="indice" etiqueta="Índice" alPulsar={() => abrirPanel('indice')} />
+            <BotonPanel activo={panel === 'mapa' || panel === 'entidades'} icono="chispa" etiqueta="Mapa" alPulsar={() => abrirPanel('mapa')} />
             {doc.cuentas.figuras > 0 ? <BotonPanel activo={panel === 'figuras'} icono={medio ? 'video' : 'figura'} etiqueta={medio ? 'Fotogramas' : 'Figuras'} alPulsar={() => abrirPanel('figuras')} /> : null}
             <BotonPanel activo={panel === 'ficha'} icono="editar" etiqueta="Ficha" alPulsar={() => abrirPanel('ficha')} />
           </div>
@@ -323,7 +344,9 @@ function Lector() {
       <div className="flex">
         <div ref={medio ? undefined : zona} data-compartido="lectura" className={cx('min-w-0 flex-1 px-5 md:px-12', !medio && 'pb-24')}>
           {medio ? (
-            <Reproductor ref={reproductor} doc={doc} inicial={busqueda.t} resaltar={busqueda.q} {...(pasaje ? { pasaje: pasaje.texto } : {})} {...(material ? { material } : {})} alVer={alVerMedio} {...(ingesta?.unidades ? { pendientes: Math.max(0, ingesta.unidades - (ingesta.leidas ?? 0)) } : {})} />
+            <Reproductor ref={reproductor} doc={doc} inicial={busqueda.t} resaltar={busqueda.q} {...(pasaje ? { pasaje: pasaje.texto } : {})} {...(material ? { material } : {})} alVer={alVerMedio} {...(ingesta?.unidades ? { pendientes: Math.max(0, ingesta.unidades - (ingesta.leidas ?? 0)) } : {})}
+              vista={busqueda.v === 'pelicula' ? 'pelicula' : 'transcripcion'} alCambiarVista={cambiarVista}
+              sinPelicula={<div className="pt-4"><EstadoComprension documento={doc.id} mapa={mapaComprension} listo={doc.estado === 'listo'} /><p className="mt-3 text-[0.875rem] text-coffee-600">Cuando el vídeo esté comprendido, aquí se verá cada secuencia, escena y plano, sincronizados con el reproductor.</p></div>} />
           ) : (
             <ProveedorEntidades documento={doc.id}>
               <Flujo ref={flujo} doc={doc} modo={modo} inicial={inicial} resaltar={busqueda.q} {...(pasaje ? { pasaje: pasaje.texto, contextoPasaje: pasaje.contexto } : {})} {...(materialFlujo ? { material: materialFlujo } : {})} leidas={ingesta ? ingesta.leidas : undefined} total={ingesta?.unidades ?? undefined} alVer={alVer} />
@@ -332,7 +355,7 @@ function Lector() {
         </div>
         {panel ? (
           <aside aria-label="Panel del documento" className="sticky top-[4.25rem] hidden h-[calc(100dvh-4.25rem)] w-[23rem] shrink-0 flex-col border-l border-cream-300 bg-cream-50/95 shadow-[-4px_0_16px_rgb(44_24_16/0.05)] xl:flex">
-            <PanelDocumento doc={doc} panel={panel} setPanel={setPanel} irA={(o) => { flujo.current?.irA(o, true); hojear(zona.current, o >= actual); }} irT={(t) => reproductor.current?.irA(t)} actual={actual} />
+            <PanelDocumento doc={doc} panel={panel} setPanel={setPanel} irA={(o) => { flujo.current?.irA(o, true); hojear(zona.current, o >= actual); }} irT={(t) => reproductor.current?.irA(t)} irAAncla={irAAncla} actual={actual} tiempo={tiempo} />
           </aside>
         ) : null}
       </div>
@@ -343,7 +366,7 @@ function Lector() {
           <Dialog.Overlay className="fixed inset-0 z-50 bg-[rgb(26_21_17/0.38)] xl:hidden anim-aparece" />
           <Dialog.Content aria-describedby={undefined} className="fixed inset-x-0 bottom-0 z-50 flex max-h-[82dvh] flex-col rounded-t-2xl border-t border-cream-400 bg-cream-50 shadow-[var(--levantado-alto)] xl:hidden anim-tostada">
             <Dialog.Title className="sr-only">Panel del documento</Dialog.Title>
-            {panel ? <PanelDocumento doc={doc} panel={panel} setPanel={setPanel} irA={(o) => { setPanel(null); flujo.current?.irA(o, true); hojear(zona.current, o >= actual); }} irT={(t) => { setPanel(null); reproductor.current?.irA(t); }} actual={actual} /> : null}
+            {panel ? <PanelDocumento doc={doc} panel={panel} setPanel={setPanel} irA={(o) => { setPanel(null); flujo.current?.irA(o, true); hojear(zona.current, o >= actual); }} irT={(t) => { setPanel(null); reproductor.current?.irA(t); }} irAAncla={(a) => { setPanel(null); irAAncla(a); }} actual={actual} tiempo={tiempo} /> : null}
           </Dialog.Content>
         </Dialog.Portal>
       </Dialog.Root>
@@ -410,7 +433,7 @@ function BarraRecorrido({ contexto, posicion, total, alAnterior, alSiguiente, al
   );
 }
 
-function BotonPanel({ activo, icono, etiqueta, alPulsar }: { activo: boolean; icono: 'indice' | 'editar' | 'figura' | 'video'; etiqueta: string; alPulsar: () => void }) {
+function BotonPanel({ activo, icono, etiqueta, alPulsar }: { activo: boolean; icono: 'indice' | 'editar' | 'figura' | 'video' | 'chispa'; etiqueta: string; alPulsar: () => void }) {
   return (
     <button type="button" aria-pressed={activo} onClick={alPulsar} className={cx('flex h-9 items-center gap-1.5 rounded-xl border px-2.5 text-[0.8125rem] font-medium transition-[background,box-shadow]', activo ? 'border-[#1a0f0a] bg-coffee-800 text-cream-50 shadow-[inset_0_1px_3px_rgb(0_0_0/0.35)]' : 'border-transparent text-coffee-500 hover:bg-cream-200 hover:text-coffee-800')}>
       <Icono nombre={icono} tam={16} /><span className="hidden lg:inline">{etiqueta}</span>
@@ -445,11 +468,11 @@ function IrA({ etiqueta, total, alIr, medio }: { etiqueta: string; total: string
 }
 
 
-function PanelDocumento({ doc, panel, setPanel, irA, irT, actual }: { doc: DetalleDocumento; panel: Panel; setPanel: (p: Panel | null) => void; irA: (o: number) => void; irT: (t: number) => void; actual: number }) {
+function PanelDocumento({ doc, panel, setPanel, irA, irT, irAAncla, actual, tiempo }: { doc: DetalleDocumento; panel: Panel; setPanel: (p: Panel | null) => void; irA: (o: number) => void; irT: (t: number) => void; irAAncla: (a: AnclaMaterial) => void; actual: number; tiempo: number }) {
   const { data: secciones, isPending } = useQuery(q.secciones(doc.id));
   const { data: figuras } = useQuery({ ...q.figuras(doc.id), enabled: panel === 'figuras' || doc.cuentas.figuras > 0 });
   const { data: folios } = useQuery(q.folios(doc.id));
-  const pestanas: Array<[Panel, string]> = [['indice', 'Índice'], ...(figuras?.length || doc.cuentas.figuras > 0 ? [['figuras', esMedio(doc.tipo) ? 'Fotogramas' : 'Figuras'] as [Panel, string]] : []), ['ficha', 'Ficha']];
+  const pestanas: Array<[Panel, string]> = [['indice', 'Índice'], ['mapa', 'Mapa'], ['entidades', 'Entidades'], ...(figuras?.length || doc.cuentas.figuras > 0 ? [['figuras', esMedio(doc.tipo) ? 'Fotogramas' : 'Figuras'] as [Panel, string]] : []), ['ficha', 'Ficha']];
   const etiqueta = (orden: number, m?: MapaFolios) => {
     const f = m?.folios[orden - 1];
     if (esMedio(doc.tipo)) return f?.t0 != null ? tiempoACadena(f.t0) : '';
@@ -458,10 +481,10 @@ function PanelDocumento({ doc, panel, setPanel, irA, irT, actual }: { doc: Detal
   const enCurso = secciones ? [...secciones].reverse().find((s) => s.unidadDesde <= actual) : undefined;
   return (
     <>
-      <div className="flex items-center gap-1 border-b border-cream-300 px-3 py-2.5"><div className="flex gap-1 rounded-xl border border-cream-400 bg-cream-200/70 p-1 shadow-[var(--hundido)]">
+      <div className="flex items-center gap-1 border-b border-cream-300 px-3 py-2.5"><div className="sin-barra flex min-w-0 gap-0.5 overflow-x-auto rounded-xl border border-cream-400 bg-cream-200/70 p-1 shadow-[var(--hundido)]">
         {pestanas.map(([p, n]) => (
-          <button key={p} type="button" onClick={() => setPanel(p)} aria-pressed={panel === p} className={cx('relative h-12 px-3 text-[0.9375rem]', panel === p ? ' text-tinta' : 'text-tinta-2 hover:text-tinta')}>
-            {n}{panel === p ? <span className="absolute inset-x-2 bottom-0 h-[3px] bg-tinta" /> : null}
+          <button key={p} type="button" onClick={() => setPanel(p)} aria-pressed={panel === p} className={cx('h-9 shrink-0 rounded-lg px-2 text-[0.8125rem]', panel === p ? 'bg-cream-50 font-semibold text-tinta shadow-[var(--relieve)]' : 'font-medium text-tinta-2 hover:text-tinta')}>
+            {n}
           </button>
         ))}
         </div>
@@ -484,6 +507,10 @@ function PanelDocumento({ doc, panel, setPanel, irA, irT, actual }: { doc: Detal
               ))}
             </ol>
           )
+        ) : panel === 'mapa' ? (
+          <PanelComprension doc={doc} actual={actual} tiempo={tiempo} alIr={irAAncla} />
+        ) : panel === 'entidades' ? (
+          <PanelEntidadesLector doc={doc} alIr={irAAncla} />
         ) : panel === 'figuras' ? (
           <PanelFiguras documento={doc.id} actual={actual} alIr={(f) => (f.t !== undefined ? irT(f.t) : irA(f.unidad))} />
         ) : (

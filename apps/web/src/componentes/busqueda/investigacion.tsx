@@ -11,7 +11,7 @@
  */
 import { memo, useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { Link } from '@tanstack/react-router';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ubicarPasajeEnUnidad } from '@scholaris/nucleo';
 import type { EvidenciaInvestigacion, FraseVerificada, FuenteInvestigacion, PasoInvestigacion, PlanInvestigacion } from '@scholaris/contrato';
 import { avisar, BarraAvance, Boton, Composicion, cx, Folio, Icono, Rotulo, type NombreIcono } from '@scholaris/ui';
@@ -24,10 +24,10 @@ import {
   costeLegible, duracionLegible, etiquetaHerramienta, fraseDudosa, numeroDeMarca, pruebasCitadas, pruebasSinCitar, respuestaParaCopiar, resumirEntrada, VEREDICTO,
   type EstadoInvestigacion,
 } from '../../lib/investigacion';
-import { precargarLector } from '../../datos/consultas';
+import { precargarLector, q } from '../../datos/consultas';
 import { useInvestigacion } from '../../datos/investigacion';
 import { mapaDeTexto, rango, registro } from '../lector/subrayado';
-import { RecuadroMano } from '../comunes/recuadro-mano';
+import { RecorteRegion, VistaAncla } from '../comprension/material';
 import { MarkdownRespuesta, type PintarCita } from './markdown-respuesta';
 
 const ICONO_HERRAMIENTA: Record<string, NombreIcono> = {
@@ -332,11 +332,7 @@ function Pie({ e, alCopiar, alRepetir }: { e: EstadoInvestigacion; alCopiar: () 
       </div>
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <Boton variante="linea" tam="p" icono="copiar" onClick={alCopiar}>Copiar con citas</Boton>
-        {fin.cuaderno ? (
-          <Boton variante="linea" tam="p" comoHijo>
-            <Link to="/escribir/cuadernos" search={{ c: fin.cuaderno }}><Icono nombre="escribir" tam={15} />Abrir el cuaderno</Link>
-          </Boton>
-        ) : null}
+        {fin.cuaderno ? <EnlaceCuaderno id={fin.cuaderno} /> : null}
         <Boton variante="fantasma" tam="p" icono="rayo" onClick={alRepetir}>Volver a investigar</Boton>
       </div>
       {fin.avisos.length ? (
@@ -345,6 +341,23 @@ function Pie({ e, alCopiar, alRepetir }: { e: EstadoInvestigacion; alCopiar: () 
         </ul>
       ) : null}
     </div>
+  );
+}
+
+/**
+ * El cuaderno donde quedó la investigación: su título y lo que guarda (las pruebas como tarjetas
+ * verificadas y la respuesta como nota), y el enlace para seguir trabajando en él.
+ */
+function EnlaceCuaderno({ id }: { id: string }) {
+  const { data: cuadernos } = useQuery(q.cuadernos());
+  const c = cuadernos?.find((x) => x.id === id);
+  return (
+    <Link to="/escribir/cuadernos" search={{ c: id }} className="tactil inline-flex min-h-8 max-w-full items-center gap-2 rounded-lg border border-cream-400 bg-cream-50 px-2.5 py-1 text-[0.8125rem] text-coffee-700 shadow-[var(--relieve)] hover:-translate-y-px hover:text-coffee-800">
+      <Icono nombre="escribir" tam={15} className="shrink-0" />
+      <span className="min-w-0 truncate">
+        {c ? <>Guardada en el cuaderno <em className="font-medium not-italic text-coffee-800">«{c.titulo}»</em>{c.tarjetas ? <span className="text-apagado"> ({c.tarjetas} {c.tarjetas === 1 ? 'tarjeta' : 'tarjetas'})</span> : null}</> : 'Abrir el cuaderno'}
+      </span>
+    </Link>
   );
 }
 
@@ -395,13 +408,20 @@ const TarjetaPrueba = memo(function TarjetaPrueba({ ev, final, indice, activa, a
           <span className="min-w-0 flex-1 truncate text-[0.8125rem] italic text-coffee-800">{ev.titulo}</span>
           <Folio className="shrink-0">{etiquetaCorta(ev.ancla, ev.etiqueta)}</Folio>
         </div>
-        {ev.imagenUrl && !compacta ? (
-          // La página o el fotograma entero, con la región rodeada como en el lector.
+        {!compacta && region ? (
+          // El detalle de la página o del fotograma alrededor de la región, rodeada como en el lector.
+          <div className={cx('mt-2.5 rounded-lg p-1.5 shadow-[var(--hundido)]', ev.ancla.tipo === 'tiempo' ? 'bg-[rgb(26_15_10/0.88)]' : 'bg-cream-200')}>
+            {ev.imagenUrl ? (
+              <RecorteRegion src={ev.imagenUrl} region={region} aspectoInicial={ev.ancla.tipo === 'tiempo' ? 16 / 9 : 1 / 1.414} oscuro={ev.ancla.tipo === 'tiempo'} altoMax={10}
+                clave={`${ev.documento}|${ev.id}`} etiqueta={`La región de la prueba en ${ev.etiqueta}`} />
+            ) : (
+              // Sin imagen en la prueba: la de la unidad (página) o el fotograma clave del instante.
+              <VistaAncla documento={ev.documento} ancla={ev.ancla} palabras={false} texto={false} altoMax={10} />
+            )}
+          </div>
+        ) : ev.imagenUrl && !compacta ? (
           <div className="mt-2.5 flex justify-center rounded-lg bg-[rgb(26_15_10/0.88)] p-1.5 shadow-[var(--hundido)]">
-            <div className="relative inline-block max-w-full">
-              <img src={ev.imagenUrl} alt="" loading="lazy" decoding="async" className="block max-h-44 w-auto max-w-full rounded-[3px] bg-white" />
-              {region ? <RecuadroMano region={region} clave={`${ev.documento}|${ev.id}`} etiqueta={`La región de la prueba en ${ev.etiqueta}`} /> : null}
-            </div>
+            <img src={ev.imagenUrl} alt="" loading="lazy" decoding="async" className="block max-h-36 w-auto max-w-full rounded-[3px] bg-white" />
           </div>
         ) : null}
         {ev.cita ? (

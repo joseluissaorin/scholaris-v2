@@ -1,5 +1,5 @@
 import { memo } from 'react';
-import { Link } from '@tanstack/react-router';
+import { Link, useNavigate } from '@tanstack/react-router';
 import { useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { ErrorApi, type Biblioteca, type Pagina, type ResumenDocumento } from '@scholaris/contrato';
 import { avisar, conDeshacer, cx, Icono, MenuContenido, MenuDisparador, MenuElemento, MenuRaiz, MenuRotulo, MenuSeparador, Rotulo } from '@scholaris/ui';
@@ -58,6 +58,7 @@ export async function subirDeNuevo(qc: QueryClient, id: string, biblioteca?: str
 
 /** Acciones de un documento: las mismas en la rejilla, en la lista y en el lector. */
 export function MenuDocumento({ doc, bibliotecas, children }: { doc: ResumenDocumento; bibliotecas: Biblioteca[]; children: React.ReactNode }) {
+  const navegar = useNavigate();
   const qc = useQueryClient();
 
   const copiarCita = () => copiarReferencia(doc.id);
@@ -104,6 +105,7 @@ export function MenuDocumento({ doc, bibliotecas, children }: { doc: ResumenDocu
       <MenuDisparador asChild>{children}</MenuDisparador>
       <MenuContenido className="w-64">
         <MenuElemento icono="citar" atajo="⇧⌘C" alElegir={() => void copiarCita()}>Copiar referencia</MenuElemento>
+        {doc.estado === 'listo' ? <MenuElemento icono="chispa" alElegir={() => void navegar({ to: '/documentos/$id/comprension', params: { id: doc.id } })}>Ver la comprensión</MenuElemento> : null}
         <MenuElemento icono="descargar" alElegir={() => void descargar()}>Descargar el original</MenuElemento>
         <MenuElemento icono="pila" alElegir={() => void exportarSpdf()}>Exportar como .spdf</MenuElemento>
         <MenuElemento icono="pila" alElegir={() => void exportarSpdf5()}>Exportar como SPDF 5.0</MenuElemento>

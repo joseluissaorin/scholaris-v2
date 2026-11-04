@@ -26,7 +26,9 @@ function trazo(ancho: number, alto: number, semilla: number): string {
   return caminoAbierto(linea);
 }
 
-export const RecuadroMano = memo(function RecuadroMano({ region, clave, visible = true, aLaVista, etiqueta = 'La región que señala la prueba', className }: {
+const TINTA = { rojo: 'var(--s-rojo)', azul: 'var(--s-azul)', amarillo: 'var(--s-amarillo)', crema: 'var(--s-cream-50)' } as const;
+
+export const RecuadroMano = memo(function RecuadroMano({ region, clave, visible = true, aLaVista, etiqueta = 'La región que señala la prueba', className, tinta = 'rojo', rotulo }: {
   region: Region;
   /** Para que el temblor sea siempre el mismo con la misma prueba. */
   clave?: string;
@@ -35,6 +37,10 @@ export const RecuadroMano = memo(function RecuadroMano({ region, clave, visible 
   aLaVista?: boolean;
   etiqueta?: string;
   className?: string;
+  /** El color de la pluma (por defecto, la roja). */
+  tinta?: keyof typeof TINTA;
+  /** Un nombre que se escribe junto a la región, en una plaquita (quién está en cuadro). */
+  rotulo?: string;
 }) {
   const caja = useRef<HTMLDivElement>(null);
   const [tam, setTam] = useState<{ w: number; h: number } | null>(null);
@@ -74,8 +80,13 @@ export const RecuadroMano = memo(function RecuadroMano({ region, clave, visible 
         <svg aria-hidden className="absolute overflow-visible" style={{ left: -HOLGURA, top: -HOLGURA, width: (tam?.w ?? 0) + 2 * HOLGURA, height: (tam?.h ?? 0) + 2 * HOLGURA }}>
           {/* Un velo de tinta muy leve debajo del trazo, para que se lea sobre cualquier imagen. */}
           <path key={visible ? 'velo' : 'velo-oculto'} d={camino} pathLength={1} fill="none" stroke="var(--s-cream-50)" strokeOpacity="0.55" strokeWidth="4.5" strokeLinecap="round" strokeLinejoin="round" className="recuadro-trazo" />
-          <path key={visible ? 'si' : 'no'} d={camino} pathLength={1} fill="none" stroke="var(--s-rojo)" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round" className="recuadro-trazo" />
+          <path key={visible ? 'si' : 'no'} d={camino} pathLength={1} fill="none" stroke={TINTA[tinta]} strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round" className="recuadro-trazo" />
         </svg>
+      ) : null}
+      {rotulo ? (
+        <span aria-hidden className={cx('absolute left-0 max-w-[12rem] truncate rounded-md bg-[rgb(26_15_10/0.82)] px-1.5 py-px text-[0.6875rem] font-semibold leading-snug text-cream-50 shadow-[0_2px_6px_rgb(0_0_0/0.3)]', region.y > 0.12 ? '-top-1 -translate-y-full' : 'top-1 left-1')}>
+          {rotulo}
+        </span>
       ) : null}
     </div>
   );

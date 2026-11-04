@@ -6,7 +6,7 @@
  *   const { elementos } = await api.documentos.listar({ orden: 'anio' });
  */
 
-import type { Filtros, MetadatosDocumento } from '@scholaris/nucleo';
+import type { Ficha, Filtros, Lente, MetadatosDocumento, ObjetivoFicha, RolAparicion, Segmento, TipoSegmento } from '@scholaris/nucleo';
 import { ErrorApi, PREFIJO_API, type CodigoError, type CuerpoError, type Ok, type Pagina, type ParamsPagina, type RefTarea } from './comun.js';
 import type {
   Ajustes, CanjearCupon, ClaveApi, ClaveApiCreada, Concesion, ConcederPlan, ConfigPublica, CrearClaveApi, CrearLoteCupones, CuponAdmin,
@@ -20,6 +20,9 @@ import type {
   ParcheMetadatos, PedirPartesImportacion, RehacerFolios,
   Reprocesar, ResumenDocumento, SeccionVista, UnidadVista, VolcadoDocumento,
 } from './documentos.js';
+import type {
+  AparicionVista, ComprensionBiblioteca, ComprensionLanzada, EstadoComprensionVista, MapaComprension, PedirComprension, PedirComprensionBiblioteca,
+} from './comprension.js';
 import type { ContenidoDocumento, FiguraEncontrada, FigurasRehechas, FragmentoInspeccion, MapaVectores, RehacerFiguras, UnidadInspeccion } from './contenido.js';
 import type { AnadirDocumentos, Biblioteca, Compartir, Miembro, NuevaBiblioteca } from './bibliotecas.js';
 import type {
@@ -232,6 +235,25 @@ export function crearCliente(opciones: OpcionesCliente) {
       rehacerFiguras: (id: string, p: RehacerFiguras = {}) => post<FigurasRehechas>(`/documentos/${e(id)}/figuras/rehacer`, p),
       /** Vectoriza recortes de figuras hechos en el navegador (JPEG o PNG en base64). */
       vectoresFiguras: (id: string, figuras: Array<{ id: string; mime: string; base64: string }>) => post<{ vectores: number }>(`/documentos/${e(id)}/figuras/vectores`, { figuras }),
+    },
+
+    /**
+     * La comprensión de cada documento (docs/COMPRENSION.md): su mapa (estructura sin los
+     * planos, ficha global y cifras), los segmentos, las fichas y las apariciones de las
+     * entidades, y pedir que se haga o se rehaga.
+     */
+    comprension: {
+      mapa: (documento: string) => get<MapaComprension>(`/documentos/${e(documento)}/comprension`),
+      segmentos: (documento: string, p: { tipo?: TipoSegmento; nivel?: number } = {}) => get<Segmento[]>(`/documentos/${e(documento)}/segmentos`, p),
+      fichas: (documento: string, p: { clase?: string; objetivo?: ObjetivoFicha; lente?: Lente; segmento?: string; entidad?: string; desde?: number; limite?: number } = {}) =>
+        get<Pagina<Ficha>>(`/documentos/${e(documento)}/fichas`, p),
+      apariciones: (documento: string, p: { entidad?: string; segmento?: string; rol?: RolAparicion; desde?: number; limite?: number } = {}) =>
+        get<Pagina<AparicionVista>>(`/documentos/${e(documento)}/apariciones`, p),
+      /** Lanza (o rehace, con `forzar`) la comprensión de un documento listo. */
+      comprender: (documento: string, p: PedirComprension = {}) => post<ComprensionLanzada>(`/documentos/${e(documento)}/comprender`, p),
+      biblioteca: (p: PedirComprensionBiblioteca = {}) => post<ComprensionBiblioteca>('/comprension/biblioteca', p),
+      /** El estado de la comprensión de cada documento que la tiene o la tuvo en marcha. */
+      estados: () => get<EstadoComprensionVista[]>('/comprension'),
     },
 
     /** Figuras e imágenes de toda la biblioteca (láminas, diagramas, fotogramas). */

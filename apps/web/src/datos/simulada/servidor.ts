@@ -12,6 +12,8 @@ import type {
   Entidad, MencionEntidad, TipoEntidad, EventoInvestigacion, EvidenciaInvestigacion, FraseVerificada, FuenteInvestigacion, Investigar,
 } from '@scholaris/contrato';
 import { anclaDe, BIBLIOTECAS, DOCUMENTOS, LIBRO_EN_CURSO, textoDe, type DocDemo } from './corpus';
+import { BIBLIOTECA_INVENTADA, CUENTO, PELICULA } from './obras-inventadas';
+import { figurasInventadas, mencionesInventadas, pruebaVisualInventada, regionDeCaracteres, registrarComprension } from './comprension';
 
 export const configSimulada: ConfigPublica = {
   modo: 'local', version: '2.0.0-demo', requiereAutenticacion: false,
@@ -25,7 +27,9 @@ export const configSimulada: ConfigPublica = {
 
 const docs = new Map<string, DocDemo & { estado: 'listo' | 'procesando' | 'error'; leidas?: number; tarea?: string; borrado?: boolean }>();
 for (const d of DOCUMENTOS) docs.set(d.id, { ...d, estado: 'listo' });
-const bibliotecas: Biblioteca[] = BIBLIOTECAS.map((b) => ({ ...b, documentos: 0, actualizada: b.creada, propietario: 'yo', permiso: 'propietario', compartida: b.id === 'b-clases' }));
+// El cuento y la película inventados para enseñar la comprensión (obras-inventadas.ts).
+for (const d of [CUENTO, PELICULA]) docs.set(d.id, { ...d, estado: 'listo' });
+const bibliotecas: Biblioteca[] = [...BIBLIOTECAS, BIBLIOTECA_INVENTADA].map((b) => ({ ...b, documentos: 0, actualizada: b.creada, propietario: 'yo', permiso: 'propietario', compartida: b.id === 'b-clases' }));
 
 const ahora = () => new Date().toISOString();
 const hace = (min: number) => new Date(Date.now() - min * 60_000).toISOString();
@@ -191,7 +195,7 @@ function fragmentosDe(d: DocDemo): number {
 
 function unidad(d: DocDemo, orden: number): UnidadVista {
   const ancla = anclaDe(d, orden);
-  return { id: `u-${d.id}-${orden}`, orden: orden - 1, ancla, etiqueta: anclaACita(ancla), texto: textoDe(d, orden), lector: d.tipo === 'pdf' ? 'capa-de-texto' : d.tipo === 'audio' || d.tipo === 'video' ? 'whisper-large-v3-turbo' : 'gemini-flash', confianza: 0.96 };
+  return { id: `u-${d.id}-${orden}`, orden: orden - 1, ancla, etiqueta: anclaACita(ancla), texto: textoDe(d, orden), ...(d.imagenes?.[orden - 1] ? { imagenUrl: d.imagenes[orden - 1] } : {}), lector: d.tipo === 'pdf' ? 'capa-de-texto' : d.tipo === 'audio' || d.tipo === 'video' ? 'whisper-large-v3-turbo' : 'gemini-flash', confianza: 0.96 };
 }
 
 const normalizar = (s: string) => s.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase();
@@ -367,15 +371,16 @@ async function* investigar(p: Investigar): AsyncGenerator<EventoInvestigacion> {
     const base = anclaDe(d, orden);
     const escaneo = d.tipo === 'pdf_escaneado' || d.tipo === 'fotos';
     const y = 0.11 + 0.76 * (desde / Math.max(1, unidad.length));
-    const region = escaneo ? { x: 0.09, y: Math.min(0.86, y), w: 0.82, h: Math.min(0.9 - Math.min(0.86, y), 0.05 + 0.76 * ((hasta - desde) / Math.max(1, unidad.length))) } : undefined;
+    const caracteres: [number, number] = [puntosHasta(unidad, desde), puntosHasta(unidad, hasta)];
+    const region = escaneo ? (d.imagenes ? regionDeCaracteres(unidad, caracteres) : { x: 0.09, y: Math.min(0.86, y), w: 0.82, h: Math.min(0.9 - Math.min(0.86, y), 0.05 + 0.76 * ((hasta - desde) / Math.max(1, unidad.length))) }) : undefined;
     const id = `P${pruebas.length + 1}`;
     const { quien, texto } = extracto(r.fragmento.texto, p.pregunta);
     return {
-      id, documento: d.id, titulo: d.meta.titulo, ancla: { ...base, caracteres: [puntosHasta(unidad, desde), puntosHasta(unidad, hasta)], ...(region ? { region } : {}) },
+      id, documento: d.id, titulo: d.meta.titulo, ancla: { ...base, caracteres, ...(region ? { region } : {}) },
       cita: r.pasaje?.texto || texto, modo: d.tipo === 'audio' ? 'audio' : 'texto', unidad: `u-${d.id}-${orden}`, fragmento: r.fragmento.id,
       capa: 'literal', herramienta, etiqueta: anclaACita(base), citaCorta: citaCorta(d.meta, base), orden: orden - 1,
       ...(d.meta.idioma && d.meta.idioma !== 'es' ? { idioma: d.meta.idioma } : {}),
-      ...(escaneo ? { imagenUrl: paginaSvg(orden) } : {}),
+      ...(escaneo ? { imagenUrl: d.imagenes?.[orden - 1] ?? paginaSvg(orden) } : {}),
       nota: quien ? `Habla ${quien}.` : notaDePrueba(pruebas.length),
     };
   };
@@ -407,7 +412,16 @@ async function* investigar(p: Investigar): AsyncGenerator<EventoInvestigacion> {
     yield paso('citas', { documentos: elegidos.map((r) => r.documento.id) }, 'Ninguna de estas obras cita a las otras.', [], 140);
     await espera(500 * f);
   }
-  if (conVideo) {
+  const pelicula = docs.get(PELICULA.id);
+  if (elegidos.some((r) => r.documento.id === CUENTO.id) && pelicula && !pelicula.borrado) {
+    const v = pruebaVisualInventada(p.pregunta);
+    const x: EvidenciaInvestigacion = { ...v, id: `P${pruebas.length + 1}`, herramienta: 'ver', capa: 'percepcion', citaCorta: citaCorta(pelicula.meta, v.ancla) };
+    yield paso('ver', { documento: pelicula.id, t0: v.ancla.tipo === 'tiempo' ? v.ancla.t0 : 0, t1: v.ancla.tipo === 'tiempo' ? v.ancla.t1 : 0, pregunta: '¿Cómo está filmado este momento?' }, `${v.nota ?? 'Un plano de la película'}; la región marca dónde está.`, [x.id], 2100);
+    pruebas.push(x);
+    await espera(400 * f);
+    yield { tipo: 'evidencia', evidencia: x };
+    await espera(500 * f);
+  } else if (conVideo) {
     const d = video!;
     const a = anclaDe(d, 9);
     const t = a.tipo === 'tiempo' ? a : { t0: 0, t1: 30 };
@@ -451,7 +465,9 @@ async function* investigar(p: Investigar): AsyncGenerator<EventoInvestigacion> {
   }
   if (imagen) {
     partes.push('## Lo que se ve');
-    partes.push(decir(`En el vídeo, el momento del pasaje se filma con un plano fijo del orador en el atril ${marca(imagen)}.`, 'parcial', 'El plano se ve, pero en la demostración no se ha comprobado de verdad.'));
+    partes.push(imagen.documento === PELICULA.id
+      ? decir(`En la película, ${(imagen.nota ?? 'el momento se filma en un solo plano').replace(/\.$/, '')} ${marca(imagen)}.`)
+      : decir(`En el vídeo, el momento del pasaje se filma con un plano fijo del orador en el atril ${marca(imagen)}.`, 'parcial', 'El plano se ve, pero en la demostración no se ha comprobado de verdad.'));
   }
   if (textos[2]) partes.push(`> ${decir(`${recorta(textos[2].cita)} ${marca(textos[2])}`)}`);
   const sinProbar = decir('Ninguna de las obras afirma que dependa de las otras, y esa relación no se puede dar por probada.', 'sin_prueba', 'Afirma algo de las obras sin citar ninguna prueba.');
@@ -657,6 +673,7 @@ ruta('GET', '/documentos/:id/secciones', (m) => {
   return json(d.secciones.map((s, i): SeccionVista => ({ id: `s-${i}`, nivel: s.nivel, titulo: s.titulo, unidadDesde: s.unidad - 1 })));
 });
 ruta('GET', '/documentos/:id/figuras', (m) => {
+  const inventadas = figurasInventadas(m[1]!); if (inventadas) return json(inventadas);
   const d = docs.get(m[1]!); if (!d?.figuras) return json([]);
   // Solo ilustraciones que existen en la obra (el diagrama de Darwin).
   return json(d.figuras.map((f, i) => { const a = anclaDe(d, f.unidad); return { id: `fig-${i}`, unidad: f.unidad - 1, imagenUrl: '', pie: `Figura ${i + 1}. ${f.pie}`, ancla: a, etiqueta: anclaACita(a) }; }));
@@ -837,6 +854,8 @@ function mencionDemo(e: EntDemo, [doc, orden, contexto]: [string, number, string
   const ancla = anclaDe(d, Math.min(orden, d.unidades));
   return { id: `${e.id}-m${i}`, documento: doc, fragmento: `${doc}-f${orden}`, unidad: orden - 1, ancla, etiqueta: anclaACita(ancla), texto: contexto.match(/⟦(.+?)⟧/)?.[1] ?? e.nombre, contexto };
 }
+// Los personajes, lugares y motivos del cuento y la película inventados, con sus menciones.
+for (const e of mencionesInventadas()) ENTIDADES_DEMO.push(e);
 const vecinosDemo = (id: string) => CO_DEMO.filter(([a, b]) => a === id || b === id).map(([a, b, peso, relacion]) => ({ otro: a === id ? b : a, peso, relacion }));
 const entPorId = (id: string) => ENTIDADES_DEMO.find((e) => e.id === id);
 ruta('GET', '/entidades', (_m, _c, q) => {
@@ -950,6 +969,8 @@ ruta('POST', '/subidas/url', (_m, c) => {
   return json({ documento, tarea });
 });
 ruta('DELETE', '/subidas/:id', () => ok());
+// La comprensión: mapa, segmentos, fichas, apariciones, relaciones y alineaciones (comprension.ts).
+registrarComprension({ ruta, json, error, emitir, documento: (id) => { const d = docs.get(id); return d && !d.borrado ? d : undefined; } });
 ruta('POST', '/tiempo-real/billete', () => json({ billete: 'demo', url: 'simulado:', caduca: ahora() }));
 
 function estimarUnidades(tipo: TipoEntrada, bytes: number) {
