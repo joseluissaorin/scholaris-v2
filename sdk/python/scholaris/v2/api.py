@@ -210,6 +210,8 @@ class Scholaris:
         """Respuesta con citas en flujo: eventos «resultados», «texto», «cita», «fin»."""
         r = self.pedir("POST", "/busqueda/responder", json_={"consulta": pregunta, **opciones}, stream=True, cabeceras={"accept": "text/event-stream"})
         datos: List[str] = []
+        # SSE es siempre UTF-8, pero el servidor no pone «charset» y requests decodificaría en latín-1.
+        r.encoding = "utf-8"
         for linea in r.iter_lines(decode_unicode=True):
             if linea is None:
                 continue
@@ -296,6 +298,8 @@ class Scholaris:
         finally:
             self.tiempo = tiempo
         datos: List[str] = []
+        # SSE es siempre UTF-8, pero el servidor no pone «charset» y requests decodificaría en latín-1.
+        r.encoding = "utf-8"
         for linea in r.iter_lines(decode_unicode=True):
             if linea is None:
                 continue
