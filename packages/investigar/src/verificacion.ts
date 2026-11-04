@@ -494,7 +494,7 @@ async function corregir(ctx: ContextoHerramientas, numerador: Numerador, markdow
 }
 
 /** Milisegundos de cada paso de la verificación (para el registro). */
-export interface TiemposVerificacion { juicio: number; correccion: number; rejuicio: number }
+export interface TiemposVerificacion { juicio: number; correccion: number; rejuicio: number; jueces?: number; miradas?: number }
 
 export interface ResultadoVerificacion {
   /** La respuesta corregida (sin la lista de pruebas). */
@@ -517,9 +517,10 @@ export async function verificar(ctx: ContextoHerramientas, numerador: Numerador,
   const tiempos: TiemposVerificacion = { juicio: 0, correccion: 0, rejuicio: 0 };
   // Se juzga y, a la vez, se vuelve a mirar lo que parece visual o sonoro.
   const iniciales = frasesDe(markdown);
+  const medir = async <T>(clave: 'jueces' | 'miradas', p: Promise<T>): Promise<T> => { try { return await p; } finally { tiempos[clave] = Date.now() - t0; } };
   const [juzgadasIniciales, miradas] = await Promise.all([
-    juzgar(ctx, numerador, iniciales),
-    mirarSitios(ctx, numerador, iniciales, iniciales.map((f) => claseProvisional(f, numerador)), o.sitios),
+    medir('jueces', juzgar(ctx, numerador, iniciales)),
+    medir('miradas', mirarSitios(ctx, numerador, iniciales, iniciales.map((f) => claseProvisional(f, numerador)), o.sitios)),
   ]);
   let juzgadas = juzgadasIniciales;
   aplicarMiradas(juzgadas, miradas);
