@@ -441,6 +441,62 @@ export interface ResultadoConsolidacion {
 }
 
 /**
+ * Falta el estado de una tanda al consolidar. O no se llegó a leer, o otra
+ * consolidación de la misma ingesta ya terminó y limpió el trabajo: eso se
+ * distingue con `consolidacionRegistrada`.
+ */
+export class ErrorFaltaTanda extends Error {
+  constructor(readonly tanda: number) {
+    super(`Falta la tanda ${tanda}: hay que leerla antes de consolidar`);
+    this.name = 'ErrorFaltaTanda';
+  }
+}
+
+/** Lo que deja escrito una consolidación terminada, leído de la base. */
+export interface ConsolidacionRegistrada {
+  /** Cuándo escribió la consolidación su resultado (ISO). */
+  cuando: string;
+  unidades: number;
+  fragmentos: number;
+  secciones: number;
+  figuras: number;
+  reaprovechados: number;
+  vectores: Record<string, number>;
+  tiempos: Record<string, number>;
+}
+
+/**
+ * ¿Terminó ya una consolidación de este documento a partir de `desde`?
+ *
+ * Su sello es la procedencia «indexado» de la tubería. `consolidar` la escribe
+ * al final, en la misma transacción que borra el estado de las tandas, y en las
+ * bases que parten las escrituras en lotes va siempre antes que ese borrado: si
+ * las tandas ya no están y el sello sí, el documento está consolidado. `desde`
+ * descarta el sello de una ingesta anterior del mismo documento.
+ */
+export async function consolidacionRegistrada(sql: ContextoTuberia['puertos']['sql'], documento: string, desde: string): Promise<ConsolidacionRegistrada | null> {
+  const [sello] = await sql.ejecutar<{ detalle: string | null; cuando: string }>(
+    "SELECT detalle, cuando FROM procedencia WHERE documento = ? AND fase = 'indexado' AND proveedor = 'tuberia' AND cuando >= ? ORDER BY cuando DESC LIMIT 1",
+    documento, desde,
+  );
+  if (!sello) return null;
+  const detalle = (sello.detalle ? JSON.parse(sello.detalle) : {}) as { reaprovechados?: number; tiempos?: Record<string, number>; vectores?: Record<string, number> };
+  const contar = async (tabla: 'unidades' | 'fragmentos' | 'secciones' | 'figuras') =>
+    Number((await sql.ejecutar<{ n: number }>(`SELECT count(*) AS n FROM ${tabla} WHERE documento = ?`, documento))[0]?.n ?? 0);
+  const cuenta = await sql.ejecutar<{ espacio: string; n: number }>('SELECT espacio, count(*) AS n FROM vectores WHERE documento = ? GROUP BY espacio', documento);
+  return {
+    cuando: sello.cuando,
+    unidades: await contar('unidades'),
+    fragmentos: await contar('fragmentos'),
+    secciones: await contar('secciones'),
+    figuras: await contar('figuras'),
+    reaprovechados: detalle.reaprovechados ?? 0,
+    vectores: Object.fromEntries(cuenta.map((c) => [c.espacio, Number(c.n)])),
+    tiempos: detalle.tiempos ?? {},
+  };
+}
+
+/**
  * Paso «consolidar»: el documento entero, una vez. Folios definitivos, secciones,
  * costuras entre tandas, hablantes, figuras; reaprovecha todo fragmento
  * provisional que salga igual y rehace solo los demás.
@@ -470,7 +526,7 @@ export async function consolidar(
   const estados: EstadoTanda[] = [];
   for (const t of [...plan.tandas].sort((a, b) => a.id - b.id)) {
     const e = await leerJson<EstadoTanda>(ctx, claveTanda(documento, t.id));
-    if (!e) throw new Error(`Falta la tanda ${t.id}: hay que leerla antes de consolidar`);
+    if (!e) throw new ErrorFaltaTanda(t.id);
     estados.push(e);
     procedencia.push(...e.procedencia);
     avisos.push(...e.avisos);

@@ -24,6 +24,7 @@ export { escribirDocumento, escribirVectores, escribirEspacio, entradasIndice, m
 export { ejecutarIngesta, type ResultadoIngesta, type OpcionesOrquestador } from './orquestador.js';
 export {
   prepararDocumento, leerTanda, indexarTanda, metadatosTempranos, consolidar, enviarLote, recogerLote,
+  ErrorFaltaTanda, consolidacionRegistrada, type ConsolidacionRegistrada,
   seccionesDeTanda, anclaProvisional, documentoProvisional, idUnidadDe, huellaCorta, claveLote,
   type ContextoTuberia, type OpcionesTuberia, type EstadoTanda, type ResumenTanda, type ResultadoConsolidacion,
 } from './tuberia.js';

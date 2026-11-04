@@ -10,7 +10,7 @@ import { NonRetryableError } from 'cloudflare:workflows';
 import type { Progreso } from '@scholaris/nucleo';
 import type { ParamsIngesta } from '../puertos.js';
 import { enParalelo } from '@scholaris/nucleo';
-import { prepararTuberia, type InfoTuberia } from '../compartido/tuberia-plataforma.js';
+import { plazoConsolidacion, prepararTuberia, type InfoTuberia } from '../compartido/tuberia-plataforma.js';
 import { componer, ErrorReserva, leerPrimeraPagina, leerUnPliego, limpiarTrabajo, preparar, revectorizar, soloVectores, transcribirUnTramo, type ContextoMotor, type InfoPlan } from '../compartido/motor-ingesta.js';
 import type { Env } from './env.js';
 import { SqlRemoto } from './sql.js';
@@ -145,10 +145,18 @@ export class FlujoIngesta extends WorkflowEntrypoint<Env, ParamsIngesta> {
 
       const metadatosUsuario = await step.do('metadatos-usuario', async () => (await estanteria.metadatosSubida(p.documento)) ?? null);
 
-      const plazo = Math.min(3600, 120 + 2 * info.unidades);
+      // Si el plazo vence, el trabajador sigue consolidando y el reintento se suma a esa misma
+      // consolidación (o recoge su resultado): caducar ya no la repite ni la deja a medias.
+      const plazo = plazoConsolidacion(info);
       const resumen = await step.do('consolidar', { retries: { limit: 4, delay: '5 seconds', backoff: 'exponential' }, timeout: `${plazo} seconds` }, async () => {
         await emisor.emitir(`usuario:${p.usuario}`, { tipo: 'progreso', progreso: progreso('indexado', 0, 0.72, 'Consolidando: folios, secciones y vectores') });
-        return conLatido(() => this.env.TRABAJADOR.getByName(`${p.tarea}:consolidar`).consolidar(p, info));
+        try {
+          return await conLatido(() => this.env.TRABAJADOR.getByName(`${p.tarea}:consolidar`).consolidar(p, info));
+        } catch (e) {
+          // Sin tandas y sin una consolidación terminada que las explique: reintentar no las trae.
+          if (e instanceof Error && FALTA_TANDA.test(e.message)) throw new NonRetryableError(e.message);
+          throw e;
+        }
       });
       if (resumen.vectoresPendientes) vectoresPendientes = true;
 
@@ -180,7 +188,8 @@ export class FlujoIngesta extends WorkflowEntrypoint<Env, ParamsIngesta> {
           ...(metadatosUsuario ? { metadatosUsuario: metadatosUsuario as Record<string, unknown> } : {}),
         });
         await limpiarTrabajo(almacenDesdeEnv(this.env, origenDe(this.env)), p);
-        if (vectoresPendientes) await this.env.COLA.send({ tipo: 'reindexar', usuario: p.usuario, documento: p.documento }, { delaySeconds: 120 });
+        // Consolidación recuperada: su envío al índice pudo quedarse a medias; reindexar reenvía lo guardado.
+        if (vectoresPendientes || resumen.recuperada) await this.env.COLA.send({ tipo: 'reindexar', usuario: p.usuario, documento: p.documento }, { delaySeconds: 120 });
       });
       return resumen;
     } catch (e) {
@@ -193,9 +202,13 @@ export class FlujoIngesta extends WorkflowEntrypoint<Env, ParamsIngesta> {
   }
 }
 
+const FALTA_TANDA = /Falta la tanda \d+/;
+
 /** Mensaje de error apto para la interfaz (sin pilas ni volcados de proveedor). */
 function legible(m: string): string {
   if (/cancelad/i.test(m)) return 'Cancelada.';
+  if (FALTA_TANDA.test(m)) return 'Se perdió parte de la lectura antes de terminar. Reintenta el documento: lo ya leído se aprovecha.';
+  if (/timed out|WorkflowTimeoutError/i.test(m)) return 'La lectura tardó más de lo previsto y se detuvo. Reintenta el documento: lo ya leído se aprovecha.';
   if (/cuota|páginas de lectura|plan/i.test(m)) return m;
   if (/navegador|YouTube|servidor|paquete|página respondió|texto que leer/i.test(m)) return m;
   return 'No he podido leer este documento. Vuelve a intentarlo; si sigue fallando, prueba a subirlo de nuevo.';

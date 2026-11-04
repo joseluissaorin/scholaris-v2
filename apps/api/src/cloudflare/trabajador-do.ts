@@ -15,8 +15,16 @@ import { SqlRemoto } from './sql.js';
 import { almacenDesdeEnv, catalogosDesdeEnv, cuentasDesdeEnv, emisorDesdeEnv, geminiPara, indiceDesdeEnv, inteligenciaPara, origenDe } from './puertos-cf.js';
 import { espacioNombresDe } from './indice-vectorize.js';
 import { recortadorCF } from './conversor.js';
+import { UnaVez } from '../compartido/una-vez.js';
 
 export class Trabajador extends DurableObject<Env> {
+  /**
+   * Cada objeto atiende un trabajo de una tarea («<tarea>:t3», «<tarea>:consolidar»).
+   * Si el paso que lo pidió caduca, el trabajo sigue aquí, y el reintento se suma
+   * a él en vez de lanzar otro igual en paralelo (ver `una-vez.ts`).
+   */
+  private readonly unaVez = new UnaVez(this.ctx.storage);
+
   private async contexto(p: ParamsIngesta): Promise<ContextoMotor> {
     const env = this.env;
     const cuentas = cuentasDesdeEnv(env);
@@ -50,17 +58,26 @@ export class Trabajador extends DurableObject<Env> {
   }
 
   async tanda(p: ParamsIngesta, info: InfoTuberia, id: number): Promise<ResultadoTanda> {
-    const ctx = await this.contexto(p);
-    const emisor = emisorDesdeEnv(this.env, p.usuario);
-    return procesarTanda(ctx, p, info, id, {
-      alBuscables: async (r) => {
-        if (r.legibles) await emisor.emitir(`usuario:${p.usuario}`, { tipo: 'unidades', tarea: p.tarea, documento: p.documento, desde: r.legibles[0], hasta: r.legibles[1], buscables: true });
-      },
+    // Sin recordar el resultado: volver a indexar una tanda es inocuo (las lecturas están grabadas)
+    // y vuelve a escribir su estado si un relanzamiento lo necesita.
+    return this.unaVez.hacer(`tanda:${p.tarea}:${id}`, async () => {
+      const ctx = await this.contexto(p);
+      const emisor = emisorDesdeEnv(this.env, p.usuario);
+      return procesarTanda(ctx, p, info, id, {
+        alBuscables: async (r) => {
+          if (r.legibles) await emisor.emitir(`usuario:${p.usuario}`, { tipo: 'unidades', tarea: p.tarea, documento: p.documento, desde: r.legibles[0], hasta: r.legibles[1], buscables: true });
+        },
+      });
     });
   }
 
   async consolidar(p: ParamsIngesta, info: InfoTuberia): Promise<ResumenConsolidacion> {
-    return consolidarTuberia(await this.contexto(p), p, info);
+    // Una consolidación por preparación, recordada: la terminada se devuelve tal cual a quien
+    // pregunte después (los reintentos del paso) y la que está en marcha se comparte con el
+    // reintento que llega. Un relanzamiento del vigilante vuelve a preparar y a leer las tandas,
+    // así que trae otra fecha y consolida de nuevo, pero en fila: nunca dos a la vez.
+    const clave = `consolidar:${p.tarea}:${p.documento}:${info.preparado ?? 'sin-fecha'}`;
+    return this.unaVez.hacer(clave, async () => consolidarTuberia(await this.contexto(p), p, info), { recordar: true, exclusivo: true });
   }
 
   async enviarLote(p: ParamsIngesta, info: InfoTuberia): Promise<string | null> {

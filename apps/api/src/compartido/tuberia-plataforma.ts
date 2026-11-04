@@ -13,7 +13,7 @@
  * clásico), así que reintentar un paso no vuelve a pagar ninguna.
  */
 import {
-  consolidar, enviarLote, indexarTanda, leerTanda, metadatosTempranos, planificar, prepararDocumento, recogerLote,
+  consolidacionRegistrada, consolidar, enviarLote, ErrorFaltaTanda, indexarTanda, leerTanda, metadatosTempranos, planificar, prepararDocumento, recogerLote,
   type ContextoTuberia, type Plan, type ResumenTanda, type Tanda,
 } from '@scholaris/ingesta';
 import type { PaqueteConversion } from '@scholaris/imprenta';
@@ -34,6 +34,11 @@ export interface InfoTuberia {
   tandas: Array<{ id: number; clase: Tanda['clase']; desde: number; hasta: number }>;
   /** Para la cuota: páginas o minutos. */
   coste: number;
+  /**
+   * Cuándo se preparó esta ingesta (ISO). Separa la consolidación de esta ingesta
+   * de la de una anterior del mismo documento (ver `consolidarTuberia`).
+   */
+  preparado?: string;
   original?: string;
   mime?: string;
   bytes?: number;
@@ -132,6 +137,7 @@ export async function prepararTuberia(ctx: ContextoMotor, params: ParamsIngesta 
   const coste = plan.modo === 'medio' ? Math.ceil((paquete.duracion ?? plan.tramos.length * 600) / 60) : plan.unidades;
   return {
     paquete: ligero, modo: plan.modo, economico: (params.modo ?? 'rapido') === 'economico', unidades: plan.unidades, coste,
+    preparado: new Date().toISOString(),
     tandas: plan.tandas.map((t) => ({ id: t.id, clase: t.clase, desde: t.desde, hasta: t.hasta })),
     ...(descargado ?? {}),
   };
@@ -218,6 +224,26 @@ export interface ResumenConsolidacion {
   vectores: Record<string, number>;
   tiempos: Record<string, number>;
   vectoresPendientes?: boolean;
+  /**
+   * La consolidación la terminó otro (un intento anterior que siguió trabajando):
+   * no se sabe si su envío al índice llegó entero, así que conviene reindexar
+   * (reenvía los vectores ya guardados; no vuelve a pagar ninguno).
+   */
+  recuperada?: boolean;
+}
+
+/**
+ * Cuánto puede tardar el paso «consolidar», en segundos.
+ *
+ * En los libros manda el número de páginas. En audio y vídeo las unidades del
+ * plan son los tramos de diez minutos, que no dicen nada del trabajo: consolidar
+ * rehace la transcripción entera, la escucha otra vez donde suena mal, sitúa cada
+ * fragmento y vectoriza un fotograma por escena. Ahí manda la duración: casi dos
+ * horas de película (12 tramos) se quedaban en 144 s y necesitaban unos 6 minutos.
+ */
+export function plazoConsolidacion(info: Pick<InfoTuberia, 'modo' | 'unidades' | 'coste'>): number {
+  const s = info.modo === 'medio' ? 300 + 8 * info.coste : 120 + 2 * info.unidades;
+  return Math.min(3600, Math.max(120, Math.ceil(s)));
 }
 
 export async function consolidarTuberia(ctx: ContextoMotor, params: ParamsIngesta, info: InfoTuberia): Promise<ResumenConsolidacion> {
@@ -225,16 +251,28 @@ export async function consolidarTuberia(ctx: ContextoMotor, params: ParamsIngest
   const plan = (await leerJson<Plan>(ctx, clavePlan(params)))!;
   const pendientes = { vectores: false };
   const metadatos = await metadatosGuardados(ctx, params.documento);
-  const r = await consolidar(contexto(ctx, params, paquete, plan, pendientes), { metadatos });
+  let resumen: Omit<ResumenConsolidacion, 'vectoresPendientes'>;
+  try {
+    const r = await consolidar(contexto(ctx, params, paquete, plan, pendientes), { metadatos });
+    resumen = {
+      unidades: r.unidades.length, fragmentos: r.fragmentos.length, secciones: r.secciones.length, figuras: r.figuras.length,
+      reaprovechados: r.reaprovechados, vectores: r.vectores, tiempos: r.tiempos,
+    };
+  } catch (e) {
+    // Las tandas ya no están porque otra consolidación de esta misma ingesta terminó
+    // y limpió el trabajo (un paso que caducó y siguió trabajando, o el relanzamiento
+    // del vigilante): el documento está hecho. Se recoge su resultado en vez de fallar.
+    const faltaTanda = e instanceof ErrorFaltaTanda || (e instanceof Error && e.name === 'ErrorFaltaTanda');
+    const hecha = faltaTanda && info.preparado ? await consolidacionRegistrada(ctx.sql, params.documento, info.preparado) : null;
+    if (!hecha) throw e;
+    const { cuando: _c, ...cuentas } = hecha;
+    resumen = { ...cuentas, recuperada: true };
+  }
   // Un medio sin duración conocida (YouTube cuando su API no responde): la del final de lo transcrito.
   if (plan.modo === 'medio' && !paquete.duracion) {
     const [f] = await ctx.sql.ejecutar<{ fin: number | null }>("SELECT max(CAST(json_extract(ancla, '$.t1') AS REAL)) AS fin FROM unidades WHERE documento = ?", params.documento);
     if (f?.fin && f.fin > 0 && f.fin < 1e6) await ctx.sql.ejecutar('UPDATE documentos SET duracion = ? WHERE id = ? AND (duracion IS NULL OR duracion = 0)', Math.ceil(f.fin), params.documento);
   }
   await (ctx.sql as { vaciarPendientes?: () => Promise<void> }).vaciarPendientes?.();
-  return {
-    unidades: r.unidades.length, fragmentos: r.fragmentos.length, secciones: r.secciones.length, figuras: r.figuras.length,
-    reaprovechados: r.reaprovechados, vectores: r.vectores, tiempos: r.tiempos,
-    ...(pendientes.vectores ? { vectoresPendientes: true } : {}),
-  };
+  return { ...resumen, ...(pendientes.vectores ? { vectoresPendientes: true } : {}) };
 }
