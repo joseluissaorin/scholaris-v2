@@ -51,6 +51,8 @@ export async function leerEstadoComprension(sql: SQL, documento: string): Promis
     const detalle: Record<string, number> = {};
     for (const [k, v] of Object.entries(d)) if (typeof v === 'number' && !['tokensEntrada', 'tokensSalida', 'usd', 'llamadas'].includes(k)) detalle[k] = v;
     e.pasos[paso] = { hecho: f.cuando, ms: Number(f.ms ?? 0), usd: r5(n('usd')), ...(Object.keys(detalle).length ? { detalle } : {}) };
+    // Un paso terminado también es actividad: «actualizado» es lo último que se movió.
+    if (f.cuando > e.actualizado) e.actualizado = f.cuando;
     e.usd += n('usd'); e.tokensEntrada += n('tokensEntrada'); e.tokensSalida += n('tokensSalida'); e.llamadas += n('llamadas');
     for (const a of Array.isArray(d.avisos) ? (d.avisos as string[]) : []) if (!e.avisos.includes(a)) e.avisos.push(a);
     for (const m of (f.proveedor ?? '').split('+')) if (m) modelos.add(m);
