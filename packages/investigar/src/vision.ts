@@ -281,7 +281,10 @@ export function tramoDeComprobacion(a: { t0: number; t1: number; instante?: numb
  */
 export async function comprobarEnSitio(ctx: ContextoHerramientas, p: Prueba, afirmaciones: string[], sentido: 'ver' | 'escuchar', o: { signal?: AbortSignal } = {}): Promise<Array<{ veredicto: 'si' | 'no' | 'dudoso'; nota: string }> | null> {
   if (!afirmaciones.length) return [];
-  const modelo = ctx.p.modelos.revisor ?? ctx.p.modelos.agente;
+  // El modelo de la visión, no el del agente: con la misma clave, Gemini atiende las llamadas al
+  // modelo grande de una en una (ocho revisiones a la vez se ponían en fila y tardaban 60-150 s),
+  // y en las trampas visuales del banco el rápido da los mismos veredictos en la mitad de tiempo.
+  const modelo = ctx.p.modelos.revisor ?? ctx.p.modelos.vision ?? ctx.p.modelos.agente;
   const e = p.evidencia;
   const a = e.ancla;
   const partes: ParteMensaje[] = [];
