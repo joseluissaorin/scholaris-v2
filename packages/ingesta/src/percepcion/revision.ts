@@ -17,7 +17,7 @@
  * El resultado son correcciones tipadas (`CorreccionTranscripcion`), que la
  * ingesta aplica con `aplicarCorrecciones`. Todo se graba: repetirlo no cuesta.
  */
-import { enParalelo, sha256, type Evidencia, type PersonaPercibida, type Transcriptor } from '@scholaris/nucleo';
+import { enParalelo, sha256, type Evidencia, type PercepcionMedio, type PersonaPercibida, type Transcriptor } from '@scholaris/nucleo';
 import { instantesDePalabras, type PalabrasTiempo } from '@scholaris/spdf';
 import { normalNombre, Unificador, repartoInicial } from './reparto.js';
 import type { AlmacenTrabajo, CostePercepcion, FicheroModelo, Mirada, UnidadMedio, Vidente } from './tipos.js';
@@ -613,4 +613,38 @@ export function aplicarCorrecciones(unidades: UnidadMedio[], correcciones: Corre
     out.push({ texto: textoConMarcas(ws), t0: r2(ws[0]!.t0), t1: r2(ws.at(-1)!.t1), ...(ws.at(-1)?.hablante ? { hablante: ws.at(-1)!.hablante! } : {}), palabras: compactas(ws) });
   }
   return out.sort((a, b) => a.t0 - b.t0).map((u, i) => ({ ...u, orden: i }));
+}
+
+/**
+ * Pone en las frases clave de una percepción el hablante de la transcripción
+ * revisada: cada frase se casa con la frase de la transcripción más parecida a
+ * menos de 4 s. Sirve para una percepción hecha antes de revisar la
+ * transcripción (sus hablantes venían de las etiquetas equivocadas).
+ */
+export function hablantesDeDialogos(p: PercepcionMedio, unidades: UnidadMedio[]): { percepcion: PercepcionMedio; cambios: number } {
+  const frases = frasesUbicadas(palabrasDeUnidades(unidades)).filter((f) => f.hablante);
+  const u = new Unificador(p.reparto);
+  const parecido = (a: string, b: string) => {
+    const x = normal(a).split(' ').filter((w) => w.length > 2), y = new Set(normal(b).split(' '));
+    return x.length ? x.filter((w) => y.has(w)).length / x.length : 0;
+  };
+  let cambios = 0;
+  const escenas = p.escenas.map((e) => ({
+    ...e,
+    dialogoClave: e.dialogoClave.map((d) => {
+      // La frase clave puede abarcar varias frases de la transcripción: se busca la que más se le parece.
+      let mejor: FraseUbicada | null = null, nota = 0;
+      for (const f of frases) {
+        if (f.t1 < d.t - 4 || f.t0 > d.t + 6) continue;
+        const n = Math.max(parecido(d.texto, f.texto), parecido(f.texto, d.texto) * 0.9);
+        if (n > nota) { nota = n; mejor = f; }
+      }
+      if (!mejor || nota < 0.6) return d;
+      const h = u.canonico(mejor.hablante!);
+      if (d.hablante && normalNombre(d.hablante) === normalNombre(h)) return d;
+      cambios++;
+      return { ...d, hablante: h };
+    }),
+  }));
+  return { percepcion: { ...p, escenas }, cambios };
 }

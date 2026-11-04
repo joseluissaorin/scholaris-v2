@@ -12,7 +12,7 @@
  *   percepcion/revision/…    lo que devolvió cada llamada de la revisión
  */
 import {
-  anclarMaterial, clavesProxy, fuenteGemini, percibirMedio, revisarTranscripcionConVideo,
+  anclarMaterial, aplicarCorrecciones, clavesProxy, fuenteGemini, percibirMedio, revisarTranscripcionConVideo,
   type ActividadAudio, type AlmacenTrabajo, type AnclajeResultado, type CortesProxy, type LineaPagina, type PercepcionConCoste, type ProgresoPercepcion, type RevisionTranscripcion, type UnidadAnclable, type UnidadMedio,
 } from '@scholaris/ingesta';
 import type { PaqueteConversion } from '@scholaris/imprenta';
@@ -112,7 +112,10 @@ export async function percibirDocumento(
   await asegurarProxy({ almacen: ctx.almacen, ...(ctx.hacerProxy ? { hacerProxy: ctx.hacerProxy } : {}) }, {
     prefijo: doc.prefijo, original: doc.original ?? d.original ?? '', mime: doc.mime ?? d.mime, tipo: doc.tipo, ...(doc.nombre ? { nombre: doc.nombre } : {}),
   });
-  const unidades = await unidadesDeMedio(ctx.sql, doc.documento);
+  // Si ya se revisó la transcripción (huecos, hablantes, desfases), se mira con la revisada.
+  const revision = await ctx.almacen.bytes(claveRevision(doc.prefijo)).then((b) => (b ? (JSON.parse(new TextDecoder().decode(b)) as RevisionTranscripcion) : null)).catch(() => null);
+  const leidas = await unidadesDeMedio(ctx.sql, doc.documento);
+  const unidades = revision?.correcciones.length ? aplicarCorrecciones(leidas, revision.correcciones) : leidas;
   const cortes = await ctx.almacen.bytes(clavesProxy(doc.prefijo).cortes).then((b) => (b ? (JSON.parse(new TextDecoder().decode(b)) as CortesProxy).cortes : undefined)).catch(() => undefined);
   const m = d.metadatos;
   const autores = (m.autores ?? []).map((x) => `${x.nombre} ${x.apellidos}`.trim()).filter(Boolean);

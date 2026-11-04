@@ -80,7 +80,7 @@ Variantes:
   - Argon: escala exacta 0,86, IoU 0,79 (el 96 % ≥ 0,5), 0,326 $ y 203 s.
   - Flash: escala 0,81, IoU 0,59, 0,128 $ y 182 s.
   - La ventana larga no empeora el resultado. Con el prompt 1, los dos llamaron «Germán» al chico de la camisa de cuadros, que no habla: era la presión del reparto conocido.
-  - El prompt 2 marca en el reparto quién habla en cada fragmento y pide no nombrar a nadie solo por estar en la lista. Con él, Argon llega a personas 1,00, escala exacta 0,90 e IoU 0,80, por 0,353 $ y 231 s. Es el que se usa (`VERSION_PERCEPCION = 'percepcion-2'`).
+  - El prompt 2 marca en el reparto quién habla en cada fragmento y pide no nombrar a nadie solo por estar en la lista. Con él, Argon llega a personas 1,00, escala exacta 0,90 e IoU 0,80, por 0,353 $ y 231 s. El prompt 3 (`VERSION_PERCEPCION = 'percepcion-3'`, el vigente) añade que el hablante de las frases clave es quien se ve u oye decirlas, no la etiqueta de la transcripción.
 
 **Por defecto.**
 
@@ -149,6 +149,12 @@ La transcripción de la película en producción (`dmw21xnomjseg07mi`) tiene hue
   - no duplica lo que ya está.
 
   Después hay que reescribir `unidades`, trocear de nuevo y revectorizar lo que cambie (como un reproceso de la tanda de medios). Esa parte no está hecha, porque es de la ingesta.
+
+### Orden en la comprensión
+
+1. Revisar la transcripción (`revisarTranscripcionDocumento`).
+2. Percibir (`percibirDocumento`). Si existe `transcripcion.revision.json`, lo aplica solo y mira con la transcripción revisada.
+3. Para una percepción hecha antes de la revisión, `hablantesDeDialogos(percepcion, unidadesRevisadas)` pone en las frases clave el hablante bueno.
 
 ### Recomendación para la ingesta
 

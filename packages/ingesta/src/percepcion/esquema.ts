@@ -7,7 +7,7 @@ import type { Lente, PersonaPercibida } from '@scholaris/nucleo';
 import { marca } from './ventanas.js';
 
 /** Versión del prompt y del esquema: entra en la clave de lo grabado. */
-export const VERSION_PERCEPCION = 'percepcion-2';
+export const VERSION_PERCEPCION = 'percepcion-3';
 
 export const ESCALAS = ['gran plano general', 'plano general', 'plano entero', 'plano americano', 'plano medio', 'plano medio corto', 'primer plano', 'primerísimo primer plano', 'plano detalle'] as const;
 export const ANGULACIONES = ['normal', 'picado', 'contrapicado', 'cenital', 'nadir', 'aberrante'] as const;
@@ -139,7 +139,7 @@ export function instruccionesSistema(medio: 'video' | 'audio', lente: Lente, idi
     'Todas las marcas de tiempo, en H:MM:SS.s contadas desde el principio de la obra completa (no desde el principio del fragmento).',
     'Usa exactamente los nombres del reparto conocido. Si aparece alguien que no está, dale un nombre si la obra lo dice y, si no, una descripción breve y estable («camarero de Coppelia»).',
     'No le des a nadie un nombre del reparto solo porque esté en la lista: hazlo cuando lo reconozcas por su aspecto o por su voz, o cuando la transcripción lo nombre o le dé la palabra en ese momento. Un figurante que no habla y no reconoces se describe.',
-    'La transcripción es fiable para lo que se dice: las frases de «dialogos» se copian literalmente de ella, con su hablante.',
+    'La transcripción es fiable para lo que se dice, no tanto para quién lo dice: las frases de «dialogos» se copian literalmente de ella, pero el hablante es quien ves u oyes decirlas (la etiqueta de la transcripción puede estar equivocada).',
     'Las escenas cubren todo el fragmento, sin huecos ni solapes: cambia de escena con el lugar, el tiempo o la acción.',
     'Sonido: separa música (incidental o de la escena), canciones, silencios significativos, ambiente y efectos; di si es diegético.',
   ];

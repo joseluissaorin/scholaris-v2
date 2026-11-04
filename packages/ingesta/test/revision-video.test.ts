@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { Transcriptor } from '@scholaris/nucleo';
 import { instantesDePalabras } from '@scholaris/spdf';
 import {
-  aplicarCorrecciones, coberturaTranscripcion, frasesUbicadas, marca, palabrasDeUnidad, palabrasDeUnidades, revisarHablantesVentana, revisarTranscripcionConVideo,
+  aplicarCorrecciones, hablantesDeDialogos, coberturaTranscripcion, frasesUbicadas, marca, palabrasDeUnidad, palabrasDeUnidades, revisarHablantesVentana, revisarTranscripcionConVideo,
   subventanasDe, transcribirConVideo, Unificador, ventana,
   type AlmacenTrabajo, type CorreccionTranscripcion, type Mirada, type PeticionMirar, type UnidadMedio, type Vidente,
 } from '../src/index.js';
@@ -162,5 +162,20 @@ describe('aplicarCorrecciones', () => {
 
   it('sin correcciones, las unidades salen tal cual', () => {
     expect(aplicarCorrecciones(us, [])).toEqual(us);
+  });
+});
+
+describe('hablantes de las frases clave', () => {
+  it('toma el hablante de la transcripción revisada, casando por tiempo y texto', () => {
+    const us = [unidad(0, '**Germán:** Las esculturas son mías, ¿oíste? **Diego:** Germán.', 3893)];
+    const p = {
+      documento: 'd', modelo: 'm', version: 'v', duracion: 4000, avisos: [], reparto: [{ nombre: 'Germán' }, { nombre: 'Diego' }],
+      escenas: [{ t0: 3800, t1: 3950, titulo: 'E', personas: [], accion: '', sonido: [], planos: [], dialogoClave: [
+        { t: 3893.5, hablante: 'Diego', texto: '¡Las esculturas son mías, ¿oíste?' }, { t: 3896, hablante: 'Diego', texto: 'Germán.' }, { t: 3920, hablante: 'Nancy', texto: 'Otra cosa distinta.' },
+      ] }],
+    };
+    const r = hablantesDeDialogos(p, us);
+    expect(r.cambios).toBe(1);
+    expect(r.percepcion.escenas[0]!.dialogoClave.map((d) => d.hablante)).toEqual(['Germán', 'Diego', 'Nancy']);
   });
 });

@@ -12,7 +12,7 @@ export { PROXY, clavesProxy, PARAMETROS_PROXY, interpretarEscenasFfmpeg, cortesD
 export { fuenteGemini, ErrorSinProxy, type PuertoFicheros, type FicheroRemoto, type AlmacenProxy, type CacheGemini, type PuertosFuenteGemini } from './fuente-gemini.js';
 export { anclarMaterial, buscarCita, textoEn, esqueleto, regionPorLineas, regionPorVision, unirRegiones, type PuertosAnclaje, type UnidadAnclable, type LineaPagina, type AnclajeResultado } from './anclaje.js';
 export {
-  revisarTranscripcionConVideo, coberturaTranscripcion, transcribirConVideo, revisarHablantesVentana, aplicarCorrecciones, palabrasDeUnidad, palabrasDeUnidades, frasesUbicadas, subventanasDe, segmentosDePalabras, esRota,
+  revisarTranscripcionConVideo, hablantesDeDialogos, coberturaTranscripcion, transcribirConVideo, revisarHablantesVentana, aplicarCorrecciones, palabrasDeUnidad, palabrasDeUnidades, frasesUbicadas, subventanasDe, segmentosDePalabras, esRota,
   VERSION_REVISION, ESQUEMA_OIDO, ESQUEMA_HABLANTES,
   type CorreccionTranscripcion, type RevisionTranscripcion, type CoberturaTranscripcion, type Hueco, type SegmentoOido, type PalabraUbicada, type FraseUbicada, type PuertosRevision, type OpcionesRevisionTranscripcion, type Tramo,
 } from './revision.js';

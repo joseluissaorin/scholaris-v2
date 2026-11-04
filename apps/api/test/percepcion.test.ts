@@ -65,6 +65,25 @@ describe('percibirDocumento', () => {
     expect((await percibirDocumento(ctx, doc, { reutilizar: true })).documento).toBe('d1');
     expect(peticiones.length).toBe(1);
   });
+
+  it('si la transcripción está revisada, mira con la revisada', async () => {
+    const a = almacenFalso();
+    await a.poner('u/a/d/d1/proxy.mp4', new Uint8Array(10), 'video/mp4');
+    await a.poner('u/a/d/d1/transcripcion.revision.json', JSON.stringify({ correcciones: [{ tipo: 'hablante', unidad: 0, palabras: [0, 5], t0: 10, t1: 12, texto: '', de: 'Diego', a: 'Germán', confianza: 0.9, fuente: 'm' }] }));
+    const sql = sqlFalso(pelicula, [{ orden: 0, ancla: JSON.stringify({ tipo: 'tiempo', t0: 10, t1: 12, hablante: 'Diego' }), texto: '**Diego:** Las esculturas son mías, ¿oíste?', t0: 10, t1: 12, palabras: null, imagen: null }]);
+    const textos: string[] = [];
+    const gemini = {
+      async generar(modelo: string, cuerpo: Record<string, unknown>) {
+        textos.push(JSON.stringify(cuerpo));
+        return { texto: '{"escenas":[],"planos":[],"sonidos":[],"dialogos":[],"reparto":[]}', fin: 'STOP', uso: { proveedor: 'gemini', modelo, operacion: 'percibir', tokensEntrada: 1, tokensSalida: 1, ms: 1 } };
+      },
+      async subirArchivoPorTrozos() { return { nombre: 'files/x', uri: 'u', mime: 'video/mp4', estado: 'ACTIVE' }; },
+      async archivo() { return null; },
+    };
+    await percibirDocumento({ almacen: a as unknown as AlmacenAmpliado, sql, gemini: gemini as never }, { documento: 'd1', prefijo: 'u/a/d/d1/', tipo: 'video' });
+    expect(textos[0]).toContain('Germán: Las esculturas son mías');
+    expect(textos[0]).not.toContain('Diego: Las esculturas');
+  });
 });
 
 describe('crearAnclador', () => {
