@@ -15,3 +15,7 @@ bench/src/estado-tmp*.ts
 # Operación de la instancia alojada (solo en local)
 deploy/produccion/
 deploy/cloudflare/wrangler.propio.jsonc
+
+# Banco de Investigar: copia local de la biblioteca de producción y resultados (material con derechos)
+packages/investigar/banco/datos/
+packages/investigar/banco/resultados/
