@@ -153,6 +153,34 @@ export function senalesContenido(a: Obra, b: Obra, trozos: readonly TrozoMateria
   return senales;
 }
 
+/** Lo que el material de `y` dice de cada una de las `otras` (una sola lectura del material). */
+async function contenidoDe(ctx: ContextoComprension, y: Obra, otras: readonly Obra[]): Promise<Map<string, SenalRelacion[]>> {
+  const salida = new Map<string, SenalRelacion[]>();
+  if (!otras.length) return salida;
+  const trozos = await trozosDe(ctx, y);
+  for (const x of otras) { const s = senalesContenido(y, x, trozos); if (s.length) salida.set(x.id, s); }
+  return salida;
+}
+
+/**
+ * ¿Hace falta leer el material de `y` para buscar en él los títulos de `x`? Un texto con
+ * fragmentos se mira antes en el índice léxico (frase exacta): si no aparece, no se lee.
+ * Los medios se leen siempre (los créditos están en la percepción, no en los fragmentos).
+ */
+async function nombraA(ctx: ContextoComprension, y: Obra, x: Obra): Promise<boolean> {
+  if (y.medio !== 'texto') return true;
+  const titulos = x.titulos.filter((t) => t.split(' ').length >= 2 && t.length >= 10);
+  if (!titulos.length) return false;
+  try {
+    const [n] = await ctx.sql.ejecutar<{ n: number }>('SELECT COUNT(*) AS n FROM fragmentos WHERE documento = ?', y.id);
+    if (!Number(n?.n ?? 0)) return true;
+    const q = titulos.map((t) => `"${t}"`).join(' OR ');
+    const [f] = await ctx.sql.ejecutar<{ n: number }>(
+      'SELECT COUNT(*) AS n FROM fragmentos_fts JOIN fragmentos f ON f.n = fragmentos_fts.rowid WHERE fragmentos_fts MATCH ? AND f.documento = ?', q, y.id);
+    return Number(f?.n ?? 0) > 0;
+  } catch { return true; }
+}
+
 // ---------------------------------------------------------------------------
 // Wikidata
 // ---------------------------------------------------------------------------
@@ -472,12 +500,12 @@ function fuenteDe(tipo: TipoRelacion, senales: SenalRelacion[], decidioModelo: b
  */
 export async function evaluarPar(
   ctx: ContextoComprension, a: Obra, b: Obra,
-  c: { wikidata: Map<string, ObraWikidata | null>; trozos: Map<string, TrozoMaterial[]>; entidades: MapaEntidades; resumenes: Map<string, string>; vectores: Map<string, Float32Array | null>; uso: { uso: UsoModelo }; modelo: boolean; ahora: string },
+  c: { wikidata: Map<string, ObraWikidata | null>; contenido: Map<string, Map<string, SenalRelacion[]>>; entidades: MapaEntidades; resumenes: Map<string, string>; vectores: Map<string, Float32Array | null>; uso: { uso: UsoModelo }; modelo: boolean; ahora: string },
 ): Promise<CandidataRelacion | null> {
   const senales: SenalRelacion[] = [...senalesMetadatos(a, b)];
   for (const [x, y] of [[a, b], [b, a]] as const) {
-    if (!c.trozos.has(x.id)) c.trozos.set(x.id, await trozosDe(ctx, x));
-    senales.push(...senalesContenido(x, y, c.trozos.get(x.id)!).map((s) => (x === a ? s : { ...s, sentido: s.sentido === 'a' ? 'b' as const : 'a' as const })));
+    const delMaterial = c.contenido.get(x.id)?.get(y.id) ?? [];
+    senales.push(...delMaterial.map((s) => (x === a ? s : { ...s, sentido: s.sentido === 'a' ? 'b' as const : 'a' as const })));
   }
   senales.push(...senalesWikidata(a, c.wikidata.get(a.id) ?? null, b, c.wikidata.get(b.id) ?? null, c.ahora));
   senales.push(...await senalesCitas(ctx, a, b));
@@ -548,9 +576,18 @@ export async function detectarRelaciones(ctx: ContextoComprension, documento: st
     }
   }
   const contexto = {
-    wikidata, trozos: new Map<string, TrozoMaterial[]>(), entidades: await entidadesPorDocumento(ctx, todas.map((x) => x.id)),
+    wikidata, contenido: new Map<string, Map<string, SenalRelacion[]>>(), entidades: await entidadesPorDocumento(ctx, todas.map((x) => x.id)),
     resumenes: new Map<string, string>(), vectores: new Map<string, Float32Array | null>(), uso, modelo: o.modelo ?? true, ahora,
   };
+  // El material de cada documento se lee una vez: el del documento nuevo, entero; el de los demás, solo si lo nombran.
+  const implicadas = todas.filter((x) => pares.some(([p, q]) => p.id === x.id || q.id === x.id));
+  if (documento) {
+    const foco = todas.find((x) => x.id === documento)!;
+    contexto.contenido.set(foco.id, await contenidoDe(ctx, foco, implicadas.filter((x) => x !== foco)));
+    for (const y of implicadas) if (y !== foco && await nombraA(ctx, y, foco)) contexto.contenido.set(y.id, await contenidoDe(ctx, y, [foco]));
+  } else {
+    for (const y of implicadas) contexto.contenido.set(y.id, await contenidoDe(ctx, y, implicadas.filter((x) => x !== y)));
+  }
   const umbral = o.umbral ?? 0.5;
   const existentes = documento ? await leerRelaciones(ctx.sql, documento) : await leerRelaciones(ctx.sql);
   const deUsuario = new Set(existentes.filter((r) => r.fuente === 'usuario').map((r) => [r.origen, r.destino].sort().join('|')));
@@ -558,10 +595,7 @@ export async function detectarRelaciones(ctx: ContextoComprension, documento: st
   const candidatas: CandidataRelacion[] = [];
   for (const [x, y] of pares) {
     if (deUsuario.has([x.id, y.id].sort().join('|'))) continue;
-    // Dos documentos sin nada que leer todavía no se comparan.
     const cand = await evaluarPar(ctx, x, y, contexto);
-    // El trozo de material ya leído de un documento que no vuelve a salir se suelta (bibliotecas grandes).
-    if (!documento && contexto.trozos.size > 40) contexto.trozos.clear();
     if (!cand || cand.confianza < umbral) continue;
     if (rechazos.some((r) => r.par === [cand.origen, cand.destino].sort().join('|') && (!r.tipo || r.tipo === cand.tipo))) continue;
     candidatas.push(cand);
