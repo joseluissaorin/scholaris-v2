@@ -145,14 +145,16 @@ export class Trabajador extends DurableObject<Env> {
   /** Cierra (bien o mal), avisa al vigilante de que ha terminado y deja seguir a la cola de la biblioteca. */
   async comprensionCerrar(p: ParamsComprension, plan: PlanComprension | null, r: { ok: boolean; error?: string }): Promise<void> {
     const ctx = await this.contextoComprension(p);
-    if (plan) await cerrarComprension(ctx, plan, r);
+    let sinModelo = false;
+    if (plan) sinModelo = (await cerrarComprension(ctx, plan, r)).estado === 'sin_modelo';
     else {
       const { actualizarEstado } = await import('@scholaris/ingesta');
       await actualizarEstado(ctx.sql, p.documento, { estado: 'error', error: r.error ?? 'La comprensión no pudo empezar.' }, new Date().toISOString());
       await (ctx.sql as SqlRemoto).vaciarPendientes();
     }
     await this.env.TAREA.getByName(`tarea:${p.usuario}:${p.instancia}`).emitir({ tipo: 'fin', tarea: p.instancia, documento: p.documento, estado: r.ok ? 'listo' : 'error', ...(r.error ? { error: r.error } : {}) });
-    await emisorDesdeEnv(this.env, p.usuario).emitir(`usuario:${p.usuario}`, { tipo: 'comprension', documento: p.documento, paso: 'fin', avance: 1, mensaje: r.ok ? 'Comprensión terminada' : r.error ?? 'La comprensión ha fallado', estado: r.ok ? 'hecho' : 'error' }).catch(() => undefined);
+    const mensaje = sinModelo ? 'Sin modelo de comprensión: hace falta una clave de Gemini.' : r.ok ? 'Comprensión terminada' : r.error ?? 'La comprensión ha fallado';
+    await emisorDesdeEnv(this.env, p.usuario).emitir(`usuario:${p.usuario}`, { tipo: 'comprension', documento: p.documento, paso: 'fin', avance: 1, mensaje, estado: r.ok && !sinModelo ? 'hecho' : 'error' }).catch(() => undefined);
     await this.env.ESTANTERIA.getByName(p.usuario).comprensionesPendientes({ id: p.usuario, plan: p.plan }).catch(() => 0);
   }
 }
