@@ -109,6 +109,44 @@ export function veredictoDeFrase(f: Pick<FraseJuzgada, 'clase' | 'marcas' | 'evi
   return 'parcial';
 }
 
+/**
+ * ¿Lleva la frase una marca en medio, con más texto y otra marca detrás («X [E1], Y [E2].»)? Cada
+ * marca quedaría juzgada contra la frase entera y solo sostendría su trozo.
+ */
+export function marcaEnMedio(frase: string): boolean {
+  const marcas = [...frase.matchAll(/\[E\d+\]/g)];
+  if (new Set(marcas.map((m) => m[0])).size < 2) return false;
+  const primera = marcas[0]!;
+  const resto = frase.slice((primera.index ?? 0) + primera[0].length);
+  // Lo que va detrás de la primera marca, sin otras marcas, traducciones ni el punto final: si queda texto, está en medio.
+  return /\p{L}{3,}/u.test(resto.replace(/\[E\d+\]/g, '').replace(/\(\s*«[^»]*»\s*\)/g, ''));
+}
+
+/**
+ * Último recurso, si la corrección no lo arregla: parte una frase con marcas en medio en una
+ * frase por marca, cortando detrás de cada marca (y de su coma o su «y»).
+ */
+export function partirPorMarcas(frase: string): string {
+  if (!marcaEnMedio(frase)) return frase;
+  const trozos: string[] = [];
+  let resto = frase.trim();
+  for (;;) {
+    const m = /\[E\d+\](?:\[E\d+\])*(?:\s*\(\s*«[^»]*»\s*\))?/.exec(resto);
+    if (!m) break;
+    const fin = (m.index ?? 0) + m[0].length;
+    const antes = resto.slice(0, fin).trim();
+    const despues = resto.slice(fin).replace(/^\s*[,;:]?\s*(?:(?:y|e|así como|además de|mientras(?: que)?|seguid[oa]s? de|junto a|con)\s+)?/i, '');
+    trozos.push(antes);
+    resto = despues;
+    if (!/\p{L}{3,}/u.test(resto.replace(/\[E\d+\]/g, ''))) { resto = ''; break; }
+  }
+  if (resto.trim()) trozos.push(resto.trim());
+  return trozos
+    .map((t) => t.replace(/[.;,:\s]+$/u, '').replace(/^(\p{Ll})/u, (c) => c.toUpperCase()))
+    .map((t) => `${t.replace(/\s+(\[E\d+\])/g, ' $1')}.`)
+    .join(' ');
+}
+
 /** Lo que la verificación sabe de una prueba citada: su cita y, si es una página o un tramo, el texto entero de la unidad. */
 export function textoDePrueba(numerador: Numerador, id: string, maximo = 6000): string {
   const x = numerador.marcada(id);
@@ -248,7 +286,7 @@ async function juzgar(ctx: ContextoHerramientas, numerador: Numerador, frases: F
     for (const [id, v] of Object.entries(comprobacionesLiterales(f, numerador))) marcas[id] = v;
     // Tres marcas o más en una frase casi nunca sostienen cada una la frase entera (en el banco,
     // más de la mitad quedaban «parcial»): se corrige siempre, partiéndola.
-    if (!f.tabla && new Set(f.evidencias).size >= 3) {
+    if (!f.tabla && (new Set(f.evidencias).size >= 3 || marcaEnMedio(f.original))) {
       for (const id of f.evidencias) if (marcas[id]!.veredicto === 'sostiene') marcas[id] = { veredicto: 'parcial', nota: 'La frase junta varias afirmaciones con varias pruebas: hay que partirla.' };
     }
     return { ...f, clase: x?.clase ?? (f.evidencias.length ? 'hecho' : 'interpretacion'), marcas, ...(x?.nota ? { nota: x.nota } : {}) };
@@ -345,7 +383,7 @@ function aplicarMiradas(juzgadas: FraseJuzgada[], miradas: Miradas): void {
 
 const SISTEMA_CORRECCION = `Corriges frases de una respuesta académica para que cada una diga exactamente lo que prueban sus pruebas. Recibes cada frase con sus marcas [E#], el juicio de cada marca y el texto de las pruebas; a veces, otras pruebas del cuaderno [P#] que podrían servir.
 Reglas:
-1. Cada marca tiene que sostener ELLA SOLA la frase ENTERA en la que va. Si la frase junta datos que vienen de pruebas distintas, pártela en varias frases cortas, cada una con su marca justo detrás.
+1. Cada marca va al FINAL de su frase y tiene que sostener ELLA SOLA la frase ENTERA. Si la frase junta datos que vienen de pruebas distintas, pártela en varias frases completas y cortas, cada una con su marca al final. Mal: «Se ve la calle [E1], gente en la acera [E2] y un mural [E3].» Bien: «Se ve la calle [E1]. Hay gente en la acera [E2]. Al fondo aparece un mural [E3].»
 2. Ciñe cada afirmación a lo que dice su prueba. Lo que ninguna prueba dice, quítalo; si una de las otras pruebas [P#] lo sostiene entera, puedes usarla con su marca.
 3. Las palabras que pongas entre «» tienen que estar copiadas tal cual de la prueba que citas. Nunca digas que alguien nombra, dice o muestra algo que no esté escrito en la prueba.
 4. Lo visual y lo sonoro, solo como lo describe la prueba de lo que se vio u oyó; si al volver a mirar no se vio, quítalo.
@@ -470,12 +508,31 @@ export async function verificar(ctx: ContextoHerramientas, numerador: Numerador,
     const c = await corregir(ctx, numerador, texto, juzgadas);
     texto = c.markdown;
     correcciones = juzgadas.filter((f) => f.corregida).length;
+    // Lo que siga con marcas en medio de la frase se parte a mano, una frase por marca.
+    for (const f of frasesDe(texto)) {
+      if (f.tabla || !marcaEnMedio(f.original)) continue;
+      const pos = texto.indexOf(f.original);
+      if (pos < 0) continue;
+      texto = `${texto.slice(0, pos)}${partirPorMarcas(f.original)}${texto.slice(pos + f.original.length)}`;
+      correcciones++;
+    }
     if (correcciones) {
       // Lo corregido se vuelve a juzgar (sin volver a corregir); lo demás conserva su juicio.
       const previas = new Map(juzgadas.filter((f) => !f.corregida).map((f) => [f.original, f]));
       const frases = frasesDe(texto);
       const nuevas = frases.filter((f) => !previas.has(f.original));
-      const rejuzgadas = new Map((await juzgar(ctx, numerador, nuevas)).map((f) => [f.original, f]));
+      const nuevasJuzgadas = await juzgar(ctx, numerador, nuevas);
+      // Lo que ya se vio confirmado de una marca vale también para las frases nuevas que la citan (lo que
+      // no se vio, no: la corrección habrá cambiado precisamente eso).
+      const porMarca = new Map<string, { veredicto: 'si' | 'no' | 'dudoso'; nota: string; sentido: 'ver' | 'escuchar' }>();
+      for (const ms of miradas.values()) for (const [marca, v] of Object.entries(ms)) if (v.veredicto === 'si') porMarca.set(marca, v);
+      const heredadas: Miradas = new Map();
+      nuevasJuzgadas.forEach((f, i) => {
+        const ms = Object.fromEntries(f.evidencias.filter((id) => porMarca.has(id)).map((id) => [id, porMarca.get(id)!]));
+        if (Object.keys(ms).length) heredadas.set(i, ms);
+      });
+      aplicarMiradas(nuevasJuzgadas, heredadas);
+      const rejuzgadas = new Map(nuevasJuzgadas.map((f) => [f.original, f]));
       juzgadas = frases.map((f) => previas.get(f.original) ?? rejuzgadas.get(f.original) ?? { ...f, clase: 'hecho' as const, marcas: {} });
     }
   }

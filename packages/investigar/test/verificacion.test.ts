@@ -9,7 +9,7 @@ import type { ContextoHerramientas } from '../src/contexto.js';
 import { Contabilidad, type PeticionModelo } from '../src/modelo.js';
 import { CuadernoPruebas, type Ambito } from '../src/pruebas.js';
 import { Numerador } from '../src/sintesis.js';
-import { comprobacionesLiterales, frasesDe, nombradosEn, verificar } from '../src/verificacion.js';
+import { comprobacionesLiterales, frasesDe, marcaEnMedio, nombradosEn, partirPorMarcas, verificar } from '../src/verificacion.js';
 import { ModeloGuion, textoDe } from './apoyo.js';
 
 const pagina = (fisica: number, impresa: string): Ancla => ({ tipo: 'pagina', fisica, impresa, romana: false, origen: 'leido', confianza: 1 });
@@ -133,6 +133,36 @@ describe('frases con muchas marcas', () => {
     const v = await verificar(ctx, n, n.sustituir('Marta llega al puerto, Tomás cuenta historias y Marta no piensa volver [P1][P2][P3].'), { sitios: 0 });
     expect(corregida).toBe(true);
     expect(v.markdown).toBe('Marta llega al puerto [E1]. Tomás cuenta historias [E2]. Marta no piensa volver [E3].');
+  });
+});
+
+describe('marcas en medio de la frase', () => {
+  it('se reconocen (la traducción entre paréntesis detrás de la marca no cuenta)', () => {
+    expect(marcaEnMedio('Se ve la calle [E1], gente en la acera [E2] y un mural [E3].')).toBe(true);
+    expect(marcaEnMedio('Dice «hola» [E1] («hello») y se va [E1].')).toBe(false);
+    expect(marcaEnMedio('Marta llega al puerto [E1][E2].')).toBe(false);
+  });
+
+  it('si la corrección no las arregla, la frase se parte en una frase por marca', () => {
+    expect(partirPorMarcas('Se ve la calle a través del follaje [E1], gente caminando por la acera [E2] y un mural pintado [E3], seguidos de un rótulo [E4].'))
+      .toBe('Se ve la calle a través del follaje [E1]. Gente caminando por la acera [E2]. Un mural pintado [E3]. Un rótulo [E4].');
+  });
+
+  it('una frase con una marca en medio se corrige siempre', async () => {
+    let corregida = false;
+    const { ctx } = ctxCon((p) => {
+      const t = textoDe(p);
+      if (p.sistema?.startsWith('Corriges')) {
+        corregida = true;
+        // El corrector falla y la deja igual: entra la partición a mano.
+        return { json: { frases: [{ i: 0, texto: /### Frase 0\n(.*)/.exec(t)![1] }] } };
+      }
+      return { json: juicio(t, () => null) };
+    });
+    const n = new Numerador(ctx);
+    const v = await verificar(ctx, n, n.sustituir('Marta llega al puerto [P1], y Tomás cuenta historias en la taberna [P2].'), { sitios: 0 });
+    expect(corregida).toBe(true);
+    expect(v.markdown).toBe('Marta llega al puerto [E1]. Tomás cuenta historias en la taberna [E2].');
   });
 });
 

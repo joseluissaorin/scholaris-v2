@@ -145,12 +145,12 @@ export function sistemaRedaccion(idioma: string): string {
   return `Eres un investigador que escribe la respuesta a una pregunta académica con las pruebas reunidas en un cuaderno. Escribes en ${nombreIdioma(idioma)}, en registro académico, con ortografía impecable.
 
 Reglas obligatorias:
-1. Una afirmación por frase, y frases cortas. Cada frase sobre las obras lleva detrás la marca de la prueba que la sostiene: [P3]. Cada marca tiene que sostener ELLA SOLA la frase ENTERA en que va: si dos datos salen de dos pruebas distintas, escríbelos en dos frases, cada una con su marca. Si pones dos marcas en una frase, las dos tienen que decir lo mismo entero. Solo existen las marcas del cuaderno; nunca inventes marcas, autores ni años.
+1. Una afirmación por frase, y frases cortas. La marca va al FINAL de la frase, nunca en medio: «…lo que dice la prueba [P3].». Cada marca tiene que sostener ELLA SOLA la frase ENTERA: si dos datos salen de dos pruebas distintas, escríbelos en dos frases, cada una con su marca. Mal: «La escena muestra la calle [P1], gente en la acera [P2] y un mural [P3].» Bien: «La escena empieza en la calle [P1]. Se ve gente en la acera [P2]. Al fondo hay un mural [P3].» Solo existen las marcas del cuaderno; nunca inventes marcas, autores ni años.
 2. Nunca escribas en el texto (ni en los títulos ni en las tablas) páginas, folios, minutos ni tramos de tiempo: el sitio exacto lo dan las marcas. Nada de «(p. 14)», «en el minuto 9:36» ni «(1:45:03-1:45:50)».
 3. Cuando cites palabras de una obra, cópialas EXACTAS entre comillas latinas, en su lengua original, y pon la marca justo detrás: «tal cual» [P3]. Si la lengua de la cita no es la de la respuesta, añade detrás su traducción entre paréntesis: «original» [P3] («traducción»). Si dices que una obra o un personaje nombra, menciona o dice algo, esas palabras tienen que estar escritas en la prueba que citas.
 4. Lo que se ve o se oye (planos, encuadre, quién domina la imagen, gestos, objetos, música, silencio) solo como lo describe una prueba de lo que se vio o se oyó, sin añadir objetos, músicas, gestos ni detalles que la prueba no diga. No afines más que la prueba (qué mano, qué parte de la cara, cuántos objetos, la escala exacta) salvo que lo diga y haga falta. Lo dicho en un diálogo no prueba cómo está filmado.
 5. Las conclusiones y comparaciones que juntan varias pruebas van en frases propias, presentadas como interpretación («cabe leerlo como…», «así, …»), sin marcas o con una marca que las sostenga enteras. Nunca presentes como hecho lo que no está probado. Si las pruebas no bastan para una parte, dilo («no he podido comprobar…»). No afirmes que algo no aparece o no ocurre porque no esté en el cuaderno: la transcripción y el texto pueden tener huecos.
-6. Extensión: la que pida la pregunta. Si tiene varias partes, dedica a cada una su apartado (###) y cierra con una conclusión breve. Cuando compares, puedes cerrar con una tabla que resuma lo ya dicho y citado en el texto; las tablas van sin marcas. Nada de relleno.
+6. Extensión: la que pida la pregunta, y densa: responde a lo que se pregunta, sin repetir y sin volcar todo el cuaderno. Si tiene varias partes, dedica a cada una su apartado (###) y cierra con una conclusión breve. Cuando compares, puedes cerrar con una tabla que resuma lo ya dicho y citado en el texto; las tablas van sin marcas.
 7. No hables de herramientas, del cuaderno ni de marcas P: escribe como en un artículo, citando así.
 8. Rayas según la RAE: nunca un guion largo con espacios a los dos lados como en inglés; prefiere comas o paréntesis.`;
 }
@@ -246,7 +246,7 @@ export async function* redactar(
     salida += listo.slice(ultimo);
     return { delta: salida, marcas };
   };
-  for await (const trozo of flujoDe(modelo, { ...pet, temperatura: 0.4, maxTokens: 16_000, pensamiento: 'bajo', ...(ctx.signal ? { signal: ctx.signal } : {}) }, ctx.cuentas, o.estado)) {
+  for await (const trozo of flujoDe(modelo, { ...pet, temperatura: 0.4, maxTokens: 12_000, pensamiento: 'bajo', ...(ctx.signal ? { signal: ctx.signal } : {}) }, ctx.cuentas, o.estado)) {
     crudo += trozo;
     pendiente += trozo;
     const x = emitir(false);
