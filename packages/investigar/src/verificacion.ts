@@ -341,35 +341,41 @@ async function mirarSitios(ctx: ContextoHerramientas, numerador: Numerador, fras
     }
   });
   const lista = [...grupos.values()].sort((a, b) => b.frases.length - a.frases.length).slice(0, Math.max(0, sitios));
-  let k = 0;
-  // Todas a la vez (hasta ocho): cada comprobación es una llamada corta y la verificación espera a la más lenta.
-  await Promise.all(Array.from({ length: Math.min(8, lista.length) }, async () => {
-    while (k < lista.length) {
-      const g = lista[k++]!;
-      // Con plazo: la verificación espera a la más lenta, y alguna tarda el doble que las demás.
-      const control = new AbortController();
-      const reloj = setTimeout(() => control.abort(new Error(`más de ${PLAZO_MIRADA_MS / 1000} s`)), PLAZO_MIRADA_MS);
-      const alAbortar = () => control.abort(ctx.signal?.reason);
-      ctx.signal?.addEventListener('abort', alAbortar, { once: true });
-      try {
-        const r = await comprobarEnSitio(ctx, g.prueba, g.frases.map((x) => frases[x.i]!.limpia), g.sentido, { signal: control.signal });
-        if (!r) continue;
-        r.forEach((v, n) => {
-          const { i, marca } = g.frases[n]!;
-          const m = salida.get(i) ?? {};
-          m[marca] = { ...v, sentido: g.sentido };
-          salida.set(i, m);
-        });
-      } catch (e) {
-        if (control.signal.aborted && !ctx.signal?.aborted) abandonadas.n++;
-        else ctx.avisos.push(`No se pudo volver a mirar: ${(e as Error).message}`);
-      } finally {
-        clearTimeout(reloj);
-        ctx.signal?.removeEventListener('abort', alAbortar);
+  let k = 0, hechas = 0;
+  // Gemini atiende de una en una las llamadas con vídeo del mismo fichero: mandarlas todas a la vez
+  // solo hace esperar a todas. Van de tres en tres, las de más frases primero, y con un plazo para
+  // todas: lo que no se haya mirado a tiempo se queda con el juicio del texto.
+  const plazo = new AbortController();
+  const reloj = setTimeout(() => plazo.abort(new Error(`más de ${PLAZO_MIRADAS_MS / 1000} s`)), PLAZO_MIRADAS_MS);
+  const alAbortar = () => plazo.abort(ctx.signal?.reason);
+  ctx.signal?.addEventListener('abort', alAbortar, { once: true });
+  try {
+    await Promise.all(Array.from({ length: Math.min(3, lista.length) }, async () => {
+      while (k < lista.length && !plazo.signal.aborted) {
+        const g = lista[k++]!;
+        try {
+          const r = await comprobarEnSitio(ctx, g.prueba, g.frases.map((x) => frases[x.i]!.limpia), g.sentido, { signal: plazo.signal });
+          hechas++;
+          if (!r) continue;
+          r.forEach((v, n) => {
+            const { i, marca } = g.frases[n]!;
+            const m = salida.get(i) ?? {};
+            m[marca] = { ...v, sentido: g.sentido };
+            salida.set(i, m);
+          });
+        } catch (e) {
+          if (plazo.signal.aborted) continue;
+          hechas++;
+          ctx.avisos.push(`No se pudo volver a mirar: ${(e as Error).message}`);
+        }
       }
-    }
-  }));
-  if (abandonadas.n) ctx.avisos.push(`${abandonadas.n === 1 ? 'Una revisión' : `${abandonadas.n} revisiones`} del vídeo o de la página ${abandonadas.n === 1 ? 'tardó' : 'tardaron'} demasiado y se ${abandonadas.n === 1 ? 'dejó' : 'dejaron'}: lo que comprobaban queda con el juicio del texto.`);
+    }));
+  } finally {
+    clearTimeout(reloj);
+    ctx.signal?.removeEventListener('abort', alAbortar);
+  }
+  if (!ctx.signal?.aborted) abandonadas.n = lista.length - hechas;
+  if (abandonadas.n) ctx.avisos.push(`${abandonadas.n === 1 ? 'Una revisión' : `${abandonadas.n} revisiones`} del vídeo o de la página ${abandonadas.n === 1 ? 'no llegó' : 'no llegaron'} a tiempo y se ${abandonadas.n === 1 ? 'dejó' : 'dejaron'}: lo que comprobaban queda con el juicio del texto.`);
   return salida;
 }
 
@@ -397,8 +403,8 @@ function aplicarMiradas(juzgadas: FraseJuzgada[], miradas: Miradas): void {
 export const MAX_CORRECCIONES = 36;
 /** Frases que, tras corregir, siguen juntando tres marcas o más y se corrigen otra vez (si son más, no). */
 export const MAX_SEGUNDA_VUELTA = 6;
-/** Plazo de cada «volver a mirar» (la verificación espera a la más lenta). */
-export const PLAZO_MIRADA_MS = 90_000;
+/** Plazo para volver a mirar (todas las revisiones juntas; la verificación espera a la última). */
+export const PLAZO_MIRADAS_MS = 75_000;
 
 const SISTEMA_CORRECCION = `Corriges frases de una respuesta académica para que cada una diga exactamente lo que prueban sus pruebas. Recibes cada frase con sus marcas [E#], el juicio de cada marca y el texto de las pruebas; a veces, otras pruebas del cuaderno [P#] que podrían servir.
 Reglas:

@@ -9,7 +9,7 @@ import type { ContextoHerramientas } from '../src/contexto.js';
 import { Contabilidad, type PeticionModelo } from '../src/modelo.js';
 import { CuadernoPruebas, type Ambito } from '../src/pruebas.js';
 import { Numerador } from '../src/sintesis.js';
-import { comprobacionesLiterales, cuadrarTablas, frasesDe, marcaEnMedio, MAX_CORRECCIONES, nombradosEn, PLAZO_MIRADA_MS, partirPorMarcas, verificar } from '../src/verificacion.js';
+import { comprobacionesLiterales, cuadrarTablas, frasesDe, marcaEnMedio, MAX_CORRECCIONES, nombradosEn, PLAZO_MIRADAS_MS, partirPorMarcas, verificar } from '../src/verificacion.js';
 import { ModeloGuion, textoDe } from './apoyo.js';
 
 const pagina = (fisica: number, impresa: string): Ancla => ({ tipo: 'pagina', fisica, impresa, romana: false, origen: 'leido', confianza: 1 });
@@ -257,12 +257,12 @@ describe('lo visual y lo sonoro se vuelve a mirar', () => {
       };
       const n = new Numerador(ctx);
       const promesa = verificar(ctx, n, n.sustituir('Marta aparece en primer plano junto a la puerta [P3].'), { sitios: 4 });
-      await vi.advanceTimersByTimeAsync(PLAZO_MIRADA_MS + 10);
+      await vi.advanceTimersByTimeAsync(PLAZO_MIRADAS_MS + 10);
       const v = await promesa;
       expect(abortada).toBe(true);
       expect(v.tiempos.miradasAbandonadas).toBe(1);
       expect(v.frases[0]!.veredicto).toBe('respaldada');
-      expect(ctx.avisos.join(' ')).toContain('tardó demasiado');
+      expect(ctx.avisos.join(' ')).toContain('no llegó a tiempo');
     } finally {
       vi.useRealTimers();
     }
