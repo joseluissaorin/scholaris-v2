@@ -35,7 +35,8 @@ import { RecuadroMano } from '../comunes/recuadro-mano';
 import { EnCuadroSobreVideo, VistaPelicula } from '../comprension/pelicula';
 import { FotogramaVirtual } from '../comprension/material';
 
-export interface ManejadorMedio { irA: (t: number) => void }
+/** `sonar`: seguir reproduciendo (por defecto); sin él, el medio se queda en ese fotograma (una región que mirar). */
+export interface ManejadorMedio { irA: (t: number, sonar?: boolean) => void }
 
 interface Props {
   doc: DetalleDocumento;
@@ -132,7 +133,7 @@ export const Reproductor = forwardRef<ManejadorMedio, Props>(function Reproducto
     m.ponerPista(aVtt(tr));
   }, [tr, propio, esVideo, m]);
 
-  useImperativeHandle(ref, () => ({ irA: (t) => { m.irA(t, { sonar: true }); setSeguir(true); } }), [m]);
+  useImperativeHandle(ref, () => ({ irA: (t, sonar = true) => { if (!sonar) m.pausar(); m.irA(t, { sonar }); setSeguir(true); } }), [m]);
 
   // El lector sabe por dónde va (la URL, el folio de la barra).
   const segundo = useSegundo(1);

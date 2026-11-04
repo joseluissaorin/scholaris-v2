@@ -18,8 +18,7 @@ import { q } from '../datos/consultas';
 import { qc } from '../datos/comprension';
 import { esNoEncontrado } from '../componentes/comunes/errores';
 import { cuentaCorrespondencias, NOMBRE_CORRESPONDENCIA, NOMBRE_RELACION, SENTIDO_CORRESPONDENCIA, verboRelacion } from '../lib/comprension';
-import { FilaAlineacion, FormaCorrespondencia, VisorLado } from '../componentes/comprension/alineaciones';
-import { DatosFicha } from '../componentes/comprension/mapa';
+import { CambiosRelacion, FilaAlineacion, FormaCorrespondencia, VisorLado } from '../componentes/comprension/alineaciones';
 
 interface BusquedaRelacion { desde?: string; al?: string; tipo?: TipoCorrespondencia }
 // Aquí y no de lib/comprension: la validación va en el trozo inicial y no debe arrastrar la biblioteca entera.
@@ -97,7 +96,7 @@ function LadoALado() {
             <h1 className="truncate text-[0.9375rem] font-semibold leading-tight text-coffee-800"><em>{tituloIzq}</em> y <em>{tituloDer}</em></h1>
           </div>
           <Consejo texto="Poner la otra obra a la izquierda">
-            <Boton variante="linea" tam="p" icono="ordenar" comoHijo><Link to="/relaciones/$id" params={{ id }} search={{ desde: der, ...(tipo ? { tipo } : {}) }}><span className="hidden sm:inline">Cambiar de lado</span></Link></Boton>
+            <Boton variante="linea" tam="p" comoHijo><Link to="/relaciones/$id" params={{ id }} search={{ desde: der, ...(tipo ? { tipo } : {}) }} aria-label="Cambiar de lado: la otra obra a la izquierda"><Icono nombre="ordenar" tam={15} /><span className="hidden sm:inline">Cambiar de lado</span></Link></Boton>
           </Consejo>
         </div>
       </div>
@@ -109,7 +108,9 @@ function LadoALado() {
           </h2>
           {resumen ? <p className="mt-2 text-[1rem] text-coffee-700">{resumen}</p> : null}
           {ficha?.texto ? <p className="lectura mt-3 text-[0.9375rem] leading-relaxed text-coffee-800">{ficha.texto}</p> : null}
-          {ficha ? <DatosFicha datos={ficha.datos} solo={['conserva', 'cambia', 'anade', 'suprime']} className="mt-4" /> : null}
+          {ficha ? <CambiosRelacion ficha={ficha} tituloA={r.origen === izq ? tituloIzq : tituloDer} tituloB={r.destino === izq ? tituloIzq : tituloDer} className="mt-4" /> : null}
+          {r.estadoAlineacion?.estado === 'en_marcha' ? <p role="status" className="mt-3 flex items-center gap-2 text-[0.875rem] text-coffee-700"><span aria-hidden className="h-2 w-2 rounded-full bg-rojo anim-pulso" />Alineando las dos obras: las correspondencias aparecen según se calculan.</p> : null}
+          {r.estadoAlineacion?.estado === 'error' ? <p role="alert" className="mt-3 text-[0.875rem] text-rojo">{r.estadoAlineacion.error ?? 'La alineación se detuvo con un error.'}</p> : null}
         </header>
 
         {todas?.length ? (
@@ -119,7 +120,7 @@ function LadoALado() {
           </div>
         ) : null}
 
-        <div className="mt-5 grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)_minmax(0,1fr)]">
+        <div className="mt-5 grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)_minmax(0,1fr)]">
           <div className="min-w-0 md:order-1 xl:sticky xl:top-24 xl:self-start">
             <VisorLado doc={docIzq} lado={ladoDe(izq)} tipo={elegida?.tipo} otroTitulo={tituloDer} conMotor={motorIzq} />
           </div>
@@ -129,8 +130,8 @@ function LadoALado() {
               <span className="text-[0.75rem] text-apagado">{lista.length ? `${k + 1} de ${lista.length}` : ''}</span>
               <span className="ml-auto hidden items-center gap-1 text-[0.75rem] text-apagado sm:flex"><Teclas>J</Teclas><Teclas>K</Teclas> siguiente y anterior</span>
             </div>
-            <div className="mb-2 grid grid-cols-[minmax(4.5rem,0.7fr)_minmax(0,2.4fr)_minmax(4.5rem,0.7fr)] gap-3 px-3 text-[0.6875rem] font-semibold uppercase tracking-[0.06em] text-coffee-500" aria-hidden>
-              <span className="truncate">{tituloIzq}</span><span>Qué cambia</span><span className="truncate text-right">{tituloDer}</span>
+            <div className="mb-2 flex justify-between gap-3 px-3 text-[0.6875rem] font-semibold uppercase tracking-[0.06em] text-coffee-500" aria-hidden>
+              <span className="min-w-0 truncate">{tituloIzq}</span><span className="min-w-0 truncate text-right">{tituloDer}</span>
             </div>
             {isPending ? <div className="flex flex-col gap-2">{Array.from({ length: 6 }, (_, i) => <Esqueleto key={i} className="h-20 rounded-xl" />)}</div>
               : !lista.length ? <p className="rounded-xl border border-dashed border-cream-500 p-4 text-[0.875rem] text-coffee-600">{todas?.length ? 'Ninguna correspondencia de ese tipo.' : 'Esta relación todavía no tiene alineaciones: se calculan después de comprender las dos obras.'}</p>

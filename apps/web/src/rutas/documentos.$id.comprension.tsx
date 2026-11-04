@@ -7,11 +7,11 @@
  */
 import { useMemo, useState } from 'react';
 import { createFileRoute, Link } from '@tanstack/react-router';
-import { useQuery, useSuspenseQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient, useSuspenseQuery } from '@tanstack/react-query';
 import type { Segmento } from '@scholaris/nucleo';
-import { Boton, Composicion, Consejo, cx, Esqueleto, Icono, Vacio } from '@scholaris/ui';
+import { avisar, Boton, Composicion, Consejo, cx, Esqueleto, Icono, Vacio } from '@scholaris/ui';
 import { q } from '../datos/consultas';
-import { fichaGlobal, qc } from '../datos/comprension';
+import { confirmarRelacion, fichaGlobal, qc } from '../datos/comprension';
 import { anioVisible, autores, esMedio, NOMBRE_TIPO } from '../lib/formato';
 import { numero } from '../lib/numero';
 import { cuentaCorrespondencias, cuentaLegible, cuentaPorTipo, NOMBRE_CORRESPONDENCIA, NOMBRE_RELACION, verboRelacion, type RelacionVista } from '../lib/comprension';
@@ -69,8 +69,8 @@ function Comprension() {
             <h1 className="truncate text-[0.9375rem] font-semibold leading-tight text-coffee-800">{doc.metadatos.titulo}</h1>
           </div>
           {doc.tipo === 'video' && hecho ? (
-            <Boton variante="linea" tam="p" icono="video" comoHijo className="hidden sm:inline-flex">
-              <Link to="/lector/$id" params={{ id }} search={{ v: 'pelicula' }}>La película plano a plano</Link>
+            <Boton variante="linea" tam="p" comoHijo className="hidden sm:inline-flex">
+              <Link to="/lector/$id" params={{ id }} search={{ v: 'pelicula' }}><Icono nombre="video" tam={15} />La película plano a plano</Link>
             </Boton>
           ) : null}
         </div>
@@ -157,19 +157,29 @@ function Relaciones({ documento, relaciones }: { documento: string; relaciones: 
 }
 
 function TarjetaRelacion({ r, documento }: { r: RelacionVista; documento: string }) {
+  const qcl = useQueryClient();
+  const [confirmando, setConfirmando] = useState(false);
+  const confirmar = async () => {
+    setConfirmando(true);
+    try { await confirmarRelacion(qcl, r.id); avisar('Relación confirmada: la detección ya no la cambia.', { tono: 'exito' }); }
+    catch (e) { avisar(e instanceof Error && e.message ? e.message : 'No se pudo confirmar la relación.', { tono: 'error' }); }
+    finally { setConfirmando(false); }
+  };
   const { data: als } = useQuery(qc.alineaciones(r.id));
   const [abierta, setAbierta] = useState(false);
   const resumen = (r.ficha?.datos.resumen as { es?: string } | undefined)?.es;
   const autoria = [r.otro.autores.join(', '), r.otro.anio].filter(Boolean).join(', ');
   return (
     <li className="flex flex-col rounded-2xl border border-cream-400 bg-cream-50 p-4 shadow-[var(--levantado)]">
-      <p className="text-[0.75rem] font-semibold text-coffee-500">{NOMBRE_RELACION[r.tipo]}{r.fuente === 'usuario' || r.confirmada ? ', confirmada' : ''}</p>
+      <p className="text-[0.75rem] font-semibold text-coffee-500">{NOMBRE_RELACION[r.tipo]}{r.confirmada ? <span className="font-normal text-apagado"> (confirmada)</span> : null}</p>
       <h3 className="mt-1 text-[1.0625rem] leading-snug text-coffee-800">
         Esta obra {verboRelacion(r.tipo, r.sentido)}{' '}
         <Link to="/documentos/$id/comprension" params={{ id: r.otro.id }} className="font-semibold italic underline decoration-cream-500 underline-offset-4 hover:decoration-coffee-500">{r.otro.titulo}</Link>
         {autoria ? <span className="text-coffee-600"> ({autoria})</span> : null}
       </h3>
       {resumen ? <p className="mt-2 text-[0.875rem] text-coffee-700">{resumen}</p> : null}
+      {r.estadoAlineacion?.estado === 'en_marcha' ? <p role="status" className="mt-2 flex items-center gap-2 text-[0.8125rem] text-coffee-700"><span aria-hidden className="h-2 w-2 rounded-full bg-rojo anim-pulso" />Alineando las dos obras…</p> : null}
+      {r.estadoAlineacion?.estado === 'error' ? <p role="alert" className="mt-2 text-[0.8125rem] text-rojo">{r.estadoAlineacion.error ?? 'La alineación se detuvo con un error.'}</p> : null}
       {r.ficha?.texto ? (
         <>
           <p className={cx('lectura mt-2 text-[0.875rem] leading-relaxed text-coffee-800', !abierta && 'line-clamp-4')}>{r.ficha.texto}</p>
@@ -184,9 +194,10 @@ function TarjetaRelacion({ r, documento }: { r: RelacionVista; documento: string
         </ul>
       ) : null}
       <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-cream-200 pt-3">
-        <Boton variante="tinta" tam="p" icono="pila" comoHijo>
-          <Link to="/relaciones/$id" params={{ id: r.id }} search={{ desde: documento }}>Ver lado a lado{r.alineaciones ? ` (${r.alineaciones})` : ''}</Link>
+        <Boton variante="tinta" tam="p" comoHijo>
+          <Link to="/relaciones/$id" params={{ id: r.id }} search={{ desde: documento }}><Icono nombre="pila" tam={15} />Ver lado a lado{r.alineaciones ? ` (${r.alineaciones})` : ''}</Link>
         </Boton>
+        {!r.confirmada ? <Boton variante="fantasma" tam="p" icono="hecho" cargando={confirmando} onClick={() => void confirmar()}>Confirmar</Boton> : null}
         <span className="text-[0.75rem] text-apagado">Confianza {Math.round(r.confianza * 100)} %, {r.fuente === 'modelo' ? 'propuesta por el modelo' : r.fuente === 'wikidata' ? 'según Wikidata' : r.fuente === 'metadatos' ? 'por los metadatos' : 'marcada a mano'}</span>
       </div>
     </li>

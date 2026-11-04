@@ -415,3 +415,53 @@ estampan.
   de 150 KB: los bocetos, el motor y el arrastre van en sus trozos.
 
 Capturas en `capturas/movimiento/` (escritorio y móvil, claro y oscuro).
+
+## 15. Comprensión
+
+Lo que la capa de comprensión sabe de cada documento (docs/COMPRENSION.md) se ve
+en tres sitios, y todo lo citado abre el lector en su sitio exacto
+(`componentes/comprension/`, `lib/comprension.ts`, `datos/comprension.ts`):
+
+- **La comprensión de un documento** (`/documentos/:id/comprension`, el icono de
+  chispa en la barra del lector, «Ver la comprensión» en el menú de cada
+  documento): el estado del flujo con su avance en vivo (evento `comprension`
+  del tiempo real) y «Comprender» o «Volver a comprender» (con confirmación:
+  gasta modelo); la ficha global (lo esencial, sinopsis, sentido o tesis, temas
+  y motivos con cada aparición como folio, el análisis, lo que anota la lente y
+  el contexto, con lo de fuera de la obra marcado); la estructura en árbol con
+  el resumen de cada parte y su ficha; las entidades y las relaciones con otras
+  obras.
+- **En el lector**: dos pestañas del panel, Mapa (estado, estructura con la
+  parte por donde se va, relaciones) y Entidades (por clases, con sus
+  apariciones y la misma entidad en otras obras). Pulsar lleva al sitio sin
+  salir: la página con los caracteres subrayados y la región rodeada a mano, o
+  el segundo con la región sobre el fotograma (el vídeo se queda quieto para
+  verla). En un vídeo, «Película» a la derecha (`?v=pelicula`): secuencias,
+  escenas y sonido en una línea que sigue al reproductor y se recorre
+  arrastrando, los planos de la escena en curso con su escala abreviada (PG,
+  PM, PP…), la tarjeta del plano (escala, angulación, movimiento, composición,
+  luz, quién está en cuadro) y la ficha de la escena. Quién está en cuadro se
+  rodea también sobre el vídeo, cada uno con su nombre. Los carriles son un
+  solo tabulador cada uno y las flechas pasan de un tramo a otro.
+- **Lado a lado** (`/relaciones/:id?desde=`): la ficha de la relación (el modo
+  de la adaptación o la traducción, los cambios por aspecto con sus pruebas en
+  las dos obras y lo inferido marcado, los personajes), la leyenda de las
+  correspondencias con su forma de Kandinsky (círculo azul, lo que se
+  conserva; triángulo amarillo, lo que se condensa, amplía o reordena;
+  cuadrado rojo, lo que se transforma; huecos los que faltan en un lado), que
+  filtra, y cada alineación entre los dos visores: a un lado el vídeo en su
+  tramo (con el motor único: «Ver el tramo» suena y para al final), al otro la
+  página con la región rodeada y los caracteres subrayados. J y K recorren.
+
+**El anclaje en pequeño** (`material.tsx`): `RecorteRegion` (el detalle de una
+página o de un fotograma alrededor de su región, con la pluma roja; la caja se
+estrecha antes que crecer), `TextoSenalado` (los caracteres en su contexto,
+contados en puntos de código NFC), `PalabrasDelTramo` (las palabras de un
+tramo con sus tiempos, las del ancla marcadas y la que suena encendida) y
+`VistaAncla`, que elige según el medio. Las pruebas de Investigar, las
+apariciones y las alineaciones usan las mismas piezas.
+
+La demostración trae un cuento y su película **inventados** para esto
+(`datos/simulada/obras-inventadas.ts`): las páginas del cuento se dibujan
+renglón a renglón, justificadas, y la región de cada ancla sale de ese dibujo;
+los fotogramas son un guion gráfico con cada personaje en su región.

@@ -252,8 +252,10 @@ export const TarjetaEvidencia = memo(function TarjetaEvidencia({ e, alIr }: { e:
 /** Las apariciones de un tema o de un motivo como folios que abren el lector en cada una. */
 export function ChipsApariciones({ apariciones, max = 10, alIr }: { apariciones: AparicionVista[]; max?: number; alIr?: (a: AparicionVista) => void }) {
   const [todas, setTodas] = useState(false);
-  if (!apariciones.length) return <p className="text-[0.75rem] text-apagado">Sin apariciones ancladas.</p>;
-  const lista = todas ? apariciones : apariciones.slice(0, max);
+  // Varias apariciones en el mismo tramo (dos palabras de un parlamento) son un solo folio.
+  const unicas = useMemo(() => { const vistas = new Set<string>(); return apariciones.filter((a) => { const k = `${a.documento}|${etiquetaAncla(a.ancla, a.anclaFin)}`; if (vistas.has(k)) return false; vistas.add(k); return true; }); }, [apariciones]);
+  if (!unicas.length) return <p className="text-[0.75rem] text-apagado">Sin apariciones ancladas.</p>;
+  const lista = todas ? unicas : unicas.slice(0, max);
   const clase = 'tactil inline-flex h-7 items-center rounded-md border border-cream-400 bg-cream-50 px-1.5 font-mono text-[0.6875rem] text-coffee-700 shadow-[var(--relieve)] hover:-translate-y-px hover:border-cream-500';
   return (
     <ul className="flex flex-wrap gap-1.5" aria-label="Apariciones">
@@ -263,8 +265,8 @@ export function ChipsApariciones({ apariciones, max = 10, alIr }: { apariciones:
             : <Link {...enlaceAncla(a.documento, a.ancla)} title={a.forma} aria-label={`${a.forma}, ${etiquetaAncla(a.ancla, a.anclaFin)}`} className={clase}>{etiquetaAncla(a.ancla, a.anclaFin)}</Link>}
         </li>
       ))}
-      {apariciones.length > max ? (
-        <li><button type="button" onClick={() => setTodas((x) => !x)} className="h-7 px-1.5 text-[0.75rem] font-medium text-coffee-600 underline decoration-cream-500 underline-offset-4 hover:text-coffee-800">{todas ? 'menos' : `y ${apariciones.length - max} más`}</button></li>
+      {unicas.length > max ? (
+        <li><button type="button" onClick={() => setTodas((x) => !x)} className="h-7 px-1.5 text-[0.75rem] font-medium text-coffee-600 underline decoration-cream-500 underline-offset-4 hover:text-coffee-800">{todas ? 'menos' : `y ${unicas.length - max} más`}</button></li>
       ) : null}
     </ul>
   );

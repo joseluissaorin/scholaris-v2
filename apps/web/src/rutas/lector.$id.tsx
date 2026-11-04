@@ -230,7 +230,8 @@ function Lector() {
     const m = materialDeBusqueda(b);
     setMaterial(m ? { ...m, u: b.u, t: b.t, llegada: Date.now() } : null);
     void navegar({ search: (x) => ({ ...x, u: b.u, t: b.t, cr: b.cr, rg: b.rg, it: b.it, sec: b.sec, par: b.par }), replace: true, resetScroll: false });
-    if (medio) { if (b.t != null) reproductor.current?.irA(b.t); }
+    // Con región, el vídeo se queda quieto en el fotograma, para verla; sin ella, suena desde ahí.
+    if (medio) { if (b.t != null) reproductor.current?.irA(b.t, !m?.region); }
     else if (b.u) { flujo.current?.irA(b.u, Math.abs(b.u - actual) <= 3); if (Math.abs(b.u - actual) > 3) hojear(zona.current, b.u >= actual); }
   }, [navegar, medio, actual]);
   const cambiarVista = useCallback((v: 'transcripcion' | 'pelicula') => void navegar({ search: (x) => ({ ...x, v: v === 'pelicula' ? 'pelicula' as const : undefined }), replace: true, resetScroll: false }), [navegar]);

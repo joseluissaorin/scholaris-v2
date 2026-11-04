@@ -55,7 +55,7 @@ export function useFotogramaEn(documento: string, t: number | null, activo = tru
     if (t == null || !data) return null;
     const fs = data.filter((f) => f.t != null && f.imagenUrl);
     let mejor: (typeof fs)[number] | undefined;
-    for (const f of fs) if (f.t! <= t + 0.5 && (!mejor || f.t! > mejor.t!)) mejor = f;
+    for (const f of fs) if (f.t! <= t + 1.5 && (!mejor || f.t! > mejor.t!)) mejor = f;
     mejor ??= fs.sort((a, b) => Math.abs(a.t! - t) - Math.abs(b.t! - t))[0];
     return mejor ? { url: mejor.imagenUrl, t: mejor.t!, ...(mejor.descripcion ? { descripcion: mejor.descripcion } : {}) } : null;
   }, [data, t]);
@@ -127,7 +127,7 @@ export function TextoSenalado({ texto, caracteres, margen = 140, className }: { 
   const [pre, dentro, post] = contextoDeCaracteres(texto, caracteres, margen);
   if (!dentro.trim()) return null;
   return (
-    <p className={cx('lectura text-[0.875rem] leading-snug text-coffee-700', className)}>
+    <p className={cx('font-serif text-[0.875rem] leading-snug text-coffee-700', className)}>
       {limpiar(pre)}<mark className="text-coffee-900">{limpiar(dentro)}</mark>{limpiar(post)}
     </p>
   );
@@ -185,7 +185,7 @@ export function PalabrasDelTramo({ documento, ancla, alrededor = 18, vivo, alIr,
   if (desde < 0) return <p className={cx('text-[0.8125rem] text-apagado', className)}>No se habla en este tramo ({tiempoACadena(ancla.tipo === 'tiempo' ? ancla.t0 : 0)}).</p>;
   const hablantes = tr.hablantes;
   return (
-    <p className={cx('lectura text-[0.875rem] leading-relaxed text-coffee-700', className)}>
+    <p className={cx('font-serif text-[0.875rem] leading-relaxed text-coffee-700', className)}>
       {a > 0 ? '… ' : ''}
       {tr.palabras.slice(a, b).map((w, j) => {
         const i = a + j;
@@ -218,13 +218,15 @@ export function PalabrasDelTramo({ documento, ancla, alrededor = 18, vivo, alIr,
  * página (si la hay) y los caracteres en su contexto; en un vídeo, el fotograma
  * de su instante con la región y las palabras del tramo; en audio, las palabras.
  */
-export function VistaAncla({ documento, ancla, cita, recorte = true, palabras = true, vivo, alIr, className, altoMax }: {
+export function VistaAncla({ documento, ancla, cita, recorte = true, palabras = true, texto = true, vivo, alIr, className, altoMax }: {
   documento: string;
   ancla: AnclaMaterial;
   /** Lo que dice (si no hay texto en la unidad): se enseña tal cual. */
   cita?: string;
   recorte?: boolean;
   palabras?: boolean;
+  /** Los caracteres en su contexto (en una página). Sin él, solo el recorte. */
+  texto?: boolean;
   vivo?: boolean;
   alIr?: (t: number) => void;
   className?: string;
@@ -254,7 +256,7 @@ export function VistaAncla({ documento, ancla, cita, recorte = true, palabras = 
       ) : null}
       {ancla.tipo === 'tiempo' && palabras && (ancla.caracteres || !region) ? (
         <PalabrasDelTramo documento={documento} ancla={ancla} {...(vivo ? { vivo } : {})} {...(alIr ? { alIr } : {})} />
-      ) : ancla.caracteres && u?.texto ? (
+      ) : texto && ancla.caracteres && u?.texto ? (
         <TextoSenalado texto={u.texto} caracteres={ancla.caracteres} />
       ) : cita ? (
         <p className="text-[0.8125rem] leading-snug text-coffee-700">{cita}</p>
@@ -272,7 +274,8 @@ export function FotogramaVirtual({ documento, className }: { documento: string; 
     if (!fs.length) return;
     return motor().escucharTiempo((t) => {
       let k = 0;
-      for (let j = 0; j < fs.length; j++) if (fs[j]!.t! <= t + 0.05) k = j; else break;
+      // El último fotograma que empieza antes (o muy poco después: los clave suelen ir un segundo dentro del plano).
+      for (let j = 0; j < fs.length; j++) if (fs[j]!.t! <= t + 1.5) k = j; else break;
       setI((x) => (x === k ? x : k));
     });
   }, [fs]);

@@ -94,7 +94,7 @@ const FilaEntidad = memo(function FilaEntidad({ e, documento, abierta, alAbrir, 
               {conRegion.map((a) => (
                 <li key={a.id}>
                   <IrAparicion a={a} {...(alIr ? { alIr } : {})} className="block rounded-lg">
-                    <VistaAncla documento={a.documento} ancla={a.ancla} palabras={false} altoMax={6} />
+                    <VistaAncla documento={a.documento} ancla={a.ancla} palabras={false} texto={false} altoMax={6} />
                     <span className="mt-1 block text-center font-mono text-[0.6875rem] text-coffee-600">{etiquetaAncla(a.ancla, a.anclaFin)}</span>
                   </IrAparicion>
                 </li>

@@ -139,7 +139,7 @@ function LineaPelicula({ p, pos, alIr }: { p: Pelicula; pos: Posicion; alIr: (t:
           {p.sonido.length ? <CarrilSonido sonido={p.sonido} actuales={pos.sonido} d={d} alIr={alIr} alto={altoSonido} /> : null}
         </div>
         {/* El cabezal cruza todos los carriles; debajo, la franja para recorrer arrastrando. */}
-        <div ref={cabezal} aria-hidden className="pointer-events-none absolute -bottom-6 top-0 z-20 w-0" style={{ left: 0 }}>
+        <div ref={cabezal} aria-hidden className="pointer-events-none absolute -bottom-6 top-0 z-[11] w-0" style={{ left: 0 }}>
           <span className="absolute inset-y-0 left-0 w-px -translate-x-1/2 bg-rojo/75" />
           <span className="absolute bottom-[0.3rem] left-0 h-[10px] w-[10px] -translate-x-1/2 rounded-full border-2 border-cream-50 bg-rojo shadow-[0_1px_3px_rgb(0_0_0/0.3)]" />
         </div>
@@ -155,7 +155,7 @@ function LineaPelicula({ p, pos, alIr }: { p: Pelicula; pos: Posicion; alIr: (t:
         >
           <div className="absolute inset-x-0 top-2 h-1 rounded-full bg-cream-200 shadow-[var(--hundido)]" />
           {vista ? (
-            <span className="pointer-events-none absolute top-6 z-30 -translate-x-1/2 whitespace-nowrap rounded-lg bg-[rgb(26_15_10/0.88)] px-2 py-1 text-[0.6875rem] text-cream-50 shadow-[0_4px_12px_rgb(0_0_0/0.25)]" style={{ left: vista.x }}>
+            <span className="pointer-events-none absolute top-6 z-[12] -translate-x-1/2 whitespace-nowrap rounded-lg bg-[rgb(26_15_10/0.88)] px-2 py-1 text-[0.6875rem] text-cream-50 shadow-[0_4px_12px_rgb(0_0_0/0.25)]" style={{ left: vista.x }}>
               <span className="font-mono">{tiempoACadena(vista.t)}</span> {sobre(vista.t)}
             </span>
           ) : null}
@@ -271,7 +271,7 @@ function PlanosDeEscena({ p, escena, pos, alIr }: { p: Pelicula; escena: TramoPe
         <span aria-hidden className="flex h-9 w-[4.75rem] shrink-0 items-center justify-end text-[0.6875rem] font-semibold uppercase tracking-[0.06em] text-coffee-500 sm:w-24">Planos</span>
         <div className="relative min-w-0 flex-1">
           <Carril nombre="Planos de la escena" tramos={planos} actual={actual} d={span} desde={escena.t0} alIr={alIr} tono="tinta" alto="h-9" rotulos={(t) => ABREVIATURA[(t as PlanoVista).escala ?? ''] ?? (t as PlanoVista).escala ?? ''} />
-          <div ref={cabezal} aria-hidden className="pointer-events-none absolute inset-y-0 z-20 w-0.5 -translate-x-1/2 rounded-full bg-rojo" style={{ left: 0, opacity: 0 }} />
+          <div ref={cabezal} aria-hidden className="pointer-events-none absolute inset-y-0 z-[11] w-0.5 -translate-x-1/2 rounded-full bg-rojo" style={{ left: 0, opacity: 0 }} />
         </div>
       </div>
     </div>
@@ -326,7 +326,7 @@ const TarjetaPlano = memo(function TarjetaPlano({ plano, documento, indice, tota
         <div className="mt-3">
           <p className="text-[0.75rem] font-semibold text-coffee-500">En cuadro</p>
           <ul className="mt-1 flex flex-wrap gap-1.5">
-            {plano.personas.map((x) => <li key={`p-${x.nombre}`} className="inline-flex items-center gap-1.5 rounded-lg border border-cream-400 bg-cream-50 px-2 py-0.5 text-[0.8125rem] text-coffee-800 shadow-[var(--relieve)]"><span aria-hidden className="h-2 w-2 rounded-full bg-rojo" />{x.nombre}{x.nota ? <span className="text-coffee-500">, {x.nota}</span> : null}</li>)}
+            {plano.personas.map((x) => <li key={`p-${x.nombre}`} className="inline-flex items-center gap-1.5 rounded-lg border border-cream-400 bg-cream-50 px-2 py-0.5 text-[0.8125rem] text-coffee-800 shadow-[var(--relieve)]"><span aria-hidden className="h-2 w-2 rounded-full bg-rojo" /><span>{x.nombre}{x.nota ? <span className="text-coffee-500">, {x.nota}</span> : null}</span></li>)}
             {plano.objetos.map((x) => <li key={`o-${x.nombre}`} className="inline-flex items-center gap-1.5 rounded-lg border border-cream-400 bg-cream-50 px-2 py-0.5 text-[0.8125rem] text-coffee-800 shadow-[var(--relieve)]"><span aria-hidden className="h-0 w-0 border-x-[4px] border-b-[7px] border-x-transparent border-b-amarillo" />{x.nombre}</li>)}
           </ul>
         </div>

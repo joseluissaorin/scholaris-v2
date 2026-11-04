@@ -150,3 +150,11 @@ export function aparicionesFuera(documentos: string[], entidad: string) {
     staleTime: 5 * 60_000,
   });
 }
+
+/** Confirma que una relación detectada es cierta (pasa a ser del usuario y la detección no la toca). */
+export async function confirmarRelacion(qcl: QueryClient, id: string): Promise<RelacionVista> {
+  const r = await api().pedir<RelacionVista>('POST', `/relaciones/${encodeURIComponent(id)}/confirmar`);
+  qcl.setQueryData(qc.relacion(id).queryKey, (x) => (x ? { ...x, confirmada: true, fuente: 'usuario' as const } : x));
+  await qcl.invalidateQueries({ queryKey: ['comprension', 'relaciones'] });
+  return r;
+}

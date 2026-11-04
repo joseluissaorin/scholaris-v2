@@ -27,19 +27,72 @@ export interface ObraRelacionada {
   tipo: TipoEntrada;
 }
 
+/** Cómo va la alineación de una relación (el Workflow de transmedia). */
+export interface EstadoAlineacionVista {
+  estado: 'en_marcha' | 'hecho' | 'error';
+  alineaciones: number;
+  usd: number;
+  avisos: string[];
+  error?: string;
+  actualizado: string;
+}
+
 /**
- * GET /documentos/:id/relaciones → RelacionVista[]. Copia del tipo que llega en
- * `@scholaris/contrato` (transmedia.ts); cuando esté, se importa de allí.
+ * GET /documentos/:id/relaciones → RelacionVista[]. Copia del tipo de
+ * `@scholaris/contrato` (transmedia.ts, ola 2); al integrar, se importa de allí.
  */
 export type RelacionVista = Relacion & {
   otro: ObraRelacionada;
-  /** El lado de ESTE documento: `origen` adapta, traduce o edita a `destino`. */
+  /** El lado del documento que se pide: `origen` adapta, traduce o edita a `destino`. */
   sentido: 'origen' | 'destino';
   alineaciones: number;
   /** La ficha de la relación (objetivo «relacion»). */
   ficha?: Ficha;
-  confirmada?: boolean;
+  /** La puso o la confirmó el usuario. */
+  confirmada: boolean;
+  estadoAlineacion?: EstadoAlineacionVista;
 };
+
+/** Un cambio de la ficha de una relación: qué cambia de B (destino) a A (origen), con sus pruebas (índices en `ficha.evidencias`). */
+export interface CambioRelacion { aspecto: string; afirmacion: string; pruebas: { a: number[]; b: number[] }; inferido?: boolean }
+export interface PersonajeRelacion { nombre: string; cambio: string; nota: string; pruebas: { a: number[]; b: number[] } }
+
+export const NOMBRE_ASPECTO: Record<string, string> = {
+  estructura: 'Estructura', personajes: 'Personajes', punto_de_vista: 'Punto de vista', tiempo: 'Tiempo', espacio: 'Espacio', final: 'Final',
+  ideologia: 'Ideología', tono: 'Tono', dialogo: 'Diálogo', simbolos: 'Símbolos', medio: 'Lo propio de cada medio', otro: 'Otros cambios',
+};
+export const NOMBRE_CAMBIO_PERSONAJE: Record<string, string> = {
+  conservado: 'se conserva', anadido: 'añadido', suprimido: 'suprimido', fusionado: 'fundido con otro', desdoblado: 'desdoblado', transformado: 'transformado',
+  ampliado: 'ampliado', reducido: 'reducido', de_mencionado_a_escena: 'de mencionado a estar en escena', renombrado: 'renombrado',
+};
+
+const indices = (v: unknown) => (Array.isArray(v) ? v.filter((x): x is number => Number.isInteger(x) && x >= 0) : []);
+const pruebasDe = (v: unknown) => { const p = (v && typeof v === 'object' ? v : {}) as { a?: unknown; b?: unknown }; return { a: indices(p.a), b: indices(p.b) }; };
+
+/** Los cambios de la ficha de una relación, saneados (lo que no se entienda se cae). */
+export function cambiosDeFicha(f: Ficha | undefined): CambioRelacion[] {
+  const v = f?.datos.cambios;
+  if (!Array.isArray(v)) return [];
+  return v.filter((c) => c && typeof c === 'object' && typeof (c as { afirmacion?: unknown }).afirmacion === 'string' && (c as { afirmacion: string }).afirmacion.trim())
+    .map((c: { aspecto?: unknown; afirmacion: string; pruebas?: unknown; inferido?: unknown }) => ({
+      aspecto: typeof c.aspecto === 'string' ? c.aspecto : 'otro', afirmacion: c.afirmacion.trim(), pruebas: pruebasDe(c.pruebas), ...(c.inferido ? { inferido: true } : {}),
+    }));
+}
+
+export function personajesDeFicha(f: Ficha | undefined): PersonajeRelacion[] {
+  const v = f?.datos.personajes;
+  if (!Array.isArray(v)) return [];
+  return v.filter((p) => p && typeof p === 'object' && typeof (p as { nombre?: unknown }).nombre === 'string' && (p as { nombre: string }).nombre.trim())
+    .map((p: { nombre: string; cambio?: unknown; nota?: unknown; pruebas?: unknown }) => ({ nombre: p.nombre.trim(), cambio: typeof p.cambio === 'string' ? p.cambio : 'transformado', nota: typeof p.nota === 'string' ? p.nota : '', pruebas: pruebasDe(p.pruebas) }));
+}
+
+/** Los cambios agrupados por aspecto, en el orden de la disciplina (estructura, personajes, punto de vista…). */
+export function cambiosPorAspecto(cs: readonly CambioRelacion[]): Array<[string, CambioRelacion[]]> {
+  const orden = Object.keys(NOMBRE_ASPECTO);
+  const m = new Map<string, CambioRelacion[]>();
+  for (const c of cs) m.set(c.aspecto, [...(m.get(c.aspecto) ?? []), c]);
+  return [...m.entries()].sort(([a], [b]) => (orden.indexOf(a) + 99 * +(orden.indexOf(a) < 0)) - (orden.indexOf(b) + 99 * +(orden.indexOf(b) < 0)));
+}
 
 // ---------------------------------------------------------------------------
 // Nombres

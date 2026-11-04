@@ -13,6 +13,9 @@ import { costeLegible } from '../../lib/investigacion';
 import { numero } from '../../lib/numero';
 import { haceCuanto } from '../../lib/formato';
 
+/** «1 ficha», «12 fichas», con los números a la española. */
+const cuantos = (n: number, uno: string, varios: string) => `${numero(n)} ${n === 1 ? uno : varios}`;
+
 export function EstadoComprension({ documento, mapa, listo, compacto, className }: {
   documento: string;
   mapa: MapaComprension | undefined;
@@ -89,7 +92,7 @@ export function EstadoComprension({ documento, mapa, listo, compacto, className 
 
       {e && valor === 'hecho' && !compacto ? (
         <p className="mt-2 text-[0.8125rem] text-apagado">
-          {mapa ? `${numero(mapa.totales.segmentos)} segmentos${mapa.totales.planos ? `, de ellos ${numero(mapa.totales.planos)} planos` : ''}, ${numero(mapa.totales.fichas)} fichas y ${numero(mapa.totales.apariciones)} apariciones de ${numero(mapa.totales.entidades)} entidades. ` : ''}
+          {mapa ? `${cuantos(mapa.totales.segmentos, 'segmento', 'segmentos')}${mapa.totales.planos ? `, de ellos ${cuantos(mapa.totales.planos, 'plano', 'planos')}` : ''}, ${cuantos(mapa.totales.fichas, 'ficha', 'fichas')} y ${cuantos(mapa.totales.apariciones, 'aparición', 'apariciones')}${mapa.totales.entidades ? ` de ${cuantos(mapa.totales.entidades, 'entidad', 'entidades')}` : ''}. ` : ''}
           {e.modelo ? <>Con <span className="dato">{e.modelo}</span>, </> : null}{costeLegible(e.usd)}, {haceCuanto(e.actualizado)}.
         </p>
       ) : null}

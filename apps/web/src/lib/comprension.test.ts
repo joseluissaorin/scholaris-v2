@@ -180,3 +180,18 @@ describe('dónde se está', () => {
     expect(segmentoEn([seg('a', 'escena', 0, null, 0, 10), seg('b', 'plano', 1, 'a', 0, 5)], { t: 3 })?.id).toBe('a');
   });
 });
+
+describe('la ficha de una relación', () => {
+  it('sanea los cambios y los personajes y los agrupa por aspecto', async () => {
+    const { cambiosDeFicha, personajesDeFicha, cambiosPorAspecto } = await import('./comprension');
+    const f = { datos: {
+      cambios: [{ aspecto: 'final', afirmacion: 'Da la vuelta al reloj.', pruebas: { a: [0], b: [1, -2, 'x'] } }, { aspecto: 'estructura', afirmacion: ' Conserva. ', pruebas: {} , inferido: true }, { afirmacion: '' }, null],
+      personajes: [{ nombre: 'Nieves', cambio: 'anadido', nota: 'Vecina.', pruebas: { a: [2], b: [] } }, { cambio: 'suprimido' }],
+    } } as unknown as Ficha;
+    const cs = cambiosDeFicha(f);
+    expect(cs).toEqual([{ aspecto: 'final', afirmacion: 'Da la vuelta al reloj.', pruebas: { a: [0], b: [1] } }, { aspecto: 'estructura', afirmacion: 'Conserva.', pruebas: { a: [], b: [] }, inferido: true }]);
+    expect(cambiosPorAspecto(cs).map(([a]) => a)).toEqual(['estructura', 'final']);
+    expect(personajesDeFicha(f)).toEqual([{ nombre: 'Nieves', cambio: 'anadido', nota: 'Vecina.', pruebas: { a: [2], b: [] } }]);
+    expect(cambiosDeFicha(undefined)).toEqual([]);
+  });
+});

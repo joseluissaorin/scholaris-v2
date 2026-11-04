@@ -39,8 +39,8 @@ export function PanelComprension({ doc, actual, tiempo, alIr }: { doc: DetalleDo
         </section>
       ) : null}
       {doc.tipo === 'video' && mapa.totales.planos ? (
-        <Boton variante="linea" tam="p" icono="video" comoHijo className="self-start">
-          <Link to="/lector/$id" params={{ id: doc.id }} search={(s) => ({ ...s, v: 'pelicula' as const })} replace resetScroll={false}>La película plano a plano</Link>
+        <Boton variante="linea" tam="p" comoHijo className="self-start">
+          <Link to="/lector/$id" params={{ id: doc.id }} search={(s) => ({ ...s, v: 'pelicula' as const })} replace resetScroll={false}><Icono nombre="video" tam={15} />La película plano a plano</Link>
         </Boton>
       ) : null}
       {relaciones?.length ? (

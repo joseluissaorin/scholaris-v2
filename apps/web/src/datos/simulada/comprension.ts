@@ -26,8 +26,9 @@ const cp = (t: string, i: number) => Array.from(t.slice(0, i)).length;
 // Las páginas del cuento, dibujadas renglón a renglón (y dónde cae cada carácter)
 // ---------------------------------------------------------------------------
 
-interface Renglon { desde: number; hasta: number; x: number; y: number; texto: string; titulo?: boolean }
-const ANCHO = 600, ALTO = 848, IZQ = 70, DER = 530, RENGLON = 25, LETRA = 7.35, POR_LINEA = 60;
+/** Un renglón de la página: sus caracteres [desde, hasta), dónde empieza y cuánto mide (justificado, salvo el último del párrafo). */
+interface Renglon { desde: number; hasta: number; x: number; y: number; ancho: number; texto: string; titulo?: boolean }
+const ANCHO = 600, ALTO = 848, IZQ = 70, DER = 530, RENGLON = 25, LETRA = 6.7, POR_LINEA = 64;
 const xml = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
 /** Reparte el texto de una página en renglones, contando los puntos de código de cada uno. */
@@ -39,23 +40,26 @@ export function maquetar(texto: string): Renglon[] {
     pos = texto.indexOf(parrafo, pos) + parrafo.length;
     if (parrafo.startsWith('## ')) {
       y += 18;
-      out.push({ desde: inicio, hasta: inicio + Array.from(parrafo).length, x: ANCHO / 2, y, texto: parrafo.slice(3), titulo: true });
+      out.push({ desde: inicio, hasta: inicio + Array.from(parrafo).length, x: ANCHO / 2, y, ancho: 0, texto: parrafo.slice(3), titulo: true });
       y += RENGLON + 22;
       continue;
     }
     const palabras = parrafo.split(' ');
     let linea = '', desde = inicio, primera = true, c = inicio;
-    const cerrar = () => {
-      out.push({ desde, hasta: desde + Array.from(linea).length, x: IZQ + (primera ? 22 : 0), y, texto: linea });
+    const cerrar = (ultima: boolean) => {
+      const x = IZQ + (primera ? 22 : 0);
+      const n = Array.from(linea).length;
+      // Justificada a la caja, como en el libro; la última del párrafo, a su largo natural.
+      out.push({ desde, hasta: desde + n, x, y, ancho: ultima ? Math.min(DER - x, n * LETRA) : DER - x, texto: linea });
       y += RENGLON; primera = false;
     };
     for (const p of palabras) {
       const largo = Array.from(p).length;
-      if (linea && Array.from(linea).length + 1 + largo > POR_LINEA - (primera ? 3 : 0)) { cerrar(); linea = p; desde = c; }
+      if (linea && Array.from(linea).length + 1 + largo > POR_LINEA - (primera ? 3 : 0)) { cerrar(false); linea = p; desde = c; }
       else linea = linea ? `${linea} ${p}` : p;
       c += largo + 1;
     }
-    if (linea) cerrar();
+    if (linea) cerrar(true);
     y += 6;
   }
   return out;
@@ -65,7 +69,7 @@ function paginaSvg(texto: string, folio: string): string {
   const rs = maquetar(texto);
   const lineas = rs.map((r) => (r.titulo
     ? `<text x="${r.x}" y="${r.y}" text-anchor="middle" font-size="20" letter-spacing="3">${xml(r.texto)}</text>`
-    : `<text x="${r.x}" y="${r.y}">${xml(r.texto)}</text>`)).join('');
+    : `<text x="${r.x}" y="${r.y}" textLength="${r.ancho.toFixed(1)}" lengthAdjust="spacingAndGlyphs">${xml(r.texto)}</text>`)).join('');
   // Papel algo amarillento, una sombra de escáner en el lomo y el folio al pie.
   return `data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${ANCHO} ${ALTO}" width="${ANCHO}" height="${ALTO}"><defs><linearGradient id="l" x1="0" x2="1"><stop offset="0" stop-color="#d9ccb4"/><stop offset="0.06" stop-color="#f6efe0"/><stop offset="1" stop-color="#fbf6ea"/></linearGradient></defs><rect width="${ANCHO}" height="${ALTO}" fill="url(#l)"/><text x="${ANCHO / 2}" y="56" text-anchor="middle" font-family="Georgia, serif" font-size="11" letter-spacing="2" fill="#6b5a48">LAS TARDES DEL MIRLO</text><g font-family="Georgia, serif" font-size="15.2" fill="#2a1d14">${lineas}</g><text x="${ANCHO / 2}" y="${ALTO - 40}" text-anchor="middle" font-family="Georgia, serif" font-size="13" fill="#4a3b2e">${folio}</text></svg>`)}`;
 }
@@ -77,9 +81,10 @@ export function regionDeCaracteres(texto: string, [a, b]: readonly [number, numb
   const y0 = rs[0]!.y - 17, y1 = rs.at(-1)!.y + 7;
   let x0 = IZQ - 4, x1 = DER + 4;
   if (rs.length === 1) {
-    const r = rs[0]!;
-    x0 = r.x + Math.max(0, a - r.desde) * LETRA - 3;
-    x1 = Math.min(DER + 4, r.x + (Math.min(b, r.hasta) - r.desde) * LETRA + 3);
+    // Con el renglón justificado a su ancho, cada carácter ocupa su parte proporcional.
+    const r = rs[0]!, n = Math.max(1, r.hasta - r.desde);
+    x0 = r.x + (Math.max(0, a - r.desde) / n) * r.ancho - 3;
+    x1 = Math.min(DER + 4, r.x + ((Math.min(b, r.hasta) - r.desde) / n) * r.ancho + 3);
   }
   return { x: x0 / ANCHO, y: y0 / ALTO, w: (x1 - x0) / ANCHO, h: (y1 - y0) / ALTO };
 }
@@ -503,7 +508,7 @@ function fotogramaSvg(e: EscenaInventada, p: PlanoInventado): string {
 
 function figurasPelicula(): FiguraVista[] {
   return PLANOS.map((p, i) => {
-    const t = Math.round((p.t0 + Math.min(4, (p.t1 - p.t0) / 2)) * 10) / 10;
+    const t = Math.round((p.t0 + Math.min(1, (p.t1 - p.t0) / 2)) * 10) / 10;
     return {
       id: `fot-${p.id}`, unidad: unidadEnTiempo(t) - 1, imagenUrl: fotogramaSvg(p.escena, p), descripcion: p.descripcion,
       ancla: { tipo: 'tiempo', t0: t, t1: t }, etiqueta: anclaACita({ tipo: 'tiempo', t0: t, t1: t }), t, escena: i === 0 || PLANOS[i - 1]!.escena.id !== p.escena.id,
@@ -550,22 +555,55 @@ function alineaciones(): Alineacion[] {
   return ALINEACIONES.map(([tipo, a, b, nota], i) => ({ id: `al-${i + 1}`, relacion: ID_RELACION, orden: i, tipo, ...(a ? { a } : {}), ...(b ? { b } : {}), nota, confianza: tipo === 'alusion' ? 0.62 : 0.86 }));
 }
 
+let confirmada = false;
+
 function relacion(): Relacion & { ficha: Ficha } {
   const creditos = PLANOS.find((p) => p.id === 'es1pl3')!;
+  const plano = (id: string) => PLANOS.find((p) => p.id === id)!;
+  // Las pruebas de la ficha: A es la película (origen) y B el cuento (destino); los cambios las citan por índice.
+  const evidencias: Evidencia[] = [
+    evPlano(plano('es2pl4'), { nombre: 'Ernesto', region: { x: 0.5, y: 0.06, w: 0.42, h: 0.92 } }, 'Ernesto domina el encuadre en primer término'), // 0 A
+    evTexto(2, 'Pensé que era uno de esos viejos que hablan con cualquiera'), // 1 B
+    evDialogo('En este barrio todo se sabe, chico. Y lo que no se sabe, se inventa.'), // 2 A
+    evTexto(6, '—Tomás, no te conviene que te vean tanto con el librero.'), // 3 B
+    evDialogo('Volví porque alguien me esperaba en el muelle.'), // 4 A
+    evTexto(8, 'Me contó que en el puerto de vuelta lo esperaba una persona a la que nunca nombró'), // 5 B
+    evPlano(plano('es14pl3'), undefined, 'Tomás da la vuelta al reloj de arena'), // 6 A
+    evTexto(12, 'Puse el reloj sobre la mesa. No le di la vuelta.'), // 7 B
+    evPlano(plano('es7pl1'), { nombre: 'Nieves', region: { x: 0.44, y: 0.12, w: 0.18, h: 0.84 } }, 'Nieves y Tomás bailan en la azotea'), // 8 A
+    evPlano(plano('es13pl3'), { nombre: 'Tomás', region: { x: 0.08, y: 0.06, w: 0.4, h: 0.92 } }, 'Tomás domina el encuadre en primer término'), // 9 A
+    evTexto(11, '—Para usted —me dijo—. Así no tendrá que pedirle a nadie media hora.'), // 10 B
+  ];
+  const conteo: Partial<Record<TipoCorrespondencia, number>> = {};
+  for (const [t] of ALINEACIONES) conteo[t] = (conteo[t] ?? 0) + 1;
   return {
-    id: ID_RELACION, origen: ID_PELICULA, destino: ID_CUENTO, tipo: 'adaptacion_de', nota: 'La autora del cuento coescribe el guion.', confianza: 0.97, fuente: 'modelo', creada: CREADA,
+    id: ID_RELACION, origen: ID_PELICULA, destino: ID_CUENTO, tipo: 'adaptacion_de', nota: 'La autora del cuento coescribe el guion.', confianza: 0.97,
+    fuente: confirmada ? 'usuario' : 'modelo', creada: CREADA,
     evidencias: [evPlano(creditos, undefined, 'Texto en pantalla: «SEGÚN UN CUENTO DE ADELA SORNÍ»'), evTexto(1, 'La primera vez que vi a Ernesto Valdivia')],
     ficha: ficha({
       id: `${ID_RELACION}:fi`, documento: null, objetivo: 'relacion', objetivoId: ID_RELACION, lente: 'cine', clase: 'adaptacion',
       texto: 'La película conserva el armazón del cuento (cinco de sus once escenas pasan casi intactas) y cambia el modo de contarlo: la voz retrospectiva de Tomás desaparece y su juicio sobre Ernesto se convierte en decisiones de puesta en cuadro. Las supresiones (Rafa, las notas de la facultad) y los añadidos (el prólogo en el muelle, Nieves, el baile) desplazan la sospecha del barrio de un rumor sin nombre a un personaje que la dice. El cambio de sentido más hondo está en el final: el reloj que el cuento deja quieto, la película lo pone a contar.',
       datos: {
-        conserva: ['La estructura en encuentro, librería, tormenta, cierre y despedida.', 'La regla de la media hora.', 'Las réplicas de Ernesto sobre los libros que no se mudan.'],
-        cambia: ['La voz del narrador pasa a la composición del encuadre.', 'La confidencia de Ernesto pasa al estilo directo, sin flashback.', 'El final: Tomás da la vuelta al reloj.'],
-        anade: ['El prólogo en el muelle.', 'Nieves y el baile en la azotea.'],
-        suprime: ['Rafa.', 'Las notas de Tomás en la facultad.'],
-        resumen: { es: 'Adaptación que conserva la estructura, sustituye la voz narradora por la puesta en cuadro e invierte el sentido del reloj al final.' },
+        relacion: { tipo: 'adaptacion_de', origen: ID_PELICULA, destino: ID_CUENTO }, titulo: 'Arena en los bolsillos y Las tardes del Mirlo',
+        modo: 'Transposición fiel en la estructura que transfocaliza el relato: la voz del narrador pasa a la puesta en cuadro.',
+        resumen: { es: 'Adaptación que conserva la estructura, sustituye la voz narradora por la puesta en cuadro e invierte el sentido del reloj al final.', en: 'An adaptation that keeps the structure, turns the narrating voice into mise-en-scène and reverses the meaning of the hourglass at the end.' },
+        cambios: [
+          { aspecto: 'estructura', afirmacion: 'Conserva las cinco grandes partes del cuento (encuentro, librería, tormenta, cierre y despedida) y les añade un prólogo en el muelle.', pruebas: { a: [], b: [] }, inferido: true },
+          { aspecto: 'punto_de_vista', afirmacion: 'El juicio del narrador sobre Ernesto se convierte en composición: Ernesto domina el encuadre y Tomás queda al fondo, desenfocado.', pruebas: { a: [0], b: [1] } },
+          { aspecto: 'personajes', afirmacion: 'El aviso de Rafa pasa a Nieves, una vecina que dice en voz alta lo que el cuento deja en rumor.', pruebas: { a: [2], b: [3] } },
+          { aspecto: 'tiempo', afirmacion: 'La analepsis de la juventud de Ernesto pasa al estilo directo, sin flashback.', pruebas: { a: [4], b: [5] } },
+          { aspecto: 'final', afirmacion: 'El reloj que el cuento deja quieto, la película lo pone a contar: Tomás le da la vuelta.', pruebas: { a: [6], b: [7] } },
+          { aspecto: 'medio', afirmacion: 'La despedida se dice con la cámara: por primera vez Tomás domina el encuadre, en contrapicado.', pruebas: { a: [9], b: [10] } },
+        ],
+        personajes: [
+          { nombre: 'Nieves', cambio: 'anadido', nota: 'Vecina de la azotea; pone voz a la sospecha y enseña a Tomás a bailar.', pruebas: { a: [8], b: [] } },
+          { nombre: 'Rafa', cambio: 'suprimido', nota: 'Su aviso pasa a Nieves.', pruebas: { a: [], b: [3] } },
+          { nombre: 'Ernesto Valdivia', cambio: 'conservado', nota: 'Mismo papel; su confidencia se oye en su voz.', pruebas: { a: [4], b: [5] } },
+          { nombre: 'Don Julián', cambio: 'ampliado', nota: 'Su gesto con la canela se ve en un plano.', pruebas: { a: [], b: [] } },
+        ],
+        conteo, alineaciones: ALINEACIONES.length,
       },
-      evidencias: [evTexto(12, 'No le di la vuelta.'), evPlano(PLANOS.find((p) => p.id === 'es14pl3')!, undefined, 'Tomás da la vuelta al reloj de arena')],
+      evidencias,
     }),
   };
 }
@@ -777,11 +815,13 @@ export function registrarComprension(h: Ayudas): void {
     if (lado !== r.origen && lado !== r.destino) return null;
     const otro = h.documento(lado === r.origen ? r.destino : r.origen)!;
     return {
-      ...r, sentido: lado === r.origen ? 'origen' : 'destino', alineaciones: ALINEACIONES.length, confirmada: false,
+      ...r, sentido: lado === r.origen ? 'origen' : 'destino', alineaciones: ALINEACIONES.length, confirmada,
+      estadoAlineacion: { estado: 'hecho', alineaciones: ALINEACIONES.length, usd: 0.38, avisos: [], actualizado: CREADA },
       otro: { id: otro.id, titulo: otro.meta.titulo, autores: otro.meta.autores.map((x) => `${x.nombre} ${x.apellidos}`), ...(otro.meta.anioOriginal ?? otro.meta.anio ? { anio: (otro.meta.anioOriginal ?? otro.meta.anio)! } : {}), tipo: otro.tipo },
     };
   };
   ruta('GET', '/documentos/:id/relaciones', (m) => { const v = vistaRelacion(m[1]!); return json(v ? [v] : []); });
+  ruta('POST', '/relaciones/:id/confirmar', (m) => { if (m[1] !== ID_RELACION) return error(404, 'no_encontrado', 'Esa relación no existe.'); confirmada = true; return json(vistaRelacion(ID_PELICULA)); });
   ruta('GET', '/relaciones/:id', (m) => (m[1] === ID_RELACION ? json(vistaRelacion(ID_PELICULA)) : error(404, 'no_encontrado', 'Esa relación no existe.')));
   ruta('GET', '/relaciones/:id/alineaciones', (m, _c, q) => {
     if (m[1] !== ID_RELACION) return error(404, 'no_encontrado', 'Esa relación no existe.');
