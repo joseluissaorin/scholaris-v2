@@ -9,7 +9,7 @@ import type { ContextoHerramientas } from '../src/contexto.js';
 import { Contabilidad, type PeticionModelo } from '../src/modelo.js';
 import { CuadernoPruebas, type Ambito } from '../src/pruebas.js';
 import { Numerador } from '../src/sintesis.js';
-import { comprobacionesLiterales, frasesDe, marcaEnMedio, nombradosEn, partirPorMarcas, verificar } from '../src/verificacion.js';
+import { comprobacionesLiterales, frasesDe, marcaEnMedio, MAX_CORRECCIONES, nombradosEn, partirPorMarcas, verificar } from '../src/verificacion.js';
 import { ModeloGuion, textoDe } from './apoyo.js';
 
 const pagina = (fisica: number, impresa: string): Ancla => ({ tipo: 'pagina', fisica, impresa, romana: false, origen: 'leido', confianza: 1 });
@@ -133,6 +133,24 @@ describe('frases con muchas marcas', () => {
     const v = await verificar(ctx, n, n.sustituir('Marta llega al puerto, Tomás cuenta historias y Marta no piensa volver [P1][P2][P3].'), { sitios: 0 });
     expect(corregida).toBe(true);
     expect(v.markdown).toBe('Marta llega al puerto [E1]. Tomás cuenta historias [E2]. Marta no piensa volver [E3].');
+  });
+});
+
+describe('tope de correcciones', () => {
+  it(`como mucho ${MAX_CORRECCIONES} frases, primero las que ninguna prueba sostiene`, async () => {
+    const corregidas: number[] = [];
+    const { ctx } = ctxCon((p) => {
+      const t = textoDe(p);
+      if (p.sistema?.startsWith('Corriges')) { for (const m of t.matchAll(/### Frase (\d+)/g)) corregidas.push(Number(m[1])); return { json: { frases: [] } }; }
+      // Las frases pares, parciales; la última, sin respaldo.
+      return { json: juicio(t, (frase) => (frase.includes('número 79') ? 'no_sostiene' : /número \d*[02468]\b/.test(frase) ? 'parcial' : null)) };
+    });
+    const n = new Numerador(ctx);
+    const md = Array.from({ length: 80 }, (_, k) => `Marta llega al puerto por vez número ${k} [P1].`).join(' ');
+    await verificar(ctx, n, n.sustituir(md), { sitios: 0 });
+    // 41 piden corrección (40 parciales y una sin respaldo): van 36, y la que nada sostiene, la primera.
+    expect(corregidas.length).toBe(MAX_CORRECCIONES);
+    expect(corregidas).toContain(79);
   });
 });
 

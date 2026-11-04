@@ -341,8 +341,8 @@ async function mirarSitios(ctx: ContextoHerramientas, numerador: Numerador, fras
   });
   const lista = [...grupos.values()].sort((a, b) => b.frases.length - a.frases.length).slice(0, Math.max(0, sitios));
   let k = 0;
-  // Seis a la vez: cada comprobación es una llamada corta y la verificación espera a la más lenta.
-  await Promise.all(Array.from({ length: Math.min(6, lista.length) }, async () => {
+  // Todas a la vez (hasta ocho): cada comprobación es una llamada corta y la verificación espera a la más lenta.
+  await Promise.all(Array.from({ length: Math.min(8, lista.length) }, async () => {
     while (k < lista.length) {
       const g = lista[k++]!;
       try {
@@ -381,6 +381,9 @@ function aplicarMiradas(juzgadas: FraseJuzgada[], miradas: Miradas): void {
 // ---------------------------------------------------------------------------
 // Corrección
 // ---------------------------------------------------------------------------
+
+/** Frases que se corrigen como mucho en una respuesta. */
+export const MAX_CORRECCIONES = 36;
 
 const SISTEMA_CORRECCION = `Corriges frases de una respuesta académica para que cada una diga exactamente lo que prueban sus pruebas. Recibes cada frase con sus marcas [E#], el juicio de cada marca y el texto de las pruebas; a veces, otras pruebas del cuaderno [P#] que podrían servir.
 Reglas:
@@ -427,9 +430,20 @@ function citasEn(textoNuevo: string, permitidos: string[]): boolean {
 async function corregir(ctx: ContextoHerramientas, numerador: Numerador, markdown: string, juzgadas: FraseJuzgada[]): Promise<{ markdown: string; cambiadas: string[] }> {
   // Un modelo rápido: corregir es ceñir y partir frases, no investigar (y la latencia cuenta).
   const modelo = ctx.p.modelos.corrector ?? ctx.p.modelos.verificador ?? ctx.p.modelos.redactor ?? ctx.p.modelos.agente;
+  // Primero lo que no sostiene nada, después las frases compuestas y lo parcial, y lo que afirma un
+  // hecho sin marca al final; como mucho `MAX_CORRECCIONES` (la latencia crece con cada lote).
+  const prioridad = (f: FraseJuzgada) => {
+    const vs = f.evidencias.map((id) => f.marcas[id]?.veredicto ?? 'sostiene');
+    if (vs.includes('no_sostiene')) return 0;
+    if (vs.includes('parcial')) return f.evidencias.length >= 2 ? 1 : 2;
+    return 3;
+  };
   const pendientes = juzgadas
     .map((f, i) => ({ f, i }))
-    .filter(({ f }) => !f.tabla && (f.evidencias.some((id) => f.marcas[id]?.veredicto !== 'sostiene') || (!f.evidencias.length && f.clase !== 'interpretacion')));
+    .filter(({ f }) => !f.tabla && (f.evidencias.some((id) => f.marcas[id]?.veredicto !== 'sostiene') || (!f.evidencias.length && f.clase !== 'interpretacion')))
+    .sort((a, b) => prioridad(a.f) - prioridad(b.f) || a.i - b.i)
+    .slice(0, MAX_CORRECCIONES)
+    .sort((a, b) => a.i - b.i);
   if (!pendientes.length) return { markdown, cambiadas: [] };
   const extra = new Map(pendientes.map(({ f, i }) => [i, candidatas(ctx, numerador, f)]));
   const lotes: Array<typeof pendientes> = [];
