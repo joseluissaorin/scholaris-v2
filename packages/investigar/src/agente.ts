@@ -250,6 +250,9 @@ export async function* investigar(p: PuertosInvestigar, pregunta: string, o: Opc
     }
     if (agotado()) avisos.push(`La investigación agotó su presupuesto (${pasos} pasos, ${Math.round((reloj() - t0) / 1000)} s, ${cuentas.usd.toFixed(3)} $).`);
 
+    const fases: Record<string, number> = { bucle: Math.round(reloj() - t0) };
+    let marca = reloj();
+    const fase = (nombre: string) => { fases[nombre] = Math.round(reloj() - marca); marca = reloj(); };
     // 4. La redacción. Una redacción vacía o cortada (un flujo que se cae, un modelo que no
     // devuelve nada) nunca llega a «fin»: se vuelve a escribir (otra vez con el mismo modelo y
     // después con otro) y, si sigue fallando, la investigación termina en error.
@@ -291,6 +294,7 @@ export async function* investigar(p: PuertosInvestigar, pregunta: string, o: Opc
     }
     if (numerador.descartadas.length) avisos.push(`Se quitaron ${numerador.descartadas.length} marcas que no correspondían a ninguna prueba.`);
 
+    fase('redaccion');
     // 5. La prosa, sin páginas ni minutos escritos a mano (el sitio lo dan las marcas) y sin
     // marcas en las tablas (una fila se juzga entera y casi ninguna marca la sostiene entera).
     const anclas = () => numerador.marcadas.map((m) => m.evidencia);
@@ -306,7 +310,9 @@ export async function* investigar(p: PuertosInvestigar, pregunta: string, o: Opc
     cuerpo = quitarLocalizadores(v.markdown, anclas()).markdown;
     // Lo corregido puede citar pruebas nuevas: a sus oraciones y a su región.
     let rg2: Awaited<ReturnType<typeof regiones>> = null;
-    if (v.correcciones) { afinar(numerador, ctx, cuerpo); rg2 = await regiones(); }
+    fase('verificacion');
+    // Las citas nuevas de la corrección, a su región sin visión (gratis y al momento; en un escaneo se quedan con sus caracteres).
+    if (v.correcciones) { afinar(numerador, ctx, cuerpo); rg2 = await regionesDeCitas(ctx, numerador, { vision: false }).catch(() => null); }
     for (const r of [rg, rg2]) {
       if (!r?.uso.llamadas) continue;
       // Una entrada por localización, con el total en la primera.
@@ -350,7 +356,9 @@ export async function* investigar(p: PuertosInvestigar, pregunta: string, o: Opc
       }
       f.evidencias.push(e.id);
     }
+    fase('final');
     const ms = Math.round(reloj() - t0);
+    console.error(JSON.stringify({ nivel: 'info', que: 'investigar_tiempos', id, ms, ...fases, correcciones: v.correcciones, pruebas: evidencias.length, usd: Math.round(cuentas.usd * 1000) / 1000 }));
     const inv: Investigacion = { id, pregunta, plan, markdown, evidencias, frases: frasesFinales, notas: ctx.notas, confianza, modelo: modeloAgente, ms };
 
     // 7. La memoria.
