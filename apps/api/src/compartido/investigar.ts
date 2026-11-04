@@ -18,9 +18,20 @@ import { obtenerBuscador } from './servicios.js';
 
 /**
  * Modelos del agente, elegidos con el banco de Investigar (packages/investigar/banco,
- * 4-11-2026): Gemini 4 Argon es el que mejor usa las herramientas (más pasos útiles,
- * encuentra las escenas que hay que encontrar y las mira); 3.8 Flash mira, verifica y
- * planifica en las búsquedas rápidas a una fracción del precio.
+ * 4-11-2026; mismas dos preguntas difíciles sobre Fresa y chocolate y su cuento, con
+ * 3.8 Flash para mirar y verificar):
+ *
+ *   agente                              pasos   llamadas a «ver»   anclas clave   $/pregunta
+ *   gemini-4-argon                      17, 15        4, 3             6/6          0,21-0,24
+ *   gemini-3.8-flash                    14, 15        2, 4             6/6          0,09-0,10
+ *   gemini-3.1-pro-preview               6, 13        1, 3             5/6          0,14-0,17
+ *   gemini-3.1-pro-preview-customtools   8, 10        2, 1             4/6          0,14-0,19
+ *
+ * Ninguno hizo llamadas inválidas. Los 3.1 Pro paran pronto (no buscan la segunda
+ * escena de Coppelia, la que resignifica el helado); Argon es el más concienzudo:
+ * localiza las escenas, las mira enteras y lee alrededor. Flash usa bien las
+ * herramientas a menos de la mitad del precio: va en la profundidad «rápida» y mira y
+ * verifica en todas.
  */
 export const MODELOS_INVESTIGAR = {
   agente: 'gemini-4-argon',
