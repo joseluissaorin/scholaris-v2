@@ -118,7 +118,7 @@ async function mirar(args: Record<string, unknown>, ctx: ContextoHerramientas, m
       modo === 'ver'
         ? 'Analiza como un especialista en cine: planos (escala, angulación, movimiento de cámara), composición y quién domina el encuadre, profundidad de campo, luz y color, montaje, objetos y símbolos, texto en pantalla. Una observación por plano o hecho relevante para la pregunta, con su instante y la caja de lo descrito en el fotograma de ese instante.'
         : 'Analiza el sonido: música (diegética o no, qué pieza si la reconoces), canciones, silencios, ruido ambiente, tono y prosodia de las voces, quién habla. Una observación por hecho sonoro relevante, con su instante.',
-      'Los instantes, SIEMPRE contados desde el principio de la obra completa. Solo lo que se ve o se oye de verdad; si algo no se distingue, dilo en la respuesta. Escribe en español.',
+      'Los instantes, SIEMPRE contados desde el principio de la obra completa. Solo lo que se ve o se oye de verdad; si algo no se distingue, dilo en la respuesta. No identifiques un objeto, una persona, un gesto o una pieza musical con más precisión de la que se distingue (si no se ve bien si es un disco o un casete, di «un soporte de música»; si no se sabe quién canta, no lo nombres); en las observaciones, quién es cada persona solo si se la reconoce sin duda. Escribe en español.',
     ].filter(Boolean).join('\n\n');
   } else {
     if (modo === 'escuchar') return fallo('Este documento no tiene sonido: usa «ver» o «leer».');
