@@ -19,7 +19,7 @@ import { Contabilidad, type MensajeAgente, type ParteMensaje } from './modelo.js
 import { candidatas, catalogo, planificar } from './plan.js';
 import { presupuestoDe, type OpcionesInvestigar, type PuertosInvestigar } from './puertos.js';
 import { CuadernoPruebas, fichaDocumento, vistaPrueba, type Prueba } from './pruebas.js';
-import { nombreIdioma, Numerador, redactar } from './sintesis.js';
+import { afinar, nombreIdioma, Numerador, redactar } from './sintesis.js';
 import { confianzaDe, marcarSinPrueba, verificar } from './verificacion.js';
 import { escuchar, ver } from './vision.js';
 
@@ -237,7 +237,8 @@ export async function* investigar(p: PuertosInvestigar, pregunta: string, o: Opc
     }
     if (numerador.descartadas.length) avisos.push(`Se quitaron ${numerador.descartadas.length} marcas que no correspondían a ninguna prueba.`);
 
-    // 5. La verificación.
+    // 5. Las páginas citadas sin cita literal, a sus oraciones; y la verificación.
+    afinar(numerador, ctx, texto);
     const v = await verificar(ctx, numerador, texto, presupuesto.revisiones);
     const respaldadas = v.frases.filter((f) => f.veredicto === 'respaldada').length;
     yield { tipo: 'verificacion', frases: v.frases, respaldadas, total: v.frases.length };

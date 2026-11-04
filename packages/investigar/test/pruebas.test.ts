@@ -5,7 +5,7 @@ import { segundosDe, tramoDe, type ContextoHerramientas } from '../src/contexto.
 import type { MensajeAgente } from '../src/modelo.js';
 import { presupuestoDe } from '../src/puertos.js';
 import { CuadernoPruebas, estrechar, hablanteEn, puntosDeCodigo, type Prueba } from '../src/pruebas.js';
-import { citaPrevia, Numerador } from '../src/sintesis.js';
+import { afinar, citaPrevia, Numerador } from '../src/sintesis.js';
 import { confianzaDe, frasesDe, marcarSinPrueba, oracionesDe } from '../src/verificacion.js';
 import { instantesDe, regionDeCaja } from '../src/vision.js';
 
@@ -96,6 +96,19 @@ describe('numerar las citas', () => {
     const n = new Numerador(contexto());
     n.sustituir('Dice «algo que no está» [P1].');
     expect(n.literalesNoEncontrados).toEqual([{ cita: 'algo que no está', prueba: 'P1' }]);
+  });
+
+  it('una página citada sin cita literal se estrecha a las oraciones que sostienen la frase', () => {
+    const ctx = contexto();
+    const relleno = 'Era una tarde cualquiera en la ciudad y nadie esperaba nada. '.repeat(6);
+    const texto = `${relleno}Diego le pidió a David que no dejara de ser revolucionario. ${relleno}`;
+    ctx.pruebas.registrar({ evidencia: { documento: 'd', ancla: pagina(9, '17'), cita: texto.slice(0, 80), modo: 'texto', unidad: 'u9' }, capa: 'literal', herramienta: 'leer', ambito: { unidad: 'u9', orden: 8, texto, ancla: pagina(9, '17') } });
+    const n = new Numerador(ctx);
+    const md = n.sustituir('Diego le pide a David que siga siendo revolucionario [P3].');
+    expect(afinar(n, ctx, md)).toBe(1);
+    const e = n.evidencia('E1')!;
+    expect(e.cita).toBe('Diego le pidió a David que no dejara de ser revolucionario.');
+    expect(Array.from(texto).slice(...e.ancla.caracteres!).join('')).toBe(e.cita);
   });
 
   it('citaPrevia reconoce la cita justo antes de la marca', () => {

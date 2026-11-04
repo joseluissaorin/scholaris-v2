@@ -6,6 +6,8 @@
  * que no existen se quitan y se cuentan.
  */
 import type { EvidenciaInvestigacion, PlanInvestigacion } from '@scholaris/contrato';
+import { pasajeSiResponde, terminos } from '@scholaris/busqueda';
+import { frasesDe } from './verificacion.js';
 import { flujoDe } from './modelo.js';
 import { fichaDe, lineaPrueba, recortar, type ContextoHerramientas, type Nota } from './contexto.js';
 import { estrechar, vistaPrueba, type Prueba } from './pruebas.js';
@@ -26,6 +28,8 @@ interface Marcada {
   evidencia: EvidenciaInvestigacion;
   /** La cita literal se encontró en la prueba (si no, la evidencia es la prueba entera). */
   estrechada: boolean;
+  /** Sin cita literal, se estrechó a las oraciones de la unidad que sostienen las frases que la citan. */
+  afinada?: boolean;
 }
 
 /** Numera las pruebas citadas (E1, E2…) y estrecha las anclas a las citas literales. */
@@ -92,6 +96,32 @@ export class Numerador {
   marcada(id: string): Marcada | undefined {
     return this.marcadas.find((m) => m.id === id);
   }
+}
+
+/**
+ * Una página o un tramo citado sin cita literal es un ancla gruesa (una página entera, a
+ * veces dos). Se estrecha a las oraciones de esa unidad que casan con las frases que la
+ * citan (de una a tres, con al menos dos términos en común); si no casan, se queda entera.
+ */
+export function afinar(numerador: Numerador, ctx: ContextoHerramientas, markdown: string): number {
+  const frases = frasesDe(markdown);
+  let n = 0;
+  for (const m of numerador.marcadas) {
+    const amb = m.prueba.ambito;
+    if (m.estrechada || !amb || amb.texto.length < 400) continue;
+    const citan = frases.filter((f) => f.evidencias.includes(m.id)).map((f) => f.limpia).join(' ');
+    const ts = [...new Set(terminos(citan))];
+    if (ts.length < 2) continue;
+    const p = pasajeSiResponde(amb.texto, ts);
+    if (!p?.texto) continue;
+    const e = estrechar(m.prueba, p.texto);
+    if (!e) continue;
+    const base: Prueba = { ...m.prueba, evidencia: { ...m.prueba.evidencia, ancla: e.ancla, ...(e.anclaFin ? { anclaFin: e.anclaFin } : {}), cita: e.cita } };
+    m.evidencia = { ...vistaPrueba(base, fichaDe(ctx, m.prueba.evidencia.documento), { id: m.id, ...(m.evidencia.imagenUrl ? { imagenUrl: m.evidencia.imagenUrl } : {}) }) };
+    m.afinada = true;
+    n++;
+  }
+  return n;
 }
 
 const NOMBRES_IDIOMA: Record<string, string> = { es: 'español', en: 'inglés', fr: 'francés', it: 'italiano', pt: 'portugués', de: 'alemán', la: 'latín', ca: 'catalán', gl: 'gallego', eu: 'euskera' };
