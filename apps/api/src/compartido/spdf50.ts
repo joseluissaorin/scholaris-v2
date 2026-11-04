@@ -9,6 +9,9 @@
  *   conformidad).
  * - Importar: un .spdf 5.0 → un SPDF 4.1 en memoria, que después sigue el camino de
  *   siempre (`importarSpdf`).
+ * - La comprensión (segmentos, fichas, entidades, apariciones, relaciones y alineaciones)
+ *   viaja como extensión opcional `x_scholaris_comprension` (compartido/comprension-spdf.ts);
+ *   al importar pasa a las tablas 4.2 del fichero en memoria.
  *
  * `spdf-format` aún no está en npm: va como tarball versionado en `vendor/` (ver
  * `vendor/LEEME.md`).
@@ -19,10 +22,11 @@ import {
   type ArchivoSpdf, type UnidadSpdf,
 } from '@scholaris/spdf';
 import {
-  SpdfWriter, mapLegacyAnchor, mapLegacyKind, mapLegacyMetadata, openSpdf, type Anchor, type CslItem, type CslName, type SqlEngine,
+  SpdfWriter, docrefOf, mapLegacyAnchor, mapLegacyKind, mapLegacyMetadata, openSpdf, type Anchor, type CslItem, type CslName, type SqlEngine,
 } from 'spdf-format/core';
 import { wasmEngine } from 'spdf-format/wasm';
 import type { PuertosUsuario } from '../puertos.js';
+import { escribirCapaEnArchivo, escribirExtensionComprension, leerCapaComprension, leerExtensionComprension } from './comprension-spdf.js';
 import { claveDe } from '../rutas/util.js';
 import { prefijoDocumento } from '../rutas/subidas.js';
 
@@ -159,6 +163,7 @@ export async function armarSpdf50(p: PuertosUsuario, d: Documento, o: OpcionesSp
     await w.addFigures(figuras.map((g) => ({
       id: g.id, unit: g.unidad, image: ref(g.imagen) ?? '', caption: g.pie ?? null, description: g.descripcion ?? null, anchor: mapLegacyAnchor(g.ancla),
     })));
+    const registrados = new Set<string>();
     if (o.vectores !== false) {
       const usados = new Set((await p.sql.ejecutar<{ espacio: string }>('SELECT DISTINCT espacio FROM vectores WHERE documento = ?', d.id)).map((f) => f.espacio));
       for (const e of (await leerEspacios(p.sql)).filter((x) => usados.has(x.id))) {
@@ -166,15 +171,19 @@ export async function armarSpdf50(p: PuertosUsuario, d: Documento, o: OpcionesSp
           id: e.id, provider: e.proveedor, model: e.modelo, version: e.version ?? null, dims: e.dims, dtype: 'f32',
           normalized: e.normalizado, truncated_from: null, modalities: e.modalidades.map((m) => MODALIDAD[m] ?? m), task_prefixes: null, created: null,
         });
-        const vs = await leerVectores(p.sql, { espacio: e.id, documento: d.id });
+        registrados.add(id);
+        // `vectors` es solo de la capa literal (§3.9); los de las fichas van en la extensión de la comprensión.
+        const vs = (await leerVectores(p.sql, { espacio: e.id, documento: d.id })).filter((v) => OBJETIVO[v.objetivo]);
         for (let i = 0; i < vs.length; i += 500) {
-          await w.addVectors(id, vs.slice(i, i + 500).map((v) => ({ target: OBJETIVO[v.objetivo] ?? 'fragment', id: v.id, vector: v.valores })));
+          await w.addVectors(id, vs.slice(i, i + 500).map((v) => ({ target: OBJETIVO[v.objetivo]!, id: v.id, vector: v.valores })));
         }
       }
     }
     for (const e of await leerProcedencia(p.sql, d.id)) {
       await w.addProvenance({ stage: e.fase, provider: e.proveedor ?? null, model: null, detail: e.detalle ?? null, ms: e.ms ?? null, at: e.cuando ?? d.creado });
     }
+    const capa = await leerCapaComprension(p.sql, d.id, { entidades: 'grafo', vectores: o.vectores !== false });
+    if (capa) await escribirExtensionComprension(w, capa, { docref: docrefOf({ source_sha256: d.huella, id: d.id }), espacios: registrados });
     const bytes = await w.finish();
     return { bytes, omitidos: o.incrustar ? [...mimes.keys()].filter((k) => !incrustados.has(k)).length : 0 };
   } catch (e) {
@@ -356,6 +365,10 @@ export async function archivoDesde50(bytes: Uint8Array, generador: string): Prom
       const detalle = e.model ? { ...(e.detail && typeof e.detail === 'object' ? (e.detail as Record<string, unknown>) : e.detail !== null ? { valor: e.detail } : {}), modelo: e.model } : e.detail;
       await a.registrarProcedencia({ documento: d.id, fase: e.stage, proveedor: e.provider, detalle, ms: e.ms, cuando: e.at });
     }
+    // La comprensión, si el fichero la trae (extensión opcional; sin ella no pasa nada).
+    const comprension = await leerExtensionComprension(doc);
+    avisos.push(...comprension.avisos);
+    if (comprension.capa) await escribirCapaEnArchivo(a.sql, comprension.capa);
     return { archivo: a, avisos };
   } catch (e) {
     a.cerrar();

@@ -292,9 +292,53 @@ compara el modo rápido con Investigar, antes y después de cada cambio.
 
 ## SPDF
 
-Por dentro, el esquema pasa a SPDF 4.2 con las tablas de comprensión. Al exportar a 5.0,
-la comprensión viaja como extensión opcional `x_scholaris_comprension`, con las tablas
-`x_scholaris_segments`, `x_scholaris_cards`, `x_scholaris_entities` (las del grafo que
-aparecen en el documento), `x_scholaris_appearances`, `x_scholaris_relations` y
-`x_scholaris_alignments`. Las relaciones nombran al otro documento por su `sha256-…` y
-la memoria va como anotaciones W3C. En el repositorio de SPDF se propone un RFC para un perfil `understanding` en 5.1.
+Por dentro, el esquema pasa a SPDF 4.2 con las tablas de comprensión. El código de la
+frontera está en `apps/api/src/compartido/comprension-spdf.ts` (la capa) y
+`anotaciones-spdf.ts` (la memoria).
+
+**SPDF 4.2 interno** (el .spdf de Scholaris y las copias entre bibliotecas): las mismas
+tablas que la estantería, más `comprension_entidades` con las entidades del grafo que
+aparecen en el documento, porque el grafo no viaja.
+
+**SPDF 5.0**: la comprensión va como extensión opcional `x_scholaris_comprension`
+(versión 1.0, `required = 0`), así que un lector que no la conoce la ignora. Nombres y
+valores en inglés, como en el núcleo:
+
+| Tabla | Columnas |
+|---|---|
+| `x_scholaris_segments` | `id, document, parent, level, ord, kind, title, anchor, anchor_end, unit_from, unit_to, summary, origin, confidence, t0, t1` |
+| `x_scholaris_cards` | `n, id, document, target, target_id, lens, class, language, text, data, evidence, model, version, created` |
+| `x_scholaris_entities` | `id, kind, name, aliases, wikidata, description, fictional` |
+| `x_scholaris_appearances` | `id, entity, document, segment, anchor, anchor_end, form, role, confidence, t0, physical` |
+| `x_scholaris_relations` | `id, source, target, kind, note, evidence, confidence, origin, created` |
+| `x_scholaris_alignments` | `id, relation, ord, kind, doc_a, anchor_a, anchor_end_a, segment_a, doc_b, anchor_b, anchor_end_b, segment_b, note, confidence` |
+| `x_scholaris_vectors` | `target` (`card`), `id, space, data` |
+
+- Solo van las entidades que aparecen en el documento (por sus apariciones, sus fichas o
+  sus relaciones), con su Wikidata y siguiendo las fusiones del grafo.
+- Los otros documentos se nombran por su `docref` (`sha256-<huella>`, o el id si no hay
+  huella), en las relaciones, en los lados de las alineaciones y en el campo `doc` de
+  cada prueba (`{doc, anchor, anchor_end?, quote?, mode, unit?, fragment?, figure?}`).
+- Las anclas son anclas 5.0: `caracteres` pasa a `chars` y `region` queda igual. Lo que
+  se ve en un instante de un vídeo se escribe como ancla de tiempo de ese instante
+  (`t0 = t1`) con su región, y el plano de donde sale queda en el miembro `span`. Su URI
+  es la de Media Fragments, `#t=6.5,6.5&xywh=percent:25,10,30,60`.
+- La tabla `vectors` del núcleo solo admite `fragment`, `unit` y `figure` (§3.9), así que
+  los vectores de las fichas van en `x_scholaris_vectors`, en un espacio de `spaces`.
+- No hay índice FTS de las fichas en el fichero, porque la especificación prohíbe tablas
+  virtuales fuera de `fragments_fts` (§2.1). Al importar, `fichas_fts` se rehace solo.
+- Importar resuelve cada entidad contra el grafo de la biblioteca (primero por Wikidata,
+  después por tipo y nombre), da ids nuevos si el documento entra como copia y busca cada
+  `docref` por su huella. Las relaciones con obras que no están en la estantería se
+  quedan fuera, con un aviso. Si la extensión no está, el fichero entra igual; si viene
+  en una versión mayor desconocida, entra solo el texto.
+
+**La memoria** de una investigación se exporta con `GET /cuadernos/:id/anotaciones`
+como `.spdfa.json` (SPDF 5.0 §17.1). Cada tarjeta verificada es una anotación con la
+URI de ancla de su prueba (`SpdfAnchorSelector`, con caracteres, región e instante), la
+cita literal con su contexto (`TextQuoteSelector`) y, en vídeo y audio, un
+`FragmentSelector` de Media Fragments. Las notas y las síntesis apuntan a las pruebas
+que citan, así que su `target` es una lista.
+
+En el repositorio de SPDF, la RFC 0004 propone un perfil `understanding` para la 5.1 con
+estas mismas tablas sin el prefijo del fabricante.
