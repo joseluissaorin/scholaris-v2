@@ -1,7 +1,8 @@
 /**
  * Corpus de demostración para trabajar sin API.
  *
- * Son obras y autores reales, todas de dominio público. Cada pasaje se ha
+ * Son obras y autores reales, todas de dominio público (la excepción, el cuento
+ * y la película inventados de `obras-inventadas.ts`, va aparte y lo dice). Cada pasaje se ha
  * copiado de forma automática, sin retocar, de la edición digital indicada
  * junto a cada obra, con su ortografía de origen (la «ſ» del Quijote de 1608,
  * los acentos de las ediciones del siglo XIX, el inglés de Bentham). Nadie
@@ -38,6 +39,10 @@ export interface DocDemo {
   sinEncabezados?: boolean;
   /** Audio y vídeo: quién habla al empezar cada unidad. */
   turnos?: string[];
+  /** Audio y vídeo: el tramo exacto de cada unidad, si no se estima por la longitud del texto (las obras inventadas). */
+  tiempos?: Array<[number, number]>;
+  /** Imagen de cada página (las obras inventadas: la página escaneada, dibujada con su texto). */
+  imagenes?: string[];
   /** Ilustraciones reales de la obra, con su unidad. */
   figuras?: Array<{ unidad: number; pie: string }>;
   bibliotecas: string[];
@@ -375,6 +380,8 @@ function hash(t: string) {
 
 /** Tiempos de cada unidad, en proporción a la longitud de su texto. */
 function tiempos(d: DocDemo, orden: number): [number, number] {
+  const fijo = d.tiempos?.[orden - 1];
+  if (fijo) return fijo;
   const total = d.cubre ?? d.duracion ?? 60;
   if (d.pasajes.length !== d.unidades) {
     const paso = total / d.unidades;
