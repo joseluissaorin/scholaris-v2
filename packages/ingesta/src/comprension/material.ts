@@ -28,8 +28,17 @@ export interface FotogramaMaterial {
   unidad: string;
 }
 
+/** Una línea de diálogo con el hablante que reconoció la percepción (por la imagen y la voz). */
+export interface VozPercibida {
+  t: number;
+  hablante: string;
+  texto: string;
+}
+
 export interface Material {
   documento: Documento;
+  /** Hablantes reconciliados por la percepción: mandan sobre las etiquetas de la transcripción. */
+  voces?: VozPercibida[];
   unidades: UnidadMaterial[];
   porOrden: Map<number, UnidadMaterial>;
   porId: Map<string, UnidadMaterial>;
@@ -152,4 +161,36 @@ export function hablantesDe(m: Material): string[] {
 /** Instante de cada palabra de una unidad de tiempo, si se guardaron. */
 export function instantes(u: UnidadMaterial): Array<[number, number]> | null {
   return u.palabras ? instantesDePalabras(u.palabras) : null;
+}
+
+// ---------------------------------------------------------------------------
+// Huecos de la transcripción (medios)
+// ---------------------------------------------------------------------------
+
+/**
+ * Tramos sin transcripción: entre dos unidades seguidas, al principio y al final.
+ * No se sabe si son silencio, música o un hueco de la transcripción: por eso
+ * nunca se puede afirmar una ausencia a partir de la transcripción sola.
+ */
+export function huecosTranscripcion(m: Pick<Material, 'unidades' | 'documento'>, minimo = 30): Array<[number, number]> {
+  const us = m.unidades.filter((u) => u.t0 !== undefined && u.t1 !== undefined).sort((a, b) => a.t0! - b.t0!);
+  if (!us.length) return [];
+  const salida: Array<[number, number]> = [];
+  if (us[0]!.t0! > minimo) salida.push([0, us[0]!.t0!]);
+  let fin = us[0]!.t1!;
+  for (const u of us.slice(1)) {
+    if (u.t0! - fin > minimo) salida.push([fin, u.t0!]);
+    fin = Math.max(fin, u.t1!);
+  }
+  const d = m.documento.duracion;
+  if (d && d - fin > minimo) salida.push([fin, d]);
+  return salida;
+}
+
+/** Qué parte de [t0, t1] tiene transcripción (0-1) y qué huecos caen dentro. */
+export function coberturaTranscripcion(m: Pick<Material, 'unidades' | 'documento'>, t0: number, t1: number, minimo = 30): { cobertura: number; huecos: Array<[number, number]> } {
+  const huecos = huecosTranscripcion(m, minimo).map(([a, b]) => [Math.max(a, t0), Math.min(b, t1)] as [number, number]).filter(([a, b]) => b - a > 1);
+  const total = Math.max(1, t1 - t0);
+  const sin = huecos.reduce((x, [a, b]) => x + (b - a), 0);
+  return { cobertura: Math.round(Math.max(0, 1 - sin / total) * 100) / 100, huecos: huecos.map(([a, b]) => [Math.round(a), Math.round(b)] as [number, number]) };
 }

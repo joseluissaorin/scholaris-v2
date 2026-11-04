@@ -8,7 +8,7 @@ import { cadena, cadenas, ESCALAS_PLANO, ESQUEMA_PARTICIPANTE, lista, objeto, op
 
 export const cine: DefinicionLente = {
   id: 'cine',
-  version: 'cine@1',
+  version: 'cine@2',
   segmentos: ['secuencia', 'escena', 'plano'],
   conFicha: ['secuencia', 'escena'],
   guiaEstructura: `Secuencias: bloques narrativos con unidad de acción que agrupan varias escenas (el prólogo, «Coppelia», «la primera visita»). Una película de hora y media suele tener entre doce y treinta.
@@ -23,7 +23,8 @@ Los títulos de crédito iniciales y finales son segmentos propios.`,
 - Narración fílmica: punto de vista, ocularización y auricularización (qué vemos y oímos y desde quién), lo que sabe el espectador frente a los personajes.
 - Objetos y símbolos (qué significan en la obra), texto en pantalla, función narrativa de la escena.
 Si una adaptación literaria es conocida, compárala solo como contexto externo, marcado.
-No describas planos que no veas: si solo tienes el diálogo y unos fotogramas sueltos, las decisiones de cámara que no consten se dejan vacías o se dicen como inferencia a partir de los fotogramas.`,
+No describas planos que no veas: si solo tienes el diálogo y unos fotogramas sueltos, las decisiones de cámara que no consten se dejan vacías o se dicen como inferencia a partir de los fotogramas.
+La ficha de una escena se funda en lo percibido (lo que se ve y se oye: escenas, planos, sonido, quién está) y en la transcripción. Si el tramo no tiene transcripción completa, dilo en la ficha y no deduzcas de ella lo que no se dice. Quién habla, según la percepción cuando difiera de la etiqueta de la transcripción.`,
   datosSegmento: objeto({
     lugar: cadena(),
     tiempo: cadena('Día, noche, época.'),

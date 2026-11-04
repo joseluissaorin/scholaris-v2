@@ -10,7 +10,7 @@ import { aplicarEsquemaFunciones } from '@scholaris/funciones';
 import { buscarFichas, escribirDocumento, escribirUnidades, leerApariciones, leerFichas, leerSecciones, leerSegmentos, type UnidadSpdf } from '@scholaris/spdf';
 import { describe, expect, it } from 'vitest';
 import {
-  anclarReferencia, comprenderDocumento, elegirLentes, leerEstadoComprension, leerMaterial, localizarCita, pasoSegmentos, pasoFichas, planificarComprension,
+  anclarReferencia, coberturaTranscripcion, comprenderDocumento, huecosTranscripcion, elegirLentes, leerEstadoComprension, leerMaterial, localizarCita, pasoSegmentos, pasoFichas, planificarComprension,
   limpiarProsa, textoDeCaracteres, tramoDeCaracteres, type ContextoComprension, type ModeloComprension, type PeticionComprension,
 } from '../src/index.js';
 import { baseReal, embebedorFalso } from './fakes.js';
@@ -49,20 +49,21 @@ async function cuento(sql: SQL, id = 'cuento') {
   })));
 }
 
-const DIALOGO_COPPELIA = 'No pude resistir la tentación. Me encanta la fresa. Es lo único bueno que hacen en este país.';
+// Diálogos inventados (la película tiene derechos): solo los tiempos y los hablantes son los de la transcripción real.
+const DIALOGO_COPPELIA = 'No me pude contener con el helado. La fresa es mi debilidad. Es lo mejor que tiene esta ciudad.';
 
 async function pelicula(sql: SQL, id = 'pelicula') {
   await escribirDocumento(sql, { ...documento(id, 'video', 'Fresa y chocolate', { tipoCSL: 'motion_picture', anio: 1993, autores: [{ nombre: 'Tomás', apellidos: 'Gutiérrez Alea' }] }), duracion: 700 });
   const palabras = DIALOGO_COPPELIA.split(/\s+/);
   const unidades: UnidadSpdf[] = [
-    { id: `${id}:u0`, documento: id, orden: 0, texto: '**Vivian:** Aquí parece que vamos a hacer algo malo.\n\n**David:** Ya nosotros habíamos hablado.', lector: 'asr', confianza: 1, ancla: { tipo: 'tiempo', t0: 107, t1: 145.7, hablante: 'Vivian' } },
-    { id: `${id}:u1`, documento: id, orden: 1, texto: '**David:** Yo te quiero mucho, Vivian.\n\n**Vivian:** Solo te interesa el sexo, como a todos.', lector: 'asr', confianza: 1, ancla: { tipo: 'tiempo', t0: 373.6, t1: 417.5, hablante: 'David' } },
-    { id: `${id}:u2`, documento: id, orden: 2, texto: '**Diego:** ¡Vivan los novios! Qué profundo es, cruel, mi tormento.', lector: 'asr', confianza: 1, ancla: { tipo: 'tiempo', t0: 466.9, t1: 519.6, hablante: 'Diego' } },
+    { id: `${id}:u0`, documento: id, orden: 0, texto: '**Vivian:** Este sitio no me gusta nada.\n\n**David:** Ya lo habíamos hablado.', lector: 'asr', confianza: 1, ancla: { tipo: 'tiempo', t0: 107, t1: 145.7, hablante: 'Vivian' } },
+    { id: `${id}:u1`, documento: id, orden: 1, texto: '**David:** Te quiero, Vivian.\n\n**Vivian:** Eso dicen todos.', lector: 'asr', confianza: 1, ancla: { tipo: 'tiempo', t0: 373.6, t1: 417.5, hablante: 'David' } },
+    { id: `${id}:u2`, documento: id, orden: 2, texto: '**Diego:** ¡Felicidades a los novios! Qué bonita la boda.', lector: 'asr', confianza: 1, ancla: { tipo: 'tiempo', t0: 466.9, t1: 519.6, hablante: 'Diego' } },
     {
       id: `${id}:u3`, documento: id, orden: 3, texto: DIALOGO_COPPELIA, lector: 'asr', confianza: 1, ancla: { tipo: 'tiempo', t0: 594.6, t1: 641.8, hablante: 'Diego' },
       palabras: { v: 1, t0: 594.6, cs: palabras.flatMap((_, i) => [i * 50, 45]) },
     },
-    { id: `${id}:u4`, documento: id, orden: 4, texto: '**Diego:** Aprovecha, niño. ¿Dónde vas a encontrar esos libros?\n\n**David:** Que no voy a casa de gente que no conozco.', lector: 'asr', confianza: 1, ancla: { tipo: 'tiempo', t0: 641.8, t1: 689, hablante: 'Diego' } },
+    { id: `${id}:u4`, documento: id, orden: 4, texto: '**Diego:** Aprovecha, muchacho. ¿Dónde vas a encontrar estos libros?\n\n**David:** No voy a casa de desconocidos.', lector: 'asr', confianza: 1, ancla: { tipo: 'tiempo', t0: 641.8, t1: 689, hablante: 'Diego' } },
   ];
   await escribirUnidades(sql, unidades);
 }
@@ -177,7 +178,7 @@ describe('comprensión: un cuento', () => {
     const e = await comprenderDocumento(contexto(sql, modelo), 'cuento');
     expect(e.estado).toBe('hecho');
     expect(e.lentes).toEqual(['narrativa']);
-    expect(e.version).toBe('comprension@1 narrativa@1');
+    expect(e.version).toBe('comprension@2 narrativa@1');
     expect(Object.keys(e.pasos).sort()).toEqual(['entidades', 'estructura', 'fichas:0', 'global', 'indexado']);
     expect(e.usd).toBeCloseTo(0.04, 5);
     expect(e.modelo).toContain('falso-alto');
@@ -305,7 +306,7 @@ describe('comprensión: una película con su percepción', () => {
       fichas: pedidos(texto).map((s) => ({
         segmento: s, texto: `Escena ${s}: plano medio, Diego domina el encuadre.`, resumen_es: 'Coppelia', resumen_en: 'Coppelia',
         datos: { lugar: 'Coppelia', personajes: [{ nombre: 'Diego' }], accion: 'Diego aborda a David', funcionNarrativa: 'encuentro' },
-        evidencias: [{ u: 3, cita: 'Me encanta la fresa' }, { t: 610, apoya: 'Diego con la copa de helado de fresa a la izquierda del encuadre' }],
+        evidencias: [{ u: 3, cita: 'La fresa es mi debilidad' }, { t: 610, apoya: 'Diego con la copa de helado de fresa a la izquierda del encuadre' }],
       })),
     }),
     entidades: () => ({
@@ -351,13 +352,13 @@ describe('comprensión: una película con su percepción', () => {
     // Fichas de escena: la cita del diálogo se estrecha a sus palabras; lo visual va con su instante.
     const fe = await leerFichas(sql, { documento: 'pelicula', clase: 'escena' });
     expect(fe.length).toBe(3);
-    const cita = fe[0]!.evidencias.find((x) => x.cita === 'Me encanta la fresa')!;
+    const cita = fe[0]!.evidencias.find((x) => x.cita === 'La fresa es mi debilidad')!;
     expect(cita.modo).toBe('video');
     expect(cita.ancla).toMatchObject({ tipo: 'tiempo', hablante: 'Diego' });
     if (cita.ancla.tipo !== 'tiempo') throw new Error('ancla de tiempo');
-    // «Me encanta la fresa» son las palabras 5-8 (una cada 0,5 s desde 594,6; cada una dura 0,45 s).
-    expect(cita.ancla.t0).toBeCloseTo(594.6 + 2.5, 2);
-    expect(cita.ancla.t1).toBeCloseTo(594.6 + 4.45, 2);
+    // «La fresa es mi debilidad» son las palabras 7-11 (una cada 0,5 s desde 594,6; cada una dura 0,45 s).
+    expect(cita.ancla.t0).toBeCloseTo(594.6 + 3.5, 2);
+    expect(cita.ancla.t1).toBeCloseTo(594.6 + 5.95, 2);
     expect(fe[0]!.evidencias.find((x) => x.ancla.instante === 610)!.cita).toMatch(/copa de helado/);
 
     // Diego es la misma entidad en el cuento y en la película.
@@ -376,7 +377,7 @@ describe('comprensión: una película con su percepción', () => {
     // El objeto y la canción percibidos también entran en el grafo.
     const [helado] = await sql.ejecutar<{ id: string }>("SELECT id FROM entidades WHERE clave = 'helado de fresa'");
     expect((await leerApariciones(sql, { entidad: helado!.id, documento: 'pelicula' })).some((a) => a.rol === 'visible' && a.ancla.region)).toBe(true);
-    const [bolero] = await sql.ejecutar<{ id: string }>("SELECT id FROM entidades WHERE tipo = 'obra' AND clave = 'mi tormento'");
+    const [bolero] = await sql.ejecutar<{ id: string }>("SELECT id FROM entidades WHERE tipo = 'obra' AND clave = 'bolero de la fiesta'");
     expect((await leerApariciones(sql, { entidad: bolero!.id }))[0]).toMatchObject({ rol: 'audible' });
 
     // Actor ↔ personaje, desde la percepción (sin red no hay Wikidata).
@@ -422,15 +423,73 @@ describe('comprensión: una película con su percepción', () => {
     archivo.cerrar();
   });
 
+  it('los huecos de la transcripción se dicen y quién habla lo decide la percepción', async () => {
+    const { sql, archivo } = await base();
+    await pelicula(sql);
+    const m = await leerMaterial(sql, 'pelicula');
+    expect(huecosTranscripcion(m).map(([a, b]) => [Math.round(a), Math.round(b)])).toEqual([[0, 107], [146, 374], [418, 467], [520, 595]]);
+    expect(coberturaTranscripcion(m, 107, 418)).toEqual({ cobertura: 0.27, huecos: [[146, 374]] });
+    // La transcripción atribuye a Diego una línea que, según la imagen y la voz, dice Germán.
+    const corregida: PercepcionMedio = JSON.parse(JSON.stringify(percepcion));
+    corregida.reparto.push({ nombre: 'Germán', ficticia: true, actor: 'Francisco Gattorno' });
+    corregida.escenas[2]!.dialogoClave.push({ t: 645, hablante: 'Germán', texto: 'Aprovecha, muchacho. ¿Dónde vas a encontrar estos libros?' });
+    const modelo = modeloFalso({
+      ...respuestasPelicula,
+      fichas: (p, t) => ({ fichas: (respuestasPelicula.fichas(p, t) as { fichas: Array<Record<string, unknown>> }).fichas.map((f) => ({ ...f, evidencias: [{ u: 4, cita: 'Dónde vas a encontrar estos libros' }] })) }),
+    });
+    await comprenderDocumento(contexto(sql, modelo, { percepcion: async () => corregida }), 'pelicula');
+    const [german] = await sql.ejecutar<{ id: string }>("SELECT id FROM entidades WHERE tipo = 'persona' AND clave = 'german'");
+    const voz = (await leerApariciones(sql, { entidad: german!.id })).filter((a) => a.rol === 'habla' && a.ancla.tipo === 'tiempo' && a.ancla.t0 > 641);
+    expect(voz.map((a) => a.forma)).toEqual(['Germán (la transcripción dice Diego)']);
+    // La evidencia también lleva el hablante percibido.
+    const [escena] = await leerFichas(sql, { documento: 'pelicula', clase: 'escena' });
+    expect(escena!.evidencias[0]!.ancla).toMatchObject({ tipo: 'tiempo', hablante: 'Germán' });
+    // Cada ficha de escena dice cuánta transcripción tiene; el modelo lo sabe al escribirla.
+    const posada = (await leerFichas(sql, { documento: 'pelicula', clase: 'escena' })).find((f) => f.datos.titulo === 'La posada')!;
+    expect(posada.datos.transcripcion).toEqual({ cobertura: 0.27, huecos: [[146, 374]] });
+    expect(posada.datos.percibido).toBe(true);
+    const pedido = modelo.llamadas.filter((p) => p.operacion === 'fichas').map((p) => p.partes.map((x) => ('texto' in x ? x.texto : '')).join('\n')).join('\n');
+    expect(pedido).toMatch(/Tramos sin transcripción \(no se sabe si son silencio, música o huecos de la transcripción\): 0:00-1:47, 2:25-6:13/);
+    expect(pedido).toMatch(/Transcripción de este tramo: 27 % \(sin transcripción: 2:26-6:14\)/);
+    archivo.cerrar();
+  });
+
+  it('rehacer por partes: con la transcripción reparada solo se paga lo que cambia', async () => {
+    const { sql, archivo } = await base();
+    await pelicula(sql);
+    const modelo = modeloFalso(respuestasPelicula);
+    const ctx = contexto(sql, modelo, { percepcion: async () => percepcion });
+    await comprenderDocumento(ctx, 'pelicula');
+    const cuenta = (op: string) => modelo.llamadas.filter((p) => p.operacion === op).length;
+    const antes = { secuencias: cuenta('estructura:secuencias'), fichas: cuenta('fichas'), global: cuenta('global') };
+    // Se repara el principio de la transcripción (la posada): cambia una unidad.
+    await sql.ejecutar('UPDATE unidades SET texto = ? WHERE id = ?', '**Vivian:** Este sitio no me gusta nada, de verdad.\n\n**David:** Ya lo habíamos hablado.', 'pelicula:u0');
+    const e = await comprenderDocumento(ctx, 'pelicula');
+    expect(e.estado).toBe('hecho');
+    // La estructura (misma percepción) se aprovecha; solo se piden las fichas de lo que toca la unidad cambiada.
+    expect(cuenta('estructura:secuencias')).toBe(antes.secuencias);
+    expect(e.pasos.estructura!.detalle).toMatchObject({ reutilizada: 1 });
+    expect(cuenta('fichas')).toBe(antes.fichas + 1);
+    expect(pedidos(modelo.llamadas.filter((p) => p.operacion === 'fichas').at(-1)!.partes.map((x) => ('texto' in x ? x.texto : '')).join('\n'))).toEqual(['s0', 's1']);
+    expect(e.pasos['fichas:0']!.detalle).toMatchObject({ reutilizadas: 3 });
+    expect(cuenta('global')).toBe(antes.global + 1);
+    expect(await leerFichas(sql, { documento: 'pelicula', clase: 'escena' })).toHaveLength(3);
+    // Sin cambios, nada.
+    const n = modelo.llamadas.length;
+    await comprenderDocumento(ctx, 'pelicula');
+    expect(modelo.llamadas.length).toBe(n);
+    archivo.cerrar();
+  });
+
   it('las anclas de los medios: tramo de unas palabras y voz del turno', async () => {
     const { sql, archivo } = await base();
     await pelicula(sql);
     const m = await leerMaterial(sql, 'pelicula');
     const u3 = m.porOrden.get(3)!;
     expect(tramoDeCaracteres(u3, [0, 2])).toEqual([594.6, 595.05]);
-    const e = anclarReferencia(m, { u: 4, cita: 'gente que no conozco' })!;
+    const e = anclarReferencia(m, { u: 4, cita: 'casa de desconocidos' })!;
     expect(e.ancla).toMatchObject({ tipo: 'tiempo', hablante: 'David', t0: 641.8, t1: 689 });
-    expect(e.cita).toBe('gente que no conozco');
+    expect(e.cita).toBe('casa de desconocidos');
     archivo.cerrar();
   });
 });

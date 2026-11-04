@@ -8,7 +8,9 @@
 import type { Ficha, Lente, PercepcionMedio, Segmento } from '@scholaris/nucleo';
 import { anclarReferencias, limpiarProsa } from './anclaje.js';
 import { esquemaFichaGlobal, esquemaFichasSegmento, lente, REGLAS_COMUNES } from './lentes/index.js';
-import { fichaDocumento, textoParaModelo, type Material } from './material.js';
+import { coberturaTranscripcion, etiquetaUnidad, fichaDocumento, huecosTranscripcion, textoParaModelo, type Material } from './material.js';
+import { VERSION_COMPRENSION } from './lentes/comun.js';
+import { huella } from './util.js';
 import { textoEscena, textoReparto } from './medios.js';
 import { llamar } from './modelo.js';
 import type { DefinicionLente, ModeloComprension, RefModelo, UsoModelo } from './tipos.js';
@@ -52,8 +54,35 @@ export function prefijoMaterial(m: Material, segmentos: readonly Segmento[], o: 
     const escenas = [...o.percepcion.escenas].sort((a, b) => a.t0 - b.t0);
     partes.push(`Percepción de la obra, escena a escena (sin el detalle de los planos):\n${escenas.map((e, i) => `Escena ${i} [${Math.round(e.t0)}-${Math.round(e.t1)} s] «${e.titulo}»${e.lugar ? `, ${e.lugar}` : ''}. ${e.accion}${e.personas.length ? ` (${e.personas.join(', ')})` : ''}`).join('\n')}`);
   }
+  const huecos = m.medio ? huecosTranscripcion(m) : [];
+  if (huecos.length) {
+    const t = (x: number) => etiquetaUnidad({ tipo: 'tiempo', t0: x, t1: x });
+    partes.push(`Tramos sin transcripción (no se sabe si son silencio, música o huecos de la transcripción): ${huecos.map(([a, b]) => `${t(a)}-${t(b)}`).join(', ')}. Lo que pase ahí solo se conoce por la percepción y los fotogramas; nunca concluyas que algo no se dice o no ocurre porque no esté en la transcripción.`);
+  }
   if (o.largo) partes.push(`Material completo:\n\n${textoParaModelo(m, { fotogramas: m.medio, maxCaracteres: o.maxCaracteres })}`);
   return partes.join('\n\n');
+}
+
+/** Unidades de un segmento (en los medios, las que tocan su tramo de tiempo). */
+function unidadesDe(m: Material, s: Segmento) {
+  if (s.ancla.tipo === 'tiempo') {
+    const a = s.ancla;
+    return m.unidades.filter((u) => u.t0 !== undefined && u.t1 !== undefined && u.t0 < a.t1 && u.t1 > a.t0);
+  }
+  const d = m.porId.get(s.unidadDesde)?.orden ?? 0, h = m.porId.get(s.unidadHasta)?.orden ?? d;
+  return m.unidades.filter((u) => u.orden >= d && u.orden <= h);
+}
+
+/**
+ * Huella de lo que entra en la ficha de un segmento: versión de la lente, el
+ * segmento, su texto, lo percibido en su tramo y las voces. Si no cambia, la
+ * ficha se reutiliza al rehacer (una transcripción reparada solo paga lo nuevo).
+ */
+export function huellaEntradaSegmento(m: Material, l: Lente, s: Segmento, percepcion?: PercepcionMedio | null): string {
+  const a = s.ancla.tipo === 'tiempo' ? s.ancla : null;
+  const escenas = a && percepcion ? percepcion.escenas.filter((e) => e.t0 < a.t1 && e.t1 > a.t0) : [];
+  const voces = a ? (m.voces ?? []).filter((v) => v.t >= a.t0 && v.t < a.t1) : [];
+  return huella(JSON.stringify([VERSION_COMPRENSION, lente(l).version, s.tipo, s.titulo, a ? [Math.round(a.t0), Math.round(a.t1)] : null, unidadesDe(m, s).map((u) => u.texto), escenas, voces]));
 }
 
 interface FichaModelo {
@@ -71,11 +100,24 @@ function sistemaLente(def: DefinicionLente, tarea: string): string {
 
 /** Las fichas de una tanda de segmentos. */
 export async function fichasDeLote(
-  m: Material, l: Lente, segmentos: readonly Segmento[], ids: readonly string[], modelo: ModeloComprension, acumulado: { uso: UsoModelo }, o: OpcionesFichas,
-): Promise<{ fichas: Ficha[]; descartadas: number; faltan: number }> {
+  m: Material, l: Lente, segmentos: readonly Segmento[], ids: readonly string[], modelo: ModeloComprension, acumulado: { uso: UsoModelo },
+  o: OpcionesFichas & { previas?: ReadonlyMap<string, Ficha> },
+): Promise<{ fichas: Ficha[]; descartadas: number; faltan: number; reutilizadas: number }> {
   const def = lente(l);
   const porId = new Map(segmentos.map((s) => [s.id, s]));
-  const objetivo = ids.map((id) => porId.get(id)).filter((s): s is Segmento => !!s);
+  const huellas = new Map<string, string>();
+  const reutilizadas: Ficha[] = [];
+  const objetivo: Segmento[] = [];
+  for (const id of ids) {
+    const s = porId.get(id);
+    if (!s) continue;
+    const h = huellaEntradaSegmento(m, l, s, o.percepcion);
+    huellas.set(s.id, h);
+    const previa = o.previas?.get(h);
+    if (previa) reutilizadas.push({ ...previa, id: `${m.documento.id}:fi:${s.id}:${l}`, objetivoId: s.id, datos: { ...previa.datos, titulo: s.titulo } });
+    else objetivo.push(s);
+  }
+  if (!objetivo.length) return { fichas: reutilizadas, descartadas: 0, faltan: 0, reutilizadas: reutilizadas.length };
   const escenasPercibidas = o.percepcion ? [...o.percepcion.escenas].sort((a, b) => a.t0 - b.t0) : [];
   const detalle = (s: Segmento) => {
     const partes: string[] = [];
@@ -86,6 +128,11 @@ export async function fichasDeLote(
     if (s.ancla.tipo === 'tiempo' && escenasPercibidas.length) {
       const a = s.ancla;
       escenasPercibidas.forEach((e, i) => { if (e.t0 < a.t1 && e.t1 > a.t0) partes.push(textoEscena(o.percepcion!, i)); });
+    }
+    if (s.ancla.tipo === 'tiempo') {
+      const c = coberturaTranscripcion(m, s.ancla.t0, s.ancla.t1);
+      const t = (x: number) => etiquetaUnidad({ tipo: 'tiempo', t0: x, t1: x });
+      if (c.cobertura < 0.9) partes.push(`Transcripción de este tramo: ${Math.round(c.cobertura * 100)} %${c.huecos.length ? ` (sin transcripción: ${c.huecos.map(([x, y]) => `${t(x)}-${t(y)}`).join(', ')})` : ''}. Apóyate en lo percibido y no afirmes ausencias.`);
     }
     return partes.join('\n\n');
   };
@@ -120,14 +167,19 @@ export async function fichasDeLote(
     vistos.add(s.id);
     const a = anclarReferencias(m, f.evidencias, { maximo: 24 });
     descartadas += a.descartadas;
+    const transcripcion = s.ancla.tipo === 'tiempo' ? coberturaTranscripcion(m, s.ancla.t0, s.ancla.t1) : null;
     fichas.push({
       id: `${m.documento.id}:fi:${s.id}:${l}`, documento: m.documento.id, objetivo: 'segmento', objetivoId: s.id, lente: l, clase: s.tipo,
       idioma: o.idioma, texto: limpiarProsa(f.texto.trim(), m),
-      datos: { ...(f.datos ?? {}), resumen: { es: limpiarProsa(f.resumen_es ?? '', m), en: limpiarProsa(f.resumen_en ?? '', m) }, titulo: s.titulo, ...(a.descartadas ? { citasNoVerificadas: a.descartadas } : {}) },
+      datos: {
+        ...(f.datos ?? {}), resumen: { es: limpiarProsa(f.resumen_es ?? '', m), en: limpiarProsa(f.resumen_en ?? '', m) }, titulo: s.titulo,
+        huellaEntrada: huellas.get(s.id), ...(transcripcion ? { transcripcion, percibido: !!o.percepcion } : {}),
+        ...(a.descartadas ? { citasNoVerificadas: a.descartadas } : {}),
+      },
       evidencias: a.evidencias, modelo: modelo.modelo(o.calidad), version: def.version, creada: o.creada,
     });
   }
-  return { fichas, descartadas, faltan: objetivo.length - fichas.length };
+  return { fichas: [...reutilizadas, ...fichas], descartadas, faltan: objetivo.length - fichas.length, reutilizadas: reutilizadas.length };
 }
 
 export interface TemaModelo {

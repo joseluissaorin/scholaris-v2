@@ -207,7 +207,7 @@ export function aparicionesDeTexto(m: Material, ents: readonly EntidadResuelta[]
     });
     for (const t of tomadas.sort((a, b) => a.c[0] - b.c[0])) {
       if (turnos.some((x) => t.c[0] >= x.ini && t.c[1] <= x.fin)) continue;
-      const ancla = anclaDe(u, t.c);
+      const ancla = anclaDe(u, t.c, m.voces);
       const segmento = ancla.tipo === 'tiempo' ? loc.enTiempo(ancla.t0) : loc.enTexto(u.orden, t.c[0]);
       salida.push({
         id: idAparicion(doc, 'e', [t.e.id, u.id, t.c, t.rol]), entidad: t.e.id, documento: doc, ...(segmento ? { segmento } : {}),
@@ -219,15 +219,19 @@ export function aparicionesDeTexto(m: Material, ents: readonly EntidadResuelta[]
       const largo = Array.from(u.texto).length;
       const voces = turnos.length ? turnos : u.ancla.hablante ? [{ nombre: u.ancla.hablante, ini: 0, fin: 0 }] : [];
       voces.forEach((v, i) => {
-        const e = buscarHablante(v.nombre);
-        if (!e) return;
         const c: [number, number] = [v.fin, turnos.length ? (voces[i + 1]?.ini ?? largo) : largo];
         if (c[1] <= c[0]) return;
-        const ancla = anclaDe(u, c);
+        // La percepción (imagen y voz) manda sobre la etiqueta de la transcripción, que a veces se cruza.
+        const ancla = anclaDe(u, c, m.voces);
+        const percibido = ancla.tipo === 'tiempo' && m.voces?.length ? ancla.hablante : undefined;
+        const corregido = percibido && llano(percibido) !== llano(v.nombre) ? percibido : undefined;
+        const e = buscarHablante(corregido ?? v.nombre);
+        if (!e) return;
         const segmento = ancla.tipo === 'tiempo' ? loc.enTiempo(ancla.t0) : undefined;
         salida.push({
           id: idAparicion(doc, 'e', [e.id, u.id, c, 'habla']), entidad: e.id, documento: doc, ...(segmento ? { segmento } : {}),
-          ancla, forma: v.nombre, rol: 'habla', confianza: 0.9,
+          ancla, forma: corregido ? `${corregido} (la transcripción dice ${v.nombre})` : v.nombre, rol: 'habla',
+          confianza: corregido ? 0.85 : m.voces?.length && !percibido ? 0.75 : 0.9,
         });
       });
     }

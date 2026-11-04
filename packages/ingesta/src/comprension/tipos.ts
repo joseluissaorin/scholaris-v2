@@ -140,6 +140,8 @@ export interface PlanComprension {
   calidades: Record<'estructura' | 'fichas' | 'entidades' | 'global', 'alta' | 'rapida'>;
   /** Huella del material del que sale. */
   huella: string;
+  /** Al rehacer por partes: qué se puede aprovechar de la pasada anterior. */
+  reusar: { estructura: boolean; fichas: boolean };
   /** Ya estaba hecha con esta versión: los pasos no hacen nada. */
   hecha: boolean;
   opciones: Pick<OpcionesComprension, 'segmentosPorLlamada' | 'wikidata' | 'maxCaracteresContexto'>;
@@ -162,6 +164,8 @@ export interface EstadoComprension {
   error?: string;
   /** Huella del material (unidades): si la ingesta se rehace, la comprensión también. */
   huella?: string;
+  /** Huella de la percepción con que se hizo (vacía si no la hubo). */
+  huellaPercepcion?: string;
   /** Instancia del Workflow que la lleva (para el vigilante). */
   instancia?: string;
   /** Con qué se lanzó (para relanzarla igual). */

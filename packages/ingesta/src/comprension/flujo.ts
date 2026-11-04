@@ -11,17 +11,17 @@
  * El Workflow `scholaris-comprension` los llama uno a uno (las tandas de fichas
  * y las entidades, a la vez); `comprenderDocumento` los encadena en local.
  */
-import { enParalelo, type Ficha, type Lente, type PercepcionMedio, type Segmento } from '@scholaris/nucleo';
+import { enParalelo, type Aparicion, type Ficha, type Lente, type PercepcionMedio, type Segmento } from '@scholaris/nucleo';
 import { borrarComprension, escribirApariciones, escribirFichas, leerFichas, leerSegmentos } from '@scholaris/spdf';
 import { ESQUEMA_ELECCION, SISTEMA_ELECCION, elegirLentes, lente, VERSION_COMPRENSION, versionDe } from './lentes/index.js';
 import {
-  agruparSecuencias, construirArbol, estructuraDelModelo, guardarEstructura, segmentosDePercepcion, segmentosDeSecciones, type Borrador,
+  agruparSecuencias, construirArbol, estructuraDelModelo, guardarEstructura, segmentosDePercepcion, segmentosDeSecciones, unidadesEnTramo, type Borrador,
 } from './estructura.js';
 import { aparicionesDePercepcion, aparicionesDeTemas, aparicionesDeTexto, conocidasEnBiblioteca, enlazarReparto, extraerEntidadesDelModelo, fichasDeEntidades, resolverEntidades } from './entidades.js';
 import { actualizarEstado, apuntarPaso, borrarPasos, gastado, leerEstadoComprension, pasoHecho, usoVacio } from './estado.js';
 import { fichaGlobal, fichasDeLote, lotesDeFichas } from './fichas.js';
 import { indexarFichas } from './indexado.js';
-import { hablantesDe, leerMaterial, muestraDe, tokensDe, type Material } from './material.js';
+import { hablantesDe, leerMaterial, muestraDe, tokensDe, type Material, type VozPercibida } from './material.js';
 import { fichasDePlanos } from './medios.js';
 import { llamar } from './modelo.js';
 import { huella } from './util.js';
@@ -40,6 +40,22 @@ async function avisar(ctx: ContextoComprension, documento: string, paso: PasoCom
     if (/cancelad/i.test((e as Error).message)) throw e;
   }
 }
+
+/** El material con su percepción (si es un medio y la hay) y las voces que esta reconoció. */
+async function materialDe(ctx: ContextoComprension, documento: string): Promise<{ m: Material; percepcion: PercepcionMedio | null }> {
+  const m = await leerMaterial(ctx.sql, documento);
+  const percepcion = await percepcionDe(ctx, m);
+  if (percepcion) m.voces = vocesPercibidas(percepcion);
+  return { m, percepcion };
+}
+
+/** Las líneas de diálogo con su hablante, tal como las reconoció la percepción. */
+export function vocesPercibidas(p: PercepcionMedio): VozPercibida[] {
+  return p.escenas.flatMap((e) => e.dialogoClave.filter((d) => d.hablante).map((d) => ({ t: d.t, hablante: d.hablante!, texto: d.texto }))).sort((a, b) => a.t - b.t);
+}
+
+/** Huella de la percepción: si llega otra (o una reparada), la estructura del medio se rehace. */
+export const huellaDePercepcion = (p: PercepcionMedio | null) => (p ? huella(JSON.stringify([p.modelo, p.version, p.duracion, p.escenas.map((e) => [e.t0, e.t1, e.planos.length])])) : '');
 
 async function percepcionDe(ctx: ContextoComprension, m: Material): Promise<PercepcionMedio | null> {
   if (!m.medio || !ctx.percepcion) return null;
@@ -76,8 +92,7 @@ export function plazosDe(tokens: number, largo: boolean): PlanComprension['plazo
  */
 export async function planificarComprension(ctx: ContextoComprension, documento: string, o: OpcionesComprension = {}): Promise<PlanComprension> {
   const t = ahoraDe(ctx);
-  const m = await leerMaterial(ctx.sql, documento);
-  const percepcion = await percepcionDe(ctx, m);
+  const { m, percepcion } = await materialDe(ctx, documento);
   let lentes: Lente[] = (o.lentes ?? []).filter((l, i, a) => a.indexOf(l) === i).slice(0, 2);
   const uso: { uso: UsoModelo } = { uso: usoVacio() };
   if (!lentes.length) {
@@ -117,6 +132,7 @@ export async function planificarComprension(ctx: ContextoComprension, documento:
   const plan: PlanComprension = {
     documento, lentes, version, medio: m.medio, caracteres, tokensAprox, largo, conPercepcion: !!percepcion,
     plazos: plazosDe(tokensAprox, largo), presupuestoUsd: o.presupuestoUsd ?? PRESUPUESTO, estimacionUsd, economico, calidades, huella: huellaMaterial, hecha: false,
+    reusar: { estructura: false, fichas: false },
     opciones: { segmentosPorLlamada: o.segmentosPorLlamada ?? POR_LLAMADA, ...(o.wikidata !== undefined ? { wikidata: o.wikidata } : {}), maxCaracteresContexto: maxCaracteres },
   };
   if (!ctx.modelo) {
@@ -125,19 +141,29 @@ export async function planificarComprension(ctx: ContextoComprension, documento:
     return { ...plan, hecha: true };
   }
   const previo = await leerEstadoComprension(ctx.sql, documento);
-  const mismo = previo?.version === version && (!previo.huella || previo.huella === huellaMaterial);
+  const huellaPercepcion = huellaDePercepcion(percepcion);
+  const mismaVersion = previo?.version === version;
+  const mismaPercepcion = (previo?.huellaPercepcion ?? '') === huellaPercepcion;
+  const mismo = mismaVersion && (!previo?.huella || previo.huella === huellaMaterial) && mismaPercepcion;
   if (previo?.estado === 'hecho' && mismo && !o.forzar) return { ...plan, hecha: true };
   const reanudar = previo?.estado === 'en_marcha' && mismo && !o.forzar;
-  if (!reanudar) {
+  if (reanudar) {
+    await actualizarEstado(ctx.sql, documento, { estado: 'en_marcha', error: undefined }, t);
+  } else if (previo && mismaVersion && !o.forzar && previo.estado !== 'sin_modelo') {
+    // Misma versión con otro material (la transcripción se reparó, llegó la percepción) o tras un
+    // error: se rehace por partes. Lo que no ha cambiado (la estructura de un medio con la misma
+    // percepción, las fichas de los segmentos con la misma huella de entrada) no se vuelve a pagar.
+    await borrarPasos(ctx.sql, documento);
+    plan.reusar = { estructura: m.medio && mismaPercepcion, fichas: true };
+    await actualizarEstado(ctx.sql, documento, { estado: 'en_marcha', huella: huellaMaterial, huellaPercepcion, iniciado: t, avisos: [], error: undefined }, t);
+  } else {
     // De cero: fuera la comprensión anterior (también del índice) y su procedencia.
     const { fichas } = await borrarComprension(ctx.sql, documento);
     if (ctx.indice && ctx.espacioNombres && fichas.length) {
       for (let i = 0; i < fichas.length; i += 500) await ctx.indice.borrar(ctx.espacioNombres, fichas.slice(i, i + 500)).catch(() => undefined);
     }
     await borrarPasos(ctx.sql, documento);
-    await actualizarEstado(ctx.sql, documento, { estado: 'en_marcha', lentes, version, huella: huellaMaterial, iniciado: t, avisos: [], error: undefined }, t);
-  } else {
-    await actualizarEstado(ctx.sql, documento, { estado: 'en_marcha', error: undefined }, t);
+    await actualizarEstado(ctx.sql, documento, { estado: 'en_marcha', lentes, version, huella: huellaMaterial, huellaPercepcion, iniciado: t, avisos: [], error: undefined }, t);
   }
   if (uso.uso.llamadas) await apuntarPaso(ctx.sql, documento, 'plan', uso.uso, uso.uso.ms, t, {});
   await vaciar(ctx);
@@ -158,11 +184,30 @@ export async function pasoSegmentos(ctx: ContextoComprension, plan: PlanComprens
   const inicio = Date.now();
   const t = ahoraDe(ctx);
   await avisar(ctx, doc, 'estructura', 0.05, 'Leyendo la estructura de la obra');
-  const m = await leerMaterial(ctx.sql, doc);
-  const percepcion = await percepcionDe(ctx, m);
+  const { m, percepcion } = await materialDe(ctx, doc);
   const l = plan.lentes[0]!;
   const acumulado = { uso: usoVacio() };
   const avisos: string[] = [];
+  const previos = plan.reusar.estructura ? await leerSegmentos(ctx.sql, doc) : [];
+  if (previos.length) {
+    // La misma estructura (un medio con la misma percepción): se reancla a las unidades nuevas por tiempo.
+    const reanclados = previos.map((s) => {
+      if (s.ancla.tipo !== 'tiempo') return s;
+      const us = unidadesEnTramo(m, s.ancla.t0, s.anclaFin?.tipo === 'tiempo' ? s.anclaFin.t1 : s.ancla.t1);
+      return { ...s, unidadDesde: us[0]!.id, unidadHasta: us.at(-1)!.id };
+    });
+    const { secciones } = await guardarEstructura(ctx.sql, m, reanclados);
+    let planos = 0;
+    if (percepcion) {
+      const fichas = fichasDePlanos(percepcion, reanclados, { idioma: m.documento.metadatos.idioma ?? 'es', modelo: percepcion.modelo, version: lente('cine').version, creada: t });
+      for (let i = 0; i < fichas.length; i += 200) await escribirFichas(ctx.sql, fichas.slice(i, i + 200));
+      planos = fichas.length;
+    }
+    const lotes = lotesDeFichas(reanclados, def, plan.opciones.segmentosPorLlamada).length;
+    await apuntarPaso(ctx.sql, doc, 'estructura', usoVacio(), Date.now() - inicio, ahoraDe(ctx), { segmentos: reanclados.length, secciones, lotes, planos, reutilizada: 1 });
+    await vaciar(ctx);
+    return { segmentos: reanclados.length, lotes };
+  }
   const leidos = segmentosDeSecciones(m, l);
   const borradores: Borrador[] = [...leidos];
   if (percepcion) {
@@ -221,15 +266,21 @@ export async function pasoFichas(ctx: ContextoComprension, plan: PlanComprension
     await vaciar(ctx);
     return { fichas: 0 };
   }
-  const m = await leerMaterial(ctx.sql, doc);
-  const percepcion = await percepcionDe(ctx, m);
+  const { m, percepcion } = await materialDe(ctx, doc);
   const acumulado = { uso: usoVacio() };
+  const previas = new Map<string, Ficha>();
+  if (plan.reusar.fichas) {
+    for (const f of await leerFichas(ctx.sql, { documento: doc, objetivo: 'segmento', lente: l })) {
+      if (typeof f.datos.huellaEntrada === 'string') previas.set(f.datos.huellaEntrada, f);
+    }
+  }
   const r = await fichasDeLote(m, l, segmentos, ids, ctx.modelo, acumulado, {
+    previas,
     largo: plan.largo, calidad: yaGastado > plan.presupuestoUsd * 0.7 ? 'rapida' : plan.calidades.fichas, maxCaracteres: plan.opciones.maxCaracteresContexto ?? MAX_CONTEXTO,
     percepcion, idioma: m.documento.metadatos.idioma ?? 'es', creada: ahoraDe(ctx),
   });
   await escribirFichas(ctx.sql, r.fichas);
-  await apuntarPaso(ctx.sql, doc, paso, acumulado.uso, Date.now() - inicio, ahoraDe(ctx), { fichas: r.fichas.length, citasDescartadas: r.descartadas, sinFicha: r.faltan },
+  await apuntarPaso(ctx.sql, doc, paso, acumulado.uso, Date.now() - inicio, ahoraDe(ctx), { fichas: r.fichas.length, reutilizadas: r.reutilizadas, citasDescartadas: r.descartadas, sinFicha: r.faltan },
     r.faltan ? [`${r.faltan} segmentos se quedaron sin ficha en la tanda ${lote + 1}.`] : []);
   await vaciar(ctx);
   return { fichas: r.fichas.length };
@@ -246,8 +297,7 @@ export async function pasoEntidades(ctx: ContextoComprension, plan: PlanComprens
   const t = ahoraDe(ctx);
   await avisar(ctx, doc, 'entidades', 0.5, 'Reconociendo personajes, lugares, obras y motivos');
   const l = plan.lentes[0]!;
-  const m = await leerMaterial(ctx.sql, doc);
-  const percepcion = await percepcionDe(ctx, m);
+  const { m, percepcion } = await materialDe(ctx, doc);
   const segmentos = await leerSegmentos(ctx.sql, doc);
   const acumulado = { uso: usoVacio() };
   const avisos: string[] = [];
@@ -256,11 +306,15 @@ export async function pasoEntidades(ctx: ContextoComprension, plan: PlanComprens
     largo: plan.largo, calidad: plan.calidades.entidades, maxCaracteres: Math.min(plan.opciones.maxCaracteresContexto ?? MAX_CONTEXTO, 1_200_000), percepcion, conocidas,
   });
   const ents = await resolverEntidades(ctx.sql, delModelo);
-  const apariciones = aparicionesDeTexto(m, ents, segmentos);
-  if (percepcion) {
-    const p = await aparicionesDePercepcion(ctx.sql, m, percepcion, ents, segmentos);
-    apariciones.push(...p.apariciones);
-  }
+  // Primero lo percibido (puede añadir personas al reparto: las voces de la transcripción se casan con ellas).
+  const apariciones = percepcion ? (await aparicionesDePercepcion(ctx.sql, m, percepcion, ents, segmentos)).apariciones : [];
+  const deTexto = aparicionesDeTexto(m, ents, segmentos);
+  // Una línea de diálogo percibida que ya está como turno de la transcripción (misma voz, mismo tramo) no se cuenta dos veces.
+  const turnos = deTexto.filter((a) => a.rol === 'habla' && a.ancla.tipo === 'tiempo');
+  const repetida = (a: Aparicion) => a.rol === 'habla' && a.ancla.tipo === 'tiempo'
+    && turnos.some((x) => x.entidad === a.entidad && x.ancla.tipo === 'tiempo' && a.ancla.tipo === 'tiempo' && a.ancla.t0 >= x.ancla.t0 - 1 && a.ancla.t0 <= x.ancla.t1 + 1);
+  for (let i = apariciones.length - 1; i >= 0; i--) if (repetida(apariciones[i]!)) apariciones.splice(i, 1);
+  apariciones.push(...deTexto);
   const reparto = await enlazarReparto(ctx.sql, m, ents, { ...(ctx.fetch ? { fetch: ctx.fetch } : {}), ...(plan.opciones.wikidata !== undefined ? { wikidata: plan.opciones.wikidata } : {}), percepcion, ahora: t });
   avisos.push(...reparto.avisos);
   const fe = fichasDeEntidades(m, l, ents, apariciones, reparto.papeles, { modelo: ctx.modelo.modelo(plan.calidades.entidades), idioma: m.documento.metadatos.idioma ?? 'es', creada: t });
@@ -291,17 +345,25 @@ export async function pasoGlobal(ctx: ContextoComprension, plan: PlanComprension
   const inicio = Date.now();
   const t = ahoraDe(ctx);
   await avisar(ctx, doc, 'global', 0.75, 'Escribiendo la ficha global de la obra');
-  const m = await leerMaterial(ctx.sql, doc);
-  const percepcion = await percepcionDe(ctx, m);
+  const { m, percepcion } = await materialDe(ctx, doc);
   const segmentos = await leerSegmentos(ctx.sql, doc);
   const fichasSegmento = await leerFichas(ctx.sql, { documento: doc, objetivo: 'segmento' });
   const acumulado = { uso: usoVacio() };
   const calidad = (await gastado(ctx.sql, doc)) > plan.presupuestoUsd ? 'rapida' : plan.calidades.global;
   await ctx.sql.ejecutar('DELETE FROM apariciones WHERE documento = ? AND id LIKE ?', doc, `${doc}:ap:t:%`);
+  // Fichas de segmentos que ya no existen (la estructura cambió al rehacer): fuera, también del índice.
+  const vigentes = new Set(segmentos.map((s) => s.id));
+  const huerfanas = fichasSegmento.filter((f) => !vigentes.has(f.objetivoId)).map((f) => f.id);
+  for (const id of huerfanas) {
+    await ctx.sql.ejecutar('DELETE FROM fichas WHERE id = ?', id);
+    await ctx.sql.ejecutar("DELETE FROM vectores WHERE objetivo = 'ficha' AND id = ?", id);
+  }
+  if (huerfanas.length && ctx.indice && ctx.espacioNombres) await ctx.indice.borrar(ctx.espacioNombres, huerfanas).catch(() => undefined);
+  const fichasVigentes = fichasSegmento.filter((f) => vigentes.has(f.objetivoId));
   let temas = 0, descartadas = 0;
   const fichas: Ficha[] = [];
   for (const [i, l] of plan.lentes.entries()) {
-    const r = await fichaGlobal(m, l, segmentos, fichasSegmento, ctx.modelo, acumulado, {
+    const r = await fichaGlobal(m, l, segmentos, fichasVigentes, ctx.modelo, acumulado, {
       largo: plan.largo, calidad, maxCaracteres: plan.opciones.maxCaracteresContexto ?? MAX_CONTEXTO, percepcion, idioma: m.documento.metadatos.idioma ?? 'es', creada: t, secundaria: i > 0,
     });
     descartadas += r.descartadas;

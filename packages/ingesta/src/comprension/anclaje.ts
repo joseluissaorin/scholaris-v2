@@ -9,7 +9,7 @@
  * contrato), y se cuenta para la procedencia.
  */
 import type { AnclaMaterial, Evidencia, ModoEvidencia } from '@scholaris/nucleo';
-import type { Material, UnidadMaterial } from './material.js';
+import type { Material, UnidadMaterial, VozPercibida } from './material.js';
 import { instantes } from './material.js';
 import type { RefModelo } from './tipos.js';
 
@@ -180,11 +180,37 @@ export function modoDe(m: Material): ModoEvidencia {
   return m.documento.tipo === 'video' ? 'video' : m.documento.tipo === 'audio' ? 'audio' : 'texto';
 }
 
-/** El ancla material de un tramo de caracteres de una unidad. */
-export function anclaDe(u: UnidadMaterial, caracteres?: [number, number]): AnclaMaterial {
+const palabrasDe = (s: string) => new Set(s.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? []);
+
+/**
+ * El hablante que dio la percepción para lo que se dice en [t0, t1] (y, si se da,
+ * con ese texto): la línea de diálogo percibida más cercana que comparta al menos
+ * la mitad de las palabras. Las etiquetas de la transcripción a veces se cruzan.
+ */
+export function hablantePercibido(voces: readonly VozPercibida[] | undefined, t0: number, t1: number, texto?: string): string | undefined {
+  if (!voces?.length) return undefined;
+  const q = texto ? palabrasDe(texto) : null;
+  let mejor: { v: VozPercibida; d: number } | null = null;
+  for (const v of voces) {
+    if (v.t < t0 - 2 || v.t > t1 + 2) continue;
+    if (q && q.size) {
+      const w = palabrasDe(v.texto);
+      const comunes = [...q].filter((x) => w.has(x)).length;
+      if (comunes < Math.min(q.size, w.size) / 2) continue;
+    }
+    const d = Math.abs(v.t - (t0 + t1) / 2);
+    if (!mejor || d < mejor.d) mejor = { v, d };
+  }
+  return mejor?.v.hablante;
+}
+
+/** El ancla material de un tramo de caracteres de una unidad (con el hablante de la percepción si lo hay). */
+export function anclaDe(u: UnidadMaterial, caracteres?: [number, number], voces?: readonly VozPercibida[]): AnclaMaterial {
   if (u.ancla.tipo === 'tiempo') {
     const tramo = caracteres ? tramoDeCaracteres(u, caracteres) : null;
-    const hablante = caracteres ? hablanteEn(u, caracteres[0]) : u.ancla.hablante;
+    const etiquetado = caracteres ? hablanteEn(u, caracteres[0]) : u.ancla.hablante;
+    const t0 = tramo?.[0] ?? u.ancla.t0, t1 = tramo?.[1] ?? u.ancla.t1;
+    const hablante = (caracteres ? hablantePercibido(voces, t0, t1, textoDeCaracteres(u, caracteres)) : undefined) ?? etiquetado;
     return {
       tipo: 'tiempo', t0: tramo?.[0] ?? u.ancla.t0, t1: tramo?.[1] ?? u.ancla.t1,
       ...(hablante ? { hablante } : {}), ...(caracteres ? { caracteres } : {}),
@@ -256,7 +282,7 @@ export function anclarReferencia(m: Material, r: RefModelo): Evidencia | null {
   for (const c of candidatas) {
     const loc = localizarCita(c, cita);
     if (!loc) continue;
-    return { documento, modo: modoDe(m), unidad: c.id, ancla: anclaDe(c, loc.caracteres), cita: loc.literal };
+    return { documento, modo: modoDe(m), unidad: c.id, ancla: anclaDe(c, loc.caracteres, m.voces), cita: loc.literal };
   }
   return null;
 }

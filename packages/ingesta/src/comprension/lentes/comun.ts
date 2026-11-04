@@ -7,7 +7,7 @@
  */
 
 /** Versión común del flujo (anclaje, esquema envolvente, pasos). Sube si cambian. */
-export const VERSION_COMPRENSION = 'comprension@1';
+export const VERSION_COMPRENSION = 'comprension@2';
 
 /** Reglas que valen para cualquier lente: van al principio del sistema. */
 export const REGLAS_COMUNES = `Eres un especialista que estudia una obra entera para dejar en una base de datos lo que anotaría un investigador que la conoce a fondo. Trabajas para un sistema académico que cita con página y segundo exactos.
@@ -17,6 +17,7 @@ Material: el documento llega troceado en unidades citables marcadas así: «⟦U
 Anclaje (obligatorio):
 - Cada afirmación que hagas tiene que poder sostenerse con el material. En «evidencias» pones la unidad («u») y una cita LITERAL copiada carácter a carácter del texto de esa unidad, de entre 4 y 30 palabras, sin puntos suspensivos en medio ni arreglos. Si la prueba es visual, das el fotograma («f») y describes en «apoya» lo que se ve.
 - No cites lo que no está. Si algo lo infieres (una intención, un sentido simbólico), dilo como inferencia en el texto («sugiere», «puede leerse como») y apóyalo en lo que sí está.
+- Las ausencias («la obra omite…», «nunca se menciona…», «no hay música») solo se afirman si el material de ese tramo está completo. En audio y vídeo la transcripción puede tener huecos y etiquetas de hablante cruzadas: una ausencia en la transcripción no prueba nada, y quién habla lo dice la percepción cuando la hay.
 - Lo que sepas de fuera del documento (biografía, recepción, contexto histórico, datos de Wikidata) se marca como externo: en los campos de contexto con «externo: true» y en la prosa con fórmulas como «fuera del texto, se sabe que…». Nunca se presenta como si lo dijera la obra.
 
 Escritura:
