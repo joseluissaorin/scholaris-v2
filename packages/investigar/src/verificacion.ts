@@ -15,6 +15,7 @@
 import type { FraseVerificada } from '@scholaris/contrato';
 import { contieneLiteral, terminos } from '@scholaris/busqueda';
 import { recortar, type ContextoHerramientas } from './contexto.js';
+import type { ModeloAgente } from './modelo.js';
 import type { Prueba } from './pruebas.js';
 import { pruebaEnAmbito, type Numerador } from './sintesis.js';
 import { comprobarEnSitio, tramoDeComprobacion } from './vision.js';
@@ -384,6 +385,8 @@ function aplicarMiradas(juzgadas: FraseJuzgada[], miradas: Miradas): void {
 
 /** Frases que se corrigen como mucho en una respuesta. */
 export const MAX_CORRECCIONES = 36;
+/** Frases que, tras corregir, siguen juntando tres marcas o más y se corrigen otra vez (si son más, no). */
+export const MAX_SEGUNDA_VUELTA = 6;
 
 const SISTEMA_CORRECCION = `Corriges frases de una respuesta académica para que cada una diga exactamente lo que prueban sus pruebas. Recibes cada frase con sus marcas [E#], el juicio de cada marca y el texto de las pruebas; a veces, otras pruebas del cuaderno [P#] que podrían servir.
 Reglas:
@@ -427,9 +430,9 @@ function citasEn(textoNuevo: string, permitidos: string[]): boolean {
  * ciñe a sus pruebas, añade pruebas del cuaderno o quita lo que nada sostiene. Devuelve el
  * Markdown nuevo y las frases que cambiaron.
  */
-async function corregir(ctx: ContextoHerramientas, numerador: Numerador, markdown: string, juzgadas: FraseJuzgada[]): Promise<{ markdown: string; cambiadas: string[] }> {
+async function corregir(ctx: ContextoHerramientas, numerador: Numerador, markdown: string, juzgadas: FraseJuzgada[], otroModelo?: ModeloAgente): Promise<{ markdown: string; cambiadas: string[] }> {
   // Un modelo rápido: corregir es ceñir y partir frases, no investigar (y la latencia cuenta).
-  const modelo = ctx.p.modelos.corrector ?? ctx.p.modelos.verificador ?? ctx.p.modelos.redactor ?? ctx.p.modelos.agente;
+  const modelo = otroModelo ?? ctx.p.modelos.corrector ?? ctx.p.modelos.verificador ?? ctx.p.modelos.redactor ?? ctx.p.modelos.agente;
   // Primero lo que no sostiene nada, después las frases compuestas y lo parcial, y lo que afirma un
   // hecho sin marca al final; como mucho `MAX_CORRECCIONES` (la latencia crece con cada lote).
   const prioridad = (f: FraseJuzgada) => {
@@ -584,25 +587,18 @@ export async function verificar(ctx: ContextoHerramientas, numerador: Numerador,
   let texto = markdown;
   let correcciones = 0, filasCorregidas = 0;
   if (o.corregir) {
-    const tc = Date.now();
-    const c = await corregir(ctx, numerador, texto, juzgadas);
-    texto = c.markdown;
-    tiempos.correccion = Date.now() - tc;
-    correcciones = juzgadas.filter((f) => f.corregida).length;
     // Lo que siga con marcas en medio de la frase se parte a mano, una frase por marca.
-    for (const f of frasesDe(texto)) {
-      if (f.tabla || !marcaEnMedio(f.original)) continue;
-      const pos = texto.indexOf(f.original);
-      if (pos < 0) continue;
-      texto = `${texto.slice(0, pos)}${partirPorMarcas(f.original)}${texto.slice(pos + f.original.length)}`;
-      correcciones++;
-    }
-    // Las tablas, cotejadas con el texto ya corregido (a la vez que se vuelve a juzgar).
-    const tt = Date.now();
-    const tablas = cuadrarTablas(ctx, texto).finally(() => { tiempos.tablas = Date.now() - tt; });
-    if (correcciones) {
-      const tr = Date.now();
-      // Lo corregido se vuelve a juzgar (sin volver a corregir); lo demás conserva su juicio.
+    const partirMedias = () => {
+      for (const f of frasesDe(texto)) {
+        if (f.tabla || !marcaEnMedio(f.original)) continue;
+        const pos = texto.indexOf(f.original);
+        if (pos < 0) continue;
+        texto = `${texto.slice(0, pos)}${partirPorMarcas(f.original)}${texto.slice(pos + f.original.length)}`;
+        correcciones++;
+      }
+    };
+    // Lo corregido se vuelve a juzgar (sin volver a corregir); lo demás conserva su juicio.
+    const rejuzgar = async () => {
       const previas = new Map(juzgadas.filter((f) => !f.corregida).map((f) => [f.original, f]));
       const frases = frasesDe(texto);
       const nuevas = frases.filter((f) => !previas.has(f.original));
@@ -619,6 +615,31 @@ export async function verificar(ctx: ContextoHerramientas, numerador: Numerador,
       aplicarMiradas(nuevasJuzgadas, heredadas);
       const rejuzgadas = new Map(nuevasJuzgadas.map((f) => [f.original, f]));
       juzgadas = frases.map((f) => previas.get(f.original) ?? rejuzgadas.get(f.original) ?? { ...f, clase: 'hecho' as const, marcas: {} });
+    };
+    const tc = Date.now();
+    const c = await corregir(ctx, numerador, texto, juzgadas);
+    texto = c.markdown;
+    tiempos.correccion = Date.now() - tc;
+    correcciones = juzgadas.filter((f) => f.corregida).length;
+    partirMedias();
+    // Las tablas, cotejadas con el texto ya corregido (a la vez que se vuelve a juzgar).
+    const tt = Date.now();
+    const tablas = cuadrarTablas(ctx, texto).finally(() => { tiempos.tablas = Date.now() - tt; });
+    if (correcciones) {
+      const tr = Date.now();
+      await rejuzgar();
+      // Segunda vuelta, solo para lo que sigue juntando tres marcas o más al final de una frase (el
+      // corrector rápido a veces la devuelve igual): la corrige el modelo del agente, una vez.
+      const compuestas = juzgadas.filter((f) => !f.tabla && new Set(f.evidencias).size >= 3);
+      if (compuestas.length && compuestas.length <= MAX_SEGUNDA_VUELTA) {
+        const c2 = await corregir(ctx, numerador, texto, compuestas, ctx.p.modelos.agente);
+        if (c2.cambiadas.length) {
+          texto = c2.markdown;
+          correcciones += compuestas.filter((f) => f.corregida).length;
+          partirMedias();
+          await rejuzgar();
+        }
+      }
       tiempos.rejuicio = Date.now() - tr;
     }
     for (const [original, nueva] of await tablas) {

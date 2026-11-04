@@ -134,6 +134,26 @@ describe('frases con muchas marcas', () => {
     expect(corregida).toBe(true);
     expect(v.markdown).toBe('Marta llega al puerto [E1]. Tomás cuenta historias [E2]. Marta no piensa volver [E3].');
   });
+
+  it('si el corrector rápido la devuelve igual, el modelo del agente la corrige en una segunda vuelta', async () => {
+    const compuesta = 'Marta llega al puerto, Tomás cuenta historias y Marta no piensa volver [E1][E2][E3].';
+    const { ctx } = ctxCon((p) => {
+      const t = textoDe(p);
+      if (p.sistema?.startsWith('Corriges')) return { json: { frases: [{ i: Number(/### Frase (\d+)/.exec(t)![1]), texto: 'Marta llega al puerto [E1]. Tomás cuenta historias [E2]. Marta no piensa volver [E3].' }] } };
+      return { json: juicio(t, () => null) };
+    });
+    // El corrector rápido no la parte (y, al darla igual, la vuelve a dejar con tres marcas).
+    let rapido = 0;
+    (ctx.p.modelos as { corrector?: unknown }).corrector = new ModeloGuion((p) => {
+      rapido++;
+      return { json: { frases: [{ i: Number(/### Frase (\d+)/.exec(textoDe(p))![1]), texto: `${compuesta} ` }] } };
+    });
+    const n = new Numerador(ctx);
+    const v = await verificar(ctx, n, n.sustituir('Marta llega al puerto, Tomás cuenta historias y Marta no piensa volver [P1][P2][P3].'), { sitios: 0 });
+    expect(rapido).toBe(1);
+    expect(v.markdown).toBe('Marta llega al puerto [E1]. Tomás cuenta historias [E2]. Marta no piensa volver [E3].');
+    expect(v.frases.every((f) => f.veredicto === 'respaldada')).toBe(true);
+  });
 });
 
 describe('tope de correcciones', () => {
