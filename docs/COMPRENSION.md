@@ -232,6 +232,58 @@ primer momento y la comprensión llega después, con su progreso. Pasos:
    contenido) y alineación de cada pareja relacionada. Cuando entra un documento nuevo
    se revisan sus relaciones con todos los demás.
 
+### Transmedia y transidioma
+
+El código está en `packages/ingesta/src/transmedia/`. El paso 7 corre en el mismo Workflow,
+después de cerrar la comprensión (un fallo suyo no la estropea), y también solo, para un
+documento o para la biblioteca entera (`ParamsComprension.transmedia`).
+
+- **Detección** (`detectarRelaciones`), par a par. Cada par reúne indicios con peso y prueba:
+  metadatos CSL (mismo título en otro medio o en otra lengua, título y lengua originales,
+  traductores, obra contenedora, otra edición); contenido (el título de la otra obra en el
+  material, con su contexto: «guion basado en su cuento…» en el texto en pantalla de los
+  créditos, «traducción de…»); Wikidata (P144, P4969, P629, P747, P655, P58, P50, P57, P1877;
+  la prueba lleva la URL del dato y la consulta queda en caché en `entidades_wikidata`); el
+  grafo de citas; las entidades del grafo que comparten (los personajes de ficción pesan más,
+  con su rareza en la biblioteca) y el parecido de las fichas globales. Los indicios con tipo
+  se combinan por tipo; los demás solo refuerzan una derivación. Lo dudoso lo decide el modelo
+  rápido. Las relaciones del usuario (creadas o confirmadas) no se tocan; las que rechaza no
+  vuelven (`transmedia:rechazo` en la procedencia).
+- **Alineación** (`alinearRelacion`), con un cerrojo por relación y una huella de las dos obras
+  y de su comprensión: si no cambian, no se repite. El lado `a` es siempre el origen. Gruesa:
+  segmentos ↔ segmentos, con lo que se añade y lo que se suprime. Fina: por cada segmento de la
+  obra de partida, pasaje ↔ pasaje, con las dos obras enteras delante cuando caben; cada lado
+  se ancla contra el material (caracteres en el texto; tramo, instante y región del fotograma
+  percibido en el vídeo) y lo que no se encuentra no es prueba. Una supresión en un tramo con
+  huecos de transcripción baja de confianza y lo dice en la nota. Las traducciones entre
+  textos se alinean párrafo a párrafo (Gale y Church por longitudes y revisión del modelo por
+  ventanas), con anclas exactas de párrafo en las dos lenguas y sin necesidad de comprensión.
+- **Ficha de la relación** (objetivo `relacion`, clase `adaptacion`, `traduccion`…, sin
+  documento): el ensayo de la transformación entera, con `datos.cambios` y `datos.personajes`
+  anclados en los dos lados (índices a `evidencias`; `inferido` si falta prueba) y el mapa de
+  la alineación gruesa. Se vectoriza en el documento de origen.
+- **Rutas**: `GET /documentos/:id/relaciones`, `POST /documentos/:id/alinear`,
+  `GET /relaciones/:id`, `GET /relaciones/:id/alineaciones`, `POST /relaciones`,
+  `POST /relaciones/:id/confirmar`, `DELETE /relaciones/:id` y `POST /transmedia/biblioteca`
+  (tipos en `packages/contrato/src/transmedia.ts`), las mismas en la v1 y en el SDK de Python.
+
+Modelos de la alineación, medidos el 4-11-2026 con *Fresa y chocolate* y el cuento (la misma
+gruesa y la fina de dos escenas): `gemini-4-argon` da 14 y 18 correspondencias por escena,
+todas ancladas, con notas de unas cincuenta palabras y el vocabulario de los estudios de
+adaptación; `gemini-3.1-pro-preview`, 6 y 10, más someras; `gemini-3.8-flash` se desbocó en
+una (salida cortada) y escribe notas más cortas. La alineación y la ficha van con
+`comprension` (argon); las ventanas de párrafos de una traducción, con `comprensionRapida`.
+
+Prueba real del 4-11-2026. *Fresa y chocolate* y el cuento: la detección da `adaptacion_de`
+con confianza 0,99 (P144 de Wikidata y los créditos de 7:18, «guion… basado en su cuento»);
+la alineación, 139 correspondencias (128 finas, 83 con los dos lados anclados) y una ficha de
+1 600 palabras con 76 pruebas, por 1,07 USD; 106 de los 112 puntos de la rúbrica de las
+preguntas transmedia del banco tienen una alineación fina en sus anclas. *Marianela*
+(capítulos I-V) y la traducción de Clara Bell: 240 pares de párrafos y la ficha por 0,24 USD,
+y las preguntas en inglés, francés e italiano sobre el original encuentran su párrafo por
+vectores (de 24 a 26 de 30 en primer lugar, 30 de 30 entre los cinco primeros) frente a 5-8 de
+30 por la búsqueda léxica.
+
 Modelos: el de comprensión es el mejor disponible, elegido por medición en el banco
 (candidatos a 4-11-2026: `gemini-4-argon`, `gemini-3.1-pro-preview`, `gemini-pro-latest`
 y `gemini-3.8-flash`). Las ventanas pueden ir con uno rápido si el banco lo permite.

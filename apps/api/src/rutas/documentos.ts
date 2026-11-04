@@ -16,7 +16,7 @@ import { clavesDeDocumento, idsIndiceDeDocumento, tareaDeDocumento, totalesEstan
 import { aBase64Url } from '../compartido/firmas.js';
 import { invalidarBuscador, puertosFunciones } from '../compartido/servicios.js';
 import { alBorrarDocumento } from '@scholaris/funciones';
-import { cacheEnAlmacen, rehacerFicha, unidadDeFila } from '@scholaris/ingesta';
+import { borrarRelacionesDeDocumento, cacheEnAlmacen, rehacerFicha, unidadDeFila } from '@scholaris/ingesta';
 import type { PuertosUsuario } from '../puertos.js';
 import { lanzarIngesta, prefijoDocumento } from './subidas.js';
 import { archivoDe } from '../compartido/motor-ingesta.js';
@@ -48,12 +48,15 @@ export async function borrarDocumentoCompleto(p: PuertosUsuario, id: string): Pr
   const ids = await idsIndiceDeDocumento(p.sql, id);
   const tarea = await tareaDeDocumento(p.sql, id);
   if (tarea) await p.orquestador.cancelar(tarea).catch(() => undefined);
+  // Sus relaciones con otras obras (alineaciones y fichas de relación incluidas) se van con él.
+  const fichasRelacion = await borrarRelacionesDeDocumento(p.sql, id).catch(() => [] as string[]);
   await borrarDocumento(p.sql, id);
   await p.sql.ejecutar('DELETE FROM pl_subidas WHERE documento = ?', id);
   invalidarBuscador(p.sql);
   p.segundoPlano((async () => {
     await alBorrarDocumento(await puertosFunciones(p), id).catch((e: unknown) => console.error('alBorrarDocumento', e));
     if (p.indice && ids.length) for (let i = 0; i < ids.length; i += 500) await p.indice.borrar(p.config.espacioNombres(p.usuario.id), ids.slice(i, i + 500));
+    if (p.indice && fichasRelacion.length) await p.indice.borrar(p.config.espacioNombres(p.usuario.id), fichasRelacion).catch(() => undefined);
     const propio = prefijoDocumento(p.usuario.id, id);
     // Si alguien tiene una copia que apunta a estos binarios, se quedan hasta que la borre.
     if (!(await p.cuentas.retenerSiReferenciado(propio, p.usuario.id))) await p.almacen.borrarPrefijo(propio);

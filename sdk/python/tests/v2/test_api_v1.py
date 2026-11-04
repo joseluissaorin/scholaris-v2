@@ -78,6 +78,35 @@ def test_comprension_por_la_v1():
     assert f.pedidas[3][2]["json"] == {"documentos": ["d1", "d2"]}
 
 
+def test_relaciones_y_alineaciones_por_la_v1():
+    rel = {"id": "rel-1", "origen": "d1", "destino": "d2", "tipo": "adaptacion_de", "otro": {"id": "d2", "titulo": "Cuento"}, "sentido": "origen", "alineaciones": 3, "confirmada": False}
+    f = SesionFalsa([Respuesta(200, [rel]), Respuesta(200, {"elementos": [{"tipo": "suprimido"}], "total": 1}), Respuesta(201, {**rel, "confirmada": True}),
+                     Respuesta(200, {"borrada": True}), Respuesta(202, {"instancia": "tmd-x", "relaciones": 1}), Respuesta(202, {"instancia": "tmd-y", "relaciones": 4})])
+    s = Scholaris("sch_prueba", base="https://ejemplo.es", sesion=f)
+    assert s.relaciones("d1")[0]["tipo"] == "adaptacion_de"
+    assert s.alineaciones("rel-1", tipo="suprimido")["total"] == 1
+    assert s.relacionar("d1", "d2", "adaptacion_de", nota="Créditos")["confirmada"] is True
+    assert s.rechazar_relacion("rel-1")["borrada"] is True
+    assert s.alinear("d1", forzar=True)["instancia"] == "tmd-x"
+    assert s.alinear(documentos=["d1"], solo_detectar=True)["relaciones"] == 4
+    rutas = [(m, u) for m, u, _ in f.pedidas]
+    assert rutas == [("GET", "https://ejemplo.es/api/v1/documentos/d1/relaciones"), ("GET", "https://ejemplo.es/api/v1/relaciones/rel-1/alineaciones"),
+                     ("POST", "https://ejemplo.es/api/v1/relaciones"), ("DELETE", "https://ejemplo.es/api/v1/relaciones/rel-1"),
+                     ("POST", "https://ejemplo.es/api/v1/documentos/d1/alinear"), ("POST", "https://ejemplo.es/api/v1/transmedia")]
+    assert f.pedidas[2][2]["json"] == {"origen": "d1", "destino": "d2", "tipo": "adaptacion_de", "nota": "Créditos"}
+    assert f.pedidas[4][2]["json"] == {"forzar": True}
+    assert f.pedidas[5][2]["json"] == {"documentos": ["d1"], "alinear": False}
+
+
+def test_alineaciones_de_la_v2_pasan_de_pagina():
+    from scholaris.v2 import Scholaris as V2
+
+    f = SesionFalsa([Respuesta(200, {"elementos": [{"id": "a1"}], "total": 2, "siguiente": "1"}), Respuesta(200, {"elementos": [{"id": "a2"}], "total": 2})])
+    s = V2("https://ejemplo.es", clave="sch_prueba", sesion=f)
+    assert [x["id"] for x in s.alineaciones("rel-1")] == ["a1", "a2"]
+    assert f.pedidas[1][1] == "https://ejemplo.es/api/v2/relaciones/rel-1/alineaciones"
+
+
 def test_fichas_de_la_v2_pasan_de_pagina():
     from scholaris.v2 import Scholaris as V2
 

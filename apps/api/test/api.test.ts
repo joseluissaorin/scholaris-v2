@@ -330,6 +330,64 @@ describe('comprensión', () => {
   });
 });
 
+describe('relaciones entre obras (transmedia)', () => {
+  it('crear, leer, confirmar, alinear y rechazar por la v2, y leer por la v1', async () => {
+    const t = await token('user_transmedia', { fea: 'u:scholaris' });
+    const subir = async (nombre: string, parrafos: string[]) => {
+      const original = new TextEncoder().encode(parrafos.join('\n\n'));
+      const s = await api('/subidas', { token: t, cuerpo: { nombre, mime: 'text/markdown', bytes: original.byteLength } });
+      await SELF.fetch(s.cuerpo.original.url, { method: 'PUT', body: original, headers: s.cuerpo.original.cabeceras });
+      const rec = await api(`/subidas/${s.cuerpo.subida}/recursos`, { token: t, cuerpo: { recursos: [{ ruta: 'paquete.json', mime: 'application/json' }] } });
+      await SELF.fetch(rec.cuerpo.recursos[0].subida.url, { method: 'PUT', body: JSON.stringify(paqueteDocumento(parrafos)), headers: { 'content-type': 'application/json' } });
+      const ing = await api(`/subidas/${s.cuerpo.subida}/ingestar`, { token: t, cuerpo: { paquete: 'paquete.json' } });
+      expect((await esperarTarea(t, ing.cuerpo.tarea)).estado).toBe('listo');
+      return ing.cuerpo.documento as string;
+    };
+    const original = await subir('original.md', ['El edificio es circular.', 'El inspector vive en el centro.']);
+    const traduccion = await subir('traduccion.md', ['The building is circular.', 'The inspector lives in the centre.']);
+
+    const creada = await api('/relaciones', { token: t, cuerpo: { origen: traduccion, destino: original, tipo: 'traduccion_de', nota: 'Traducción de prueba.' } });
+    expect(creada.estado).toBe(201);
+    expect(creada.cuerpo).toMatchObject({ origen: traduccion, destino: original, tipo: 'traduccion_de', fuente: 'usuario', confirmada: true, sentido: 'origen', alineaciones: 0, otro: { id: original } });
+    const id = creada.cuerpo.id as string;
+    expect((await api('/relaciones', { token: t, cuerpo: { origen: traduccion, destino: original, tipo: 'parecido' } })).estado).toBe(400);
+    expect((await api('/relaciones', { token: t, cuerpo: { origen: traduccion, destino: 'no-existe', tipo: 'cita_a' } })).estado).toBe(404);
+
+    const delOriginal = await api(`/documentos/${original}/relaciones`, { token: t });
+    expect(delOriginal.cuerpo).toHaveLength(1);
+    expect(delOriginal.cuerpo[0]).toMatchObject({ id, sentido: 'destino', otro: { id: traduccion } });
+    expect((await api(`/relaciones/${id}`, { token: t })).cuerpo).toMatchObject({ id, nota: 'Traducción de prueba.' });
+    expect((await api(`/relaciones/${id}/alineaciones`, { token: t })).cuerpo).toEqual({ elementos: [], total: 0 });
+    expect((await api(`/relaciones/${id}/alineaciones?tipo=raro`, { token: t })).estado).toBe(400);
+    expect((await api(`/relaciones/${id}/confirmar`, { token: t, cuerpo: {} })).cuerpo).toMatchObject({ confirmada: true });
+
+    // Alinear (el Workflow con «transmedia»): una traducción entre textos se alinea por párrafos aunque no haya modelo.
+    const al = await api(`/documentos/${traduccion}/alinear`, { token: t, cuerpo: { forzar: true } });
+    expect(al.estado).toBe(202);
+    expect(al.cuerpo).toMatchObject({ instancia: expect.stringMatching(/^tmd-/), relaciones: 1 });
+    let alineaciones: any;
+    for (let i = 0; i < 120; i++) {
+      alineaciones = await api(`/relaciones/${id}/alineaciones`, { token: t });
+      if (alineaciones.cuerpo.total) break;
+      await new Promise((r) => setTimeout(r, 250));
+    }
+    expect(alineaciones.cuerpo.total).toBeGreaterThan(0);
+    expect(alineaciones.cuerpo.elementos[0]).toMatchObject({ relacion: id, tipo: 'traducido', a: { documento: traduccion }, b: { documento: original } });
+    expect((await api('/transmedia/biblioteca', { token: t, cuerpo: { alinear: false } })).estado).toBe(202);
+
+    // La v1 pasa por la v2.
+    const clave = await api('/claves', { token: t, cuerpo: { nombre: 'transmedia', alcances: ['lectura', 'escritura'] } });
+    const v1 = await SELF.fetch(`https://scholaris.prueba/api/v1/documentos/${original}/relaciones`, { headers: { authorization: `Bearer ${clave.cuerpo.secreto}` } });
+    expect(v1.status).toBe(200);
+    expect(((await v1.json()) as Array<{ id: string }>)[0]!.id).toBe(id);
+
+    // Rechazar: se va con sus alineaciones.
+    expect((await api(`/relaciones/${id}`, { token: t, metodo: 'DELETE' })).cuerpo).toEqual({ borrada: true });
+    expect((await api(`/documentos/${original}/relaciones`, { token: t })).cuerpo).toEqual([]);
+    expect((await api(`/relaciones/${id}/alineaciones`, { token: t })).estado).toBe(404);
+  });
+});
+
 describe('rehacer folios sin releer', () => {
   it('quita los folios inventados de las guardas en blanco y reancla los fragmentos', async () => {
     const t = await token('user_folios', { fea: 'u:scholaris' });

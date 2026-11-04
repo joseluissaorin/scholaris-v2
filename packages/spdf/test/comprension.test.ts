@@ -6,10 +6,10 @@ import type { Alineacion, Aparicion, Documento, Evidencia, Ficha, Relacion, Segm
 import { describe, expect, it } from 'vitest';
 import { crearSpdf } from '../src/archivo.js';
 import {
-  aparicionesEnTiempo, borrarComprension, buscarFichas, escribirAlineaciones, escribirApariciones, escribirFichas, escribirRelaciones,
+  aparicionesEnTiempo, borrarComprension, buscarFichas, correspondencias, escribirAlineaciones, escribirApariciones, escribirFichas, escribirRelaciones,
   escribirSegmentos, leerAlineaciones, leerApariciones, leerFichas, leerRelaciones, leerSegmentos, segmentosEnTiempo,
 } from '../src/comprension.js';
-import { escribirDocumento } from '../src/repositorio.js';
+import { escribirDocumento, escribirUnidades } from '../src/repositorio.js';
 
 const base = (id: string, tipo: Documento['tipo'], titulo: string): Documento => ({
   id, tipo, metadatos: { titulo, autores: [], idioma: 'es' }, estado: 'listo', huella: id.repeat(64).slice(0, 64), original: '',
@@ -93,5 +93,30 @@ describe('comprensión: repositorio', () => {
     expect(await leerAlineaciones(sql, { relacion: 'r1' })).toEqual([]);
     expect(await leerRelaciones(sql, 'pelicula')).toHaveLength(1);
     a.cerrar();
+  });
+});
+
+describe('comprensión: correspondencias', () => {
+  it('lo que corresponde a un párrafo en la otra obra, con su texto literal (original y traducción)', async () => {
+    const { sql } = await crearSpdf();
+    await escribirDocumento(sql, base('es', 'pdf', 'Marianela'));
+    await escribirDocumento(sql, base('en', 'pdf', 'Marianela'));
+    // Dominio público (Pérez Galdós, 1878) y una traducción inglesa de prueba.
+    const es = 'Se puso el sol.\n\nEl viajero siguió adelante en su camino.';
+    const en = 'The sun went down.\n\nThe traveller went on his way.';
+    await escribirUnidades(sql, [
+      { id: 'es:u0', documento: 'es', orden: 0, texto: es, lector: 'prueba', confianza: 1, ancla: pagina(1, '1') },
+      { id: 'en:u0', documento: 'en', orden: 0, texto: en, lector: 'prueba', confianza: 1, ancla: pagina(1, '1') },
+    ]);
+    await escribirRelaciones(sql, [{ id: 'r', origen: 'en', destino: 'es', tipo: 'traduccion_de', evidencias: [], confianza: 1, fuente: 'usuario', creada: '2026-11-04' }]);
+    await escribirAlineaciones(sql, [
+      { id: 'r:p0', relacion: 'r', orden: 0, tipo: 'traducido', a: { documento: 'en', ancla: { ...pagina(1, '1'), caracteres: [0, 18] } }, b: { documento: 'es', ancla: { ...pagina(1, '1'), caracteres: [0, 15] } }, nota: '', confianza: 1 },
+      { id: 'r:p1', relacion: 'r', orden: 1, tipo: 'traducido', a: { documento: 'en', ancla: { ...pagina(1, '1'), caracteres: [20, 50] } }, b: { documento: 'es', ancla: { ...pagina(1, '1'), caracteres: [17, 56] } }, nota: '', confianza: 1 },
+    ]);
+    const [c] = await correspondencias(sql, 'es', { ...pagina(1, '1'), caracteres: [20, 30] });
+    expect(c!.alineacion.id).toBe('r:p1');
+    expect(c!.textoOtro).toBe('The traveller went on his way.');
+    expect((await correspondencias(sql, 'en', { ...pagina(1, '1'), caracteres: [0, 5] }))[0]!.textoOtro).toBe('Se puso el sol.');
+    expect(await correspondencias(sql, 'es', { ...pagina(2, '2') })).toEqual([]);
   });
 });
