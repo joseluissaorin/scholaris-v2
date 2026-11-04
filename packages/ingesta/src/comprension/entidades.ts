@@ -9,7 +9,7 @@
  * aquí, en el material, con su sitio exacto: caracteres en el texto, la voz en
  * su tramo y, con la percepción, la región del fotograma en su instante.
  */
-import type { Aparicion, Ficha, Lente, PercepcionMedio, RolAparicion, Segmento, SQL, TipoEntidadComprension } from '@scholaris/nucleo';
+import { enParalelo, type Aparicion, type Ficha, type Lente, type PercepcionMedio, type RolAparicion, type Segmento, type SQL, type TipoEntidadComprension } from '@scholaris/nucleo';
 import { claveEntidad, entidadActiva, obtenerEntidad } from '@scholaris/funciones';
 import { anclaDe, anclarReferencias, buscarFormasEnUnidad, limpiarProsa } from './anclaje.js';
 import { ventanas } from './estructura.js';
@@ -18,9 +18,9 @@ import { lente, REGLAS_COMUNES } from './lentes/index.js';
 import { fichaDocumento, textoParaModelo, type Material } from './material.js';
 import { textoReparto } from './medios.js';
 import { llamar } from './modelo.js';
-import { buscarObraAudiovisual, repartoWikidata, type PapelWikidata } from './reparto.js';
+import { buscarObraAudiovisual, repartoWikidata, type CacheWikidata, type PapelWikidata } from './reparto.js';
 import type { EntidadModelo, ModeloComprension, UsoModelo } from './tipos.js';
-import { huella, localizadorSegmentos } from './util.js';
+import { conLimite, huella, localizadorSegmentos } from './util.js';
 
 /** Los tipos del grafo de la biblioteca (los de @scholaris/funciones). */
 type TipoEntidad = Parameters<typeof obtenerEntidad>[1];
@@ -38,20 +38,39 @@ export const TIPO_GRAFO: Record<TipoEntidadComprension, TipoEntidad> = {
 /** Tipos que se buscan distinguiendo mayúsculas (nombres propios); los demás, sin distinguir. */
 const PROPIOS = new Set<TipoEntidadComprension>(['persona', 'personaje', 'lugar', 'obra', 'obra_musical', 'organizacion', 'evento']);
 
+/**
+ * La lista de entidades: solo lo que hace falta para encontrarlas y unirlas (nombre,
+ * formas, alusiones, una línea). El análisis de las principales va aparte
+ * (`ESQUEMA_ANALISIS`), en llamadas pequeñas y en paralelo: pedirlo todo junto
+ * daba respuestas de 25 000 tokens que tardaban más de siete minutos (4-11-2026).
+ */
 export const ESQUEMA_ENTIDADES = objeto({
   entidades: lista(objeto({
     nombre: cadena('Nombre canónico: el más completo con que la obra (o la biblioteca) la conoce.'),
     tipo: opcion(TIPOS_FINOS),
     formas: cadenas('TODAS las formas literales con que aparece nombrada (nombre, apellido, apodos, títulos, diminutivos), tal como se escriben.'),
     alusiones: cadenas('Expresiones literales que la aluden sin nombrarla y que la señalan sin ambigüedad en esta obra («el muchacho del helado de chocolate»).'),
-    descripcion: cadena('Quién o qué es, en una línea.'),
+    descripcion: cadena('Quién o qué es, en una línea (como mucho 20 palabras).'),
     ficticia: logico('true si es un personaje de ficción.'),
     importancia: entero('1 (de paso) a 5 (protagonista o eje).'),
     actor: cadena('En obras audiovisuales: quién la interpreta, solo si consta en el material (créditos, percepción).'),
-    analisis: cadena('Solo para importancia 4 o 5: su papel en la obra, caracterización y transformación (80-200 palabras).'),
-    evidencias: ESQUEMA_EVIDENCIAS,
   }, ['nombre', 'tipo', 'formas', 'descripcion', 'importancia'])),
 }, ['entidades']);
+
+/** El análisis de unas entidades principales: papel, caracterización y transformación, con pruebas. */
+export const ESQUEMA_ANALISIS = objeto({
+  entidades: lista(objeto({
+    nombre: cadena('El nombre canónico, tal como se pidió.'),
+    analisis: cadena('Su papel en la obra, caracterización y transformación (80-200 palabras).'),
+    evidencias: ESQUEMA_EVIDENCIAS,
+  }, ['nombre', 'analisis', 'evidencias'])),
+}, ['entidades']);
+
+/** Entidades principales por llamada de análisis y llamadas a la vez. */
+export const ANALISIS_POR_LLAMADA = 5;
+const ANALISIS_A_LA_VEZ = 4;
+/** Como mucho, cuántas entidades llevan análisis propio. */
+export const MAX_ANALIZADAS = 20;
 
 /** Lo que ya conoce la biblioteca y conviene nombrar igual (las de este documento y las más vistas). */
 export async function conocidasEnBiblioteca(sql: SQL, documento: string, limite = 250): Promise<string> {
@@ -99,20 +118,52 @@ export async function extraerEntidadesDelModelo(
     o.percepcion?.reparto.length ? `Reparto percibido (guía):\n${textoReparto(o.percepcion)}` : '',
   ].filter(Boolean).join('\n\n');
   const tramos = o.largo ? [[m.unidades[0]?.orden ?? 0, m.unidades.at(-1)?.orden ?? 0] as [number, number]] : ventanas(m, o.maxCaracteres);
-  const listas: EntidadModelo[][] = [];
-  for (const [desde, hasta] of tramos) {
-    const vistas = listas.length ? `\n\nYa vistas en tramos anteriores (mismo nombre canónico si reaparecen):\n${unirEntidades(listas).map((e) => `- ${e.nombre} (${e.tipo})`).join('\n')}` : '';
+  // Los tramos de un documento largo van a la vez: se unen por nombre canónico (la lista de la biblioteca guía a todos).
+  const listas = await enParalelo(tramos, 3, async ([desde, hasta]) => {
     const r = await llamar<{ entidades: EntidadModelo[] }>(modelo, {
-      sistema: `${REGLAS_COMUNES}\n\n${def.instrucciones}\n\nTarea: reconocer las entidades de la obra con correferencia en todo el documento: cada persona, personaje, lugar, obra, organización, objeto significativo, motivo, acontecimiento o concepto, una sola vez, con todas las formas en que aparece. Tipos que importan en esta lente, por orden: ${def.entidades.join(', ')}.`,
+      sistema: `${REGLAS_COMUNES}\n\n${def.instrucciones}\n\nTarea: reconocer las entidades de la obra con correferencia en todo el documento: cada persona, personaje, lugar, obra, organización, objeto significativo, motivo, acontecimiento o concepto, una sola vez, con todas las formas en que aparece. Tipos que importan en esta lente, por orden: ${def.entidades.join(', ')}. Solo la lista: el análisis de las principales se pide aparte.`,
       partes: [
-        { texto: `${fichaDocumento(m.documento)}${guia ? `\n\n${guia}` : ''}\n\nMaterial${o.largo ? '' : ` (unidades ${desde} a ${hasta})`}:\n\n${textoParaModelo(m, { desde, hasta, fotogramas: m.medio && !o.percepcion, maxCaracteres: o.maxCaracteres })}${vistas}` },
+        { texto: `${fichaDocumento(m.documento)}${guia ? `\n\n${guia}` : ''}\n\nMaterial${o.largo ? '' : ` (unidades ${desde} a ${hasta})`}:\n\n${textoParaModelo(m, { desde, hasta, fotogramas: m.medio && !o.percepcion, maxCaracteres: o.maxCaracteres })}` },
         { texto: 'Devuelve las entidades. Las formas, literales y completas (son las que se buscarán en el texto). Las alusiones, solo si no son ambiguas. Responde solo con el JSON.' },
       ],
-      esquema: ESQUEMA_ENTIDADES, calidad: o.calidad, maxTokens: 30_000, operacion: 'entidades',
+      esquema: ESQUEMA_ENTIDADES, calidad: o.calidad, maxTokens: 24_000, operacion: 'entidades',
     }, acumulado);
-    listas.push(r.entidades ?? []);
-  }
+    return r.entidades ?? [];
+  });
   return unirEntidades(listas);
+}
+
+/**
+ * El análisis de las entidades principales (importancia 4 o 5, hasta `MAX_ANALIZADAS`),
+ * en tandas pequeñas y a la vez, con la obra entera delante (el prefijo se repite: la
+ * caché implícita lo abarata). Devuelve el análisis y las pruebas por nombre.
+ */
+export async function analizarEntidades(
+  m: Material, l: Lente, principales: readonly Pick<EntidadModelo, 'nombre' | 'tipo' | 'descripcion'>[], modelo: ModeloComprension, acumulado: { uso: UsoModelo },
+  o: { largo: boolean; calidad: 'alta' | 'rapida'; maxCaracteres: number; percepcion?: PercepcionMedio | null },
+): Promise<Map<string, { analisis: string; evidencias: EntidadModelo['evidencias'] }>> {
+  const def = lente(l);
+  const tandas: Array<typeof principales> = [];
+  for (let i = 0; i < principales.length; i += ANALISIS_POR_LLAMADA) tandas.push(principales.slice(i, i + ANALISIS_POR_LLAMADA));
+  const material = `${fichaDocumento(m.documento)}${o.percepcion?.reparto.length ? `\n\nReparto percibido:\n${textoReparto(o.percepcion)}` : ''}\n\nMaterial:\n\n${textoParaModelo(m, { fotogramas: m.medio && !o.percepcion, maxCaracteres: o.maxCaracteres })}`;
+  const salida = new Map<string, { analisis: string; evidencias: EntidadModelo['evidencias'] }>();
+  await enParalelo(tandas, ANALISIS_A_LA_VEZ, async (tanda) => {
+    const r = await llamar<{ entidades: Array<{ nombre: string; analisis: string; evidencias?: EntidadModelo['evidencias'] }> }>(modelo, {
+      sistema: `${REGLAS_COMUNES}\n\n${def.instrucciones}\n\nTarea: el análisis de unas entidades principales de la obra (personajes, lugares, objetos o motivos): su papel, cómo se caracterizan y cómo cambian, con sus pruebas.`,
+      partes: [
+        { texto: material },
+        { texto: `Analiza estas entidades (una por entrada, con el mismo nombre):\n${tanda.map((e) => `- ${e.nombre} (${e.tipo})${e.descripcion ? `: ${e.descripcion}` : ''}`).join('\n')}\n\nResponde solo con el JSON.` },
+      ],
+      esquema: ESQUEMA_ANALISIS, calidad: o.calidad, maxTokens: 12_000, operacion: 'personajes',
+    }, acumulado);
+    for (const x of r.entidades ?? []) if (x?.nombre && x.analisis) salida.set(x.nombre.trim(), { analisis: x.analisis, evidencias: x.evidencias ?? [] });
+  });
+  return salida;
+}
+
+/** Las que merecen análisis propio: las de importancia 4 o 5, las más importantes primero. */
+export function principalesDe<T extends Pick<EntidadModelo, 'importancia'>>(ents: readonly T[]): T[] {
+  return [...ents].filter((e) => (e.importancia ?? 1) >= 4).sort((a, b) => (b.importancia ?? 1) - (a.importancia ?? 1)).slice(0, MAX_ANALIZADAS);
 }
 
 export interface EntidadResuelta extends EntidadModelo {
@@ -309,6 +360,29 @@ export async function aparicionesDePercepcion(
 /** Marca de las relaciones de reparto que pone la comprensión (en lugar del fragmento de donde sale la relación). */
 export const FRAGMENTO_REPARTO = 'comprension:reparto';
 
+/** Todo lo que puede tardar Wikidata en un paso (cada petición tiene además su propio límite). */
+export const ESPERA_TOTAL_WIKIDATA_MS = 25_000;
+
+export { conLimite };
+
+/** La caché de Wikidata de la comprensión, en la tabla `entidades_wikidata` de las funciones (30 días). */
+export function cacheWikidataSql(sql: SQL): CacheWikidata {
+  return {
+    async leer(clave) {
+      try {
+        const desde = new Date(Date.now() - 30 * 86400_000).toISOString();
+        const [f] = await sql.ejecutar<{ respuesta: string }>("SELECT respuesta FROM entidades_wikidata WHERE consulta = ? AND idioma = 'comprension' AND creada > ?", clave.slice(0, 900), desde);
+        return f ? String(f.respuesta) : null;
+      } catch { return null; }
+    },
+    async guardar(clave, valor) {
+      try {
+        await sql.ejecutar("INSERT OR REPLACE INTO entidades_wikidata (consulta, idioma, respuesta, creada) VALUES (?, 'comprension', ?, ?)", clave.slice(0, 900), valor, new Date().toISOString());
+      } catch { /* sin caché, se pregunta otra vez */ }
+    },
+  };
+}
+
 export interface Papel {
   personaje: string;
   personajeId: string;
@@ -324,19 +398,23 @@ export interface Papel {
  * enlace del actor con Wikidata.
  */
 export async function enlazarReparto(
-  sql: SQL, m: Material, ents: EntidadResuelta[], o: { fetch?: typeof fetch; wikidata?: boolean; percepcion?: PercepcionMedio | null; ahora: string },
+  sql: SQL, m: Material, ents: EntidadResuelta[], o: { fetch?: typeof fetch; wikidata?: boolean; percepcion?: PercepcionMedio | null; ahora: string; esperaWikidataMs?: number },
 ): Promise<{ papeles: Papel[]; avisos: string[] }> {
   const avisos: string[] = [];
   const buscar = buscadorPorNombre(ents);
   const candidatos: Array<{ personaje: string; actor: string; fuente: Papel['fuente']; qidActor?: string; qidPersonaje?: string }> = [];
   if (o.fetch && o.wikidata !== false && (m.documento.tipo === 'video' || m.documento.metadatos.tipoCSL === 'motion_picture' || m.documento.metadatos.tipoCSL === 'broadcast')) {
+    const f = o.fetch;
+    const cache = cacheWikidataSql(sql);
     try {
-      const qid = await buscarObraAudiovisual(o.fetch, m.documento);
-      if (qid) {
-        const papeles: PapelWikidata[] = await repartoWikidata(o.fetch, qid);
+      // Todo Wikidata, como mucho `ESPERA_TOTAL_WIKIDATA_MS` (cada petición, además, tiene la suya): es un añadido.
+      await conLimite((async () => {
+        const qid = await buscarObraAudiovisual(f, m.documento, cache);
+        if (!qid) return;
+        const papeles: PapelWikidata[] = await repartoWikidata(f, qid, ['es', 'en'], cache);
         for (const p of papeles) if (p.personaje) candidatos.push({ personaje: p.personaje.nombre, actor: p.actor.nombre, fuente: 'wikidata', qidActor: p.actor.qid, ...(p.personaje.qid ? { qidPersonaje: p.personaje.qid } : {}) });
         if (!papeles.some((p) => p.personaje)) avisos.push(`Wikidata (${qid}) tiene el reparto sin papeles: actor y personaje se unen solo con la percepción.`);
-      }
+      })(), o.esperaWikidataMs ?? ESPERA_TOTAL_WIKIDATA_MS, 'Wikidata no contestó a tiempo');
     } catch (e) {
       avisos.push(`Wikidata no respondió: ${(e as Error).message}`.slice(0, 200));
     }

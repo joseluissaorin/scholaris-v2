@@ -16,8 +16,8 @@ import { almacenDesdeEnv, catalogosDesdeEnv, cuentasDesdeEnv, emisorDesdeEnv, ge
 import { espacioNombresDe } from './indice-vectorize.js';
 import { recortadorCF } from './conversor.js';
 import { UnaVez } from '../compartido/una-vez.js';
-import { cerrarComprension, pasoEntidades, pasoFichas, pasoGlobal, pasoIndexado, pasoSegmentos, planificarComprension, type ContextoComprension, type PlanComprension } from '@scholaris/ingesta';
-import { contextoComprension, type ParamsComprension } from '../compartido/comprension.js';
+import { cerrarComprension, pasoEntidades, pasoFichas, pasoGlobal, pasoIndexado, pasoPersonajes, pasoSegmentos, planificarComprension, type ContextoComprension, type PlanComprension } from '@scholaris/ingesta';
+import { contextoComprension, registroEnConsola, type ParamsComprension } from '../compartido/comprension.js';
 import type { PasoTrabajador } from './flujo-comprension.js';
 
 export class Trabajador extends DurableObject<Env> {
@@ -105,7 +105,7 @@ export class Trabajador extends DurableObject<Env> {
   // Comprensión (Workflow `scholaris-comprension`): un objeto por paso de cada instancia.
   // -------------------------------------------------------------------------
 
-  private async contextoComprension(p: ParamsComprension): Promise<ContextoComprension> {
+  private async contextoComprension(p: ParamsComprension, limite?: number): Promise<ContextoComprension> {
     const env = this.env;
     const cuentas = cuentasDesdeEnv(env);
     const ia = await inteligenciaPara(env, cuentas, p.usuario, { sinCache: true });
@@ -118,6 +118,8 @@ export class Trabajador extends DurableObject<Env> {
       embebedor: ia.embebedor, indice: indiceDesdeEnv(env, ia), espacioNombres: espacioNombresDe(p.usuario),
       emisor: emisorDesdeEnv(env, p.usuario),
       latido: () => tarea.esperar(Date.now() + 4 * 60_000).catch(() => undefined),
+      registro: registroEnConsola(p.instancia),
+      ...(limite ? { limite } : {}),
     });
   }
 
@@ -128,16 +130,40 @@ export class Trabajador extends DurableObject<Env> {
     }), { recordar: true });
   }
 
-  /** Un paso; los reintentos se suman al que sigue en marcha y lo ya hecho consta en la procedencia. */
+  /**
+   * Un paso; los reintentos se suman al que sigue en marcha y lo ya hecho consta en la
+   * procedencia. El trabajo se acota al plazo del paso (cada llamada al modelo se corta a
+   * lo que quede): un reintento que se suma no puede quedarse esperando a algo colgado.
+   */
   async comprensionPaso(p: ParamsComprension, plan: PlanComprension, paso: PasoTrabajador, lote?: number): Promise<unknown> {
     return this.unaVez.hacer(`cmp:${p.instancia}:${paso}:${lote ?? ''}`, async () => {
-      const ctx = await this.contextoComprension(p);
-      switch (paso) {
-        case 'estructura': return pasoSegmentos(ctx, plan);
-        case 'fichas': return pasoFichas(ctx, plan, lote ?? 0);
-        case 'entidades': return pasoEntidades(ctx, plan);
-        case 'global': return pasoGlobal(ctx, plan);
-        case 'indexado': return pasoIndexado(ctx, plan);
+      const plazo = (plan.plazos as Partial<Record<PasoTrabajador, number>>)[paso] ?? 600;
+      const ctx = await this.contextoComprension(p, Date.now() + plazo * 1000 - 5_000);
+      const t0 = Date.now();
+      console.log(JSON.stringify({ que: 'comprension', instancia: p.instancia, documento: p.documento, paso, lote, estado: 'inicio', plazo }));
+      try {
+        let r: unknown;
+        switch (paso) {
+          case 'estructura': r = await pasoSegmentos(ctx, plan); break;
+          case 'fichas': r = await pasoFichas(ctx, plan, lote ?? 0); break;
+          case 'entidades': r = await pasoEntidades(ctx, plan); break;
+          case 'personajes': r = await pasoPersonajes(ctx, plan); break;
+          case 'global': r = await pasoGlobal(ctx, plan); break;
+          case 'indexado': {
+            const x = await pasoIndexado(ctx, plan);
+            // Lo que no llegó al índice dentro del plazo se reenvía desde la estantería.
+            if (x.pendientes) await this.env.COLA.send({ tipo: 'reindexar', usuario: p.usuario, documento: p.documento }, { delaySeconds: 120 }).catch(() => undefined);
+            r = x;
+            break;
+          }
+        }
+        console.log(JSON.stringify({ que: 'comprension', instancia: p.instancia, documento: p.documento, paso, lote, estado: 'fin', ms: Date.now() - t0 }));
+        return r;
+      } catch (e) {
+        // Nunca un «Error:» vacío: el Workflow y el vigilante tienen que saber qué paso y por qué.
+        const mensaje = (e as Error)?.message || (e as Error)?.name || String(e) || 'error sin mensaje';
+        console.log(JSON.stringify({ que: 'comprension', instancia: p.instancia, documento: p.documento, paso, lote, estado: 'error', ms: Date.now() - t0, error: mensaje.slice(0, 500) }));
+        throw new Error(`${paso}${lote !== undefined ? ` ${lote}` : ''}: ${mensaje}`.slice(0, 900));
       }
     });
   }

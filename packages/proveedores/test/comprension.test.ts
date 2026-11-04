@@ -34,3 +34,20 @@ describe('comprensor de Gemini', () => {
     await expect(c.generar(p)).rejects.toThrow(/JSON ilegible en global/);
   });
 });
+
+describe('comprensor de Gemini con límite', () => {
+  it('una llamada que no contesta se corta en su límite, reintentos incluidos, con un error de plazo', async () => {
+    let peticiones = 0;
+    const colgada = ((_u: string, init?: RequestInit) => {
+      peticiones++;
+      return new Promise<Response>((_, no) => init?.signal?.addEventListener('abort', () => no(Object.assign(new Error('abortada'), { name: 'AbortError' }))));
+    }) as unknown as typeof fetch;
+    const c = crearComprensorGemini(crearGemini({ clave: 'k', fetch: colgada, esperaBase: 1, timeoutMs: 600_000 }));
+    const t0 = Date.now();
+    await expect(c.generar({ sistema: 's', partes: [{ texto: 't' }], esquema: {}, calidad: 'alta', operacion: 'entidades', limiteMs: 300 }))
+      .rejects.toThrow(/sin respuesta dentro del plazo \(0 s\) en entidades/);
+    // Sin el límite, el cliente esperaba 600 s por intento y hasta cuatro intentos.
+    expect(Date.now() - t0).toBeLessThan(3000);
+    expect(peticiones).toBeLessThanOrEqual(3);
+  });
+});

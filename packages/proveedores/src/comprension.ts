@@ -23,6 +23,19 @@ export interface PeticionComprensionGemini {
   calidad: 'alta' | 'rapida';
   maxTokens?: number;
   operacion: string;
+  /**
+   * Tiempo máximo de la llamada entera (reintentos incluidos), en milisegundos. La comprensión
+   * lo deriva del plazo de su paso: una llamada que no llega no puede dejar el paso colgado.
+   */
+  limiteMs?: number;
+}
+
+/** Una llamada que se quedó sin tiempo. No se reintenta dentro del mismo paso (el mensaje dice «plazo»). */
+export class ErrorPlazoComprension extends ErrorProveedor {
+  constructor(modelo: string, operacion: string, ms: number) {
+    super('gemini', `${modelo}: sin respuesta dentro del plazo (${Math.round(ms / 1000)} s) en ${operacion}`);
+    this.name = 'ErrorPlazoComprension';
+  }
 }
 
 export interface OpcionesComprensor {
@@ -69,7 +82,15 @@ export function crearComprensorGemini(cliente: ClienteGemini, o: OpcionesCompren
           thinkingConfig: configPensamiento(p.calidad === 'alta' ? o.pensamientoAlto ?? 'medium' : o.pensamientoRapido ?? 'low'),
         },
       };
-      const r = await cliente.generar(id, cuerpo, 'generar', {});
+      // Con límite: una señal para la llamada entera (también corta los reintentos) y el mismo tiempo por intento.
+      const senal = p.limiteMs ? AbortSignal.timeout(p.limiteMs) : undefined;
+      let r: Awaited<ReturnType<ClienteGemini['generar']>>;
+      try {
+        r = await cliente.generar(id, cuerpo, 'generar', {}, p.limiteMs ? { timeoutMs: p.limiteMs, intentos: 3, ...(senal ? { signal: senal } : {}) } : undefined);
+      } catch (e) {
+        if (senal?.aborted || (e as Error)?.name === 'AbortError') throw new ErrorPlazoComprension(id, p.operacion, p.limiteMs ?? 0);
+        throw e;
+      }
       if (r.fin === 'MAX_TOKENS') throw new ErrorProveedor('gemini', `${id}: salida cortada en ${p.operacion} (MAX_TOKENS)`);
       let json: T;
       try { json = extraerJSON<T>(r.texto); } catch (e) {

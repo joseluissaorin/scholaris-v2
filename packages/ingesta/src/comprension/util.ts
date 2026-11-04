@@ -39,3 +39,9 @@ export function localizadorSegmentos(m: Material, segmentos: readonly Segmento[]
     },
   };
 }
+
+/** Una promesa con tiempo máximo: si no llega, error (la promesa sigue, pero ya no bloquea a nadie). */
+export function conLimite<T>(p: Promise<T>, ms: number, mensaje: string): Promise<T> {
+  let reloj: ReturnType<typeof setTimeout> | undefined;
+  return Promise.race([p, new Promise<never>((_, no) => { reloj = setTimeout(() => no(new Error(mensaje)), ms); })]).finally(() => { if (reloj !== undefined) clearTimeout(reloj); });
+}

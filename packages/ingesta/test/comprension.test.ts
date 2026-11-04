@@ -88,6 +88,14 @@ function modeloFalso(respuestas: Partial<Record<string, (p: PeticionComprension,
   };
 }
 
+/** El análisis de las principales que pide una tanda de «personajes» («- Diego (personaje): …»), sacado del reparto de prueba. */
+function analisisDe(ents: Array<{ nombre: string; descripcion?: string; analisis?: string; evidencias?: unknown[] }>) {
+  return (_p: PeticionComprension, texto: string) => {
+    const pedidas = [...texto.split('Analiza estas entidades')[1]!.matchAll(/^- (.+?) \(/gm)].map((x) => x[1]!);
+    return { entidades: ents.filter((e) => pedidas.includes(e.nombre)).map((e) => ({ nombre: e.nombre, analisis: e.analisis ?? e.descripcion ?? '', evidencias: e.evidencias ?? [] })) };
+  };
+}
+
 /** Los ids de segmento que pide una tanda de fichas («s1 (escena…»). */
 const pedidos = (texto: string) => [...texto.split('Haz la ficha de estos segmentos')[1]!.matchAll(/^(s\d+) \(/gm)].map((x) => x[1]!);
 
@@ -119,6 +127,7 @@ const respuestasCuento = {
       { nombre: 'José Lezama Lima', tipo: 'persona', formas: ['Lezama'], descripcion: 'Poeta cubano.', importancia: 3 },
     ],
   }),
+  personajes: (p: PeticionComprension, texto: string) => analisisDe(respuestasCuento.entidades().entidades)(p, texto),
   global: () => ({
     texto: 'El relato narra, desde la focalización del narrador, el paso de la desconfianza a la amistad.', resumen_es: 'Amistad entre Diego y David.', resumen_en: 'Friendship between Diego and David.',
     sinopsis: 'David conoce a Diego en Coppelia…', contexto: [{ dato: 'Publicado en 1991 y llevado al cine en 1993.', externo: true }],
@@ -179,8 +188,8 @@ describe('comprensión: un cuento', () => {
     expect(e.estado).toBe('hecho');
     expect(e.lentes).toEqual(['narrativa']);
     expect(e.version).toBe('comprension@2 narrativa@1');
-    expect(Object.keys(e.pasos).sort()).toEqual(['entidades', 'estructura', 'fichas:0', 'global', 'indexado']);
-    expect(e.usd).toBeCloseTo(0.04, 5);
+    expect(Object.keys(e.pasos).sort()).toEqual(['entidades', 'estructura', 'fichas:0', 'global', 'indexado', 'personajes']);
+    expect(e.usd).toBeCloseTo(0.05, 5);
     expect(e.modelo).toContain('falso-alto');
 
     // Estructura: tres escenas en preorden, ancladas a sus palabras de inicio y fin.
@@ -316,6 +325,7 @@ describe('comprensión: una película con su percepción', () => {
         { nombre: 'Vivian', tipo: 'personaje', formas: ['Vivian'], descripcion: 'Novia de David', importancia: 3 },
       ],
     }),
+    personajes: (p: PeticionComprension, texto: string) => analisisDe(respuestasPelicula.entidades().entidades)(p, texto),
     global: () => ({
       texto: 'Película sobre la amistad.', resumen_es: 'r', resumen_en: 'r', sinopsis: 's', contexto: [],
       temas: [], motivos: [{ nombre: 'el helado de fresa', descripcion: 'd', formas: ['fresa'], apariciones: [{ t: 610, apoya: 'la copa de helado' }] }],
@@ -475,7 +485,8 @@ describe('comprensión: una película con su percepción', () => {
     expect(e.pasos.estructura!.detalle).toMatchObject({ reutilizada: 1 });
     expect(cuenta('fichas')).toBe(antes.fichas + 1);
     expect(pedidos(modelo.llamadas.filter((p) => p.operacion === 'fichas').at(-1)!.partes.map((x) => ('texto' in x ? x.texto : '')).join('\n'))).toEqual(['s0', 's1']);
-    expect(e.pasos['fichas:0']!.detalle).toMatchObject({ reutilizadas: 3 });
+    expect(e.pasos['fichas:0']!.detalle).toMatchObject({ reutilizadas: 2 });
+    expect(e.pasos['fichas:1']!.detalle).toMatchObject({ reutilizadas: 1 });
     expect(cuenta('global')).toBe(antes.global + 1);
     expect(await leerFichas(sql, { documento: 'pelicula', clase: 'escena' })).toHaveLength(3);
     // Sin cambios, nada.

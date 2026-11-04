@@ -2,7 +2,7 @@
  * Workflow `Comprension` (`scholaris-comprension`): la capa de comprensión de un
  * documento ya «listo» (docs/COMPRENSION.md). Pasos durables:
  *
- *   plan → estructura → [fichas-0 … fichas-n ‖ entidades] → global → indexado → cerrar
+ *   plan → estructura → [fichas-0 … fichas-n ‖ entidades → personajes] → global → indexado → cerrar
  *
  * Cada paso corre en su propio Trabajador (su cupo de conexiones) y pasa por
  * `UnaVez`: si el paso caduca, el trabajo sigue en el objeto y el reintento se
@@ -17,12 +17,13 @@ import { enParalelo } from '@scholaris/nucleo';
 import type { PlanComprension } from '@scholaris/ingesta';
 import type { ParamsComprension } from '../compartido/comprension.js';
 import type { Env } from './env.js';
+import { conLatidoAcotado } from '../compartido/latido.js';
 
 const REINTENTOS = { limit: 4, delay: '20 seconds', backoff: 'exponential' } as const;
 /** Tandas de fichas a la vez (cada una es una llamada larga al modelo). */
 const TANDAS_A_LA_VEZ = 6;
 
-export type PasoTrabajador = 'estructura' | 'fichas' | 'entidades' | 'global' | 'indexado';
+export type PasoTrabajador = 'estructura' | 'fichas' | 'entidades' | 'personajes' | 'global' | 'indexado';
 
 export class FlujoComprension extends WorkflowEntrypoint<Env, ParamsComprension> {
   async run(evento: Readonly<WorkflowEvent<ParamsComprension>>, step: WorkflowStep): Promise<unknown> {
@@ -30,16 +31,13 @@ export class FlujoComprension extends WorkflowEntrypoint<Env, ParamsComprension>
     const trabajador = (clave: string) => this.env.TRABAJADOR.getByName(`${p.instancia}:${clave}`);
     // El vigilante mira la tarea «tarea:<usuario>:<instancia>»: cada latido le dice que seguimos.
     const tarea = this.env.TAREA.getByName(`tarea:${p.usuario}:${p.instancia}`);
-    const vivo = (minutos: number) => tarea.esperar(Date.now() + minutos * 60_000).catch(() => undefined);
-    const conLatido = async <T>(minutos: number, fn: () => Promise<T>): Promise<T> => {
-      await vivo(minutos);
-      const latido = setInterval(() => { void vivo(4); }, 60_000);
-      try { return await fn(); } finally { clearInterval(latido); }
-    };
+    const vivo = (hasta: number) => tarea.esperar(hasta);
+    // Mientras el paso espera al Trabajador, late, pero nunca más allá de su plazo (ver compartido/latido.ts).
+    const conLatido = <T>(segundos: number, fn: () => Promise<T>): Promise<T> => conLatidoAcotado(vivo, segundos, fn);
     const opciones = (segundos: number) => ({ retries: REINTENTOS, timeout: `${Math.max(120, Math.round(segundos))} seconds` as const });
     // Los resultados de los pasos son JSON pequeño (el plan, unos contadores).
     const paso = async (nombre: string, segundos: number, fn: () => Promise<unknown>): Promise<unknown> =>
-      step.do(nombre, opciones(segundos), async () => JSON.parse(JSON.stringify(await conLatido(Math.ceil(segundos / 60) + 4, fn) ?? null)) as Record<string, never>);
+      step.do(nombre, opciones(segundos), async () => JSON.parse(JSON.stringify(await conLatido(segundos, fn) ?? null)) as Record<string, never>);
 
     let plan: PlanComprension | null = null;
     try {
@@ -50,7 +48,11 @@ export class FlujoComprension extends WorkflowEntrypoint<Env, ParamsComprension>
         await Promise.all([
           enParalelo(Array.from({ length: lotes }, (_, i) => i), TANDAS_A_LA_VEZ, (i) =>
             paso(`fichas-${i}`, pl.plazos.fichas, () => trabajador(`fichas-${i}`).comprensionPaso(p, pl, 'fichas', i))),
-          paso('entidades', pl.plazos.entidades, () => trabajador('entidades').comprensionPaso(p, pl, 'entidades')),
+          (async () => {
+            await paso('entidades', pl.plazos.entidades, () => trabajador('entidades').comprensionPaso(p, pl, 'entidades'));
+            // El análisis de las principales, aparte: tandas pequeñas y a la vez (un plan de antes no trae su plazo).
+            await paso('personajes', pl.plazos.personajes ?? pl.plazos.entidades, () => trabajador('personajes').comprensionPaso(p, pl, 'personajes'));
+          })(),
         ]);
         await paso('global', pl.plazos.global, () => trabajador('global').comprensionPaso(p, pl, 'global'));
         await paso('indexado', pl.plazos.indexado, () => trabajador('indexado').comprensionPaso(p, pl, 'indexado'));

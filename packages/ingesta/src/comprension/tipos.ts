@@ -40,6 +40,8 @@ export interface PeticionComprension {
   maxTokens?: number;
   /** Para la procedencia: qué paso la pide. */
   operacion: string;
+  /** Tiempo máximo de la llamada entera, reintentos incluidos (lo pone el paso según su plazo). */
+  limiteMs?: number;
 }
 
 /**
@@ -68,7 +70,22 @@ export interface ProgresoComprension {
   mensaje: string;
 }
 
-export type PasoComprension = 'plan' | 'estructura' | 'fichas' | 'entidades' | 'global' | 'indexado' | 'fin';
+export type PasoComprension = 'plan' | 'estructura' | 'fichas' | 'entidades' | 'personajes' | 'global' | 'indexado' | 'fin';
+
+/** Un apunte del diario de un paso (para `wrangler tail` y los registros locales). */
+export interface RegistroComprension {
+  documento: string;
+  paso: string;
+  /** Qué parte del paso: «modelo:entidades», «resolver», «wikidata», «apariciones»… */
+  sub: string;
+  estado: 'inicio' | 'fin' | 'error';
+  ms?: number;
+  modelo?: string;
+  tokensEntrada?: number;
+  tokensSalida?: number;
+  usd?: number;
+  detalle?: Record<string, unknown>;
+}
 
 export interface ContextoComprension {
   /** La estantería (o una base SPDF con el esquema de las funciones). */
@@ -86,6 +103,15 @@ export interface ContextoComprension {
   alProgreso?(p: ProgresoComprension): Promise<void> | void;
   /** Reloj inyectable (pruebas). */
   ahora?(): Date;
+  /**
+   * Hasta cuándo puede trabajar el paso (milisegundos de época). Cada llamada al modelo
+   * se acota a lo que quede: un paso no puede quedarse colgado más allá de su plazo.
+   */
+  limite?: number;
+  /** Diario de cada parte del paso (la plataforma lo saca por la consola). */
+  registro?(r: RegistroComprension): void;
+  /** Latido de trabajo real: se llama al empezar y al acabar cada parte, y cada minuto mientras el modelo responde. */
+  latido?(): Promise<void> | void;
 }
 
 export interface OpcionesComprension {
@@ -116,6 +142,7 @@ export interface PlazosComprension {
   estructura: number;
   fichas: number;
   entidades: number;
+  personajes: number;
   global: number;
   indexado: number;
 }

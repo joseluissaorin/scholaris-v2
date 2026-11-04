@@ -43,6 +43,14 @@ export async function leerPercepcionAlmacen(almacen: Pick<AlmacenAmpliado, 'byte
   } catch { return null; }
 }
 
+/**
+ * Diario de la comprensión en la consola: una línea JSON por parte de cada paso
+ * (`wrangler tail` enseña así qué está haciendo un paso largo y cuánto lleva).
+ */
+export function registroEnConsola(instancia: string): NonNullable<ContextoComprension['registro']> {
+  return (r) => { console.log(JSON.stringify({ que: 'comprension', instancia, ...r })); };
+}
+
 /** El modelo de comprensión con la clave de Gemini del usuario o de la instancia (sin clave, no hay). */
 export function modeloComprension(gemini: ConfigGemini | undefined): ModeloComprension | null {
   if (!gemini?.clave) return null;
@@ -61,6 +69,10 @@ export interface DependenciasContexto {
   emisor?: Emisor<EventoTiempoReal>;
   /** Latido para el vigilante (cada aviso de progreso lo renueva). */
   latido?(): Promise<void>;
+  /** Hasta cuándo puede trabajar el paso (milisegundos de época): las llamadas al modelo se acotan a ello. */
+  limite?: number;
+  /** Diario de cada parte del paso (por defecto, nada). */
+  registro?: ContextoComprension['registro'];
 }
 
 export function contextoComprension(d: DependenciasContexto): ContextoComprension {
@@ -71,6 +83,9 @@ export function contextoComprension(d: DependenciasContexto): ContextoComprensio
     ...(d.indice ? { indice: d.indice } : {}),
     ...(d.espacioNombres ? { espacioNombres: d.espacioNombres } : {}),
     fetch: globalThis.fetch.bind(globalThis),
+    ...(d.limite ? { limite: d.limite } : {}),
+    ...(d.registro ? { registro: d.registro } : {}),
+    ...(d.latido ? { latido: d.latido } : {}),
     percepcion: (documento) => leerPercepcionAlmacen(d.almacen, d.usuario, documento),
     alProgreso: async (p: ProgresoComprension) => {
       await d.latido?.();

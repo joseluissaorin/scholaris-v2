@@ -127,7 +127,7 @@ export interface ClienteGemini {
   /** Estado de un fichero de la Files API (`files/abc123`); null si ya no existe. */
   archivo(nombre: string): Promise<ArchivoGemini | null>;
   /** Llamada cruda a generateContent (para el banco y para usos especiales). */
-  generar(modelo: string, cuerpo: Record<string, unknown>, operacion: UsoProveedor['operacion'], extra?: Partial<UsoProveedor>): Promise<{ texto: string; fin?: string; uso: UsoProveedor }>;
+  generar(modelo: string, cuerpo: Record<string, unknown>, operacion: UsoProveedor['operacion'], extra?: Partial<UsoProveedor>, opciones?: OpcionesLlamada): Promise<{ texto: string; fin?: string; uso: UsoProveedor }>;
 }
 
 /** Un fichero de la Files API (vive 48 h). */
@@ -151,6 +151,12 @@ export interface SubidaPorTrozos {
   trozo?: number;
   alAvanzar?(enviados: number, total: number): void;
 }
+
+/**
+ * Lo que una llamada concreta puede ajustar de las opciones del cliente: tiempo por intento,
+ * intentos y una señal para cortarla (la comprensión las acota al plazo de su paso).
+ */
+export type OpcionesLlamada = Pick<OpcionesComunes, 'timeoutMs' | 'intentos' | 'signal'>;
 
 export interface OpcionesLectorGemini extends OpcionesTranscripcion {
   modelo?: string;
@@ -236,14 +242,17 @@ export function crearGemini(config: ConfigGemini): ClienteGemini {
   /** «modelo:nivel pedido» → nivel que el modelo acepta de verdad. */
   const pensamientoAceptado = new Map<string, NivelPensamiento | null>();
 
-  const opcionesPeticion = (timeoutMs?: number): OpcionesComunes => ({ ...config, ...(timeoutMs ? { timeoutMs } : {}) });
+  const opcionesPeticion = (timeoutMs?: number, o: OpcionesLlamada = {}): OpcionesComunes => ({
+    ...config, ...(timeoutMs ? { timeoutMs } : {}),
+    ...(o.timeoutMs ? { timeoutMs: o.timeoutMs } : {}), ...(o.intentos ? { intentos: o.intentos } : {}), ...(o.signal ? { signal: o.signal } : {}),
+  });
 
   /** Lectura y redacción rápida: sin pensar. Flash-Lite usa «minimal»; Flash, presupuesto 0. */
   function nivelPorDefecto(modelo: string): NivelPensamiento {
     return /lite/.test(modelo) ? 'minimal' : 'ninguno';
   }
 
-  async function generar(modelo: string, cuerpo: Record<string, unknown>, operacion: UsoProveedor['operacion'], extra: Partial<UsoProveedor> = {}, timeoutMs?: number) {
+  async function generar(modelo: string, cuerpo: Record<string, unknown>, operacion: UsoProveedor['operacion'], extra: Partial<UsoProveedor> = {}, timeoutMs?: number, llamada: OpcionesLlamada = {}) {
     const t0 = ahora();
     const gc = { ...((cuerpo.generationConfig as Record<string, unknown>) ?? {}) };
     const nivelPedido = nivelDe(gc.thinkingConfig);
@@ -253,7 +262,7 @@ export function crearGemini(config: ConfigGemini): ClienteGemini {
     }
     const llamar = (c: Record<string, unknown>) => limitar(() => pedir<RespuestaGenerar>({
       proveedor: 'gemini', url: `${base}/v1beta/models/${modelo}:generateContent`, cabeceras, cuerpo: c,
-    }, opcionesPeticion(timeoutMs)));
+    }, opcionesPeticion(timeoutMs, llamada)));
     let r: RespuestaGenerar | undefined;
     // Algunos modelos no admiten ciertos niveles de pensamiento («minimal» en Flash, presupuesto 0 en otros):
     // se baja por la escalera ninguno → minimal → low → sin configuración, y se recuerda.
@@ -721,7 +730,7 @@ export function crearGemini(config: ConfigGemini): ClienteGemini {
 
   return {
     contador, lector, embebedor, redactor, transcriptor, lotes, subirArchivo, subirArchivoPorTrozos, archivo,
-    generar: (modelo, cuerpo, operacion, extra) => generar(modelo, cuerpo, operacion, extra),
+    generar: (modelo, cuerpo, operacion, extra, opciones) => generar(modelo, cuerpo, operacion, extra, undefined, opciones),
   };
 }
 

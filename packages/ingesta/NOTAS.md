@@ -73,7 +73,8 @@ La capa de docs/COMPRENSION.md, con las mismas reglas: pasos sobre puertos que r
 | plan | `planificarComprension` | estado «en_marcha» (fila `comprension` de la procedencia); elige lentes, plazos y presupuesto |
 | estructura | `pasoSegmentos` | `segmentos` (y `secciones` si el documento no tenía índice); fichas de plano si hay percepción |
 | fichas *i* | `pasoFichas` | fichas de los segmentos de la tanda *i* (`lotesDeFichas`, deterministas) |
-| entidades | `pasoEntidades` | entidades del grafo (resolutor de @scholaris/funciones), `apariciones`, «X interpreta a Y», fichas de entidad |
+| entidades | `pasoEntidades` | la lista de entidades (sin análisis), su resolución en el grafo (@scholaris/funciones), `apariciones`, «X interpreta a Y» |
+| personajes | `pasoPersonajes` | fichas de entidad: el análisis de las principales en tandas de cinco, a la vez |
 | global | `pasoGlobal` | ficha global por lente; temas y motivos como entidades con todas sus apariciones |
 | indexado | `pasoIndexado` | un vector por ficha (`objetivo: 'ficha'`) en la estantería y en el índice |
 
@@ -81,3 +82,14 @@ La capa de docs/COMPRENSION.md, con las mismas reglas: pasos sobre puertos que r
 - Rehacer: con otra versión de lente o `forzar`, de cero. Con la misma versión y otro material (transcripción reparada, percepción nueva) o tras un error, por partes: la estructura de un medio con la misma percepción se reancla por tiempo y las fichas cuya huella de entrada (`huellaEntradaSegmento`) no cambió se aprovechan.
 - Anclaje: el modelo cita «u + cita literal» y aquí se busca (sin tildes ni puntuación, con ventanas para las erratas del OCR); se guarda la cita del material con sus `caracteres` NFC. Lo que no aparece no se guarda (`citasNoVerificadas`).
 - Medios: los tramos sin transcripción se dicen en el material y en cada ficha (`datos.transcripcion`); quién habla lo decide la percepción (`m.voces`) cuando la hay.
+
+## Plazos: ningún paso se queda colgado
+
+El 4-11-2026 el paso de entidades del cuento caducó tres veces seguidas en producción (plazo de 449 s). La causa: una sola llamada a gemini-4-argon pedía la lista de entidades con el análisis y las pruebas de las principales, unos 26 000 tokens de salida (cerca de su tope de 32 768) y más de cuatro minutos medidos en local, a veces más de siete. Sin límite por llamada (el cliente esperaba 600 s por intento, con reintentos), y como `UnaVez` suma los reintentos del paso al trabajo en curso, los reintentos tampoco podían terminar. El latido del Workflow (un `setInterval` sin fin) tapaba al vigilante.
+
+- La lista de entidades va sin análisis (unos 11 000 tokens, 95 s medidos) y el análisis de las principales, aparte (`pasoPersonajes`), en tandas de cinco a la vez (40-70 s cada una).
+- Cada llamada al modelo se acota a lo que queda del plazo del paso (`ctx.limite`, `modeloDelPaso`, `limiteMs` hasta el adaptador de Gemini, que corta también los reintentos). Sin tiempo para una llamada, `ErrorPlazo`, que no se reintenta dentro del paso.
+- Si un intento se quedó sin tiempo, el siguiente intento del paso va con el modelo rápido (`calidadDelPaso`): medido el 4-11-2026, la misma lista de 6 600 tokens tardó 95 s sola y 278 s con dos tandas de fichas a la vez; la latencia de Gemini no se puede prever.
+- Wikidata: 8 s por petición, 25 s en total y caché en `entidades_wikidata`. El índice: cada envío, acotado; lo que no llegue queda pendiente y se reenvía por la cola.
+- El latido del Workflow se calla al llegar al plazo (`compartido/latido.ts`); el de trabajo real lo da el Trabajador, al empezar y acabar cada parte y cada minuto mientras el modelo responde.
+- Diario: cada parte de cada paso deja una línea JSON (`{"que":"comprension",…}`) que `wrangler tail` enseña. En local, `comprender-local.ts --como-produccion` corre los pasos con sus plazos.
