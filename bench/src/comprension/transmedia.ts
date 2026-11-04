@@ -16,17 +16,21 @@ import type { Alineacion, Ficha, LadoAlineacion, Relacion } from '@scholaris/nuc
 import type { ModeloJuez } from './modelo.js';
 import type { AnclaRubrica, Banco, PuntoRubrica } from './tipos.js';
 
-/** ¿Cae un lado de una alineación (o una prueba) en un ancla de la rúbrica? */
-export function caeEn(l: Pick<LadoAlineacion, 'documento' | 'ancla' | 'anclaFin'>, a: AnclaRubrica, margen = 15): boolean {
+/**
+ * ¿Cae un lado de una alineación (o una prueba) en un ancla de la rúbrica? Solo los
+ * lados estrechos cuentan (un pasaje de hasta dos páginas o de hasta tres minutos):
+ * una escena añadida entera no «cubre» cada detalle que pase dentro.
+ */
+export function caeEn(l: Pick<LadoAlineacion, 'documento' | 'ancla' | 'anclaFin'>, a: AnclaRubrica, margen = 20): boolean {
   if (l.documento !== a.documento) return false;
   if (l.ancla.tipo === 'pagina' && a.fisica !== undefined) {
     const p0 = l.ancla.fisica, p1 = l.anclaFin?.tipo === 'pagina' ? l.anclaFin.fisica : p0;
-    return p0 <= a.fisica && a.fisica <= p1;
+    return p1 - p0 <= 1 && p0 <= a.fisica && a.fisica <= p1;
   }
   if (l.ancla.tipo === 'tiempo' && a.t0 !== undefined) {
     const t0 = l.ancla.t0, t1 = l.anclaFin?.tipo === 'tiempo' ? l.anclaFin.t1 : l.ancla.t1;
     const b0 = a.t0, b1 = a.t1 ?? a.t0;
-    return t0 < b1 + margen && t1 > b0 - margen;
+    return t1 - t0 <= 180 && t0 < b1 + margen && t1 > b0 - margen;
   }
   return false;
 }
@@ -36,7 +40,9 @@ export interface CoberturaPunto {
   punto: string;
   afirmacion: string;
   documentos: string[];
-  /** Alineaciones que caen en las anclas del punto (en todas sus obras de la relación). */
+  /** El punto tiene anclas en las dos obras (una comparación). */
+  comparativo: boolean;
+  /** Alineaciones finas que caen en las anclas del punto (en todas sus obras de la relación). */
   alineaciones: string[];
   /** Pruebas de la ficha de la relación que caen en sus anclas. */
   ficha: number;
@@ -50,8 +56,8 @@ export function puntosDeLaRelacion(banco: Banco, rel: Pick<Relacion, 'origen' | 
   const docs = new Set([rel.origen, rel.destino]);
   const salida: Array<{ pregunta: string; punto: PuntoRubrica }> = [];
   for (const q of banco.preguntas) {
-    if (!q.documentos.some((d) => docs.has(d))) continue;
-    if (!q.categorias.includes('transmedia') && !q.documentos.every((d) => docs.has(d))) continue;
+    // Las preguntas que comparan las dos obras (no las de una sola, ni las de otras de la biblioteca).
+    if (!q.categorias.includes('transmedia') || !q.documentos.some((d) => docs.has(d))) continue;
     for (const p of q.rubrica.puntos) {
       if (!p.anclas.length || !p.anclas.every((a) => docs.has(a.documento))) continue;
       salida.push({ pregunta: q.id, punto: p });
@@ -63,12 +69,12 @@ export function puntosDeLaRelacion(banco: Banco, rel: Pick<Relacion, 'origen' | 
 export function cobertura(banco: Banco, rel: Relacion, alineaciones: readonly Alineacion[], ficha: Ficha | null): CoberturaPunto[] {
   return puntosDeLaRelacion(banco, rel).map(({ pregunta, punto }) => {
     const docs = [...new Set(punto.anclas.map((a) => a.documento))];
-    const casan = alineaciones.filter((x) => docs.every((d) => {
+    const casan = alineaciones.filter((x) => !x.id.includes(':g') && docs.every((d) => {
       const lado = x.a?.documento === d ? x.a : x.b?.documento === d ? x.b : undefined;
       return !!lado && punto.anclas.filter((a) => a.documento === d).some((a) => caeEn(lado, a));
     }));
     const deFicha = (ficha?.evidencias ?? []).filter((e) => punto.anclas.some((a) => caeEn(e, a))).length;
-    return { pregunta, punto: punto.id, afirmacion: punto.afirmacion, documentos: docs, alineaciones: casan.map((x) => x.id), ficha: deFicha, cubierto: casan.length > 0 };
+    return { pregunta, punto: punto.id, afirmacion: punto.afirmacion, documentos: docs, comparativo: docs.length > 1, alineaciones: casan.map((x) => x.id), ficha: deFicha, cubierto: casan.length > 0 };
   });
 }
 
@@ -95,6 +101,8 @@ export interface InformeTransmedia {
   relacion: string;
   puntos: number;
   cubiertos: number;
+  /** Los puntos que comparan las dos obras (anclas en las dos), y cuántos tienen una alineación fina que une sus dos anclas. */
+  comparativos: { puntos: number; cubiertos: number; si: number; parcial: number };
   juez?: { si: number; parcial: number; no: number; usd: number };
   porPregunta: Record<string, { puntos: number; cubiertos: number; si?: number }>;
   detalle: CoberturaPunto[];
@@ -125,8 +133,10 @@ export async function informeTransmedia(dir: string, banco: Banco, juez: ModeloJ
       x.puntos++; if (c.cubierto) x.cubiertos++; if (c.juez === 'si') x.si = (x.si ?? 0) + 1;
       porPregunta[c.pregunta] = x;
     }
+    const comp = detalle.filter((c) => c.comparativo);
     informes.push({
       relacion: rel.id, puntos: detalle.length, cubiertos: detalle.filter((c) => c.cubierto).length, porPregunta, detalle,
+      comparativos: { puntos: comp.length, cubiertos: comp.filter((c) => c.cubierto).length, si: comp.filter((c) => c.juez === 'si').length, parcial: comp.filter((c) => c.juez === 'parcial').length },
       ...(juez ? { juez: { si: detalle.filter((c) => c.juez === 'si').length, parcial: detalle.filter((c) => c.juez === 'parcial').length, no: detalle.filter((c) => c.juez === 'no').length, usd } } : {}),
     });
   }

@@ -201,7 +201,8 @@ async function transmedia(args: string[]): Promise<void> {
     j = juezConCache(juezGemini({ clave, modelo: opcion(args, '--juez') ?? 'gemini-3.8-flash' }), join(DIR_DATOS, 'cache-juez-transmedia'));
   }
   for (const i of await informeTransmedia(dir, banco, j)) {
-    console.log(`${i.relacion}: ${i.cubiertos}/${i.puntos} puntos con alineación en sus anclas${i.juez ? `; juez: ${i.juez.si} sí, ${i.juez.parcial} parcial, ${i.juez.no} no (${i.juez.usd.toFixed(3)} USD)` : ''}`);
+    console.log(`${i.relacion}: ${i.cubiertos}/${i.puntos} puntos con una alineación fina en sus anclas${i.juez ? `; juez: ${i.juez.si} sí, ${i.juez.parcial} parcial, ${i.juez.no} no (${i.juez.usd.toFixed(3)} USD)` : ''}`);
+    console.log(`  comparativos (anclas en las dos obras): ${i.comparativos.cubiertos}/${i.comparativos.puntos} unidos por una alineación fina; juez: ${i.comparativos.si} sí, ${i.comparativos.parcial} parcial`);
     for (const [q, x] of Object.entries(i.porPregunta)) console.log(`  ${q}: ${x.cubiertos}/${x.puntos}${x.si !== undefined ? ` (sí ${x.si})` : ''}`);
   }
 }
