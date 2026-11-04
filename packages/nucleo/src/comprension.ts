@@ -254,3 +254,89 @@ export interface Alineacion {
 
 /** Objetivos de un vector además de los de la capa literal. */
 export type ObjetivoVectorComprension = 'ficha' | 'entidad';
+
+// ---------------------------------------------------------------------------
+// Percepción: lo que un modelo multimodal ve y oye al recorrer una obra entera
+// (docs/COMPRENSION.md, «Ingesta», paso 1). La produce la percepción
+// (packages/ingesta/src/percepcion) y la consume la comprensión
+// (packages/ingesta/src/comprension). Tiempos en segundos desde el inicio.
+// ---------------------------------------------------------------------------
+
+/** Algo o alguien localizado en un fotograma: región en un instante. */
+export interface Localizado {
+  nombre: string;
+  region?: Region;
+  instante?: number;
+  /** Qué hace (personas) o qué significa en la obra (objetos), si se ve. */
+  nota?: string;
+}
+
+/** Un plano: de corte a corte. */
+export interface PlanoPercibido {
+  t0: number;
+  t1: number;
+  /** Gran plano general, plano general, plano entero, americano, medio, medio corto, primer plano, primerísimo, detalle. */
+  escala?: string;
+  /** Normal, picado, contrapicado, cenital, nadir, aberrante. */
+  angulacion?: string;
+  /** Fija, panorámica, travelling, grúa, cámara en mano, zoom, steadicam. */
+  movimiento?: string;
+  /** Quién domina el encuadre, profundidad de campo, líneas, marcos dentro del marco. */
+  composicion?: string;
+  luz?: string;
+  color?: string;
+  personas: Localizado[];
+  objetos: Localizado[];
+  textoEnPantalla?: string;
+  descripcion: string;
+}
+
+export interface SonidoPercibido {
+  t0: number;
+  t1: number;
+  clase: 'musica' | 'cancion' | 'silencio' | 'ambiente' | 'efecto' | 'voz_fuera' | 'otro';
+  /** Diegético (suena en el mundo de la obra) o no. */
+  diegetico?: boolean;
+  descripcion: string;
+  /** Obra identificada (canción, pieza), si se reconoce. */
+  obra?: string;
+}
+
+/** Una escena (o bloque, en audio): unidad de lugar, tiempo y acción. */
+export interface EscenaPercibida {
+  t0: number;
+  t1: number;
+  titulo: string;
+  lugar?: string;
+  /** Día, noche, época, si se sabe. */
+  tiempo?: string;
+  personas: string[];
+  accion: string;
+  dialogoClave: Array<{ t: number; hablante?: string; texto: string }>;
+  sonido: SonidoPercibido[];
+  planos: PlanoPercibido[];
+  /** Montaje respecto a lo anterior: corte, fundido, elipsis, montaje paralelo, analepsis… */
+  transicion?: string;
+  notas?: string;
+}
+
+/** Quién es quién: lo que permite reconocer a cada persona por la imagen y por la voz. */
+export interface PersonaPercibida {
+  nombre: string;
+  /** Personaje o persona real. */
+  ficticia?: boolean;
+  actor?: string;
+  descripcionVisual?: string;
+  voz?: string;
+}
+
+/** La percepción completa de una obra de audio o vídeo. */
+export interface PercepcionMedio {
+  documento: string;
+  modelo: string;
+  version: string;
+  duracion: number;
+  reparto: PersonaPercibida[];
+  escenas: EscenaPercibida[];
+  avisos: string[];
+}
