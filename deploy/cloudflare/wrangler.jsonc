@@ -57,7 +57,9 @@
   ],
 
   "workflows": [
-    { "binding": "INGESTA", "name": "scholaris-ingesta", "class_name": "FlujoIngesta" }
+    { "binding": "INGESTA", "name": "scholaris-ingesta", "class_name": "FlujoIngesta" },
+    // La comprensión de cada documento ya listo (docs/COMPRENSION.md).
+    { "binding": "COMPRENSION", "name": "scholaris-comprension", "class_name": "FlujoComprension" }
   ],
 
   "d1_databases": [
@@ -134,7 +136,8 @@
         }
       ],
       "workflows": [
-        { "binding": "INGESTA", "name": "scholaris-produccion-ingesta", "class_name": "FlujoIngesta" }
+        { "binding": "INGESTA", "name": "scholaris-produccion-ingesta", "class_name": "FlujoIngesta" },
+        { "binding": "COMPRENSION", "name": "scholaris-produccion-comprension", "class_name": "FlujoComprension" }
       ],
       "d1_databases": [
         { "binding": "DB", "database_name": "scholaris-produccion", "database_id": "ceffae35-e07d-45a2-a926-00cabb700f9c" }

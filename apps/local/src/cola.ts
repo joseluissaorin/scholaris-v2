@@ -16,6 +16,7 @@ import { adelantarMoov, esMp4 } from '@scholaris/api/compartido/medio-rapido';
 import { asegurarProxy, type HacerProxy } from '@scholaris/api/compartido/proxy';
 import { apuntarProgreso, leerTarea } from '@scholaris/api/compartido/estanteria';
 import { LIMITES } from '@scholaris/api/compartido/planes';
+import { comprenderEnProceso, lanzarPendientes, type ParamsComprension } from '@scholaris/api/compartido/comprension';
 
 export interface DependenciasCola {
   /** Base donde se apuntan los trabajos (la de cuentas). */
@@ -70,6 +71,37 @@ export class ColaLocal implements Orquestador {
     await this.d.sql.ejecutar("INSERT OR REPLACE INTO cola_local (tarea, usuario, params, estado, creada, actualizada) VALUES (?, ?, ?, 'pendiente', ?, ?)", p.tarea, p.usuario, JSON.stringify(p), t, t);
     this.pendientes.push(p);
     this.bombear();
+  }
+
+  /**
+   * La comprensión (docs/COMPRENSION.md), una detrás de otra en este mismo
+   * proceso: es larga y cara, y no debe quitarle sitio a la lectura.
+   */
+  private comprensiones: ParamsComprension[] = [];
+  private comprendiendo = false;
+
+  async lanzarComprension(p: ParamsComprension): Promise<void> {
+    this.comprensiones.push(p);
+    void this.bombearComprension();
+  }
+
+  private async bombearComprension(): Promise<void> {
+    if (this.comprendiendo) return;
+    this.comprendiendo = true;
+    try {
+      while (this.comprensiones.length) {
+        const p = this.comprensiones.shift()!;
+        try {
+          const puertos = await this.d.puertosPara(p.usuario, p.plan);
+          await comprenderEnProceso(puertos, p, this.d.gemini ? await this.d.gemini(p.usuario) : undefined);
+          await lanzarPendientes(puertos);
+        } catch (e) {
+          console.error(`[comprensión ${p.documento}]`, e);
+        }
+      }
+    } finally {
+      this.comprendiendo = false;
+    }
   }
 
   async cancelar(tarea: string): Promise<void> {

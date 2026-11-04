@@ -115,6 +115,30 @@ class Scholaris:
         r = self.pedir("GET", f"/documentos/{id}/texto", params=p)
         return r.text if markdown else r.json()
 
+    # -- comprensión (docs/COMPRENSION.md) ----------------------------------
+
+    def comprension(self, id: str) -> dict:
+        """El mapa de un documento: estado, lentes, estructura, ficha global y totales."""
+        return self._json("GET", f"/documentos/{id}/comprension")
+
+    def segmentos(self, id: str, tipo: Optional[str] = None, nivel: Optional[int] = None) -> List[dict]:
+        return self._json("GET", f"/documentos/{id}/segmentos", params={"tipo": tipo, "nivel": nivel})
+
+    def fichas(self, id: str, clase: Optional[str] = None, objetivo: Optional[str] = None, segmento: Optional[str] = None,
+               desde: int = 0, limite: int = 200) -> dict:
+        """Una página de fichas ({elementos, total, siguiente}) con sus evidencias ancladas."""
+        return self._json("GET", f"/documentos/{id}/fichas", params={"clase": clase, "objetivo": objetivo, "segmento": segmento, "desde": desde, "limite": limite})
+
+    def apariciones(self, id: str, entidad: Optional[str] = None, rol: Optional[str] = None, desde: int = 0, limite: int = 500) -> dict:
+        return self._json("GET", f"/documentos/{id}/apariciones", params={"entidad": entidad, "rol": rol, "desde": desde, "limite": limite})
+
+    def comprender(self, id: Optional[str] = None, *, forzar: bool = False, lentes: Optional[Sequence[str]] = None,
+                   documentos: Optional[Sequence[str]] = None) -> dict:
+        """Con `id`, la comprensión de ese documento; sin él, la de toda la biblioteca (o de `documentos`)."""
+        cuerpo = {k: v for k, v in {"forzar": forzar or None, "lentes": list(lentes) if lentes else None,
+                                     "documentos": list(documentos) if documentos else None}.items() if v is not None}
+        return self._json("POST", f"/documentos/{id}/comprender" if id else "/comprender", json_=cuerpo)
+
     # -- buscar, preguntar, citar, verificar ---------------------------------
 
     def buscar(self, q: str, k: int = 10, documentos: Optional[Sequence[str]] = None) -> List[dict]:

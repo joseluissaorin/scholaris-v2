@@ -14,7 +14,10 @@
     ]
   },
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Estanteria", "Tarea", "Limitador", "Trabajador"] }],
-  "workflows": [{ "binding": "INGESTA", "name": "scholaris-ingesta-prueba", "class_name": "FlujoIngesta" }],
+  "workflows": [
+    { "binding": "INGESTA", "name": "scholaris-ingesta-prueba", "class_name": "FlujoIngesta" },
+    { "binding": "COMPRENSION", "name": "scholaris-comprension-prueba", "class_name": "FlujoComprension" }
+  ],
   "d1_databases": [{ "binding": "DB", "database_name": "scholaris-prueba", "database_id": "00000000-0000-0000-0000-000000000000" }],
   "kv_namespaces": [{ "binding": "OAUTH_KV", "id": "oauth-prueba" }],
   "r2_buckets": [{ "binding": "BUCKET", "bucket_name": "scholaris-prueba" }],

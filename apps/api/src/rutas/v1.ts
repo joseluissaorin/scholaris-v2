@@ -380,6 +380,8 @@ export function montarV1(app: AppPuerta, pl: Plataforma, autenticar: (r: Request
       verbos: [
         'POST /documentos', 'GET /documentos', 'GET /documentos/{id}', 'DELETE /documentos/{id}', 'GET /documentos/{id}/texto',
         'GET /buscar?q=…', 'POST /preguntar', 'POST /citar', 'GET /citar/{id}', 'POST /verificar',
+        'GET /documentos/{id}/comprension', 'GET /documentos/{id}/segmentos', 'GET /documentos/{id}/fichas', 'GET /documentos/{id}/apariciones',
+        'POST /documentos/{id}/comprender', 'POST /comprender',
       ].map((v) => v.replace(' /', ` ${V}/`)),
     });
   };
@@ -527,6 +529,19 @@ export function montarV1(app: AppPuerta, pl: Plataforma, autenticar: (r: Request
     const pedidoHasta = qh ? resolverLimite(qh, folios, medio) : folios.length - 1;
     if (hasta < pedidoHasta) salida.siguiente = `[${posicion(folios[hasta + 1]!)}]`;
     return quiereMarkdown(c) ? markdown(c, mdTexto(salida)) : c.json(salida);
+  }));
+
+  // La comprensión (docs/COMPRENSION.md): mapa, segmentos, fichas y apariciones; pedirla o rehacerla.
+  // Pasa tal cual por la v2 (mismos filtros en la consulta y el mismo cuerpo).
+  const consulta = (c: C) => { const q = new URL(c.req.url).search; return q || ''; };
+  for (const parte of ['comprension', 'segmentos', 'fichas', 'apariciones'] as const) {
+    app.get(`${V}/documentos/:id/${parte}`, conClave(async (c, io) => c.json(await io.pedir('GET', `/documentos/${encodeURIComponent(c.req.param('id')!)}/${parte}${consulta(c)}`))));
+  }
+  app.post(`${V}/documentos/:id/comprender`, conClave(async (c, io) => {
+    return c.json(await io.pedir('POST', `/documentos/${encodeURIComponent(c.req.param('id')!)}/comprender`, { json: await cuerpoJsonV1(c) }), 202);
+  }));
+  app.post(`${V}/comprender`, conClave(async (c, io) => {
+    return c.json(await io.pedir('POST', '/comprension/biblioteca', { json: await cuerpoJsonV1(c) }), 202);
   }));
 
   // GET /documentos/{id}/spdf?version=5: el documento como fichero SPDF (5.0, el estándar

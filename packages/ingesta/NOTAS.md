@@ -63,3 +63,21 @@ Los dos puertos los pone la plataforma: `crearWorkersAI(...).lector()` si hay `C
 - `ninguna`.
 
 Confirmado por el banco de calidad (`bench/calidad`, 183 consultas). En las consultas sobre Attention, El perseguidor y Lewis, añadir la vía visual con peso 0,3 baja el nDCG@10 de 0,751 a 0,723 sin reordenador y lo deja igual con Jev (0,833 sin ella, 0,832 con ella). Sobre las 183, quitarla de la fusión sube de 0,643 a 0,658. La vista solo aporta en las consultas visuales, y el buscador ya solo la usa para esas.
+
+# La comprensión (`src/comprension`)
+
+La capa de docs/COMPRENSION.md, con las mismas reglas: pasos sobre puertos que reciben un plan pequeño y leen lo demás del SQL. El Workflow `scholaris-comprension` (apps/api) los llama uno a uno; `comprenderDocumento` los encadena en local, en el banco y en `apps/api/scripts/comprender-local.ts`.
+
+| Paso | Función | Escribe |
+|---|---|---|
+| plan | `planificarComprension` | estado «en_marcha» (fila `comprension` de la procedencia); elige lentes, plazos y presupuesto |
+| estructura | `pasoSegmentos` | `segmentos` (y `secciones` si el documento no tenía índice); fichas de plano si hay percepción |
+| fichas *i* | `pasoFichas` | fichas de los segmentos de la tanda *i* (`lotesDeFichas`, deterministas) |
+| entidades | `pasoEntidades` | entidades del grafo (resolutor de @scholaris/funciones), `apariciones`, «X interpreta a Y», fichas de entidad |
+| global | `pasoGlobal` | ficha global por lente; temas y motivos como entidades con todas sus apariciones |
+| indexado | `pasoIndexado` | un vector por ficha (`objetivo: 'ficha'`) en la estantería y en el índice |
+
+- Cada paso hecho deja una fila `comprension:<paso>` en la procedencia con modelo, tokens y dólares; si ya está, no se repite. El estado y los totales se leen con `leerEstadoComprension`.
+- Rehacer: con otra versión de lente o `forzar`, de cero. Con la misma versión y otro material (transcripción reparada, percepción nueva) o tras un error, por partes: la estructura de un medio con la misma percepción se reancla por tiempo y las fichas cuya huella de entrada (`huellaEntradaSegmento`) no cambió se aprovechan.
+- Anclaje: el modelo cita «u + cita literal» y aquí se busca (sin tildes ni puntuación, con ventanas para las erratas del OCR); se guarda la cita del material con sus `caracteres` NFC. Lo que no aparece no se guarda (`citasNoVerificadas`).
+- Medios: los tramos sin transcripción se dicen en el material y en cada ficha (`datos.transcripcion`); quién habla lo decide la percepción (`m.voces`) cuando la hay.

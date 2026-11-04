@@ -16,6 +16,9 @@ import { almacenDesdeEnv, catalogosDesdeEnv, cuentasDesdeEnv, emisorDesdeEnv, ge
 import { espacioNombresDe } from './indice-vectorize.js';
 import { recortadorCF } from './conversor.js';
 import { UnaVez } from '../compartido/una-vez.js';
+import { cerrarComprension, pasoEntidades, pasoFichas, pasoGlobal, pasoIndexado, pasoSegmentos, planificarComprension, type ContextoComprension, type PlanComprension } from '@scholaris/ingesta';
+import { contextoComprension, type ParamsComprension } from '../compartido/comprension.js';
+import type { PasoTrabajador } from './flujo-comprension.js';
 
 export class Trabajador extends DurableObject<Env> {
   /**
@@ -96,5 +99,62 @@ export class Trabajador extends DurableObject<Env> {
 
   async primeraPagina(p: ParamsIngesta, info: InfoPlan): Promise<number> {
     return leerPrimeraPagina(await this.contexto(p), p, info);
+  }
+
+  // -------------------------------------------------------------------------
+  // Comprensión (Workflow `scholaris-comprension`): un objeto por paso de cada instancia.
+  // -------------------------------------------------------------------------
+
+  private async contextoComprension(p: ParamsComprension): Promise<ContextoComprension> {
+    const env = this.env;
+    const cuentas = cuentasDesdeEnv(env);
+    const ia = await inteligenciaPara(env, cuentas, p.usuario, { sinCache: true });
+    const estanteria = env.ESTANTERIA.getByName(p.usuario);
+    const tarea = env.TAREA.getByName(`tarea:${p.usuario}:${p.instancia}`);
+    return contextoComprension({
+      sql: new SqlRemoto({ sql: (c, ps) => estanteria.sql(c, ps), lote: (s) => estanteria.lote(s) }),
+      usuario: p.usuario, almacen: almacenDesdeEnv(env, origenDe(env)),
+      ...(await geminiPara(env, cuentas, p.usuario).then((g) => (g ? { gemini: g } : {}))),
+      embebedor: ia.embebedor, indice: indiceDesdeEnv(env, ia), espacioNombres: espacioNombresDe(p.usuario),
+      emisor: emisorDesdeEnv(env, p.usuario),
+      latido: () => tarea.esperar(Date.now() + 4 * 60_000).catch(() => undefined),
+    });
+  }
+
+  /** El plan, una vez por instancia (recordado: un reintento no vuelve a borrar lo anterior). */
+  async comprensionPlan(p: ParamsComprension): Promise<PlanComprension> {
+    return this.unaVez.hacer(`cmp-plan:${p.instancia}`, async () => planificarComprension(await this.contextoComprension(p), p.documento, {
+      ...(p.forzar ? { forzar: true } : {}), ...(p.lentes?.length ? { lentes: p.lentes } : {}), ...(p.economico ? { economico: true } : {}),
+    }), { recordar: true });
+  }
+
+  /** Un paso; los reintentos se suman al que sigue en marcha y lo ya hecho consta en la procedencia. */
+  async comprensionPaso(p: ParamsComprension, plan: PlanComprension, paso: PasoTrabajador, lote?: number): Promise<unknown> {
+    return this.unaVez.hacer(`cmp:${p.instancia}:${paso}:${lote ?? ''}`, async () => {
+      const ctx = await this.contextoComprension(p);
+      switch (paso) {
+        case 'estructura': return pasoSegmentos(ctx, plan);
+        case 'fichas': return pasoFichas(ctx, plan, lote ?? 0);
+        case 'entidades': return pasoEntidades(ctx, plan);
+        case 'global': return pasoGlobal(ctx, plan);
+        case 'indexado': return pasoIndexado(ctx, plan);
+      }
+    });
+  }
+
+  /** Cierra (bien o mal), avisa al vigilante de que ha terminado y deja seguir a la cola de la biblioteca. */
+  async comprensionCerrar(p: ParamsComprension, plan: PlanComprension | null, r: { ok: boolean; error?: string }): Promise<void> {
+    const ctx = await this.contextoComprension(p);
+    let sinModelo = false;
+    if (plan) sinModelo = (await cerrarComprension(ctx, plan, r)).estado === 'sin_modelo';
+    else {
+      const { actualizarEstado } = await import('@scholaris/ingesta');
+      await actualizarEstado(ctx.sql, p.documento, { estado: 'error', error: r.error ?? 'La comprensión no pudo empezar.' }, new Date().toISOString());
+      await (ctx.sql as SqlRemoto).vaciarPendientes();
+    }
+    await this.env.TAREA.getByName(`tarea:${p.usuario}:${p.instancia}`).emitir({ tipo: 'fin', tarea: p.instancia, documento: p.documento, estado: r.ok ? 'listo' : 'error', ...(r.error ? { error: r.error } : {}) });
+    const mensaje = sinModelo ? 'Sin modelo de comprensión: hace falta una clave de Gemini.' : r.ok ? 'Comprensión terminada' : r.error ?? 'La comprensión ha fallado';
+    await emisorDesdeEnv(this.env, p.usuario).emitir(`usuario:${p.usuario}`, { tipo: 'comprension', documento: p.documento, paso: 'fin', avance: 1, mensaje, estado: r.ok && !sinModelo ? 'hecho' : 'error' }).catch(() => undefined);
+    await this.env.ESTANTERIA.getByName(p.usuario).comprensionesPendientes({ id: p.usuario, plan: p.plan }).catch(() => 0);
   }
 }
