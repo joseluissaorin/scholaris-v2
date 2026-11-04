@@ -434,6 +434,26 @@ const relaciones: Herramienta = {
       const ids = await apuntarEvidencias(ctx, r.evidencias.slice(0, 4), { capa: 'comprension', herramienta: 'relaciones', nota: `Prueba de la relación ${r.tipo}` });
       nuevas.push(...ids);
       lineas.push(`${sentido} ${rotuloDocumento(ctx, otro)} (fuente: ${r.fuente}, confianza ${r.confianza.toFixed(2)})${r.nota ? `: ${recortar(r.nota, 400)}` : ''}${ids.length ? ` · pruebas ${ids.join(', ')}` : ''}`);
+      // La ficha de la relación (la transmedia): qué cambia de una obra a otra y qué personajes, con sus pruebas.
+      for (const f of await quieto(() => leerFichas(sql, { objetivo: 'relacion', objetivoId: r.id }), [])) {
+        lineas.push(`  [ficha ${f.clase}] ${recortar(f.texto, 1500)}`);
+        const pruebaDe = async (indices: unknown, nota: string): Promise<string[]> => {
+          const es = (Array.isArray(indices) ? indices : []).map((i) => f.evidencias[Number(i)]).filter((e): e is NonNullable<typeof e> => !!e);
+          const marcas = await apuntarEvidencias(ctx, es.slice(0, 4), { capa: 'comprension', herramienta: 'relaciones', nota });
+          nuevas.push(...marcas);
+          return marcas;
+        };
+        for (const [clave, rotulo] of [['cambios', 'Cambio'], ['personajes', 'Personaje']] as const) {
+          const lista = Array.isArray(f.datos[clave]) ? (f.datos[clave] as Array<Record<string, unknown>>).slice(0, 12) : [];
+          for (const x of lista) {
+            const textoItem = Object.entries(x).filter(([k, v]) => k !== 'pruebas' && (typeof v === 'string' || typeof v === 'number')).map(([k, v]) => `${k}: ${v}`).join('; ');
+            const pr = (x.pruebas ?? {}) as { a?: unknown; b?: unknown };
+            const a = await pruebaDe(pr.a, `${rotulo} (${r.tipo}), lado de ${fichaDe(ctx, r.origen)?.titulo ?? r.origen}`);
+            const b = await pruebaDe(pr.b, `${rotulo} (${r.tipo}), lado de ${fichaDe(ctx, r.destino)?.titulo ?? r.destino}`);
+            lineas.push(`  - ${rotulo}: ${recortar(textoItem, 400)}${a.length || b.length ? ` · pruebas ${[...a, ...b].join(', ')}` : ''}`);
+          }
+        }
+      }
     }
     const compartidas = await quieto(() => sql.ejecutar<{ otro: string; n: number; nombres: string }>(
       `SELECT m2.documento AS otro, COUNT(DISTINCT m1.entidad) AS n, group_concat(DISTINCT e.nombre) AS nombres
@@ -453,6 +473,21 @@ const relaciones: Herramienta = {
 // ---------------------------------------------------------------------------
 // alinear
 // ---------------------------------------------------------------------------
+
+/** Alineaciones de la transmedia: «…:f…» finas (pasaje ↔ pasaje), «…:p…» párrafos traducidos, «…:g…» gruesas. */
+function finura(id: string): number {
+  return /:f\d/.test(id) ? 0 : /:p\d/.test(id) ? 1 : 2;
+}
+
+/** Lo que abarca un lado de una alineación (segundos, o caracteres; una página sin caracteres cuenta como 4000). */
+function extension(l: { ancla: AnclaMaterial; anclaFin?: AnclaMaterial } | undefined): number {
+  if (!l) return Number.MAX_SAFE_INTEGER;
+  const a = l.ancla, f = l.anclaFin;
+  if (a.tipo === 'tiempo') return (f?.tipo === 'tiempo' ? f.t1 : a.t1) - a.t0;
+  if (a.caracteres) return a.caracteres[1] - a.caracteres[0];
+  if (a.tipo === 'pagina') return ((f?.tipo === 'pagina' ? f.fisica : a.fisica) - a.fisica + 1) * 4000;
+  return Number.MAX_SAFE_INTEGER;
+}
 
 function seSolapan(a: Ancla, finA: Ancla | undefined, b: { paginas?: [number, number]; tiempo?: [number, number] }): boolean {
   if (b.tiempo && a.tipo === 'tiempo') {
@@ -498,12 +533,17 @@ const alinear: Herramienta = {
     const lineas: string[] = [];
     const nuevas: string[] = [];
     const todas = await quieto(() => leerAlineaciones(sql, { documento: doc }), []);
+    const propioDe = (a: (typeof todas)[number]) => (a.a?.documento === doc ? a.a : a.b?.documento === doc ? a.b : undefined);
     const relevantes = todas.filter((a) => {
-      const propio = a.a?.documento === doc ? a.a : a.b?.documento === doc ? a.b : undefined;
+      const propio = propioDe(a);
       const otro = propio === a.a ? a.b : a.a;
       if (con && otro && otro.documento !== con) return false;
       return propio ? seSolapan(propio.ancla, propio.anclaFin, tramo) : false;
-    }).slice(0, 10);
+    })
+      // Primero las finas (pasaje ↔ pasaje) y, entre ellas, las más estrechas: en un libro largo, un
+      // tramo toca muchas alineaciones gruesas (segmento ↔ segmento) que no dicen qué pasaje es.
+      .sort((x, y) => finura(x.id) - finura(y.id) || extension(propioDe(x)) - extension(propioDe(y)) || x.orden - y.orden)
+      .slice(0, 10);
     for (const a of relevantes) {
       const lados = [a.a, a.b].filter((x): x is NonNullable<typeof x> => !!x);
       const ids: string[] = [];

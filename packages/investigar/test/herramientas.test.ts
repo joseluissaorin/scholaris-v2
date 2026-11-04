@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { escribirAlineaciones, escribirRelaciones } from '@scholaris/spdf';
+import { escribirAlineaciones, escribirFichas, escribirRelaciones } from '@scholaris/spdf';
 import type { ContextoHerramientas, Herramienta } from '../src/contexto.js';
 import { HERRAMIENTAS_LECTURA, huecosTranscripcion } from '../src/herramientas.js';
 import { Numerador, pruebaEnAmbito, textoCuaderno } from '../src/sintesis.js';
@@ -82,6 +82,39 @@ describe('herramientas de lectura', () => {
     const r = await h('relaciones').ejecutar({ documento: PELICULA }, ctx);
     expect(r.texto).toContain('adaptacion_de → «El lobo, el bosque y el hombre nuevo»');
     expect(r.texto).toContain('Comparte entidades con: «El lobo');
+  });
+
+  it('relaciones: la ficha de la relación, con sus cambios y personajes y sus pruebas de cada lado', async () => {
+    const { sql, ctx } = await contexto();
+    await escribirRelaciones(sql, [{ id: 'r1', origen: PELICULA, destino: CUENTO, tipo: 'adaptacion_de', evidencias: [], confianza: 0.95, fuente: 'wikidata', creada: '2026-11-04' }]);
+    await escribirFichas(sql, [{
+      id: 'fr1', documento: null, objetivo: 'relacion', objetivoId: 'r1', lente: 'cine', clase: 'adaptacion', idioma: 'es', modelo: 'prueba', version: '1', creada: '2026-11-04',
+      texto: 'La película convierte el monólogo del cuento en escena.',
+      datos: { cambios: [{ tipo: 'transformado', descripcion: 'La fresa pasa de pensamiento a gesto', pruebas: { a: [0], b: [1] } }], personajes: [{ nombre: 'Nancy', cambio: 'añadido', pruebas: { a: [] } }] },
+      evidencias: [
+        { documento: PELICULA, ancla: { tipo: 'tiempo', t0: 594.6, t1: 641.8 }, cita: 'Me encanta la fresa.', modo: 'audio', unidad: `${PELICULA}:u1` },
+        { documento: CUENTO, ancla: { tipo: 'pagina', fisica: 2, impresa: '4', romana: false, origen: 'leido', confianza: 1, caracteres: [100, 160] }, cita: 'habiendo chocolate, había pedido fresa', modo: 'texto', unidad: `${CUENTO}:u0` },
+      ],
+    }]);
+    const r = await h('relaciones').ejecutar({ documento: CUENTO }, ctx);
+    expect(r.texto).toContain('[ficha adaptacion] La película convierte');
+    expect(r.texto).toMatch(/- Cambio: tipo: transformado; descripcion: La fresa pasa de pensamiento a gesto · pruebas P1, P2/);
+    expect(r.texto).toContain('- Personaje: nombre: Nancy; cambio: añadido');
+    expect(ctx.pruebas.obtener('P2')?.evidencia.ancla).toMatchObject({ fisica: 2, caracteres: [100, 160] });
+  });
+
+  it('alinear: primero las alineaciones finas y estrechas', async () => {
+    const { sql, ctx } = await contexto();
+    await escribirRelaciones(sql, [{ id: 'r1', origen: PELICULA, destino: CUENTO, tipo: 'adaptacion_de', evidencias: [], confianza: 0.95, fuente: 'wikidata', creada: '2026-11-04' }]);
+    const pag = { tipo: 'pagina' as const, fisica: 2, impresa: '4', romana: false, origen: 'leido' as const, confianza: 1 };
+    await escribirAlineaciones(sql, [
+      { id: 'r1:g0001', relacion: 'r1', orden: 0, tipo: 'equivalente', nota: 'Gruesa.', a: { documento: PELICULA, ancla: { tipo: 'tiempo', t0: 500, t1: 900 } }, b: { documento: CUENTO, ancla: pag, anclaFin: { ...pag, fisica: 3 } }, confianza: 0.6 },
+      { id: 'r1:f0002', relacion: 'r1', orden: 1, tipo: 'transformado', nota: 'Fina y ancha.', a: { documento: PELICULA, ancla: { tipo: 'tiempo', t0: 594, t1: 640 } }, b: { documento: CUENTO, ancla: { ...pag, caracteres: [0, 400] } }, confianza: 0.8 },
+      { id: 'r1:f0001', relacion: 'r1', orden: 2, tipo: 'transformado', nota: 'Fina y estrecha.', a: { documento: PELICULA, ancla: { tipo: 'tiempo', t0: 600, t1: 605 } }, b: { documento: CUENTO, ancla: { ...pag, caracteres: [100, 160] } }, confianza: 0.9 },
+    ]);
+    const r = await h('alinear').ejecutar({ documento: CUENTO, paginas: { desde: 2, hasta: 2 } }, ctx);
+    const notas = [...r.texto.matchAll(/\n {2}(.+)/g)].map((m) => m[1]);
+    expect(notas).toEqual(['Fina y estrecha.', 'Fina y ancha.', 'Gruesa.']);
   });
 
   it('alinear: las alineaciones calculadas o, si no hay, lo más parecido de la otra obra', async () => {
