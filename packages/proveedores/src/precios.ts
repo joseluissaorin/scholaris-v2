@@ -29,6 +29,8 @@ export const PRECIOS: Record<string, PrecioModelo> = {
   'gemini-3.1-flash-lite': { entrada: 0.25, salida: 1.5, cache: 0.025, entradaAudio: 0.5 },
   'gemini-3.1-pro-preview': { entrada: 2, salida: 12, cache: 0.2 },
   'gemini-pro-latest': { entrada: 2, salida: 12, cache: 0.2 },
+  // Sin precio público a 4-11-2026: se estima como la familia Pro hasta que lo haya.
+  'gemini-4-argon': { entrada: 2, salida: 12, cache: 0.2 },
   'gemini-3.5-transcribe': { entrada: 2, salida: 12, porMinuto: 0.005 },
   'gemini-embedding-2': { entrada: 0.2, salida: 0, entradaAudio: 0.45 },
 

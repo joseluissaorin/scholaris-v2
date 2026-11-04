@@ -119,6 +119,54 @@ class Scholaris:
     def cita(self, id: str, estilo: str = "apa", idioma: str = "es-ES") -> dict:
         return self.pedir("GET", f"/documentos/{id}/cita", params={"estilo": estilo, "idioma": idioma})
 
+    # -- comprensión (docs/COMPRENSION.md) ----------------------------------
+
+    def comprension(self, id: str) -> dict:
+        """El mapa de un documento: estado, lentes, estructura (sin los planos), ficha global y totales."""
+        return self.pedir("GET", f"/documentos/{id}/comprension")
+
+    def segmentos(self, id: str, *, tipo: Optional[str] = None, nivel: Optional[int] = None) -> List[dict]:
+        """El árbol de segmentos en preorden (capítulos, escenas, secuencias, planos…)."""
+        return self.pedir("GET", f"/documentos/{id}/segmentos", params={k: v for k, v in {"tipo": tipo, "nivel": nivel}.items() if v is not None})
+
+    def fichas(self, id: str, *, clase: Optional[str] = None, objetivo: Optional[str] = None, lente: Optional[str] = None,
+               segmento: Optional[str] = None, entidad: Optional[str] = None) -> Iterator[dict]:
+        """Las fichas del documento (global, de segmento, de entidad), con sus evidencias ancladas; página a página."""
+        desde = 0
+        while True:
+            filtros = {"clase": clase, "objetivo": objetivo, "lente": lente, "segmento": segmento, "entidad": entidad, "desde": desde, "limite": 500}
+            p = self.pedir("GET", f"/documentos/{id}/fichas", params={k: v for k, v in filtros.items() if v is not None})
+            yield from p["elementos"]
+            if not p.get("siguiente"):
+                return
+            desde = int(p["siguiente"])
+
+    def apariciones(self, id: str, *, entidad: Optional[str] = None, segmento: Optional[str] = None, rol: Optional[str] = None) -> Iterator[dict]:
+        """Dónde aparece cada entidad del grafo: caracteres de una página, voz en un tramo, región de un fotograma."""
+        desde = 0
+        while True:
+            filtros = {"entidad": entidad, "segmento": segmento, "rol": rol, "desde": desde, "limite": 2000}
+            p = self.pedir("GET", f"/documentos/{id}/apariciones", params={k: v for k, v in filtros.items() if v is not None})
+            yield from p["elementos"]
+            if not p.get("siguiente"):
+                return
+            desde = int(p["siguiente"])
+
+    def comprender(self, id: str, *, forzar: bool = False, lentes: Optional[List[str]] = None, economico: bool = False) -> dict:
+        """Pide (o rehace con `forzar`) la comprensión de un documento; las lentes, si se fijan, la primera manda."""
+        cuerpo = {k: v for k, v in {"forzar": forzar or None, "lentes": lentes, "economico": economico or None}.items() if v is not None}
+        return self.pedir("POST", f"/documentos/{id}/comprender", json_=cuerpo)
+
+    def comprender_biblioteca(self, *, forzar: bool = False, documentos: Optional[List[str]] = None, lentes: Optional[List[str]] = None,
+                              economico: bool = False) -> dict:
+        """Encola la comprensión de toda la biblioteca (o de unos documentos); van de dos en dos."""
+        cuerpo = {k: v for k, v in {"forzar": forzar or None, "documentos": documentos, "lentes": lentes, "economico": economico or None}.items() if v is not None}
+        return self.pedir("POST", "/comprension/biblioteca", json_=cuerpo)
+
+    def comprensiones(self) -> List[dict]:
+        """El estado de la comprensión de cada documento que la tiene (o la está haciendo)."""
+        return self.pedir("GET", "/comprension")
+
     # -- subidas e ingesta --------------------------------------------------
 
     def subir(self, ruta: str, *, bibliotecas: Optional[List[str]] = None, metadatos: Optional[dict] = None,

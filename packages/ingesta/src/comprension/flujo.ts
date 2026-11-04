@@ -24,9 +24,12 @@ import { indexarFichas } from './indexado.js';
 import { hablantesDe, leerMaterial, muestraDe, tokensDe, type Material } from './material.js';
 import { fichasDePlanos } from './medios.js';
 import { llamar } from './modelo.js';
+import { huella } from './util.js';
 import type { ContextoComprension, EstadoComprension, OpcionesComprension, PasoComprension, PlanComprension, UsoModelo } from './tipos.js';
 
 const ahoraDe = (ctx: ContextoComprension) => (ctx.ahora?.() ?? new Date()).toISOString();
+/** Un SQL remoto (el del Workflow, por RPC) junta las escrituras: al acabar cada paso se mandan. */
+const vaciar = async (ctx: ContextoComprension) => { await (ctx.sql as { vaciarPendientes?(): Promise<void> }).vaciarPendientes?.(); };
 const PRESUPUESTO = 4;
 const MAX_CONTEXTO = 2_400_000;
 const POR_LLAMADA = 6;
@@ -92,6 +95,7 @@ export async function planificarComprension(ctx: ContextoComprension, documento:
     }
   }
   const version = versionDe(lentes, VERSION_COMPRENSION);
+  const huellaMaterial = huella(m.unidades.map((u) => `${u.id}:${u.texto.length}`).join('|'));
   const maxCaracteres = o.maxCaracteresContexto ?? MAX_CONTEXTO;
   const extraPercepcion = percepcion ? JSON.stringify(percepcion).length * 0.6 : 0;
   const caracteres = Math.round(m.caracteres + extraPercepcion);
@@ -112,16 +116,18 @@ export async function planificarComprension(ctx: ContextoComprension, documento:
   );
   const plan: PlanComprension = {
     documento, lentes, version, medio: m.medio, caracteres, tokensAprox, largo, conPercepcion: !!percepcion,
-    plazos: plazosDe(tokensAprox, largo), presupuestoUsd: o.presupuestoUsd ?? PRESUPUESTO, estimacionUsd, economico, calidades, hecha: false,
+    plazos: plazosDe(tokensAprox, largo), presupuestoUsd: o.presupuestoUsd ?? PRESUPUESTO, estimacionUsd, economico, calidades, huella: huellaMaterial, hecha: false,
     opciones: { segmentosPorLlamada: o.segmentosPorLlamada ?? POR_LLAMADA, ...(o.wikidata !== undefined ? { wikidata: o.wikidata } : {}), maxCaracteresContexto: maxCaracteres },
   };
   if (!ctx.modelo) {
     await actualizarEstado(ctx.sql, documento, { estado: 'sin_modelo', lentes, version, iniciado: t }, t);
+    await vaciar(ctx);
     return { ...plan, hecha: true };
   }
   const previo = await leerEstadoComprension(ctx.sql, documento);
-  if (previo?.estado === 'hecho' && previo.version === version && !o.forzar) return { ...plan, hecha: true };
-  const reanudar = previo?.estado === 'en_marcha' && previo.version === version && !o.forzar;
+  const mismo = previo?.version === version && (!previo.huella || previo.huella === huellaMaterial);
+  if (previo?.estado === 'hecho' && mismo && !o.forzar) return { ...plan, hecha: true };
+  const reanudar = previo?.estado === 'en_marcha' && mismo && !o.forzar;
   if (!reanudar) {
     // De cero: fuera la comprensión anterior (también del índice) y su procedencia.
     const { fichas } = await borrarComprension(ctx.sql, documento);
@@ -129,11 +135,12 @@ export async function planificarComprension(ctx: ContextoComprension, documento:
       for (let i = 0; i < fichas.length; i += 500) await ctx.indice.borrar(ctx.espacioNombres, fichas.slice(i, i + 500)).catch(() => undefined);
     }
     await borrarPasos(ctx.sql, documento);
-    await actualizarEstado(ctx.sql, documento, { estado: 'en_marcha', lentes, version, iniciado: t, avisos: [], error: undefined }, t);
+    await actualizarEstado(ctx.sql, documento, { estado: 'en_marcha', lentes, version, huella: huellaMaterial, iniciado: t, avisos: [], error: undefined }, t);
   } else {
     await actualizarEstado(ctx.sql, documento, { estado: 'en_marcha', error: undefined }, t);
   }
   if (uso.uso.llamadas) await apuntarPaso(ctx.sql, documento, 'plan', uso.uso, uso.uso.ms, t, {});
+  await vaciar(ctx);
   await avisar(ctx, documento, 'plan', 0.02, `Comprensión con la lente ${lentes.join(' y ')}`);
   return plan;
 }
@@ -189,6 +196,7 @@ export async function pasoSegmentos(ctx: ContextoComprension, plan: PlanComprens
   }
   const lotes = lotesDeFichas(segmentos, def, plan.opciones.segmentosPorLlamada).length;
   await apuntarPaso(ctx.sql, doc, 'estructura', acumulado.uso, Date.now() - inicio, ahoraDe(ctx), { segmentos: segmentos.length, secciones, lotes, planos }, avisos);
+  await vaciar(ctx);
   await avisar(ctx, doc, 'estructura', 0.15, `${segmentos.length} segmentos`);
   return { segmentos: segmentos.length, lotes };
 }
@@ -210,6 +218,7 @@ export async function pasoFichas(ctx: ContextoComprension, plan: PlanComprension
   const yaGastado = await gastado(ctx.sql, doc);
   if (yaGastado > plan.presupuestoUsd) {
     await apuntarPaso(ctx.sql, doc, paso, usoVacio(), 0, ahoraDe(ctx), { fichas: 0 }, [`Presupuesto agotado (${yaGastado.toFixed(2)} USD): quedan segmentos sin ficha propia.`]);
+    await vaciar(ctx);
     return { fichas: 0 };
   }
   const m = await leerMaterial(ctx.sql, doc);
@@ -222,6 +231,7 @@ export async function pasoFichas(ctx: ContextoComprension, plan: PlanComprension
   await escribirFichas(ctx.sql, r.fichas);
   await apuntarPaso(ctx.sql, doc, paso, acumulado.uso, Date.now() - inicio, ahoraDe(ctx), { fichas: r.fichas.length, citasDescartadas: r.descartadas, sinFicha: r.faltan },
     r.faltan ? [`${r.faltan} segmentos se quedaron sin ficha en la tanda ${lote + 1}.`] : []);
+  await vaciar(ctx);
   return { fichas: r.fichas.length };
 }
 
@@ -267,6 +277,7 @@ export async function pasoEntidades(ctx: ContextoComprension, plan: PlanComprens
   await apuntarPaso(ctx.sql, doc, 'entidades', acumulado.uso, Date.now() - inicio, ahoraDe(ctx), {
     entidades: ents.length, apariciones: apariciones.length, papeles: reparto.papeles.length, fichas: fe.fichas.length, citasDescartadas: fe.descartadas,
   }, avisos);
+  await vaciar(ctx);
   return { entidades: ents.length, apariciones: apariciones.length };
 }
 
@@ -310,6 +321,7 @@ export async function pasoGlobal(ctx: ContextoComprension, plan: PlanComprension
   }
   await escribirFichas(ctx.sql, fichas);
   await apuntarPaso(ctx.sql, doc, 'global', acumulado.uso, Date.now() - inicio, ahoraDe(ctx), { fichas: fichas.length, temas, citasDescartadas: descartadas });
+  await vaciar(ctx);
   return { fichas: fichas.length, temas };
 }
 
@@ -325,6 +337,7 @@ export async function pasoIndexado(ctx: ContextoComprension, plan: PlanComprensi
   const r = await indexarFichas(ctx, doc);
   await apuntarPaso(ctx.sql, doc, 'indexado', usoVacio(ctx.embebedor?.espacio.modelo ?? ''), Date.now() - inicio, ahoraDe(ctx), { vectores: r.vectores, pendientes: r.pendientes ? 1 : 0 },
     r.pendientes ? ['Los vectores de las fichas no llegaron al índice: se buscan por texto y se reenviarán.'] : []);
+  await vaciar(ctx);
   return r;
 }
 
@@ -333,6 +346,7 @@ export async function cerrarComprension(ctx: ContextoComprension, plan: PlanComp
   const previo = await leerEstadoComprension(ctx.sql, plan.documento);
   if (plan.hecha && previo) return previo;
   const e = await actualizarEstado(ctx.sql, plan.documento, r.ok ? { estado: 'hecho', error: undefined } : { estado: 'error', error: (r.error ?? 'La comprensión ha fallado.').slice(0, 500) }, t);
+  await vaciar(ctx);
   await avisar(ctx, plan.documento, 'fin', 1, r.ok ? `Comprensión terminada (${e.usd.toFixed(2)} USD)` : 'La comprensión ha fallado');
   return e;
 }

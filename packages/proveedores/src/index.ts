@@ -17,3 +17,4 @@ export * from './compatible.js';
 export * from './sin-conexion.js';
 export * from './cascada.js';
 export * from './inteligencia.js';
+export * from './comprension.js';

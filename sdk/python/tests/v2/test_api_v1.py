@@ -62,6 +62,32 @@ def test_los_errores_traen_las_dos_lenguas():
     assert e.value.codigo == "prohibido" and e.value.estado == 403 and e.value.message.startswith("This key")
 
 
+def test_comprension_por_la_v1():
+    mapa = {"documento": "d1", "estado": {"estado": "hecho", "lentes": ["cine"]}, "segmentos": [], "global": [], "totales": {"fichas": 3}}
+    f = SesionFalsa([Respuesta(200, mapa), Respuesta(200, {"elementos": [{"rol": "visible"}], "total": 1}), Respuesta(202, {"documento": "d1", "instancia": "cmp-d1-x", "estado": "pendiente"}), Respuesta(202, {"encolados": 4, "lanzados": 2})])
+    s = Scholaris("sch_prueba", base="https://ejemplo.es", sesion=f)
+    assert s.comprension("d1")["estado"]["lentes"] == ["cine"]
+    assert s.apariciones("d1", rol="visible")["total"] == 1
+    assert s.comprender("d1", forzar=True, lentes=["cine", "documental"])["instancia"] == "cmp-d1-x"
+    assert s.comprender(documentos=["d1", "d2"])["lanzados"] == 2
+    rutas = [(m, u) for m, u, _ in f.pedidas]
+    assert rutas == [("GET", "https://ejemplo.es/api/v1/documentos/d1/comprension"), ("GET", "https://ejemplo.es/api/v1/documentos/d1/apariciones"),
+                     ("POST", "https://ejemplo.es/api/v1/documentos/d1/comprender"), ("POST", "https://ejemplo.es/api/v1/comprender")]
+    assert f.pedidas[1][2]["params"] == {"rol": "visible", "desde": 0, "limite": 500}
+    assert f.pedidas[2][2]["json"] == {"forzar": True, "lentes": ["cine", "documental"]}
+    assert f.pedidas[3][2]["json"] == {"documentos": ["d1", "d2"]}
+
+
+def test_fichas_de_la_v2_pasan_de_pagina():
+    from scholaris.v2 import Scholaris as V2
+
+    f = SesionFalsa([Respuesta(200, {"elementos": [{"id": "f1"}], "total": 2, "siguiente": "1"}), Respuesta(200, {"elementos": [{"id": "f2"}], "total": 2})])
+    s = V2("https://ejemplo.es", clave="sch_prueba", sesion=f)
+    assert [x["id"] for x in s.fichas("d1", clase="escena")] == ["f1", "f2"]
+    assert f.pedidas[1][1] == "https://ejemplo.es/api/v2/documentos/d1/fichas"
+    assert f.pedidas[1][2]["params"] == {"clase": "escena", "desde": 1, "limite": 500}
+
+
 @pytest.mark.skipif(not os.environ.get("SCHOLARIS_URL"), reason="Define SCHOLARIS_URL para probar contra un servidor")
 def test_de_verdad():
     s = Scholaris(base=os.environ["SCHOLARIS_URL"])

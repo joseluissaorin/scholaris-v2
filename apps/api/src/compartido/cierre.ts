@@ -8,6 +8,7 @@ import type { PuertosUsuario } from '../puertos.js';
 import { ahora, terminarTarea, totalesEstanteria } from './estanteria.js';
 import { invalidarBuscador, puertosFunciones } from './servicios.js';
 import { alCerrarDocumento } from './lotes.js';
+import { lanzarComprension } from './comprension.js';
 
 export interface DatosCierre {
   tarea: string;
@@ -61,4 +62,6 @@ export async function cerrarIngesta(p: PuertosUsuario, d: DatosCierre): Promise<
   await alCerrarDocumento(p, d.documento, true).catch((e) => console.error('lotes', e));
   // Vigilantes «al ingerir», grafo de citas y corpus: después, sin bloquear el cierre.
   p.segundoPlano((async () => alIngerirDocumento(await puertosFunciones(p), d.documento))().catch((e) => console.error('alIngerirDocumento', e)));
+  // La comprensión (docs/COMPRENSION.md) llega después, con su propio flujo: el documento ya se puede leer y buscar.
+  if (p.orquestador.lanzarComprension) p.segundoPlano(lanzarComprension(p, d.documento).catch((e) => console.error('comprension', e)));
 }

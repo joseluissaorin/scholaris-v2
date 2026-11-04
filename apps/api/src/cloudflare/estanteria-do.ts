@@ -21,6 +21,8 @@ import type { TrabajoMantenimiento } from './cola.js';
 import { rellenarVectoresFiguras } from '../rutas/contenido.js';
 import { leerDocumento } from '@scholaris/spdf';
 import { SqlDO } from './sql.js';
+import { leerEstadoComprension, actualizarEstado as actualizarComprension } from '@scholaris/ingesta';
+import { documentoDeInstancia, instanciaComprension, lanzarPendientes, type ParamsComprension } from '../compartido/comprension.js';
 import { LIMITES } from '../compartido/planes.js';
 import { cuerpoError } from '../compartido/errores.js';
 import { almacenDesdeEnv, configDesdeEnv, cuentasDesdeEnv, emisorDesdeEnv, indiceDesdeEnv, inteligenciaPara, origenDe } from './puertos-cf.js';
@@ -56,6 +58,9 @@ export class Estanteria extends DurableObject<Env> {
       orquestador: {
         lanzarIngesta: async (params: ParamsIngesta) => {
           await env.INGESTA.create({ id: params.tarea, params });
+        },
+        lanzarComprension: async (params: ParamsComprension) => {
+          await env.COMPRENSION.create({ id: params.instancia, params });
         },
         cancelar: async (tarea: string) => {
           try { await (await env.INGESTA.get(this.instanciaDe(tarea))).terminate(); } catch { /* ya terminada */ }
@@ -148,6 +153,7 @@ export class Estanteria extends DurableObject<Env> {
    * (lo ya leído está grabado en el almacén: no se paga dos veces).
    */
   async vigilarTarea(tarea: string, sinAvanceMs: number): Promise<string> {
+    if (tarea.startsWith('cmp-')) return this.vigilarComprension(tarea, sinAvanceMs);
     const [f] = this.base.ejecutarSync<{ estado: string; params: string | null; actualizada: string }>('SELECT estado, params, actualizada FROM pl_tareas WHERE id = ?', [tarea]);
     if (!f || (f.estado !== 'en_cola' && f.estado !== 'procesando')) return 'terminada';
     const params = f.params ? (JSON.parse(f.params) as ParamsIngesta & { instancia?: string; relanzamientos?: number }) : null;
@@ -169,6 +175,47 @@ export class Estanteria extends DurableObject<Env> {
     await this.env.INGESTA.create({ id: instancia, params: nuevos });
     console.log(JSON.stringify({ que: 'vigilante', tarea, estado, instancia }));
     return `relanzada (${estado ?? 'desconocido'})`;
+  }
+
+  /**
+   * Vigilante de una comprensión (`cmp-<documento>-<sello>`): si su Workflow ha
+   * muerto o lleva más de 4 minutos sin latir, se relanza con los mismos
+   * parámetros en otra instancia. Lo hecho consta en la procedencia del documento,
+   * así que se reanuda donde quedó. Tres relanzamientos y se da por fallida.
+   */
+  private async vigilarComprension(instancia: string, sinAvanceMs: number): Promise<string> {
+    const documento = documentoDeInstancia(instancia);
+    if (!documento) return 'sin_parametros';
+    const e = await leerEstadoComprension(this.base, documento);
+    if (!e || e.instancia !== instancia || (e.estado !== 'en_marcha' && e.estado !== 'pendiente') || !e.params) return 'terminada';
+    let estado: string | null = null;
+    try { estado = (await (await this.env.COMPRENSION.get(instancia)).status()).status; } catch { estado = null; }
+    const muerto = estado === null || estado === 'errored' || estado === 'terminated' || estado === 'complete';
+    const parado = estado === 'running' || estado === 'waiting' || estado === 'queued';
+    if (!muerto && !(parado && sinAvanceMs > 240_000)) return `sigue (${estado})`;
+    const params = e.params as unknown as ParamsComprension;
+    const n = (e.relanzamientos ?? 0) + 1;
+    const t = new Date().toISOString();
+    const tarea = this.env.TAREA.getByName(`tarea:${params.usuario}:${instancia}`);
+    try { await (await this.env.COMPRENSION.get(instancia)).terminate(); } catch { /* ya estaba muerta */ }
+    if (n > 3) {
+      await actualizarComprension(this.base, documento, { estado: 'error', error: 'La comprensión se ha detenido varias veces. Vuelve a pedirla más tarde: lo ya hecho se aprovecha.' }, t);
+      await tarea.emitir({ tipo: 'fin', tarea: instancia, documento, estado: 'error' }).catch(() => undefined);
+      return 'abandonada';
+    }
+    const nueva = instanciaComprension(documento);
+    const nuevos: ParamsComprension = { ...params, instancia: nueva, forzar: false, relanzamientos: n };
+    await actualizarComprension(this.base, documento, { instancia: nueva, params: nuevos as unknown as Record<string, unknown>, relanzamientos: n, lanzada: true }, t);
+    await this.env.COMPRENSION.create({ id: nueva, params: nuevos });
+    await tarea.emitir({ tipo: 'fin', tarea: instancia, documento, estado: 'cancelada' }).catch(() => undefined);
+    console.log(JSON.stringify({ que: 'vigilante-comprension', documento, estado, nueva }));
+    return `relanzada (${estado ?? 'desconocido'})`;
+  }
+
+  /** Al terminar una comprensión: la siguiente de la cola de la biblioteca, si la hay. */
+  async comprensionesPendientes(usuario: Pick<UsuarioSesion, 'id' | 'plan'>): Promise<number> {
+    const u: UsuarioSesion = { id: usuario.id, plan: usuario.plan, correo: '', nombre: '', funciones: [], via: 'clerk' };
+    return lanzarPendientes(this.puertos(u, origenDe(this.env)));
   }
 
   /** Cola: reenvía al índice los vectores pendientes de un documento. */

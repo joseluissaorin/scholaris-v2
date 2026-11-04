@@ -280,6 +280,56 @@ describe('subida → ingesta → búsqueda', () => {
   });
 });
 
+describe('comprensión', () => {
+  it('se lanza sola al dejar listo el documento y se consulta por la v2 y la v1', async () => {
+    const t = await token('user_comprension', { fea: 'u:scholaris' });
+    const original = new TextEncoder().encode('# Letters\n\nThe building is circular.');
+    const s = await api('/subidas', { token: t, cuerpo: { nombre: 'ensayo.md', mime: 'text/markdown', bytes: original.byteLength } });
+    await SELF.fetch(s.cuerpo.original.url, { method: 'PUT', body: original, headers: s.cuerpo.original.cabeceras });
+    const rec = await api(`/subidas/${s.cuerpo.subida}/recursos`, { token: t, cuerpo: { recursos: [{ ruta: 'paquete.json', mime: 'application/json' }] } });
+    await SELF.fetch(rec.cuerpo.recursos[0].subida.url, { method: 'PUT', body: JSON.stringify(paqueteDocumento(['The building is circular.', 'The apartment of the inspector occupies the centre.'])), headers: { 'content-type': 'application/json' } });
+    const ing = await api(`/subidas/${s.cuerpo.subida}/ingestar`, { token: t, cuerpo: { paquete: 'paquete.json' } });
+    expect((await esperarTarea(t, ing.cuerpo.tarea)).estado).toBe('listo');
+    const id = ing.cuerpo.documento as string;
+
+    // Sin clave de Gemini en las pruebas: el Workflow de comprensión corre y lo deja dicho.
+    let mapa: any;
+    for (let i = 0; i < 120; i++) {
+      mapa = await api(`/documentos/${id}/comprension`, { token: t });
+      if (mapa.cuerpo.estado?.estado === 'sin_modelo') break;
+      await new Promise((r) => setTimeout(r, 250));
+    }
+    expect(mapa.estado).toBe(200);
+    expect(mapa.cuerpo.estado).toMatchObject({ documento: id, estado: 'sin_modelo', lentes: ['ensayo'] });
+    expect(mapa.cuerpo.estado.params).toBeUndefined();
+    expect(mapa.cuerpo.totales).toEqual({ segmentos: 0, planos: 0, fichas: 0, apariciones: 0, entidades: 0 });
+    expect((await api(`/documentos/${id}/segmentos`, { token: t })).cuerpo).toEqual([]);
+    expect((await api(`/documentos/${id}/fichas?clase=escena`, { token: t })).cuerpo).toEqual({ elementos: [], total: 0 });
+    expect((await api(`/documentos/${id}/apariciones?rol=habla`, { token: t })).cuerpo).toEqual({ elementos: [], total: 0 });
+    expect((await api(`/documentos/${id}/apariciones?rol=gritado`, { token: t })).estado).toBe(400);
+    expect((await api('/documentos/no-existe/comprension', { token: t })).estado).toBe(404);
+
+    // Pedirla otra vez (forzada y con una lente fijada), para un documento o para todos.
+    const otra = await api(`/documentos/${id}/comprender`, { token: t, cuerpo: { forzar: true, lentes: ['ensayo', 'cientifico'] } });
+    expect(otra.estado).toBe(202);
+    expect(otra.cuerpo).toMatchObject({ documento: id, estado: 'pendiente', instancia: expect.stringMatching(new RegExp(`^cmp-${id}-`)) });
+    expect((await api(`/documentos/${id}/comprender`, { token: t, cuerpo: { lentes: ['astrologia'] } })).estado).toBe(400);
+    const todas = await api('/comprension/biblioteca', { token: t, cuerpo: { forzar: true } });
+    expect(todas.estado).toBe(202);
+    expect(todas.cuerpo.encolados).toBe(1);
+    const lista = await api('/comprension', { token: t });
+    expect(lista.cuerpo.map((e: { documento: string }) => e.documento)).toEqual([id]);
+
+    // La v1 pasa por la v2.
+    const clave = await api('/claves', { token: t, cuerpo: { nombre: 'comprension', alcances: ['lectura', 'escritura'] } });
+    const v1 = await SELF.fetch(`https://scholaris.prueba/api/v1/documentos/${id}/comprension`, { headers: { authorization: `Bearer ${clave.cuerpo.secreto}` } });
+    expect(v1.status).toBe(200);
+    expect(((await v1.json()) as { documento: string }).documento).toBe(id);
+    const v1b = await SELF.fetch('https://scholaris.prueba/api/v1/comprender', { method: 'POST', headers: { authorization: `Bearer ${clave.cuerpo.secreto}`, 'content-type': 'application/json' }, body: JSON.stringify({ documentos: [id] }) });
+    expect(v1b.status).toBe(202);
+  });
+});
+
 describe('rehacer folios sin releer', () => {
   it('quita los folios inventados de las guardas en blanco y reancla los fragmentos', async () => {
     const t = await token('user_folios', { fea: 'u:scholaris' });

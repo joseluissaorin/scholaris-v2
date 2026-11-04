@@ -46,6 +46,10 @@ export const MODELOS_GEMINI = {
   redactorAlto: 'gemini-3.8-flash',
   embebedor: 'gemini-embedding-2',
   transcriptor: 'gemini-3.5-transcribe',
+  /** Comprensión (docs/COMPRENSION.md): estructura, fichas, entidades y ficha global. Elegido en el banco (ver proveedores/src/comprension.ts). */
+  comprension: 'gemini-3.1-pro-preview',
+  /** Comprensión rápida: secuencias, elección de lente, modo económico y lo que pase del presupuesto. */
+  comprensionRapida: 'gemini-3.8-flash',
 } as const;
 
 export interface ConfigGemini extends OpcionesComunes {

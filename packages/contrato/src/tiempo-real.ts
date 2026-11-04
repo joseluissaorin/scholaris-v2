@@ -60,6 +60,8 @@ export type EventoTiempoReal =
   | { tipo: 'fase'; tarea: string; documento: string; fase: FaseIngesta; ms?: number }
   | { tipo: 'fin'; tarea: string; documento?: string; estado: EstadoTarea; error?: string }
   | { tipo: 'alerta'; alerta: Alerta }
+  /** La comprensión de un documento avanza (docs/COMPRENSION.md): va aparte de la ingesta, que ya terminó. */
+  | { tipo: 'comprension'; documento: string; paso: string; avance: number; mensaje: string; estado?: 'en_marcha' | 'hecho' | 'error' }
   | { tipo: 'pong'; t: number };
 
 export type MensajeCliente =

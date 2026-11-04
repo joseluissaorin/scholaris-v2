@@ -11,6 +11,7 @@ import type { ParamsIngesta } from '../puertos.js';
 import type { MensajeCola } from './cola.js';
 import type { Conversor } from './conversor.js';
 import type { Trabajador } from './trabajador-do.js';
+import type { ParamsComprension } from '../compartido/comprension.js';
 
 export interface Env {
   ESTANTERIA: DurableObjectNamespace<Estanteria>;
@@ -18,6 +19,8 @@ export interface Env {
   LIMITADOR: DurableObjectNamespace<Limitador>;
   TRABAJADOR: DurableObjectNamespace<Trabajador>;
   INGESTA: Workflow<ParamsIngesta>;
+  /** La comprensión de cada documento ya listo (docs/COMPRENSION.md). */
+  COMPRENSION: Workflow<ParamsComprension>;
   /** Contenedor de conversión (opcional; ver deploy/contenedor). */
   CONVERSOR?: DurableObjectNamespace<Conversor>;
   DB: D1Database;

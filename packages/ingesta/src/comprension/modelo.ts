@@ -41,7 +41,7 @@ export class ErrorPresupuesto extends Error {
 export async function llamar<T>(modelo: ModeloComprension, p: PeticionComprension, acumulado: { uso: UsoModelo }): Promise<T> {
   const r = await reintentar(async () => modelo.generar<T>(p), {
     intentos: 3, base: 2000,
-    esReintentable: (e) => !/bloquead|PROHIBITED|SAFETY|presupuesto|no acepta/i.test(e instanceof Error ? e.message : String(e)),
+    esReintentable: (e) => !/bloquead|PROHIBITED|SAFETY|presupuesto|no acepta|MAX_TOKENS|cortada|sin respuesta para/i.test(e instanceof Error ? e.message : String(e)),
   });
   const u = acumulado.uso;
   u.tokensEntrada += r.uso.tokensEntrada; u.tokensSalida += r.uso.tokensSalida; u.usd += r.uso.usd; u.ms += r.uso.ms; u.llamadas += r.uso.llamadas;

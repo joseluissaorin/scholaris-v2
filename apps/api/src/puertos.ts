@@ -9,6 +9,7 @@ import type { Cuentas } from './compartido/cuentas.js';
 import type { ArchivoConvertir } from './compartido/motor-ingesta.js';
 import type { Recortador } from './compartido/conversor-remoto.js';
 import type { PaqueteConversion } from '@scholaris/imprenta';
+import type { ParamsComprension } from './compartido/comprension.js';
 
 /** El almacén con lo que hace falta para las subidas por partes y las URLs firmadas. */
 export interface AlmacenAmpliado extends Almacen {
@@ -97,6 +98,8 @@ export interface ParamsIngesta {
 export interface Orquestador {
   /** Lanza la ingesta (Workflow en la nube, cola local en casa). */
   lanzarIngesta(p: ParamsIngesta): Promise<void>;
+  /** Lanza la comprensión de un documento (Workflow `scholaris-comprension`, o la cola local). */
+  lanzarComprension?(p: ParamsComprension): Promise<void>;
   cancelar(tarea: string): Promise<void>;
   /** Estado del motor (para depurar), si se sabe. */
   estado?(tarea: string): Promise<string | null>;

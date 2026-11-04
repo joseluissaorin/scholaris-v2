@@ -138,6 +138,8 @@ export interface PlanComprension {
   economico: boolean;
   /** Calidad del modelo en cada paso (el económico lo pone todo en «rapida»). */
   calidades: Record<'estructura' | 'fichas' | 'entidades' | 'global', 'alta' | 'rapida'>;
+  /** Huella del material del que sale. */
+  huella: string;
   /** Ya estaba hecha con esta versión: los pasos no hacen nada. */
   hecha: boolean;
   opciones: Pick<OpcionesComprension, 'segmentosPorLlamada' | 'wikidata' | 'maxCaracteresContexto'>;
@@ -158,8 +160,14 @@ export interface EstadoComprension {
   llamadas: number;
   avisos: string[];
   error?: string;
+  /** Huella del material (unidades): si la ingesta se rehace, la comprensión también. */
+  huella?: string;
   /** Instancia del Workflow que la lleva (para el vigilante). */
   instancia?: string;
+  /** Con qué se lanzó (para relanzarla igual). */
+  params?: Record<string, unknown>;
+  /** Ya se entregó al orquestador (las pendientes sin lanzar esperan su turno en la cola). */
+  lanzada?: boolean;
   relanzamientos?: number;
   modelo?: string;
   iniciado: string;
