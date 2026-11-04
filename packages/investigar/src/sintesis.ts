@@ -10,7 +10,8 @@ import { flujoDe } from './modelo.js';
 import { fichaDe, lineaPrueba, recortar, type ContextoHerramientas, type Nota } from './contexto.js';
 import { estrechar, vistaPrueba, type Prueba } from './pruebas.js';
 
-const MARCA = /\[\s*((?:P\d+)(?:\s*[,;]\s*P\d+)*)\s*\]/gi;
+/** [P3], [P3, P8] y también con un localizador dentro («[P3, p. 14]», «[P5: 1:02:03]»), que se quita. */
+const MARCA = /\[\s*(P\d+\b[^[\]\n]{0,80}?)\s*\]/gi;
 
 /** Una cita literal justo antes de la marca («…» o “…”), si la hay. */
 export function citaPrevia(previo: string): string | null {
@@ -39,7 +40,7 @@ export class Numerador {
 
   /** Sustituye el contenido de una marca; `previo` es el texto crudo anterior (para ver si va detrás de una cita). */
   resolver(contenido: string, previo: string): { texto: string; nuevas: Record<string, string> } {
-    const ids = contenido.split(/\s*[,;]\s*/).map((x) => x.trim().toUpperCase()).filter(Boolean);
+    const ids = [...new Set((contenido.match(/\bP\d+\b/gi) ?? []).map((x) => x.toUpperCase()))];
     const cita = citaPrevia(previo);
     const salida: string[] = [];
     const nuevas: Record<string, string> = {};
@@ -103,15 +104,23 @@ Reglas obligatorias:
 1. Cada afirmación sobre las obras lleva detrás la marca de la prueba que la sostiene: [P3], o [P3, P8] si hacen falta dos. Elige la prueba más precisa (como mucho tres por afirmación); no amontones marcas. Solo existen las marcas del cuaderno. Nunca inventes marcas, páginas, minutos, autores ni años.
 2. Cuando cites palabras de una obra, cópialas EXACTAS entre comillas latinas, en su lengua original, y pon la marca justo detrás: «tal cual» [P3]. Si la lengua de la cita no es la de la respuesta, añade detrás su traducción entre paréntesis: «original» [P3] («traducción»).
 3. Lo que se ve o se oye (planos, encuadre, quién domina la imagen, música) solo con pruebas de «ver» o «escuchar» (o de fotogramas descritos). Lo dicho en un diálogo no prueba cómo está filmado.
-4. Si las pruebas no bastan para una parte de la pregunta, dilo con claridad («no he podido comprobar…»). Las interpretaciones propias van como tales («cabe leerlo como…») y se apoyan en pruebas; nunca presentes como hecho lo que no está probado.
+4. Si las pruebas no bastan para una parte de la pregunta, dilo con claridad («no he podido comprobar…»). Las interpretaciones propias van como tales («cabe leerlo como…») y se apoyan en pruebas; nunca presentes como hecho lo que no está probado. No afirmes que algo no aparece o no ocurre en una obra porque no esté en el cuaderno: la transcripción y el texto pueden tener huecos; di que no lo has podido comprobar.
 5. Extensión: la que pida la pregunta. Si tiene varias partes, dedica a cada una su apartado (###) y cierra con una conclusión breve. Usa una tabla en Markdown cuando compares obras, versiones o escenas (con marcas en las celdas). Nada de relleno.
 6. No hables de herramientas, del cuaderno ni de marcas P: escribe como en un artículo, citando así.
 7. Rayas según la RAE: nunca un guion largo con espacios a los dos lados como en inglés; prefiere comas o paréntesis.`;
 }
 
+/** ¿Entra la prueba en la redacción? Las de obras ajenas al plan, solo si el agente las pidió. */
+export function pruebaEnAmbito(ctx: ContextoHerramientas, p: Prueba): boolean {
+  const plan = ctx.documentosPlan;
+  if (!plan?.length) return true;
+  return plan.includes(p.evidencia.documento) || !!ctx.pedidos?.has(p.evidencia.documento);
+}
+
 export function textoCuaderno(ctx: ContextoHerramientas): string {
   const porDoc = new Map<string, Prueba[]>();
   for (const p of ctx.pruebas.todas()) {
+    if (!pruebaEnAmbito(ctx, p)) continue;
     const l = porDoc.get(p.evidencia.documento) ?? [];
     l.push(p);
     porDoc.set(p.evidencia.documento, l);

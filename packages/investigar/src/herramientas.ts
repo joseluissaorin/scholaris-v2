@@ -25,6 +25,27 @@ async function quieto<T>(f: () => Promise<T>, defecto: T): Promise<T> {
   try { return await f(); } catch { return defecto; }
 }
 
+/**
+ * Tramos de un audio o un vídeo sin transcripción (de al menos `minimo` segundos), dentro
+ * de `tramo` si se da: el principio, el final y los huecos entre unidades. Allí puede
+ * haber diálogo que la ingesta no recogió (o solo música): nada se da por ausente sin mirarlo.
+ */
+export async function huecosTranscripcion(sql: ContextoHerramientas['p']['sql'], documento: string, tramo?: [number, number], minimo = 60): Promise<Array<[number, number]>> {
+  const [d] = await sql.ejecutar<{ tipo: string; duracion: number | null }>('SELECT tipo, duracion FROM documentos WHERE id = ?', documento);
+  if (!d || (d.tipo !== 'video' && d.tipo !== 'audio')) return [];
+  const us = await sql.ejecutar<{ t0: number; t1: number }>('SELECT t0, t1 FROM unidades WHERE documento = ? AND t0 IS NOT NULL ORDER BY t0', documento);
+  const fin = d.duracion ?? us.at(-1)?.t1 ?? 0;
+  const huecos: Array<[number, number]> = [];
+  let cursor = 0;
+  for (const u of us) {
+    if (u.t0 - cursor >= minimo) huecos.push([cursor, u.t0]);
+    cursor = Math.max(cursor, u.t1);
+  }
+  if (fin - cursor >= minimo) huecos.push([cursor, fin]);
+  if (!tramo) return huecos;
+  return huecos.filter(([a, b]) => a < tramo[1] && b > tramo[0]).map(([a, b]) => [Math.max(a, tramo[0]), Math.min(b, tramo[1])] as [number, number]).filter(([a, b]) => b - a >= Math.min(minimo, 20));
+}
+
 /** El ámbito (la unidad) de las pruebas que salen de fragmentos o unidades. */
 async function ambitos(ctx: ContextoHerramientas, unidades: string[]): Promise<Map<string, Ambito & { imagen: string | null }>> {
   return quieto(() => leerUnidades(ctx.p.sql, unidades), new Map());
@@ -74,6 +95,8 @@ const buscar: Herramienta = {
       documentos = [...new Set(args.documentos.map((d) => resolverDocumento(ctx, d)).filter((d): d is string => !!d))];
       if (!documentos.length) return fallo(`No conozco esos documentos. Disponibles: ${documentosDisponibles(ctx)}`);
     } else if (ctx.filtros.documentos?.length) documentos = ctx.filtros.documentos;
+    else if (ctx.documentosPlan?.length) documentos = ctx.documentosPlan;
+    const enPlan = !Array.isArray(args.documentos) && !ctx.filtros.documentos?.length && !!ctx.documentosPlan?.length;
     const filtros: FiltrosCapas = { ...ctx.filtros, ...(documentos ? { documentos } : {}) };
     if (texto(args.idioma)) filtros.idiomas = [texto(args.idioma)];
     const paginas = tramoDe(args.paginas);
@@ -90,8 +113,17 @@ const buscar: Herramienta = {
     const capas = capa === 'literal' ? ['literal' as const] : capa === 'comprension' ? ['comprension' as const] : ['literal' as const, 'comprension' as const];
     const k = Math.min(12, Math.max(1, Math.round(Number(args.k) || ctx.resultadosPorBusqueda)));
     const r = await buscarEnCapas(ctx.p.buscador, consulta, { capas, filtros, limite: k });
+    // Una búsqueda vacía no prueba que algo no esté: la transcripción puede tener huecos.
+    const medios = (documentos ?? [...ctx.docs.keys()]).filter((d) => ['video', 'audio'].includes(ctx.docs.get(d)?.tipo ?? ''));
+    const huecos: string[] = [];
+    for (const d of medios.slice(0, 4)) {
+      const hs = await quieto(() => huecosTranscripcion(ctx.p.sql, d, filtros.tiempo), []);
+      if (hs.length) huecos.push(`${fichaDe(ctx, d)?.titulo ?? d}: ${hs.slice(0, 8).map(([a, b]) => `${tiempoACadena(a)}-${tiempoACadena(b)}`).join(', ')}`);
+    }
+    const avisoHuecos = huecos.length ? `\nOjo: la transcripción no cubre estos tramos (puede faltar diálogo): ${huecos.join('; ')}. Lo que no sale aquí puede estar ahí: míralo o escúchalo antes de dar nada por ausente.` : '';
+    const nota = enPlan ? `(Buscado en las obras del plan; pasa «documentos» para buscar en otras.)\n` : '';
     if (!r.resultados.length) {
-      return { texto: `Sin resultados para «${consulta}»${filtros.paginas || filtros.tiempo ? ' en ese tramo' : ''}. Prueba otras palabras, otra lengua o lee el tramo con «leer».`, resumen: 'sin resultados', pruebas: [] };
+      return { texto: `${nota}Sin resultados para «${consulta}»${filtros.paginas || filtros.tiempo ? ' en ese tramo' : ''}. Prueba otras palabras, otra lengua o lee el tramo con «leer». No concluyas que no está.${avisoHuecos}`, resumen: 'sin resultados', pruebas: [] };
     }
     const lineas: string[] = [];
     const nuevas: string[] = [];
@@ -116,7 +148,7 @@ const buscar: Herramienta = {
         lineas.push(`[ficha ${f.clase}, lente ${f.lente}] ${f.documento ? rotuloDocumento(ctx, f.documento) : 'biblioteca'}${donde}\n${recortar(f.texto, 900)}\n  pruebas de la ficha: ${ids.length ? ids.join(', ') : 'ninguna'} (la ficha es análisis: cita sus pruebas, no la ficha)`);
       }
     }
-    return { texto: lineas.join('\n\n'), resumen: `${literales} pasajes${fichas ? ` y ${fichas} fichas` : ''}`, pruebas: nuevas };
+    return { texto: `${nota}${lineas.join('\n\n')}${filtros.tiempo ? avisoHuecos : ''}`, resumen: `${literales} pasajes${fichas ? ` y ${fichas} fichas` : ''}`, pruebas: nuevas };
   },
 };
 
@@ -193,6 +225,10 @@ const leer: Herramienta = {
         lineas.push(`[${p.id}] fotograma ${tiempoACadena(a.t0)}: ${recortar(desc, 300)}`);
       }
     }
+    if (tramo.tiempo) {
+      const hs = await quieto(() => huecosTranscripcion(sql, doc, tramo!.tiempo, 30), []);
+      if (hs.length) lineas.push(`(Sin transcripción en ${hs.map(([a, b]) => `${tiempoACadena(a)}-${tiempoACadena(b)}`).join(', ')}: puede faltar diálogo; míralo o escúchalo.)`);
+    }
     return { texto: `${rotuloDocumento(ctx, doc)}\n\n${lineas.join('\n\n')}`, resumen: `${unidades.length} unidades de ${fichaDe(ctx, doc)?.titulo ?? doc}`, pruebas: nuevas };
   },
 };
@@ -233,6 +269,10 @@ const mapa: Herramienta = {
         return `- ${donde}: ${recortar(u.texto.replace(/\*\*([^*]+):\*\*/g, '$1:').replace(/\s+/g, ' '), 110)}`;
       });
       if (linea.length) partes.push(`Recorrido (${unidades.length} unidades${paso > 1 ? `, una de cada ${paso}` : ''}):\n${linea.join('\n')}`);
+    }
+    if (d.tipo === 'video' || d.tipo === 'audio') {
+      const hs = await quieto(() => huecosTranscripcion(sql, doc), []);
+      if (hs.length) partes.push(`Tramos sin transcripción (de un minuto o más; puede faltar diálogo o ser solo música, compruébalo con «ver» o «escuchar»): ${hs.map(([a, b]) => `${tiempoACadena(a)}-${tiempoACadena(b)}`).join(', ')}.`);
     }
     if (d.tipo === 'video') {
       const figs = await quieto(() => sql.ejecutar<{ descripcion: string | null; ancla: string }>(`SELECT descripcion, ancla FROM figuras WHERE documento = ? ORDER BY json_extract(ancla, '$.t0')`, doc), []);
@@ -484,7 +524,7 @@ const alinear: Herramienta = {
       // Sin comillas: una frase entrecomillada haría que el buscador la tomara por cita literal.
       const textoTramo = unidades.map((u) => u.texto.replace(/\*\*[^*\n]{1,60}?:\*\*\s*/g, '')).join(' ').replace(/[«»“”"]/g, '').replace(/\s+/g, ' ').slice(0, 900);
       if (!textoTramo) return { texto: 'Ese tramo está vacío.', resumen: 'tramo vacío', pruebas: [] };
-      const otros = con ? [con] : [...ctx.docs.keys()].filter((id) => id !== doc && (!ctx.ambito || ctx.ambito.has(id)));
+      const otros = con ? [con] : (ctx.documentosPlan?.length ? ctx.documentosPlan : [...ctx.docs.keys()]).filter((id) => id !== doc && (!ctx.ambito || ctx.ambito.has(id)));
       if (!otros.length) return { texto: 'No hay otras obras en el ámbito con las que alinear.', resumen: 'sin otras obras', pruebas: [] };
       const r = await buscarEnCapas(ctx.p.buscador, textoTramo, { capas: ['literal'], filtros: { documentos: otros }, limite: 5, reordenar: false });
       lineas.push(`No hay alineación calculada para este tramo. Pasajes más parecidos (por sentido, hay que comprobarlos leyendo):`);

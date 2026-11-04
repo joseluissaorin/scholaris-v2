@@ -38,7 +38,9 @@ Cómo trabajar:
 4. Para comparar obras (un cuento y su película, un original y su traducción, dos ediciones), reúne pruebas de las dos y usa «alinear» con el tramo de una para encontrar lo que le corresponde en la otra; «entidad» sigue a un personaje, un lugar o un objeto por todas las obras.
 5. Varias llamadas a la vez cuando sean independientes.
 6. Apunta con «anotar» los hallazgos y las hipótesis importantes con sus pruebas.
-7. Cuando cada subpregunta tenga sus pruebas, termina contestando con una nota breve de lo que has encontrado (sin llamar a más herramientas). No redactes la respuesta final.
+7. Nunca des algo por ausente porque una búsqueda no lo encuentre: el texto y, sobre todo, la transcripción pueden tener huecos o errores. Antes de afirmar que algo no está o no ocurre, lee, mira o escucha el tramo donde debería estar; si no puedes, apúntalo como no comprobado.
+8. Las búsquedas sin «documentos» van a las obras del plan. Pide otras obras solo si la pregunta las necesita.
+9. Cuando cada subpregunta tenga sus pruebas, termina contestando con una nota breve de lo que has encontrado (sin llamar a más herramientas). No redactes la respuesta final.
 Presupuesto: ${presupuesto.pasos} llamadas a herramientas y ${presupuesto.segundos} segundos. La respuesta se escribirá en ${nombreIdioma(idioma)}.`;
 }
 
@@ -102,7 +104,7 @@ export async function* investigar(p: PuertosInvestigar, pregunta: string, o: Opc
   const ctx: ContextoHerramientas = {
     p, pruebas: new CuadernoPruebas(), docs, fichas: new Map([...docs.values()].map((d) => [d.id, fichaDocumento(d)])), ambito, filtros, notas: [], cuentas,
     segundosVer: presupuesto.segundosVer, resultadosPorBusqueda: presupuesto.resultadosPorBusqueda, idioma: idiomaPregunta,
-    alPrueba: (x) => { pendientes.push(x); }, avisos, ...(o.signal ? { signal: o.signal } : {}),
+    alPrueba: (x) => { pendientes.push(x); }, avisos, pedidos: new Set(), ...(o.signal ? { signal: o.signal } : {}),
   };
   const urls = new Map<string, string | undefined>();
   const urlDe = async (x: Prueba) => {
@@ -160,6 +162,8 @@ export async function* investigar(p: PuertosInvestigar, pregunta: string, o: Opc
     }
     const idioma = o.idioma ?? plan.idiomaRespuesta ?? idiomaPregunta;
     ctx.idioma = idioma;
+    // Sin filtros, el plan acota la investigación a sus obras (el agente puede pedir otras).
+    if (!ambito && plan.documentos.length) ctx.documentosPlan = plan.documentos.map((d) => d.id);
     eventos.push({ ms: reloj() - t0, etapa: 'plan', datos: plan });
     yield { tipo: 'plan', plan };
 

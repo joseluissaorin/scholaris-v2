@@ -100,7 +100,8 @@ const ESQUEMA = {
 const SISTEMA = `Compruebas frase a frase una respuesta académica contra sus pruebas. Para cada frase numerada:
 - Si cita pruebas: «respaldada» si las pruebas dicen lo que afirma (o lo implican claramente); «parcial» si solo sostienen una parte o la frase exagera; «sin_respaldo» si no lo dicen o lo contradicen.
 - Si no cita pruebas: «interpretacion» si es comentario, análisis o conclusión razonada (no necesita cita); «sin_prueba» si afirma un hecho concreto de las obras (qué pasa, qué dice alguien, cómo está filmado, en qué página o minuto) que necesitaría una prueba.
-Sé estricto con los datos concretos (quién, qué, cuándo, cómo se ve) y generoso con la interpretación. Las notas, en español.`;
+- Una afirmación de ausencia («la película no muestra…», «el cuento no menciona…», «no hay…») es «sin_prueba» salvo que las pruebas citadas muestren el tramo entero donde debería estar.
+Sé estricto con los datos concretos (quién, qué, cuándo, cómo se ve, quién dice qué) y generoso con la interpretación. Las notas, en español.`;
 
 /** Verifica las frases. `revisiones`: cuántas frases visuales se pueden volver a mirar. */
 export async function verificar(ctx: ContextoHerramientas, numerador: Numerador, markdown: string, revisiones: number): Promise<{ frases: FraseVerificada[]; detalle: Array<FraseRespuesta & { veredicto: FraseVerificada['veredicto'] | 'interpretacion'; nota?: string; revisada?: boolean }> }> {
@@ -154,14 +155,28 @@ export async function verificar(ctx: ContextoHerramientas, numerador: Numerador,
       ctx.avisos.push(`La verificación de un lote falló: ${(e as Error).message}`);
     }
   }));
-  // 3. Lo visual, volviendo a mirar.
+  // 3. Lo visual y quién dice qué, volviendo a mirar: primero lo visual, luego las atribuciones de
+  // una frase a un hablante que solo se apoyan en la transcripción (sus etiquetas pueden fallar).
   let quedan = revisiones;
+  const aRevisar: Array<{ i: number; f: FraseRespuesta; prueba: NonNullable<ReturnType<Numerador['marcada']>> }> = [];
   for (const [i, f] of frases.entries()) {
-    if (quedan <= 0) break;
     const v = veredictos.get(i);
     if (!v || (v.veredicto !== 'respaldada' && v.veredicto !== 'parcial')) continue;
     const visual = f.evidencias.map((id) => numerador.marcada(id)).find((x) => x && x.prueba.capa === 'percepcion' && (x.evidencia.modo === 'video' || x.evidencia.modo === 'imagen'));
-    if (!visual) continue;
+    if (visual) aRevisar.push({ i, f, prueba: visual });
+  }
+  for (const [i, f] of frases.entries()) {
+    const v = veredictos.get(i);
+    if (!v || (v.veredicto !== 'respaldada' && v.veredicto !== 'parcial') || aRevisar.some((x) => x.i === i)) continue;
+    const dicho = f.evidencias.map((id) => numerador.marcada(id)).find((x) => {
+      const a = x?.evidencia.ancla;
+      return x && x.evidencia.modo === 'audio' && a?.tipo === 'tiempo' && !!a.hablante && f.limpia.toLowerCase().includes(a.hablante.toLowerCase());
+    });
+    if (dicho) aRevisar.push({ i, f, prueba: dicho });
+  }
+  for (const { i, f, prueba: visual } of aRevisar) {
+    if (quedan <= 0) break;
+    const v = veredictos.get(i)!;
     quedan--;
     try {
       const r = await volverAMirar(ctx, visual.prueba, f.limpia);

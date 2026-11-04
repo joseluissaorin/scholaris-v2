@@ -32,6 +32,14 @@ export interface ContextoHerramientas {
   idioma: string;
   /** Se llama con cada prueba nueva (para emitir el evento «evidencia»). */
   alPrueba: (p: Prueba) => void;
+  /**
+   * Las obras del plan: lo que se busca sin decir dónde se busca ahí, y la redacción
+   * solo ve pruebas de ellas o de las obras que el agente pidió expresamente (así no
+   * se cuela en una respuesta sobre una película el pasaje de otro libro). null: todas.
+   */
+  documentosPlan?: string[] | null;
+  /** Obras que el agente nombró en sus llamadas. */
+  pedidos?: Set<string>;
   avisos: string[];
   signal?: AbortSignal;
 }
@@ -114,6 +122,12 @@ export function fichaDe(ctx: ContextoHerramientas, id: string): FichaDocumento |
 
 /** El documento al que se refiere el modelo: su id, o un trozo de su título. Respeta el ámbito. */
 export function resolverDocumento(ctx: ContextoHerramientas, valor: unknown): string | null {
+  const id = resolverSinApuntar(ctx, valor);
+  if (id) ctx.pedidos?.add(id);
+  return id;
+}
+
+function resolverSinApuntar(ctx: ContextoHerramientas, valor: unknown): string | null {
   const v = texto(valor);
   if (!v) return null;
   const dentro = (id: string) => !ctx.ambito || ctx.ambito.has(id);

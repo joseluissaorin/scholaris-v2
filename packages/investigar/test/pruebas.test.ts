@@ -87,6 +87,11 @@ describe('numerar las citas', () => {
     expect(n.evidencia('E2')!.ancla.caracteres).toBeUndefined();
   });
 
+  it('las marcas con localizador dentro valen igual y el localizador se quita', () => {
+    const n = new Numerador(contexto());
+    expect(n.sustituir('Uno [P1, p. 4]. Dos [P2: pág. 4; P1]. Tres [P1 p. 3]. Nada [Pxx].')).toBe('Uno [E1]. Dos [E1]. Tres [E1]. Nada [Pxx].');
+  });
+
   it('una cita que no está en la prueba queda anotada', () => {
     const n = new Numerador(contexto());
     n.sustituir('Dice «algo que no está» [P1].');
