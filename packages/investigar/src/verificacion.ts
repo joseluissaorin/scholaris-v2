@@ -246,6 +246,11 @@ async function juzgar(ctx: ContextoHerramientas, numerador: Numerador, frases: F
     // Sin juicio (lote caído): se da por bueno, y la frase se señala.
     for (const id of f.evidencias) marcas[id] = x?.marcas[id] ?? { veredicto: 'sostiene', nota: x ? 'Sin juicio.' : 'Sin verificar.' };
     for (const [id, v] of Object.entries(comprobacionesLiterales(f, numerador))) marcas[id] = v;
+    // Tres marcas o más en una frase casi nunca sostienen cada una la frase entera (en el banco,
+    // más de la mitad quedaban «parcial»): se corrige siempre, partiéndola.
+    if (!f.tabla && new Set(f.evidencias).size >= 3) {
+      for (const id of f.evidencias) if (marcas[id]!.veredicto === 'sostiene') marcas[id] = { veredicto: 'parcial', nota: 'La frase junta varias afirmaciones con varias pruebas: hay que partirla.' };
+    }
     return { ...f, clase: x?.clase ?? (f.evidencias.length ? 'hecho' : 'interpretacion'), marcas, ...(x?.nota ? { nota: x.nota } : {}) };
   });
 }

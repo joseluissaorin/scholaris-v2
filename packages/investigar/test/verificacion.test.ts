@@ -116,6 +116,25 @@ describe('verificación por marcas y corrección', () => {
   });
 });
 
+describe('frases con muchas marcas', () => {
+  it('una frase con tres marcas se corrige siempre, aunque el juez la dé por buena', async () => {
+    let corregida = false;
+    const { ctx } = ctxCon((p) => {
+      const t = textoDe(p);
+      if (p.sistema?.startsWith('Corriges')) {
+        corregida = true;
+        expect(t).toContain('hay que partirla');
+        return { json: { frases: [{ i: 0, texto: 'Marta llega al puerto [E1]. Tomás cuenta historias [E2]. Marta no piensa volver [E3].' }] } };
+      }
+      return { json: juicio(t, () => null) };
+    });
+    const n = new Numerador(ctx);
+    const v = await verificar(ctx, n, n.sustituir('Marta llega al puerto, Tomás cuenta historias y Marta no piensa volver [P1][P2][P3].'), { sitios: 0 });
+    expect(corregida).toBe(true);
+    expect(v.markdown).toBe('Marta llega al puerto [E1]. Tomás cuenta historias [E2]. Marta no piensa volver [E3].');
+  });
+});
+
 describe('lo que se nombra tiene que estar escrito', () => {
   it('reconoce siglas y nombres detrás de «nombra», «menciona», «dice»', () => {
     expect(nombradosEn('La película nombra explícitamente la UMAP en ese diálogo.')).toEqual(['UMAP']);
