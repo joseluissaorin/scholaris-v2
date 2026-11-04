@@ -37,15 +37,23 @@ export function useUnidad(documento: string, orden: number | null | undefined): 
   return orden != null ? data?.find((u) => u.orden === orden) : undefined;
 }
 
-/** El orden (desde 1) de la unidad de un medio que suena en el segundo `t`, por los folios. */
-export function useOrdenEnTiempo(documento: string, t: number | null): number | null {
+/**
+ * El orden (desde 1) de la unidad de un medio que suena en el segundo `t`, por los folios. Con
+ * `hasta`, si el tramo [t, hasta) empieza en silencio, la primera unidad que empieza dentro de él.
+ */
+export function useOrdenEnTiempo(documento: string, t: number | null, hasta?: number): number | null {
   const { data } = useQuery({ ...q.folios(documento), enabled: t != null });
   return useMemo(() => {
     if (t == null || !data) return null;
+    // Un tramo entero (una escena): la primera unidad que empieza dentro de él, si la hay.
+    if (hasta != null) {
+      const dentro = data.folios.find((f) => f.t0 != null && f.t0 >= t - 0.01 && f.t0 < hasta);
+      if (dentro) return dentro.orden;
+    }
     let mejor: number | null = null;
     for (const f of data.folios) if (f.t0 != null && f.t0 <= t + 0.01) mejor = f.orden;
     return mejor ?? data.folios[0]?.orden ?? null;
-  }, [data, t]);
+  }, [data, t, hasta]);
 }
 
 /** El fotograma clave más cercano a un segundo (el último que empieza antes), o nada si el vídeo no los tiene. */
@@ -151,7 +159,7 @@ export function PalabrasDelTramo({ documento, ancla, alrededor = 18, vivo, alIr,
   className?: string;
 }) {
   const t = segundoDe(ancla);
-  const orden = useOrdenEnTiempo(documento, ancla.tipo === 'tiempo' ? ancla.t0 : null);
+  const orden = useOrdenEnTiempo(documento, ancla.tipo === 'tiempo' ? ancla.t0 : null, ancla.tipo === 'tiempo' && !ancla.caracteres ? ancla.t1 : undefined);
   const u = useUnidad(documento, orden);
   const datos = useMemo(() => {
     if (!u || ancla.tipo !== 'tiempo') return null;

@@ -462,3 +462,11 @@ export const ESCENAS_CUENTO: Array<{ id: string; titulo: string; parte: number; 
   { id: 'ce11', titulo: 'El reloj quieto', parte: 3, desde: 12, hasta: 12, orden: 'cronológico', duracion: 'escena', frecuencia: 'singulativa',
     resumen: 'En El Mirlo, Tomás deja el reloj sin darle la vuelta.', ficha: 'El final suspende el tiempo: mientras la arena siga abajo, la conversación no ha terminado. Don Julián vuelve a traer la canela, una reparación pequeña y tardía.' },
 ];
+
+// El índice de la película (lo que la comprensión deja en `secciones`): una entrada por secuencia, en su
+// primer tramo de diálogo (la demo no tiene tramos sin palabras).
+PELICULA.secciones = SECUENCIAS.map((s) => {
+  const t0 = s.escenas[0]!.t0;
+  const k = DIALOGOS.findIndex((d) => d[0] >= t0);
+  return { titulo: s.titulo, nivel: 1, unidad: (k < 0 ? DIALOGOS.length - 1 : k) + 1 };
+}).filter((x, i, a) => i === 0 || x.unidad !== a[i - 1]!.unidad);
