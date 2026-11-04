@@ -481,7 +481,8 @@ const alinear: Herramienta = {
     if (!relevantes.length) {
       // Sin alineación calculada: los pasajes más parecidos de las otras obras.
       const unidades = await unidadesDeTramo(sql, doc, tramo, 12);
-      const textoTramo = unidades.map((u) => u.texto.replace(/\*\*[^*\n]{1,60}?:\*\*\s*/g, '')).join(' ').replace(/\s+/g, ' ').slice(0, 900);
+      // Sin comillas: una frase entrecomillada haría que el buscador la tomara por cita literal.
+      const textoTramo = unidades.map((u) => u.texto.replace(/\*\*[^*\n]{1,60}?:\*\*\s*/g, '')).join(' ').replace(/[«»“”"]/g, '').replace(/\s+/g, ' ').slice(0, 900);
       if (!textoTramo) return { texto: 'Ese tramo está vacío.', resumen: 'tramo vacío', pruebas: [] };
       const otros = con ? [con] : [...ctx.docs.keys()].filter((id) => id !== doc && (!ctx.ambito || ctx.ambito.has(id)));
       if (!otros.length) return { texto: 'No hay otras obras en el ámbito con las que alinear.', resumen: 'sin otras obras', pruebas: [] };
