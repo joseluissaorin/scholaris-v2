@@ -47,7 +47,7 @@ const comprensor = (alto?: string, rapido?: string) => crearComprensorGemini(gem
 // Estantería local: SPDF 4.2 más el esquema de las funciones (grafo de entidades).
 // Con --estanteria se sigue sobre una estantería de una pasada anterior (para ver la biblioteca entera).
 const previa = valor('estanteria');
-const estanteria = previa ? await abrirSpdf(readFileSync(previa)) : await crearSpdf({ generador: 'comprender-local' });
+const estanteria = previa ? await abrirSpdf(new Uint8Array(readFileSync(previa))) : await crearSpdf({ generador: 'comprender-local' });
 const sql = estanteria.sql;
 await aplicarEsquemaFunciones(sql);
 const documentos: string[] = previa ? (await sql.ejecutar<{ id: string }>('SELECT id FROM documentos ORDER BY creado')).map((f) => String(f.id)) : [];
