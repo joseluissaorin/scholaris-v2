@@ -138,7 +138,8 @@ export async function lanzarComprension(
   // Una comprensión hecha no se da por perdida al relanzarla sin «forzar» (al cerrar otra vez la
   // ingesta, por ejemplo): el plan comprueba la versión y la huella del material y, si no han
   // cambiado, no hace nada. Solo lo que hay que hacer de verdad pasa a «pendiente».
-  const conserva = previo?.estado === 'hecho' && !o.forzar && !o.rehacer?.length;
+  // Con «rehacer» también: el plan ve «hecho» y repite solo esos pasos (con «pendiente» lo rehacía todo por partes).
+  const conserva = previo?.estado === 'hecho' && !o.forzar;
   const estado: EstadoComprension['estado'] = conserva ? 'hecho' : 'pendiente';
   await actualizarEstado(p.sql, documento, {
     estado, instancia, params: params as unknown as Record<string, unknown>, relanzamientos: 0, lanzada: false,
