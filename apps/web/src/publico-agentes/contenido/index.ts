@@ -10,6 +10,7 @@ import { spdf } from './spdf';
 import { busqueda } from './busqueda';
 import { citas } from './citas';
 import { investigacion } from './investigacion';
+import { comprension } from './comprension';
 import { bibliotecas } from './bibliotecas';
 import { reproductor } from './reproductor';
 import { api } from './api';
@@ -26,6 +27,6 @@ import { agentes } from './agentes';
 export type { Lengua, Pagina, Version } from './tipos';
 
 export const PAGINAS: Pagina[] = [
-  indice, queEs, formatos, spdf, busqueda, citas, investigacion, bibliotecas, reproductor,
+  indice, queEs, formatos, spdf, busqueda, citas, comprension, investigacion, bibliotecas, reproductor,
   api, local, privacidad, planes, rendimiento, preguntas, glosario, alternativas, cambios, agentes,
 ];

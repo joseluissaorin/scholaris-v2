@@ -84,13 +84,14 @@ export function RevisionTranscripcion({ doc, compacta, className }: { doc: Detal
         <div className="mt-2 flex flex-col gap-2">
           <div className="flex items-baseline gap-2">
             <span className="whitespace-nowrap text-[1.25rem] font-semibold tnum text-coffee-800">{pd ?? pa ?? '?'} %</span>
-            <span className="text-[0.8125rem] text-coffee-600">de lo que suena está transcrito{pd != null && pa != null && pd !== pa ? <span className="text-apagado"> (antes, {pa} %)</span> : null}</span>
+            <span className="text-[0.8125rem] text-coffee-600">{actual?.musica != null ? 'de lo que se habla' : 'de lo que suena'} está transcrito{pd != null && pa != null && pd !== pa ? <span className="text-apagado"> (antes, {pa} %)</span> : null}</span>
           </div>
           <BarraAvance valor={(pd ?? pa ?? 0) / 100} tono="azul" etiqueta="Parte transcrita de lo que suena" />
           {actual ? (
             <p className="text-[0.8125rem] text-coffee-600">
               {actual.huecos ? <>{numero(actual.huecos)} {actual.huecos === 1 ? 'hueco' : 'huecos'}{actual.segundosSinTexto ? `, ${tiempoACadena(actual.segundosSinTexto)} sin texto` : ''}. Van marcados en rojo, a trazos, bajo la línea del tiempo.</> : 'Sin huecos.'}
               {actual.palabrasRotas ? ` ${numero(actual.palabrasRotas)} ${actual.palabrasRotas === 1 ? 'palabra' : 'palabras'} con el instante roto.` : ''}
+              {actual.musica ? ` ${tiempoACadena(actual.musica)} de música sin palabras, apartados: no son habla perdida.` : ''}
             </p>
           ) : null}
           {r.correcciones && !compacta ? (

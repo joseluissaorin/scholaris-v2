@@ -54,6 +54,8 @@ export interface CoberturaTranscripcionVista {
   huecos: number;
   segundosSinTexto: number;
   palabrasRotas: number;
+  /** Segundos sin palabras que son música según la percepción: no cuentan como habla perdida (fuera de `activo`). */
+  musica?: number;
   /** Los huecos con su tramo (los primeros), para marcarlos en la línea del tiempo. */
   lista?: HuecoTranscripcion[];
 }

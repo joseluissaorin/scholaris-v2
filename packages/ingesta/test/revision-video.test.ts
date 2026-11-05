@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { Transcriptor } from '@scholaris/nucleo';
 import { instantesDePalabras } from '@scholaris/spdf';
 import {
-  aplicarCorrecciones, hablantesDeDialogos, coberturaTranscripcion, frasesUbicadas, marca, palabrasDeUnidad, palabrasDeUnidades, revisarHablantesVentana, revisarTranscripcionConVideo,
+  aplicarCorrecciones, hablantesDeDialogos, coberturaTranscripcion, sonidoParaCobertura, frasesUbicadas, marca, palabrasDeUnidad, palabrasDeUnidades, revisarHablantesVentana, revisarTranscripcionConVideo,
   subventanasDe, transcribirConVideo, Unificador, ventana,
   type AlmacenTrabajo, type CorreccionTranscripcion, type Mirada, type PeticionMirar, type UnidadMedio, type Vidente,
 } from '../src/index.js';
@@ -58,6 +58,20 @@ describe('cobertura', () => {
     expect(c.huecos.find((h) => h.motivo === 'tiempos_rotos')).toMatchObject({ t0: 80 });
     expect(c.palabrasRotas).toBe(3);
     expect(c.activo).toBe(27.5);
+  });
+
+  it('con la música de la percepción: lo que suena sin palabras dentro de la música no es habla perdida', () => {
+    const actividad: Array<[number, number]> = [[10, 13], [20, 40], [60, 61.5], [79, 82]];
+    // La percepción oyó música de 18 a 42 s y ninguna réplica dentro.
+    const c = coberturaTranscripcion(us, { duracion: 100, actividad, musica: [[18, 42]], dialogo: [11, 60.5] });
+    expect(c.huecos.find((h) => h.t0 === 20)?.motivo).toBe('musica');
+    expect(c.musica).toBe(20);
+    expect(c.activo).toBe(7.5);
+    // Si la percepción oyó una réplica dentro, es habla que falta.
+    const d = coberturaTranscripcion(us, { duracion: 100, actividad, musica: [[18, 42]], dialogo: [30] });
+    expect(d.huecos.find((h) => h.t0 === 20)?.motivo).toBe('sin_texto');
+    expect(d.activo).toBe(27.5);
+    expect(sonidoParaCobertura({ escenas: [{ sonido: [{ t0: 1, t1: 2, clase: 'cancion' }, { t0: 3, t1: 4, clase: 'ambiente' }], dialogoClave: [{ t: 5 }] }] })).toEqual({ musica: [[1, 2]], dialogo: [5] });
   });
 
   it('sin actividad: solo los silencios de transcripción largos', () => {

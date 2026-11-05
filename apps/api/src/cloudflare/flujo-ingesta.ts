@@ -32,6 +32,13 @@ export function plazoTranscripcion(info: Pick<InfoTuberia, 'coste'>): number {
 }
 /** Tandas a la vez (cada una en su trabajador, con su propio cupo de conexiones). */
 const OLEADA = 24;
+/**
+ * En audio y vídeo cada tanda (un tramo de 10 minutos) se transcribe en piezas de 150 s, de cuatro
+ * en cuatro: con 24 tramos a la vez, una película de dos horas lanzaba 48 piezas juntas y pasaba de
+ * los 100 000 tokens por minuto del transcriptor (429, y el respaldo de Whisper). Con 4 tramos, 16
+ * piezas: unos 77 000 tokens por minuto.
+ */
+const OLEADA_MEDIO = 4;
 
 type Avisar = (fase: Progreso['fase'], avance: number, total: number, mensaje?: string) => Progreso;
 type ConLatido = <T>(fn: () => Promise<T>) => Promise<T>;
@@ -210,7 +217,7 @@ export class FlujoIngesta extends WorkflowEntrypoint<Env, ParamsIngesta> {
       const emisor = emisorDesdeEnv(this.env, p.usuario);
       const total = info.tandas.length;
       let vectoresPendientes = false;
-      await enParalelo(info.tandas, OLEADA, (t) => step.do(`tanda-${t.id}`, { retries: REINTENTOS, timeout: '10 minutes' }, async () => {
+      await enParalelo(info.tandas, info.modo === 'medio' ? OLEADA_MEDIO : OLEADA, (t) => step.do(`tanda-${t.id}`, { retries: REINTENTOS, timeout: '10 minutes' }, async () => {
         const r = await this.env.TRABAJADOR.getByName(`${p.tarea}:t${t.id}`).tanda(p, info, t.id);
         const hechos = await contador.sumar('tandas');
         const pr = progreso('lectura', hechos / Math.max(1, total), 0.03 + 0.67 * (hechos / Math.max(1, total)), `${hechos} de ${total}`);

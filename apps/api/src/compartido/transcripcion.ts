@@ -16,8 +16,8 @@
  * aplicada: la percepción ya no la vuelve a aplicar sobre las unidades nuevas.
  */
 import {
-  aplicarCorrecciones, clavesProxy, coberturaTranscripcion, completarTranscripcion, comprobarRevision, fuenteGemini, palabrasTranscritas, recortarAudio, reescribirTranscripcion,
-  type ActividadAudio, type ContextoTuberia, type PuertosReescritura, type PuertosRevision, type ResultadoReescritura, type RevisionTranscripcion, type UnidadMedio,
+  aplicarCorrecciones, clavesProxy, coberturaTranscripcion, sonidoParaCobertura, completarTranscripcion, comprobarRevision, fuenteGemini, palabrasTranscritas, recortarAudio, reescribirTranscripcion,
+  type ActividadAudio, type CoberturaTranscripcion, type ContextoTuberia, type PuertosReescritura, type PuertosRevision, type ResultadoReescritura, type RevisionTranscripcion, type UnidadMedio,
 } from '@scholaris/ingesta';
 import type { PaqueteConversion } from '@scholaris/imprenta';
 import type { Plan } from '@scholaris/contrato';
@@ -228,7 +228,9 @@ export async function aplicarRevisionDocumento(
   const palabras = palabrasTranscritas(corregidas);
   const voz = await json<ActividadAudio>(ctx.almacen, clavesProxy(doc.prefijo).voz);
   const duracion = (d as { duracion?: number }).duracion ?? Math.max(0, ...unidades.map((u) => u.t1));
-  const coberturaFinal = coberturaTranscripcion(corregidas, { duracion, ...(voz?.tramos?.length ? { actividad: voz.tramos } : {}) });
+  // Con la percepción, los tramos sin palabras que son música no cuentan como habla perdida.
+  const sonido = sonidoParaCobertura(await leerPercepcion(ctx.almacen, doc.prefijo).catch(() => null));
+  const coberturaFinal = coberturaTranscripcion(corregidas, { duracion, ...(voz?.tramos?.length ? { actividad: voz.tramos } : {}), ...(sonido.musica.length ? sonido : {}) });
   const reescritura = await reescribirTranscripcion({ ...ctx.reescritura, sql: ctx.sql }, doc.documento, palabras, {
     detalle: { revision: { version: revision.version, modelo: revision.modelo, correcciones: cuenta(revision.correcciones), usd: revision.coste?.usd ?? 0, comprobacion } },
   });
@@ -276,4 +278,20 @@ export async function revisarTranscripcionDocumento(
   });
   await ctx.almacen.poner(claveRevision(doc.prefijo), JSON.stringify(r), 'application/json');
   return r;
+}
+
+/**
+ * La cobertura de la transcripción tal como está ahora, con la música apartada (sin modelos: la
+ * transcripción actual, el mapa de voz y la música de la percepción). Para las revisiones guardadas
+ * antes de que la cobertura supiera de música, que contaban las canciones como habla perdida.
+ */
+export async function coberturaActual(p: { sql: SQL; almacen: AlmacenAmpliado }, documento: string, prefijo: string, duracion: number | undefined): Promise<CoberturaTranscripcion | null> {
+  const percepcion = await leerPercepcion(p.almacen, prefijo).catch(() => null);
+  const sonido = sonidoParaCobertura(percepcion);
+  if (!sonido.musica.length) return null;
+  const unidades = await unidadesDeMedio(p.sql, documento);
+  if (!unidades.length) return null;
+  const voz = await json<ActividadAudio>(p.almacen, clavesProxy(prefijo).voz);
+  const d = duracion ?? Math.max(0, ...unidades.map((u) => u.t1));
+  return coberturaTranscripcion(unidades, { duracion: d, ...(voz?.tramos?.length ? { actividad: voz.tramos } : {}), ...sonido });
 }

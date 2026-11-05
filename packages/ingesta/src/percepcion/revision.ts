@@ -56,8 +56,11 @@ export interface FraseUbicada {
 }
 
 export interface Hueco extends Tramo {
-  /** `sin_texto`: suena y no hay palabras. `tiempos_rotos`: hay palabras, pero sus instantes no valen. */
-  motivo: 'sin_texto' | 'tiempos_rotos';
+  /**
+   * `sin_texto`: suena y no hay palabras. `tiempos_rotos`: hay palabras, pero sus instantes no valen.
+   * `musica`: suena música (según la percepción) y no hay ninguna réplica conocida: no es habla perdida.
+   */
+  motivo: 'sin_texto' | 'tiempos_rotos' | 'musica';
   /** Segundos con sonido dentro del hueco. */
   activo: number;
   /** En `tiempos_rotos`, la unidad (su orden). */
@@ -93,6 +96,8 @@ export interface CoberturaTranscripcion {
   huecos: Hueco[];
   /** Palabras con el instante roto (duración ≤ 0,02 s). */
   palabrasRotas: number;
+  /** Segundos de sonido sin palabras que son música (fuera de `activo`): solo con la percepción. */
+  musica?: number;
   palabras: number;
 }
 
@@ -216,7 +221,11 @@ const r2 = (x: number) => Math.round(x * 100) / 100;
  */
 export function coberturaTranscripcion(
   unidades: UnidadMedio[],
-  o: { duracion: number; actividad?: Array<[number, number]>; margen?: number; minHueco?: number; minSinActividad?: number; minRotas?: number },
+  o: {
+    duracion: number; actividad?: Array<[number, number]>; margen?: number; minHueco?: number; minSinActividad?: number; minRotas?: number;
+    /** Tramos con música o canción (de la percepción) y los instantes de las réplicas que la percepción oyó. */
+    musica?: Array<[number, number]>; dialogo?: number[];
+  },
 ): CoberturaTranscripcion {
   const margen = o.margen ?? 1.2;
   const palabras = palabrasDeUnidades(unidades);
@@ -225,7 +234,16 @@ export function coberturaTranscripcion(
   const actividad = o.actividad ? unir(o.actividad.map(([t0, t1]) => ({ t0, t1 }))) : [{ t0: 0, t1: o.duracion }];
   const minHueco = o.actividad ? (o.minHueco ?? 3) : (o.minSinActividad ?? 25);
   const sinTexto = unir(restar(actividad, cubierto), 3).filter((t) => t.t1 - t.t0 >= minHueco);
-  const huecos: Hueco[] = sinTexto.map((t) => ({ t0: r2(t.t0), t1: r2(t.t1), motivo: 'sin_texto', activo: r2(longitud(restar(actividad, [{ t0: 0, t1: t.t0 }, { t0: t.t1, t1: o.duracion }]))) }));
+  // El mapa de actividad oye la banda de la voz, y la música también suena ahí: un tramo sin palabras casi
+  // todo dentro de la música de la percepción, y sin ninguna réplica oída, es música, no habla perdida.
+  const musica = o.musica?.length ? unir(o.musica.map(([t0, t1]) => ({ t0, t1 }))) : [];
+  const esMusica = (t: Tramo) => {
+    if (!musica.length) return false;
+    const dentro = longitud(restar([t], restar([t], musica)));
+    return dentro >= 0.6 * (t.t1 - t.t0) && !(o.dialogo ?? []).some((x) => x >= t.t0 && x <= t.t1);
+  };
+  const huecos: Hueco[] = sinTexto.map((t) => ({ t0: r2(t.t0), t1: r2(t.t1), motivo: esMusica(t) ? 'musica' as const : 'sin_texto' as const, activo: r2(longitud(restar(actividad, [{ t0: 0, t1: t.t0 }, { t0: t.t1, t1: o.duracion }]))) }));
+  const segundosMusica = longitud(huecos.filter((h) => h.motivo === 'musica'));
   // Tiempos rotos: unidades con varias palabras amontonadas en un instante.
   const minRotas = o.minRotas ?? 3;
   unidades.forEach((u, k) => {
@@ -235,8 +253,9 @@ export function coberturaTranscripcion(
   });
   huecos.sort((a, b) => a.t0 - b.t0);
   return {
-    activo: r2(longitud(actividad)), cubierto: r2(longitud(actividad) - longitud(restar(actividad, cubierto))),
+    activo: r2(longitud(actividad) - segundosMusica), cubierto: r2(longitud(actividad) - longitud(restar(actividad, cubierto))),
     huecos, palabrasRotas: palabras.length - validas.length, palabras: palabras.length,
+    ...(musica.length ? { musica: r2(segundosMusica) } : {}),
   };
 }
 
@@ -724,4 +743,15 @@ export function comprobarRevision(unidades: UnidadMedio[], revision: Pick<Revisi
   }
   // Sin correcciones que comprobar, los huecos se aplican por tiempo y sin duplicar: vale.
   return { comprobadas, coinciden, fraccion: comprobadas ? coinciden / comprobadas : 1 };
+}
+
+/** De la percepción, lo que la cobertura necesita: los tramos con música o canción y los instantes de las réplicas oídas. */
+export function sonidoParaCobertura(p: { escenas: Array<{ sonido: Array<{ t0: number; t1: number; clase: string }>; dialogoClave: Array<{ t: number }> }> } | null | undefined): { musica: Array<[number, number]>; dialogo: number[] } {
+  const musica: Array<[number, number]> = [];
+  const dialogo: number[] = [];
+  for (const e of p?.escenas ?? []) {
+    for (const x of e.sonido ?? []) if (x.clase === 'musica' || x.clase === 'cancion') musica.push([x.t0, x.t1]);
+    for (const d of e.dialogoClave ?? []) dialogo.push(d.t);
+  }
+  return { musica, dialogo };
 }

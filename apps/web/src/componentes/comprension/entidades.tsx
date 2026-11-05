@@ -43,7 +43,14 @@ export function PanelEntidades({ documento, apariciones, motivos, alIr, compacto
   const [filtro, setFiltro] = useState('');
   const [abierta, setAbierta] = useState<string | null>(inicial ?? null);
   const cuentas = useMemo(() => { const m = new Map<CategoriaEntidad, number>(); for (const e of entidades) m.set(e.categoria, (m.get(e.categoria) ?? 0) + 1); return m; }, [entidades]);
-  const visibles = entidades.filter((e) => (!categoria || e.categoria === categoria) && (!filtro.trim() || sinTildes(e.nombre).includes(sinTildes(filtro.trim()))));
+  // Con muchas (una película reconoce cientos: objetos de un plano, figurantes), primero las principales:
+  // tres apariciones o más, y los temas y motivos. Buscar por nombre las encuentra todas.
+  const [menores, setMenores] = useState(false);
+  const recortar = entidades.length > 40 && !menores && !filtro.trim();
+  const principal = (e: (typeof entidades)[number]) => e.apariciones.length >= 3 || !!motivos?.has(e.id);
+  const filtradas = entidades.filter((e) => (!categoria || e.categoria === categoria) && (!filtro.trim() || sinTildes(e.nombre).includes(sinTildes(filtro.trim()))));
+  const visibles = recortar ? filtradas.filter(principal) : filtradas;
+  const ocultas = filtradas.length - visibles.length;
 
   if (!apariciones) return <div className={cx('flex flex-col gap-2', className)}>{Array.from({ length: 6 }, (_, i) => <Esqueleto key={i} className="h-12 rounded-xl" />)}</div>;
   if (!entidades.length) return <p className={cx('text-[0.875rem] text-apagado', className)}>La comprensión todavía no ha reconocido personas, lugares ni motivos en este documento.</p>;
@@ -68,6 +75,11 @@ export function PanelEntidades({ documento, apariciones, motivos, alIr, compacto
         ))}
         {!visibles.length ? <li className="px-2 py-3 text-[0.875rem] text-apagado">Ninguna entidad con ese nombre.</li> : null}
       </ul>
+      {ocultas > 0 ? (
+        <button type="button" onClick={() => setMenores(true)} className="self-start rounded-lg px-2 py-1 text-[0.8125rem] font-medium text-coffee-600 hover:bg-cream-200 hover:text-coffee-800">
+          Ver también {ocultas === 1 ? 'la que aparece' : `las ${ocultas} que aparecen`} una o dos veces
+        </button>
+      ) : null}
     </div>
   );
 }

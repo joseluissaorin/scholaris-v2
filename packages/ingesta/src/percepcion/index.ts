@@ -15,4 +15,5 @@ export {
   revisarTranscripcionConVideo, hablantesDeDialogos, coberturaTranscripcion, transcribirConVideo, revisarHablantesVentana, aplicarCorrecciones, palabrasDeUnidad, palabrasDeUnidades, palabrasTranscritas, comprobarRevision, frasesUbicadas, subventanasDe, segmentosDePalabras, esRota,
   VERSION_REVISION, ESQUEMA_OIDO, ESQUEMA_HABLANTES,
   type CorreccionTranscripcion, type RevisionTranscripcion, type CoberturaTranscripcion, type Hueco, type SegmentoOido, type PalabraUbicada, type FraseUbicada, type PuertosRevision, type OpcionesRevisionTranscripcion, type Tramo,
+  sonidoParaCobertura,
 } from './revision.js';

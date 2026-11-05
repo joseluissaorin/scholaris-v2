@@ -20,7 +20,7 @@ import type { Entorno } from '../entorno.js';
 import { cuerpoJson, exigir, fallo, noEncontrado } from '../compartido/errores.js';
 import { tareaDeDocumento } from '../compartido/estanteria.js';
 import { encolarMedios, estimarMedios, lanzarMedio, mediosDeBiblioteca, preciosHora, type PedidoMedio } from '../compartido/medios-existentes.js';
-import { leerRevision, revisaHablantes } from '../compartido/transcripcion.js';
+import { coberturaActual, leerRevision, revisaHablantes } from '../compartido/transcripcion.js';
 import { prefijoDocumento } from './subidas.js';
 import { exigirEscritura, prm, puertos, type Ctx } from './util.js';
 
@@ -113,16 +113,21 @@ export function rutasTranscripcion(app: Hono<Entorno>): void {
     if (!r && !tarea) noEncontrado('La revisión de la transcripción');
     if (!r) return c.json({ documento: id, aplicada: null, tarea, avisosDocumento: avisosDoc });
     const cuenta = (tipo: string, reemplaza?: boolean) => r.correcciones.filter((x) => x.tipo === tipo && (reemplaza === undefined || (x.tipo === 'hueco' && !!x.reemplaza?.length) === reemplaza)).length;
+    // Revisiones guardadas antes de que la cobertura supiera de música: se recalcula la de ahora (sin modelos).
+    const final = r.aplicada && r.coberturaFinal && r.coberturaFinal.musica === undefined
+      ? (await coberturaActual(p, id, prefijoDocumento(p.usuario.id, id), d.duracion ?? undefined).catch(() => null)) ?? r.coberturaFinal
+      : r.coberturaFinal;
     const sinTexto = (cb: RevisionTranscripcion['cobertura']) => ({
-      activo: cb.activo, cubierto: cb.cubierto, huecos: cb.huecos.length,
+      activo: cb.activo, cubierto: cb.cubierto, huecos: cb.huecos.filter((h) => h.motivo !== 'musica').length,
+      ...(cb.musica !== undefined ? { musica: Math.round(cb.musica) } : {}),
       segundosSinTexto: Math.round(cb.huecos.filter((h) => h.motivo === 'sin_texto').reduce((s, h) => s + h.activo, 0)), palabrasRotas: cb.palabrasRotas,
       // Dónde están (los primeros 400): la web los marca en la línea del tiempo del reproductor.
-      lista: cb.huecos.slice(0, 400).map((h) => ({ t0: Math.round(h.t0 * 10) / 10, t1: Math.round(h.t1 * 10) / 10, motivo: h.motivo, activo: Math.round(h.activo * 10) / 10 })),
+      lista: cb.huecos.filter((h) => h.motivo !== 'musica').slice(0, 400).map((h) => ({ t0: Math.round(h.t0 * 10) / 10, t1: Math.round(h.t1 * 10) / 10, motivo: h.motivo as 'sin_texto' | 'tiempos_rotos', activo: Math.round(h.activo * 10) / 10 })),
     });
     return c.json({
       documento: id, version: r.version, modelo: r.modelo, aplicada: r.aplicada ?? null,
       correcciones: { huecos: cuenta('hueco', false), tiemposRotos: cuenta('hueco', true), hablantes: cuenta('hablante'), desfases: cuenta('desfase') },
-      cobertura: { antes: sinTexto(r.cobertura), ...(r.coberturaFinal ? { despues: sinTexto(r.coberturaFinal) } : {}) },
+      cobertura: { antes: sinTexto(r.cobertura), ...(final ? { despues: sinTexto(final) } : {}) },
       usd: r.coste?.usd ?? 0, avisos: r.avisos.slice(0, 50), tarea, avisosDocumento: avisosDoc,
     });
   });
