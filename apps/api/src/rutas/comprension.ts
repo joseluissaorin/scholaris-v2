@@ -130,7 +130,7 @@ export function rutasComprension(app: Hono<Entorno>): void {
     const b = await cuerpoJson<PedirComprension>(c);
     const lentes = lentesValidas(b.lentes);
     const tope = typeof b.presupuestoUsd === 'number' && Number.isFinite(b.presupuestoUsd) ? Math.min(20, Math.max(0.05, b.presupuestoUsd)) : undefined;
-    const PASOS = ['estructura', 'entidades', 'personajes', 'global'] as const;
+    const PASOS = ['estructura', 'fichas', 'entidades', 'personajes', 'global'] as const;
     const rehacer = Array.isArray(b.rehacer) ? b.rehacer.filter((x): x is (typeof PASOS)[number] => (PASOS as readonly string[]).includes(x)) : [];
     const r = await lanzarComprension(p, id, { ...(b.forzar ? { forzar: true } : {}), ...(lentes ? { lentes } : {}), ...(b.economico ? { economico: true } : {}), ...(tope !== undefined ? { presupuestoUsd: tope } : {}), ...(rehacer.length ? { rehacer } : {}) });
     const salida: ComprensionLanzada = { documento: id, instancia: r.instancia, estado: r.estado };

@@ -219,7 +219,12 @@ se lanza sola al terminar la ingesta (`COMPRENSION_AUTOMATICA = false` en
      solapamientos y papel de cada voz.
    - Presentaciones y hojas: maqueta de cada diapositiva y semántica de cada tabla.
 2. **Estructura**: el árbol de segmentos de la lente, consolidado entre ventanas.
-3. **Fichas de segmento**, con el esquema de la lente y sus evidencias.
+3. **Fichas de segmento**, con el esquema de la lente y sus evidencias. Llevan ficha los
+   segmentos de los tipos que pide la lente y, además, las hojas del árbol que no tienen
+   ninguno de esos encima ni debajo (salvo índices, notas y bibliografías). Así, un libro
+   que el modelo divide en «partes» de dos niveles no se queda sin fichas con la lente de
+   ensayo, que solo las pide para los «apartados». `rehacer: ['fichas']` repite las
+   tandas, y las fichas con la misma entrada se reutilizan sin pagar.
 4. **Entidades y apariciones**: reconocimiento y correferencia en todo el documento (el
    reparto como guía), resueltas contra el grafo (`entidades/resolver.ts`) y su enlace a
    Wikidata, apariciones multimodales ancladas y, en el cine, la relación actor ↔
@@ -249,8 +254,10 @@ cada paso sin contar con la caché del proveedor y da la estimación del plan.
 - **Con `presupuestoUsd`** el tope es estricto (`plan.tope`). El Workflow lo hace todo
   en fila. Antes de cada paso se suma lo gastado, lo que costará ese paso (en las tandas
   de fichas, la media de las ya hechas) y lo que hay que guardar para la ficha global, y
-  las entidades se suman cuando aún faltan. Lo que no cabe no se hace y queda en los
-  avisos. El análisis de personajes se recorta a las llamadas que caben. Si no
+  las entidades se suman cuando aún faltan. Una vez hecha la estructura, la previsión
+  se ajusta con lo que costó de verdad, entre el 60 % y el 100 % de lo previsto (en los
+  textos cortos la previsión, que supone respuestas largas, reservaba el doble). Lo que no
+  cabe no se hace y queda en los avisos. El análisis de personajes se recorta a las llamadas que caben. Si no
   llegan ni la estructura ni la global, el plan falla con «El presupuesto no alcanza»,
   sin gastar nada y sin reintentos.
 - **Caché del proveedor.** La primera tanda de fichas y la primera del análisis van

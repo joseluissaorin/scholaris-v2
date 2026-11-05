@@ -73,7 +73,7 @@ export interface PedirComprension {
    */
   presupuestoUsd?: number;
   /** Rehacer solo estos pasos de una comprensión ya hecha (p. ej. «global»), sin repetir ni pagar los demás. */
-  rehacer?: Array<'estructura' | 'entidades' | 'personajes' | 'global'>;
+  rehacer?: Array<'estructura' | 'fichas' | 'entidades' | 'personajes' | 'global'>;
 }
 
 export interface PedirComprensionBiblioteca extends PedirComprension {

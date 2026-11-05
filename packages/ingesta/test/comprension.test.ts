@@ -5,13 +5,13 @@
  * entidades del grafo con apariciones, ficha global, vectores, reanudación,
  * presupuesto y el reparto de Wikidata.
  */
-import type { Documento, PercepcionMedio, SQL } from '@scholaris/nucleo';
+import type { Documento, PercepcionMedio, Segmento, SQL } from '@scholaris/nucleo';
 import { aplicarEsquemaFunciones } from '@scholaris/funciones';
 import { buscarFichas, escribirDocumento, escribirUnidades, leerApariciones, leerFichas, leerSecciones, leerSegmentos, type UnidadSpdf } from '@scholaris/spdf';
 import { describe, expect, it } from 'vitest';
 import {
   actualizarEstado, anclarReferencia, coberturaDelMaterial, comprenderDocumento, huecosTranscripcion, elegirLentes, leerEstadoComprension, leerMaterial, localizarCita, pasoSegmentos, pasoFichas, planificarComprension,
-  prevision, PRESUPUESTO_INSUFICIENTE,
+  prevision, PRESUPUESTO_INSUFICIENTE, lotesDeFichas, lente,
   limpiarProsa, textoDeCaracteres, tramoDeCaracteres, type ContextoComprension, type ModeloComprension, type PeticionComprension,
 } from '../src/index.js';
 import { baseReal, embebedorFalso } from './fakes.js';
@@ -329,23 +329,44 @@ describe('comprensión: un cuento', () => {
     await expect(planificarComprension(ctx, 'cuento', { presupuestoUsd: pv.estructura + pv.global - 0.01, forzar: true })).rejects.toThrow(PRESUPUESTO_INSUFICIENTE);
     expect(cuenta('estructura')).toBe(0);
 
-    // Llega justo para la estructura y la global: las fichas, las entidades y el análisis, que van antes,
-    // no empiezan porque se comerían lo de la global; la global sí se escribe y no se pasa del tope.
-    const tope = pv.estructura + pv.global + 0.02;
+    // Llega justo para la estructura y la global. La estructura costó mucho menos de lo previsto, así que
+    // lo que queda se prevé al 60 % (el mínimo del ajuste): 0,01 + 0,6 × (tanda + entidades + global) no cabe
+    // y la tanda de fichas, que va antes, no empieza; la global sí se escribe y no se pasa del tope.
+    const tope = pv.estructura + pv.global;
+    const k = 0.6;
+    expect(0.01 + k * (pv.porTanda + pv.entidades + pv.global)).toBeGreaterThan(tope);
     const e = await comprenderDocumento(ctx, 'cuento', { presupuestoUsd: tope, forzar: true });
     expect(e.estado).toBe('hecho');
-    expect([cuenta('estructura'), cuenta('fichas'), cuenta('entidades'), cuenta('personajes'), cuenta('global')]).toEqual([1, 0, 0, 0, 1]);
+    expect([cuenta('estructura'), cuenta('fichas'), cuenta('global')]).toEqual([1, 0, 1]);
     expect(e.usd).toBeLessThanOrEqual(tope);
     expect(e.avisos.join(' ')).toMatch(/La tanda 1 de fichas no cabía en el tope/);
-    expect(e.avisos.join(' ')).toMatch(/Las entidades no cabían en el tope/);
     expect(await leerFichas(sql, { documento: 'cuento', clase: 'global' })).toHaveLength(1);
+
+    // Sin el ajuste (la previsión entera) la misma tanda tampoco habría cabido con un margen mayor;
+    // con él, un tope que cubre la tanda al 60 % la deja entrar.
+    const ajustado = 0.01 + k * (pv.porTanda + pv.entidades + pv.global) + 0.005;
+    expect(ajustado).toBeLessThan(0.01 + pv.porTanda + pv.entidades + pv.global);
+    const conTanda = await comprenderDocumento(ctx, 'cuento', { presupuestoUsd: Math.max(ajustado, pv.estructura + pv.global), forzar: true });
+    expect(conTanda.avisos.join(' ')).not.toMatch(/La tanda 1 de fichas no cabía/);
+    expect(cuenta('fichas')).toBe(1);
 
     // Con holgura, todo; y el análisis se limita a las llamadas que caben.
     const amplio = await comprenderDocumento(ctx, 'cuento', { presupuestoUsd: pv.total + 0.5, forzar: true });
     expect(amplio.avisos.join(' ')).not.toMatch(/no cabía/);
-    expect(cuenta('fichas')).toBe(1);
-    expect(cuenta('global')).toBe(2);
+    expect(cuenta('fichas')).toBe(2);
+    expect(cuenta('global')).toBe(3);
     archivo.cerrar();
+  });
+
+  it('las tandas de fichas: los tipos que pide la lente y las hojas que no tienen ninguno', () => {
+    const seg = (id: string, tipo: Segmento['tipo'], padre: string | null, titulo = id) => ({ id, tipo, padre, titulo, nivel: padre ? 2 : 1 }) as unknown as Segmento;
+    const ensayo = lente('ensayo');
+    // Un libro en «partes» de dos niveles (Queer Ricans): fichas para las secciones, no para los capítulos ni el índice.
+    const libro = [seg('i', 'parte', null, 'Contents'), seg('c1', 'parte', null), seg('c1a', 'parte', 'c1'), seg('c1b', 'parte', 'c1'), seg('c2', 'parte', null), seg('n', 'parte', null, 'Notes')];
+    expect(lotesDeFichas(libro, ensayo, 6)).toEqual([['c1a', 'c1b', 'c2']]);
+    // Con apartados (Mil mesetas): ellos, y la parte sin apartados (el prefacio), no la que los tiene.
+    const mesetas = [seg('pre', 'parte', null, 'Prefacio'), seg('m1', 'parte', null), seg('m1a', 'apartado', 'm1'), seg('m1b', 'apartado', 'm1')];
+    expect(lotesDeFichas(mesetas, ensayo, 6)).toEqual([['pre', 'm1a', 'm1b']]);
   });
 
   it('una comprensión cancelada sigue donde quedó: lo pagado no se repite', async () => {

@@ -158,7 +158,7 @@ class Scholaris:
 
         `presupuesto_usd` es un tope estricto: antes de cada paso se suma lo que costará y lo que no cabe no se
         hace; si no llega ni para la estructura y la ficha global, no empieza. `rehacer` repite solo esos pasos
-        de una comprensión hecha («estructura», «entidades», «personajes», «global»)."""
+        de una comprensión hecha («estructura», «fichas», «entidades», «personajes», «global»)."""
         cuerpo = {k: v for k, v in {"forzar": forzar or None, "lentes": lentes, "economico": economico or None,
                                     "presupuestoUsd": presupuesto_usd, "rehacer": rehacer}.items() if v is not None}
         return self.pedir("POST", f"/documentos/{id}/comprender", json_=cuerpo)

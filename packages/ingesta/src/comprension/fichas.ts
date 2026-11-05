@@ -28,8 +28,25 @@ export function textoEstructura(m: Material, segmentos: readonly Segmento[]): st
 }
 
 /** Tandas de segmentos con ficha, en orden de lectura (deterministas: el mismo árbol da las mismas). */
+/** Índices, notas, bibliografías y agradecimientos: sin ficha propia cuando no la pide la lente. */
+const PERITEXTO = /^\s*(contents|table of contents|índice|indice|sumario|notas?|notes|bibliograf|works cited|obras citadas|references|referencias|index|acknowledg|agradecimientos|créditos|credits|copyright|about the author)\b/i;
+
+/**
+ * Las tandas de fichas: los segmentos de los tipos que la lente quiere con ficha y, además, las
+ * hojas del árbol (de sus tipos) que no tienen ninguno de esos encima ni debajo. Sin lo segundo,
+ * un libro que el modelo divide en «partes» de dos niveles se quedaba sin ninguna ficha con la
+ * lente de ensayo, que solo las pide para los «apartados» (Queer Ricans, 5-11-2026), y en
+ * Mil mesetas las mesetas sin apartados, como el prefacio, tampoco la tenían.
+ */
 export function lotesDeFichas(segmentos: readonly Segmento[], def: DefinicionLente, porLlamada = 6): string[][] {
-  const con = segmentos.filter((s) => def.conFicha.includes(s.tipo) && s.tipo !== 'plano');
+  const pide = (s: Segmento) => def.conFicha.includes(s.tipo) && s.tipo !== 'plano';
+  const porId = new Map(segmentos.map((s) => [s.id, s]));
+  const hijos = new Map<string, Segmento[]>();
+  for (const s of segmentos) if (s.padre && s.tipo !== 'plano') hijos.set(s.padre, [...(hijos.get(s.padre) ?? []), s]);
+  const arriba = (s: Segmento) => { for (let p = s.padre ? porId.get(s.padre) : undefined; p; p = p.padre ? porId.get(p.padre) : undefined) if (pide(p)) return true; return false; };
+  const hoja = (s: Segmento) => !hijos.get(s.id)?.length;
+  const con = segmentos.filter((s) => s.tipo !== 'plano' && (pide(s)
+    || (hoja(s) && def.segmentos.includes(s.tipo) && !arriba(s) && !PERITEXTO.test(s.titulo))));
   const lotes: string[][] = [];
   for (let i = 0; i < con.length; i += porLlamada) lotes.push(con.slice(i, i + porLlamada).map((s) => s.id));
   return lotes;

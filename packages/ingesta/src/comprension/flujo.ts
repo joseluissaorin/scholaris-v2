@@ -129,6 +129,23 @@ export function prevision(ctx: Pick<ContextoComprension, 'modelo'>, plan: PlanPa
   return { estructura, porTanda, tandas: n, entidades, porAnalisis, analisis, global, total };
 }
 
+/**
+ * La previsión ajustada con lo que costó de verdad la estructura de esta obra (entre el 60 % y el
+ * 100 % de lo previsto). La previsión supone respuestas largas, y en un texto corto reservaba el
+ * doble de lo que costaban las entidades y la global: en un artículo de 26 páginas, con un tope
+ * de 0,20 USD, una tanda de fichas se quedaba fuera por medio céntimo (Balutet, 5-11-2026).
+ */
+async function previsionAjustada(ctx: ContextoComprension, plan: PlanComprension, tandas?: number): Promise<PrevisionPasos> {
+  const pv = prevision(ctx, plan, tandas);
+  const [f] = await ctx.sql.ejecutar<{ u: number | null }>("SELECT json_extract(detalle, '$.usd') AS u FROM procedencia WHERE documento = ? AND fase = 'comprension:estructura'", plan.documento);
+  const real = Number(f?.u ?? 0);
+  if (!(real > 0) || !(pv.estructura > 0)) return pv;
+  const k = Math.min(1, Math.max(0.6, real / pv.estructura));
+  const a = (x: number) => x * k;
+  const r = { ...pv, porTanda: a(pv.porTanda), entidades: a(pv.entidades), porAnalisis: a(pv.porAnalisis), global: a(pv.global) };
+  return { ...r, total: r.estructura + r.porTanda * r.tandas + r.entidades + r.porAnalisis * r.analisis + r.global };
+}
+
 /** Lo que han costado de media las tandas de fichas ya hechas (mejor guía que la previsión). */
 async function costeMedioTandas(sql: ContextoComprension['sql'], documento: string): Promise<number | null> {
   const [f] = await sql.ejecutar<{ u: number | null; n: number }>(
@@ -260,7 +277,11 @@ export async function planificarComprension(ctx: ContextoComprension, documento:
   if (previo?.estado === 'hecho' && mismo && !o.forzar && o.rehacer?.length) {
     // Rehacer solo unos pasos (la ficha global, por ejemplo): se borran sus marcas y las del indexado, y los
     // demás pasos, que siguen hechos, no hacen nada ni cuestan.
-    for (const paso of new Set([...o.rehacer, 'indexado'])) await ctx.sql.ejecutar('DELETE FROM procedencia WHERE documento = ? AND fase = ?', documento, `comprension:${paso}`);
+    // «fichas» son todas las tandas (las que ya tienen ficha con la misma entrada se reutilizan sin pagar).
+    for (const paso of new Set([...o.rehacer, 'indexado'])) {
+      if (paso === 'fichas') await ctx.sql.ejecutar("DELETE FROM procedencia WHERE documento = ? AND fase LIKE 'comprension:fichas:%'", documento);
+      else await ctx.sql.ejecutar('DELETE FROM procedencia WHERE documento = ? AND fase = ?', documento, `comprension:${paso}`);
+    }
     await actualizarEstado(ctx.sql, documento, { estado: 'en_marcha', error: undefined }, t);
     await vaciar(ctx);
     return { ...plan, reusar: { estructura: true, fichas: true } };
@@ -391,7 +412,7 @@ export async function pasoFichas(ctx: ContextoComprension, plan: PlanComprension
   // hechas o, en la primera, la previsión) y lo que hay que guardar para las entidades y la global.
   let previsto = 0;
   if (plan.tope) {
-    const pv = prevision(ctx, plan, lotes.length);
+    const pv = await previsionAjustada(ctx, plan, lotes.length);
     previsto = ((await costeMedioTandas(ctx.sql, doc)) ?? pv.porTanda) + await reservaPara(ctx, doc, pv, ['entidades', 'global']);
   }
   if (yaGastado > plan.presupuestoUsd || yaGastado + previsto > plan.presupuestoUsd) {
@@ -458,7 +479,7 @@ export async function pasoEntidades(ctx: ContextoComprension, plan: PlanComprens
   // Con un tope pedido: si las entidades y la global no caben juntas, la global va primero.
   let cabe = true;
   if (plan.tope) {
-    const pv = prevision(ctx, plan);
+    const pv = await previsionAjustada(ctx, plan);
     const ya = await gastado(ctx.sql, doc);
     cabe = ya + pv.entidades + await reservaPara(ctx, doc, pv, ['global']) <= plan.presupuestoUsd;
     if (!cabe) avisos.push(`Las entidades no cabían en el tope de ${usd(plan.presupuestoUsd)} USD (gastado: ${usd(ya)}): la obra queda sin personajes, lugares ni motivos reconocidos.`);
@@ -525,7 +546,7 @@ export async function pasoPersonajes(ctx: ContextoComprension, plan: PlanCompren
   let principales = principalesDe(ents);
   const avisos: string[] = [];
   if (plan.tope && principales.length) {
-    const pv = prevision(ctx, plan);
+    const pv = await previsionAjustada(ctx, plan);
     const ya = await gastado(ctx.sql, doc);
     const llamadas = Math.max(0, Math.floor((plan.presupuestoUsd - ya - await reservaPara(ctx, doc, pv, ['global'])) / pv.porAnalisis));
     if (llamadas * ANALISIS_POR_LLAMADA < principales.length) {
@@ -578,9 +599,9 @@ export async function pasoGlobal(ctx: ContextoComprension, plan: PlanComprension
   let calidad = ya > plan.presupuestoUsd ? 'rapida' : await calidadDelPaso(ctx, doc, 'global', plan.calidades.global);
   if (plan.tope) {
     // Con un tope pedido: si con el mejor modelo no cabe, el rápido; si tampoco, no se escribe.
-    const coste = (c: 'alta' | 'rapida') => prevision(ctx, { ...plan, calidades: { ...plan.calidades, global: c } }).global;
-    if (calidad === 'alta' && ya + coste('alta') > plan.presupuestoUsd) calidad = 'rapida';
-    if (ya + coste(calidad) > plan.presupuestoUsd) {
+    const coste = async (c: 'alta' | 'rapida') => (await previsionAjustada(ctx, { ...plan, calidades: { ...plan.calidades, global: c } })).global;
+    if (calidad === 'alta' && ya + await coste('alta') > plan.presupuestoUsd) calidad = 'rapida';
+    if (ya + await coste(calidad) > plan.presupuestoUsd) {
       await apuntarPaso(ctx.sql, doc, 'global', usoVacio(), Date.now() - inicio, ahoraDe(ctx), { fichas: 0, temas: 0, sinPresupuesto: 1 },
         [`La ficha global no cabía en el tope de ${usd(plan.presupuestoUsd)} USD (gastado: ${usd(ya)}).`]);
       await vaciar(ctx);

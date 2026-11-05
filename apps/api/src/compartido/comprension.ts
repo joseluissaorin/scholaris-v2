@@ -28,7 +28,7 @@ export interface ParamsComprension {
   lentes?: Lente[];
   economico?: boolean;
   presupuestoUsd?: number;
-  rehacer?: Array<'estructura' | 'entidades' | 'personajes' | 'global'>;
+  rehacer?: Array<'estructura' | 'fichas' | 'entidades' | 'personajes' | 'global'>;
   relanzamientos?: number;
   /**
    * Solo transmedia (docs/COMPRENSION.md, paso 7): detectar las relaciones del documento
@@ -121,7 +121,7 @@ const ahora = () => new Date().toISOString();
  * rehacer), no lanza otra. Sin orquestador que la lleve, la deja «pendiente».
  */
 export async function lanzarComprension(
-  p: PuertosUsuario, documento: string, o: { forzar?: boolean; lentes?: Lente[]; economico?: boolean; presupuestoUsd?: number; rehacer?: Array<'estructura' | 'entidades' | 'personajes' | 'global'>; soloEncolar?: boolean } = {},
+  p: PuertosUsuario, documento: string, o: { forzar?: boolean; lentes?: Lente[]; economico?: boolean; presupuestoUsd?: number; rehacer?: Array<'estructura' | 'fichas' | 'entidades' | 'personajes' | 'global'>; soloEncolar?: boolean } = {},
 ): Promise<{ instancia: string | null; estado: EstadoComprension['estado'] }> {
   const previo = await leerEstadoComprension(p.sql, documento);
   const viva = previo && (previo.estado === 'en_marcha' || previo.estado === 'pendiente') && previo.instancia && Date.now() - Date.parse(previo.actualizado) < 30 * 60_000;
