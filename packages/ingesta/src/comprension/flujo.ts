@@ -204,6 +204,14 @@ export async function planificarComprension(ctx: ContextoComprension, documento:
   const mismaVersion = previo?.version === version;
   const mismaPercepcion = (previo?.huellaPercepcion ?? '') === huellaPercepcion;
   const mismo = mismaVersion && (!previo?.huella || previo.huella === huellaMaterial) && mismaPercepcion;
+  if (previo?.estado === 'hecho' && mismo && !o.forzar && o.rehacer?.length) {
+    // Rehacer solo unos pasos (la ficha global, por ejemplo): se borran sus marcas y las del indexado, y los
+    // demás pasos, que siguen hechos, no hacen nada ni cuestan.
+    for (const paso of new Set([...o.rehacer, 'indexado'])) await ctx.sql.ejecutar('DELETE FROM procedencia WHERE documento = ? AND fase = ?', documento, `comprension:${paso}`);
+    await actualizarEstado(ctx.sql, documento, { estado: 'en_marcha', error: undefined }, t);
+    await vaciar(ctx);
+    return { ...plan, reusar: { estructura: true, fichas: true } };
+  }
   if (previo?.estado === 'hecho' && mismo && !o.forzar) return { ...plan, hecha: true };
   const reanudar = previo?.estado === 'en_marcha' && mismo && !o.forzar;
   if (reanudar) {
@@ -486,12 +494,17 @@ export async function pasoGlobal(ctx: ContextoComprension, plan: PlanComprension
   }
   if (huerfanas.length && ctx.indice && ctx.espacioNombres) await ctx.indice.borrar(ctx.espacioNombres, huerfanas).catch(() => undefined);
   const fichasVigentes = fichasSegmento.filter((f) => vigentes.has(f.objetivoId));
+  // En audio y vídeo la global sale del mapa (estructura, percepción escena a escena y fichas de escenas y
+  // secuencias, sin las de cada plano), no del material entero: con una película de dos horas delante, el
+  // mejor modelo no contestaba a tiempo y la escribía el rápido de respaldo.
+  const porMapa = m.medio;
+  const fichasMapa = porMapa ? fichasVigentes.filter((f) => f.clase !== 'plano') : fichasVigentes;
   let temas = 0, descartadas = 0;
   const fichas: Ficha[] = [];
   // Una ficha global por lente, a la vez (cada una es una llamada larga): el paso dura lo que la más lenta.
   const modelo = modeloDe(ctx, doc, 'global');
-  const globales = await conRegistroDePlazo(ctx, doc, 'global', () => Promise.all(plan.lentes.map((l, i) => fichaGlobal(m, l, segmentos, fichasVigentes, modelo, acumulado, {
-    largo: plan.largo, calidad, maxCaracteres: plan.opciones.maxCaracteresContexto ?? MAX_CONTEXTO, percepcion, idioma: m.documento.metadatos.idioma ?? 'es', creada: t, secundaria: i > 0,
+  const globales = await conRegistroDePlazo(ctx, doc, 'global', () => Promise.all(plan.lentes.map((l, i) => fichaGlobal(m, l, segmentos, fichasMapa, modelo, acumulado, {
+    largo: plan.largo && !porMapa, calidad, maxCaracteres: plan.opciones.maxCaracteresContexto ?? MAX_CONTEXTO, percepcion, idioma: m.documento.metadatos.idioma ?? 'es', creada: t, secundaria: i > 0,
   }))));
   for (const r of globales) {
     descartadas += r.descartadas;

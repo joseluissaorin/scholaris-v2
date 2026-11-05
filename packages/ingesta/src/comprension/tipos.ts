@@ -143,6 +143,8 @@ export interface OpcionesComprension {
   /** Rehacer aunque ya esté hecha con esta versión. */
   forzar?: boolean;
   /** Tope de gasto por documento, en dólares (por defecto 4). */
+  /** Rehacer solo estos pasos de una comprensión ya hecha (p. ej. ['global']); los demás no se repiten ni se pagan. */
+  rehacer?: Array<'estructura' | 'entidades' | 'personajes' | 'global'>;
   presupuestoUsd?: number;
   /** Hasta cuántos caracteres va el documento entero al modelo (por defecto 2 400 000, ~700 000 tokens). */
   maxCaracteresContexto?: number;

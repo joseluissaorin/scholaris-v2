@@ -28,6 +28,7 @@ export interface ParamsComprension {
   lentes?: Lente[];
   economico?: boolean;
   presupuestoUsd?: number;
+  rehacer?: Array<'estructura' | 'entidades' | 'personajes' | 'global'>;
   relanzamientos?: number;
   /**
    * Solo transmedia (docs/COMPRENSION.md, paso 7): detectar las relaciones del documento
@@ -120,7 +121,7 @@ const ahora = () => new Date().toISOString();
  * rehacer), no lanza otra. Sin orquestador que la lleve, la deja «pendiente».
  */
 export async function lanzarComprension(
-  p: PuertosUsuario, documento: string, o: { forzar?: boolean; lentes?: Lente[]; economico?: boolean; presupuestoUsd?: number; soloEncolar?: boolean } = {},
+  p: PuertosUsuario, documento: string, o: { forzar?: boolean; lentes?: Lente[]; economico?: boolean; presupuestoUsd?: number; rehacer?: Array<'estructura' | 'entidades' | 'personajes' | 'global'>; soloEncolar?: boolean } = {},
 ): Promise<{ instancia: string | null; estado: EstadoComprension['estado'] }> {
   const previo = await leerEstadoComprension(p.sql, documento);
   const viva = previo && (previo.estado === 'en_marcha' || previo.estado === 'pendiente') && previo.instancia && Date.now() - Date.parse(previo.actualizado) < 30 * 60_000;
@@ -131,12 +132,13 @@ export async function lanzarComprension(
     ...(o.forzar ? { forzar: true } : {}), ...(o.lentes?.length ? { lentes: o.lentes } : {}),
     ...(o.economico || p.usuario.plan === 'gratis' ? { economico: true } : {}),
     ...(o.presupuestoUsd !== undefined ? { presupuestoUsd: o.presupuestoUsd } : {}),
+    ...(o.rehacer?.length ? { rehacer: o.rehacer } : {}),
   };
   const t = ahora();
   // Una comprensión hecha no se da por perdida al relanzarla sin «forzar» (al cerrar otra vez la
   // ingesta, por ejemplo): el plan comprueba la versión y la huella del material y, si no han
   // cambiado, no hace nada. Solo lo que hay que hacer de verdad pasa a «pendiente».
-  const conserva = previo?.estado === 'hecho' && !o.forzar;
+  const conserva = previo?.estado === 'hecho' && !o.forzar && !o.rehacer?.length;
   const estado: EstadoComprension['estado'] = conserva ? 'hecho' : 'pendiente';
   await actualizarEstado(p.sql, documento, {
     estado, instancia, params: params as unknown as Record<string, unknown>, relanzamientos: 0, lanzada: false,

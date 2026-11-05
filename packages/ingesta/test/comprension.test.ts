@@ -257,9 +257,15 @@ describe('comprensión: un cuento', () => {
     const n = modelo.llamadas.length;
     expect((await comprenderDocumento(contexto(sql, modelo), 'cuento')).estado).toBe('hecho');
     expect(modelo.llamadas.length).toBe(n);
+    // Solo la ficha global: los demás pasos siguen hechos y no llaman al modelo.
+    const antesGlobal = modelo.llamadas.length;
+    expect((await comprenderDocumento(contexto(sql, modelo), 'cuento', { rehacer: ['global'] })).estado).toBe('hecho');
+    expect(modelo.llamadas.slice(antesGlobal).map((x) => x.operacion)).toEqual(['global']);
+    expect((await leerFichas(sql, { documento: 'cuento', clase: 'global' }))).toHaveLength(1);
     // Forzada: se rehace de cero y sustituye (mismos ids, nada duplicado).
+    const antesForzada = modelo.llamadas.length;
     await comprenderDocumento(contexto(sql, modelo), 'cuento', { forzar: true });
-    expect(modelo.llamadas.length).toBe(n * 2);
+    expect(modelo.llamadas.length - antesForzada).toBe(n);
     expect(await leerFichas(sql, { documento: 'cuento', objetivo: 'segmento' })).toHaveLength(3);
     expect(await leerApariciones(sql, { entidad: diego.id })).toHaveLength(3);
     archivo.cerrar();

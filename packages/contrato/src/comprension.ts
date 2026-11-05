@@ -60,6 +60,8 @@ export interface PedirComprension {
    * estructura, las entidades y la ficha global se terminan con el modelo rápido.
    */
   presupuestoUsd?: number;
+  /** Rehacer solo estos pasos de una comprensión ya hecha (p. ej. «global»), sin repetir ni pagar los demás. */
+  rehacer?: Array<'estructura' | 'entidades' | 'personajes' | 'global'>;
 }
 
 export interface PedirComprensionBiblioteca extends PedirComprension {

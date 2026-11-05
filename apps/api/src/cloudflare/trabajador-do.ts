@@ -184,6 +184,7 @@ export class Trabajador extends DurableObject<Env> {
     return this.unaVez.hacer(`cmp-plan:${p.instancia}`, async () => planificarComprension(await this.contextoComprension(p), p.documento, {
       ...(p.forzar ? { forzar: true } : {}), ...(p.lentes?.length ? { lentes: p.lentes } : {}), ...(p.economico ? { economico: true } : {}),
       ...(p.presupuestoUsd !== undefined ? { presupuestoUsd: p.presupuestoUsd } : {}),
+      ...(p.rehacer?.length ? { rehacer: p.rehacer } : {}),
     }), { recordar: true });
   }
 
