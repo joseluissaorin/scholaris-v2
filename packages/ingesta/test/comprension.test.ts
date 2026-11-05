@@ -362,7 +362,8 @@ describe('comprensión: un cuento', () => {
     const seg = (id: string, tipo: Segmento['tipo'], padre: string | null, titulo = id) => ({ id, tipo, padre, titulo, nivel: padre ? 2 : 1 }) as unknown as Segmento;
     const ensayo = lente('ensayo');
     // Un libro en «partes» de dos niveles (Queer Ricans): fichas para las secciones, no para los capítulos ni el índice.
-    const libro = [seg('i', 'parte', null, 'Contents'), seg('c1', 'parte', null), seg('c1a', 'parte', 'c1'), seg('c1b', 'parte', 'c1'), seg('c2', 'parte', null), seg('n', 'parte', null, 'Notes')];
+    const libro = [seg('i', 'parte', null, 'Contents'), seg('c1', 'parte', null), seg('c1a', 'parte', 'c1'), seg('c1b', 'parte', 'c1'), seg('c2', 'parte', null), seg('n', 'parte', null, 'Notes'),
+      seg('ag', 'parte', null, 'Acknowledgments'), seg('bi', 'parte', null, 'Bibliography'), seg('ph', 'parte', null, 'Publication History'), seg('ix', 'parte', null, 'Index'), seg('ixa', 'parte', 'ix', 'A'), seg('ixb', 'parte', 'ix', 'B')];
     expect(lotesDeFichas(libro, ensayo, 6)).toEqual([['c1a', 'c1b', 'c2']]);
     // Con apartados (Mil mesetas): ellos, y la parte sin apartados (el prefacio), no la que los tiene.
     const mesetas = [seg('pre', 'parte', null, 'Prefacio'), seg('m1', 'parte', null), seg('m1a', 'apartado', 'm1'), seg('m1b', 'apartado', 'm1')];

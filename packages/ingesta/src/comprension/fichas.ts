@@ -29,7 +29,7 @@ export function textoEstructura(m: Material, segmentos: readonly Segmento[]): st
 
 /** Tandas de segmentos con ficha, en orden de lectura (deterministas: el mismo árbol da las mismas). */
 /** Índices, notas, bibliografías y agradecimientos: sin ficha propia cuando no la pide la lente. */
-const PERITEXTO = /^\s*(contents|table of contents|índice|indice|sumario|notas?|notes|bibliograf|works cited|obras citadas|references|referencias|index|acknowledg|agradecimientos|créditos|credits|copyright|about the author)\b/i;
+const PERITEXTO = /^\s*(contents\b|table of contents|índice|indice\b|sumario|notas?\b|notes\b|bibliogra(?:f|ph)|works cited|obras citadas|references\b|referencias\b|index\b|acknowledg|agradecimiento|créditos|credits\b|copyright|about the author|publication history|permissions\b|procedencia de los textos)/i;
 
 /**
  * Las tandas de fichas: los segmentos de los tipos que la lente quiere con ficha y, además, las
@@ -43,10 +43,12 @@ export function lotesDeFichas(segmentos: readonly Segmento[], def: DefinicionLen
   const porId = new Map(segmentos.map((s) => [s.id, s]));
   const hijos = new Map<string, Segmento[]>();
   for (const s of segmentos) if (s.padre && s.tipo !== 'plano') hijos.set(s.padre, [...(hijos.get(s.padre) ?? []), s]);
-  const arriba = (s: Segmento) => { for (let p = s.padre ? porId.get(s.padre) : undefined; p; p = p.padre ? porId.get(p.padre) : undefined) if (pide(p)) return true; return false; };
+  const antepasados = (s: Segmento): Segmento[] => { const r: Segmento[] = []; for (let p = s.padre ? porId.get(s.padre) : undefined; p && r.length < 50; p = p.padre ? porId.get(p.padre) : undefined) r.push(p); return r; };
   const hoja = (s: Segmento) => !hijos.get(s.id)?.length;
+  // Una hoja dentro del índice («A», «B»…) o de la bibliografía también es peritexto.
+  const peritexto = (s: Segmento) => [s, ...antepasados(s)].some((x) => PERITEXTO.test(x.titulo));
   const con = segmentos.filter((s) => s.tipo !== 'plano' && (pide(s)
-    || (hoja(s) && def.segmentos.includes(s.tipo) && !arriba(s) && !PERITEXTO.test(s.titulo))));
+    || (hoja(s) && def.segmentos.includes(s.tipo) && !antepasados(s).some(pide) && !peritexto(s))));
   const lotes: string[][] = [];
   for (let i = 0; i < con.length; i += porLlamada) lotes.push(con.slice(i, i + porLlamada).map((s) => s.id));
   return lotes;
