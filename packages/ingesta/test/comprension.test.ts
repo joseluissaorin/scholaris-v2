@@ -10,7 +10,8 @@ import { aplicarEsquemaFunciones } from '@scholaris/funciones';
 import { buscarFichas, escribirDocumento, escribirUnidades, leerApariciones, leerFichas, leerSecciones, leerSegmentos, type UnidadSpdf } from '@scholaris/spdf';
 import { describe, expect, it } from 'vitest';
 import {
-  anclarReferencia, coberturaDelMaterial, comprenderDocumento, huecosTranscripcion, elegirLentes, leerEstadoComprension, leerMaterial, localizarCita, pasoSegmentos, pasoFichas, planificarComprension,
+  actualizarEstado, anclarReferencia, coberturaDelMaterial, comprenderDocumento, huecosTranscripcion, elegirLentes, leerEstadoComprension, leerMaterial, localizarCita, pasoSegmentos, pasoFichas, planificarComprension,
+  prevision, PRESUPUESTO_INSUFICIENTE,
   limpiarProsa, textoDeCaracteres, tramoDeCaracteres, type ContextoComprension, type ModeloComprension, type PeticionComprension,
 } from '../src/index.js';
 import { baseReal, embebedorFalso } from './fakes.js';
@@ -305,13 +306,69 @@ describe('comprensión: un cuento', () => {
     expect(e.estado).toBe('hecho');
     expect(e.error).toBeUndefined();
 
-    // Presupuesto agotado: la tanda de fichas no llama al modelo y lo deja dicho.
-    const pobre = await planificarComprension(ctx, 'cuento', { presupuestoUsd: 0, forzar: true });
+    // Presupuesto agotado (el tope blando, sin pedir uno): la tanda de fichas no llama al modelo y lo deja dicho.
+    const pobre = { ...(await planificarComprension(ctx, 'cuento', { forzar: true })), presupuestoUsd: 0 };
     await pasoSegmentos(ctx, pobre);
     const antes = cuenta('fichas');
     await pasoFichas(ctx, pobre, 0);
     expect(cuenta('fichas')).toBe(antes);
     expect((await leerEstadoComprension(sql, 'cuento'))!.avisos.join(' ')).toMatch(/Presupuesto agotado/);
+    archivo.cerrar();
+  });
+
+  it('con un tope pedido no se pasa: cuenta lo que costará cada paso y guarda lo de la ficha global', async () => {
+    const { sql, archivo } = await base();
+    await cuento(sql);
+    const modelo = modeloFalso(respuestasCuento);
+    const ctx = contexto(sql, modelo);
+    const cuenta = (op: string) => modelo.llamadas.filter((p) => p.operacion === op).length;
+    const pv = prevision(ctx, await planificarComprension(ctx, 'cuento'));
+    expect(pv.total).toBeCloseTo(pv.estructura + pv.porTanda * pv.tandas + pv.entidades + pv.porAnalisis * pv.analisis + pv.global, 10);
+
+    // No llega ni para la estructura y la global: no empieza ni pide nada al modelo.
+    await expect(planificarComprension(ctx, 'cuento', { presupuestoUsd: pv.estructura + pv.global - 0.01, forzar: true })).rejects.toThrow(PRESUPUESTO_INSUFICIENTE);
+    expect(cuenta('estructura')).toBe(0);
+
+    // Llega justo para la estructura y la global: las fichas, las entidades y el análisis, que van antes,
+    // no empiezan porque se comerían lo de la global; la global sí se escribe y no se pasa del tope.
+    const tope = pv.estructura + pv.global + 0.02;
+    const e = await comprenderDocumento(ctx, 'cuento', { presupuestoUsd: tope, forzar: true });
+    expect(e.estado).toBe('hecho');
+    expect([cuenta('estructura'), cuenta('fichas'), cuenta('entidades'), cuenta('personajes'), cuenta('global')]).toEqual([1, 0, 0, 0, 1]);
+    expect(e.usd).toBeLessThanOrEqual(tope);
+    expect(e.avisos.join(' ')).toMatch(/La tanda 1 de fichas no cabía en el tope/);
+    expect(e.avisos.join(' ')).toMatch(/Las entidades no cabían en el tope/);
+    expect(await leerFichas(sql, { documento: 'cuento', clase: 'global' })).toHaveLength(1);
+
+    // Con holgura, todo; y el análisis se limita a las llamadas que caben.
+    const amplio = await comprenderDocumento(ctx, 'cuento', { presupuestoUsd: pv.total + 0.5, forzar: true });
+    expect(amplio.avisos.join(' ')).not.toMatch(/no cabía/);
+    expect(cuenta('fichas')).toBe(1);
+    expect(cuenta('global')).toBe(2);
+    archivo.cerrar();
+  });
+
+  it('una comprensión cancelada sigue donde quedó: lo pagado no se repite', async () => {
+    const { sql, archivo } = await base();
+    await cuento(sql);
+    const modelo = modeloFalso(respuestasCuento);
+    const ctx = contexto(sql, modelo);
+    const cuenta = (op: string) => modelo.llamadas.filter((p) => p.operacion === op).length;
+    await pasoSegmentos(ctx, await planificarComprension(ctx, 'cuento'));
+    expect(cuenta('estructura')).toBe(1);
+    // Se cancela (queda en «error» con la marca) y se vuelve a pedir (la API la pone en «pendiente»).
+    await actualizarEstado(sql, 'cuento', { estado: 'error', cancelada: true, error: 'Cancelada a petición.' }, ahora);
+    await actualizarEstado(sql, 'cuento', { estado: 'pendiente', error: undefined }, ahora);
+    const plan = await planificarComprension(ctx, 'cuento');
+    await pasoSegmentos(ctx, plan);
+    expect(cuenta('estructura')).toBe(1);
+    const e = (await leerEstadoComprension(sql, 'cuento'))!;
+    expect(e.estado).toBe('en_marcha');
+    expect(e.cancelada).toBeUndefined();
+    // Un error que no es una cancelación sí se rehace por partes (la estructura se vuelve a pedir).
+    await actualizarEstado(sql, 'cuento', { estado: 'error', error: 'Otro fallo.' }, ahora);
+    await pasoSegmentos(ctx, await planificarComprension(ctx, 'cuento'));
+    expect(cuenta('estructura')).toBe(2);
     archivo.cerrar();
   });
 

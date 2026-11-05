@@ -7,13 +7,13 @@
 import type { Hono } from 'hono';
 import { LENTES, type Ficha, type Lente, type ObjetivoFicha, type RolAparicion, type TipoSegmento, type ValorSQL } from '@scholaris/nucleo';
 import type {
-  AparicionVista, ComprensionBiblioteca, ComprensionLanzada, EstadoComprensionVista, MapaComprension, Pagina, PedirComprension, PedirComprensionBiblioteca,
+  AparicionVista, ComprensionBiblioteca, ComprensionCancelada, ComprensionLanzada, EstadoComprensionVista, MapaComprension, Pagina, PedirComprension, PedirComprensionBiblioteca,
 } from '@scholaris/contrato';
 import { leerDocumento, leerFichas, leerSegmentos } from '@scholaris/spdf';
 import { leerEstadoComprension, type EstadoComprension } from '@scholaris/ingesta';
 import type { Entorno } from '../entorno.js';
 import { cuerpoJson, exigir, noEncontrado } from '../compartido/errores.js';
-import { comprenderBiblioteca, lanzarComprension } from '../compartido/comprension.js';
+import { cancelarComprension, comprenderBiblioteca, lanzarComprension } from '../compartido/comprension.js';
 import { entero, exigirEscritura, json, prm, puertos, type Ctx } from './util.js';
 
 type Fila = Record<string, ValorSQL>;
@@ -30,7 +30,7 @@ export function estadoVista(e: EstadoComprension | null): EstadoComprensionVista
   return {
     documento: e.documento, estado: e.estado, lentes: e.lentes, version: e.version, pasos: e.pasos, usd: e.usd, tokensEntrada: e.tokensEntrada,
     tokensSalida: e.tokensSalida, llamadas: e.llamadas, avisos: e.avisos, iniciado: e.iniciado, actualizado: e.actualizado,
-    ...(e.error ? { error: e.error } : {}), ...(e.modelo ? { modelo: e.modelo } : {}),
+    ...(e.error ? { error: e.error } : {}), ...(e.cancelada ? { cancelada: true } : {}), ...(e.modelo ? { modelo: e.modelo } : {}),
   };
 }
 
@@ -135,6 +135,17 @@ export function rutasComprension(app: Hono<Entorno>): void {
     const r = await lanzarComprension(p, id, { ...(b.forzar ? { forzar: true } : {}), ...(lentes ? { lentes } : {}), ...(b.economico ? { economico: true } : {}), ...(tope !== undefined ? { presupuestoUsd: tope } : {}), ...(rehacer.length ? { rehacer } : {}) });
     const salida: ComprensionLanzada = { documento: id, instancia: r.instancia, estado: r.estado };
     return c.json(salida, 202);
+  });
+
+  app.post('/documentos/:id/comprension/cancelar', async (c: Ctx) => {
+    exigirEscritura(c);
+    const p = puertos(c);
+    const id = prm(c, 'id');
+    const d = await leerDocumento(p.sql, id);
+    if (!d) noEncontrado('El documento');
+    const e = await cancelarComprension(p, id);
+    const salida: ComprensionCancelada = { documento: id, estado: e?.estado ?? null, ...(e?.error ? { error: e.error } : {}), usd: e?.usd ?? 0 };
+    return c.json(salida);
   });
 
   app.post('/comprension/biblioteca', async (c: Ctx) => {

@@ -116,6 +116,8 @@ export interface Orquestador {
   lanzarIngesta(p: ParamsIngesta): Promise<void>;
   /** Lanza la comprensión de un documento (Workflow `scholaris-comprension`, o la cola local). */
   lanzarComprension?(p: ParamsComprension): Promise<void>;
+  /** Para una comprensión en marcha (su Workflow); lo que esté ya pidiéndose al modelo termina y consta. */
+  cancelarComprension?(instancia: string): Promise<void>;
   cancelar(tarea: string): Promise<void>;
   /** Estado del motor (para depurar), si se sabe. */
   estado?(tarea: string): Promise<string | null>;

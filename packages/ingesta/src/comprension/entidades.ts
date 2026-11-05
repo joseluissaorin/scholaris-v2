@@ -147,7 +147,7 @@ export async function analizarEntidades(
   for (let i = 0; i < principales.length; i += ANALISIS_POR_LLAMADA) tandas.push(principales.slice(i, i + ANALISIS_POR_LLAMADA));
   const material = `${fichaDocumento(m.documento)}${o.percepcion?.reparto.length ? `\n\nReparto percibido:\n${textoReparto(o.percepcion)}` : ''}\n\nMaterial:\n\n${textoParaModelo(m, { fotogramas: m.medio && !o.percepcion, maxCaracteres: o.maxCaracteres })}`;
   const salida = new Map<string, { analisis: string; evidencias: EntidadModelo['evidencias'] }>();
-  await enParalelo(tandas, ANALISIS_A_LA_VEZ, async (tanda) => {
+  const analizar = async (tanda: (typeof tandas)[number]) => {
     const r = await llamar<{ entidades: Array<{ nombre: string; analisis: string; evidencias?: EntidadModelo['evidencias'] }> }>(modelo, {
       sistema: `${REGLAS_COMUNES}\n\n${def.instrucciones}\n\nTarea: el análisis de unas entidades principales de la obra (personajes, lugares, objetos o motivos): su papel, cómo se caracterizan y cómo cambian, con sus pruebas.`,
       partes: [
@@ -157,7 +157,11 @@ export async function analizarEntidades(
       esquema: ESQUEMA_ANALISIS, calidad: o.calidad, maxTokens: 12_000, operacion: 'personajes',
     }, acumulado);
     for (const x of r.entidades ?? []) if (x?.nombre && x.analisis) salida.set(x.nombre.trim(), { analisis: x.analisis, evidencias: x.evidencias ?? [] });
-  });
+  };
+  // La primera tanda sola: deja la obra en la caché del proveedor y las demás, que empiezan igual, la leen
+  // a una décima parte del precio. Todas a la vez desde el principio no la encontraban (Mil mesetas, 5-11-2026).
+  if (tandas.length) await analizar(tandas[0]!);
+  await enParalelo(tandas.slice(1), ANALISIS_A_LA_VEZ, analizar);
   return salida;
 }
 

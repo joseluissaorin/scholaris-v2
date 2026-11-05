@@ -138,7 +138,20 @@ export function useComprender(documento: string) {
       setPidiendo(false);
     }
   };
-  return { pedir, pidiendo };
+  const [parando, setParando] = useState(false);
+  /** Para la comprensión en marcha (lo hecho se conserva). */
+  const parar = async () => {
+    setParando(true);
+    try {
+      const r = await api().comprension.cancelar(documento);
+      vivos.delete(documento);
+      await qcl.invalidateQueries({ queryKey: ['comprension', 'mapa', documento] });
+      return r;
+    } finally {
+      setParando(false);
+    }
+  };
+  return { pedir, pidiendo, parar, parando };
 }
 
 /** Las apariciones de una entidad en las otras obras de la biblioteca (por su ficha del grafo). */

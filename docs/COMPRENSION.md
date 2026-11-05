@@ -196,9 +196,11 @@ filmado es cine y poesía.
 
 ## Ingesta: el flujo de comprensión
 
-La comprensión es un Workflow propio (`scholaris-comprension`). Se lanza cuando la
-ingesta deja el documento «listo», así que el documento se puede leer y buscar desde el
-primer momento y la comprensión llega después, con su progreso. Pasos:
+La comprensión es un Workflow propio (`scholaris-comprension`). Gasta modelo, así que no
+se lanza sola al terminar la ingesta (`COMPRENSION_AUTOMATICA = false` en
+`apps/api/src/compartido/cierre.ts`): se pide por documento con
+`POST /documentos/:id/comprender`. El documento se puede leer y buscar desde que está
+«listo», y la comprensión llega después, con su progreso. Pasos:
 
 1. **Percepción completa**, según el medio.
    - Texto (PDF, EPUB, Word, web): el texto entero de las unidades. En los escaneados,
@@ -231,6 +233,36 @@ primer momento y la comprensión llega después, con su progreso. Pasos:
    Wikidata P144 «basado en», P629 «edición de», P655 traductor, guionista, título,
    contenido) y alineación de cada pareja relacionada. Cuando entra un documento nuevo
    se revisan sus relaciones con todos los demás.
+
+### Coste, tope y cancelación
+
+Casi todos los pasos leen la obra entera: la estructura, cada tanda de fichas (seis
+segmentos), las entidades, cada llamada del análisis de personajes (cinco entidades) y
+la ficha global. El coste crece, por tanto, con la extensión multiplicada por el número
+de llamadas. *Mil mesetas*, unos 380 000 tokens, costó 3,53 USD en modo económico
+(5-11-2026): 0,29 la estructura, 0,30 cada una de las seis tandas, 0,25 las entidades,
+0,87 el análisis y 0,31 la global. `prevision()` (en `comprension/flujo.ts`) calcula
+cada paso sin contar con la caché del proveedor y da la estimación del plan.
+
+- **Sin tope pedido** rige uno blando de 4 USD: al pasarlo no se hacen más tandas de
+  fichas y lo que queda va con el modelo rápido.
+- **Con `presupuestoUsd`** el tope es estricto (`plan.tope`). El Workflow lo hace todo
+  en fila. Antes de cada paso se suma lo gastado, lo que costará ese paso (en las tandas
+  de fichas, la media de las ya hechas) y lo que hay que guardar para la ficha global, y
+  las entidades se suman cuando aún faltan. Lo que no cabe no se hace y queda en los
+  avisos. El análisis de personajes se recorta a las llamadas que caben. Si no
+  llegan ni la estructura ni la global, el plan falla con «El presupuesto no alcanza»,
+  sin gastar nada y sin reintentos.
+- **Caché del proveedor.** La primera tanda de fichas y la primera del análisis van
+  solas. Las siguientes empiezan igual (sistema y obra), así que pueden leer la obra de
+  la caché implícita a una décima parte del precio. Todas a la vez desde el principio no
+  la encontraban nunca. Queda por medir en la próxima comprensión de pago.
+- **Cancelar**: `POST /documentos/:id/comprension/cancelar` (botón «Parar» en la
+  web, `cancelar_comprension` en el SDK de Python). Termina el Workflow y deja el
+  estado en `error` con `cancelada: true`. El vigilante de la estantería no la relanza,
+  y al pedirla otra vez sigue donde quedó con los mismos parámetros, sin repetir lo
+  pagado. Terminar el Workflow a mano no basta: el vigilante lo ve muerto y lo relanza.
+  Lo que ya se estaba pidiendo al modelo termina y se cobra.
 
 ### Transmedia y transidioma
 

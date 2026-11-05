@@ -152,10 +152,21 @@ class Scholaris:
                 return
             desde = int(p["siguiente"])
 
-    def comprender(self, id: str, *, forzar: bool = False, lentes: Optional[List[str]] = None, economico: bool = False) -> dict:
-        """Pide (o rehace con `forzar`) la comprensión de un documento; las lentes, si se fijan, la primera manda."""
-        cuerpo = {k: v for k, v in {"forzar": forzar or None, "lentes": lentes, "economico": economico or None}.items() if v is not None}
+    def comprender(self, id: str, *, forzar: bool = False, lentes: Optional[List[str]] = None, economico: bool = False,
+                   presupuesto_usd: Optional[float] = None, rehacer: Optional[List[str]] = None) -> dict:
+        """Pide (o rehace con `forzar`) la comprensión de un documento; las lentes, si se fijan, la primera manda.
+
+        `presupuesto_usd` es un tope estricto: antes de cada paso se suma lo que costará y lo que no cabe no se
+        hace; si no llega ni para la estructura y la ficha global, no empieza. `rehacer` repite solo esos pasos
+        de una comprensión hecha («estructura», «entidades», «personajes», «global»)."""
+        cuerpo = {k: v for k, v in {"forzar": forzar or None, "lentes": lentes, "economico": economico or None,
+                                    "presupuestoUsd": presupuesto_usd, "rehacer": rehacer}.items() if v is not None}
         return self.pedir("POST", f"/documentos/{id}/comprender", json_=cuerpo)
+
+    def cancelar_comprension(self, id: str) -> dict:
+        """Para la comprensión en marcha. Lo hecho se conserva y, al pedirla otra vez, sigue donde quedó
+        (lo que ya se estaba pidiendo al modelo termina y se cobra)."""
+        return self.pedir("POST", f"/documentos/{id}/comprension/cancelar", json_={})
 
     def comprender_biblioteca(self, *, forzar: bool = False, documentos: Optional[List[str]] = None, lentes: Optional[List[str]] = None,
                               economico: bool = False) -> dict:

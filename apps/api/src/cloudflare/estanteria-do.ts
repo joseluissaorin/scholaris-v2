@@ -62,6 +62,9 @@ export class Estanteria extends DurableObject<Env> {
         lanzarComprension: async (params: ParamsComprension) => {
           await env.COMPRENSION.create({ id: params.instancia, params });
         },
+        cancelarComprension: async (instancia: string) => {
+          try { await (await env.COMPRENSION.get(instancia)).terminate(); } catch { /* ya terminada */ }
+        },
         cancelar: async (tarea: string) => {
           try { await (await env.INGESTA.get(this.instanciaDe(tarea))).terminate(); } catch { /* ya terminada */ }
         },

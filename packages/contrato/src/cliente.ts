@@ -25,7 +25,7 @@ import type {
   EstimacionMedios, MediosLanzados, PedirMediosBiblioteca, RevisarTranscripcion, RevisionLanzada, RevisionSimulada, RevisionTranscripcionVista,
 } from './medios.js';
 import type {
-  AparicionVista, ComprensionBiblioteca, ComprensionLanzada, EstadoComprensionVista, MapaComprension, PedirComprension, PedirComprensionBiblioteca,
+  AparicionVista, ComprensionBiblioteca, ComprensionCancelada, ComprensionLanzada, EstadoComprensionVista, MapaComprension, PedirComprension, PedirComprensionBiblioteca,
 } from './comprension.js';
 import type { ContenidoDocumento, FiguraEncontrada, FigurasRehechas, FragmentoInspeccion, MapaVectores, RehacerFiguras, UnidadInspeccion } from './contenido.js';
 import type { AnadirDocumentos, Biblioteca, Compartir, Miembro, NuevaBiblioteca } from './bibliotecas.js';
@@ -255,6 +255,8 @@ export function crearCliente(opciones: OpcionesCliente) {
         get<Pagina<AparicionVista>>(`/documentos/${e(documento)}/apariciones`, p),
       /** Lanza (o rehace, con `forzar`) la comprensión de un documento listo. */
       comprender: (documento: string, p: PedirComprension = {}) => post<ComprensionLanzada>(`/documentos/${e(documento)}/comprender`, p),
+      /** Para la comprensión en marcha; lo hecho se conserva y, al pedirla otra vez, sigue donde quedó. */
+      cancelar: (documento: string) => post<ComprensionCancelada>(`/documentos/${e(documento)}/comprension/cancelar`, {}),
       biblioteca: (p: PedirComprensionBiblioteca = {}) => post<ComprensionBiblioteca>('/comprension/biblioteca', p),
       /** El estado de la comprensión de cada documento que la tiene o la tuvo en marcha. */
       estados: () => get<EstadoComprensionVista[]>('/comprension'),

@@ -19,7 +19,7 @@ import {
 } from './estructura.js';
 import {
   analizarEntidades, aparicionesDePercepcion, aparicionesDeTemas, aparicionesDeTexto, conocidasEnBiblioteca, enlazarReparto, extraerEntidadesDelModelo, fichasDeEntidades,
-  principalesDe, resolverEntidades, type EntidadResuelta, type Papel,
+  ANALISIS_POR_LLAMADA, MAX_ANALIZADAS, principalesDe, resolverEntidades, type EntidadResuelta, type Papel,
 } from './entidades.js';
 import { actualizarEstado, apuntarPaso, borrarPasos, gastado, guardarDatosPaso, leerDatosPaso, leerEstadoComprension, pasoHecho, usoVacio } from './estado.js';
 import { fichaGlobal, fichasDeLote, lotesDeFichas } from './fichas.js';
@@ -87,6 +87,66 @@ const MAX_CONTEXTO = 2_400_000;
 const POR_LLAMADA = 6;
 /** En los medios cada escena lleva su percepción (planos, sonido): tandas más pequeñas, llamadas más cortas. */
 const POR_LLAMADA_MEDIO = 4;
+/** Lo que las entidades y los personajes leen de una obra muy larga (caracteres). */
+const CONTEXTO_ENTIDADES = 1_200_000;
+
+/**
+ * Lo que costará cada paso, sin contar con la caché del proveedor (puede no haberla): es la
+ * estimación que se enseña y, con un tope pedido, lo que se mira antes de empezar cada paso.
+ * Mil mesetas, en modo económico: 0,29 la estructura, 0,30 cada tanda de fichas, 0,25 las
+ * entidades, 0,22 cada llamada de personajes y 0,31 la global, porque cada una lee el libro entero.
+ */
+export interface PrevisionPasos {
+  estructura: number;
+  /** Una tanda de fichas. */
+  porTanda: number;
+  tandas: number;
+  entidades: number;
+  /** Una llamada del análisis de personajes y motivos (cinco entidades). */
+  porAnalisis: number;
+  analisis: number;
+  /** Todas las fichas globales (una por lente). */
+  global: number;
+  total: number;
+}
+
+type PlanParaPrevision = Pick<PlanComprension, 'tokensAprox' | 'caracteres' | 'largo' | 'medio' | 'calidades' | 'lentes'>;
+
+export function prevision(ctx: Pick<ContextoComprension, 'modelo'>, plan: PlanParaPrevision, tandas?: number): PrevisionPasos {
+  const precio = (c: 'alta' | 'rapida') => ctx.modelo?.precio?.(c) ?? { entrada: 2, salida: 12 };
+  const coste = (c: 'alta' | 'rapida', entrada: number, salida: number) => (entrada * precio(c).entrada + salida * precio(c).salida) / 1e6;
+  const t = plan.tokensAprox;
+  const n = tandas ?? Math.max(1, Math.ceil(t / (plan.medio ? 12_000 : 65_000)));
+  const deEntidades = tokensDe(Math.min(plan.caracteres, CONTEXTO_ENTIDADES));
+  const porTanda = coste(plan.calidades.fichas, plan.largo ? t : t / n + 4000, 8000);
+  const porAnalisis = coste(plan.calidades.entidades, deEntidades, 8000);
+  const analisis = Math.ceil(MAX_ANALIZADAS / ANALISIS_POR_LLAMADA);
+  // La global de un medio sale del mapa (estructura, escenas y fichas), no del material entero.
+  const global = coste(plan.calidades.global, plan.medio ? Math.min(t, 120_000) : t + 3000 * n, 12_000) * Math.max(1, plan.lentes.length);
+  const estructura = coste(plan.calidades.estructura, t, 6000);
+  const entidades = coste(plan.calidades.entidades, deEntidades, 12_000);
+  const total = estructura + porTanda * n + entidades + porAnalisis * analisis + global;
+  return { estructura, porTanda, tandas: n, entidades, porAnalisis, analisis, global, total };
+}
+
+/** Lo que han costado de media las tandas de fichas ya hechas (mejor guía que la previsión). */
+async function costeMedioTandas(sql: ContextoComprension['sql'], documento: string): Promise<number | null> {
+  const [f] = await sql.ejecutar<{ u: number | null; n: number }>(
+    "SELECT AVG(json_extract(detalle, '$.usd')) AS u, COUNT(*) AS n FROM procedencia WHERE documento = ? AND fase LIKE 'comprension:fichas:%' AND json_extract(detalle, '$.usd') > 0", documento,
+  );
+  return Number(f?.n ?? 0) > 0 ? Number(f?.u ?? 0) : null;
+}
+
+/** Lo que hay que guardar para los pasos que faltan (de los nombrados). */
+async function reservaPara(ctx: ContextoComprension, documento: string, pv: PrevisionPasos, pasos: ReadonlyArray<'entidades' | 'global'>): Promise<number> {
+  let r = 0;
+  for (const paso of pasos) if (!(await pasoHecho(ctx.sql, documento, paso))) r += pv[paso];
+  return r;
+}
+
+const usd = (x: number) => x.toFixed(2).replace('.', ',');
+/** Empieza así el error de un tope que no alcanza: el flujo no lo reintenta. */
+export const PRESUPUESTO_INSUFICIENTE = 'El presupuesto no alcanza';
 
 async function avisar(ctx: ContextoComprension, documento: string, paso: PasoComprension, avance: number, mensaje: string): Promise<void> {
   try { await ctx.alProgreso?.({ documento, paso, avance, mensaje }); } catch (e) {
@@ -179,18 +239,11 @@ export async function planificarComprension(ctx: ContextoComprension, documento:
   const calidades: PlanComprension['calidades'] = economico
     ? { estructura: 'rapida', fichas: 'rapida', entidades: 'rapida', global: 'rapida' }
     : { estructura: 'alta', fichas: 'alta', entidades: 'alta', global: 'alta', ...(o.calidades ?? {}) };
-  const lotes = Math.max(1, Math.ceil(tokensAprox / 9000));
-  const precio = (c: 'alta' | 'rapida') => ctx.modelo?.precio?.(c) ?? { entrada: 2, salida: 12 };
-  const coste = (c: 'alta' | 'rapida', entrada: number, salida: number) => (entrada * precio(c).entrada + salida * precio(c).salida) / 1e6;
-  const estimacionUsd = r2(
-    coste(calidades.estructura, tokensAprox, 12_000)
-    + coste(calidades.fichas, (largo ? tokensAprox : tokensAprox / lotes + 4000) * lotes * 0.6, 14_000 * lotes)
-    + coste(calidades.entidades, tokensAprox, 16_000)
-    + coste(calidades.global, tokensAprox + 8000 * lotes, 16_000) * lentes.length,
-  );
+  const pv = prevision(ctx, { tokensAprox, caracteres, largo, medio: m.medio, calidades, lentes });
+  const estimacionUsd = r2(pv.total);
   const plan: PlanComprension = {
     documento, lentes, version, medio: m.medio, caracteres, tokensAprox, largo, conPercepcion: !!percepcion,
-    plazos: plazosDe(tokensAprox, largo), presupuestoUsd: o.presupuestoUsd ?? PRESUPUESTO, estimacionUsd, economico, calidades, huella: huellaMaterial, hecha: false,
+    plazos: plazosDe(tokensAprox, largo), presupuestoUsd: o.presupuestoUsd ?? PRESUPUESTO, ...(o.presupuestoUsd !== undefined ? { tope: true } : {}), estimacionUsd, economico, calidades, huella: huellaMaterial, hecha: false,
     reusar: { estructura: false, fichas: false },
     opciones: { segmentosPorLlamada: o.segmentosPorLlamada ?? (m.medio ? POR_LLAMADA_MEDIO : POR_LLAMADA), ...(o.wikidata !== undefined ? { wikidata: o.wikidata } : {}), maxCaracteresContexto: maxCaracteres },
   };
@@ -213,9 +266,14 @@ export async function planificarComprension(ctx: ContextoComprension, documento:
     return { ...plan, reusar: { estructura: true, fichas: true } };
   }
   if (previo?.estado === 'hecho' && mismo && !o.forzar) return { ...plan, hecha: true };
-  const reanudar = previo?.estado === 'en_marcha' && mismo && !o.forzar;
+  // Una cancelada se reanuda como una que el vigilante relanza: lo hecho y pagado no se repite.
+  const reanudar = (previo?.estado === 'en_marcha' || !!previo?.cancelada) && mismo && !o.forzar;
+  if (plan.tope && !reanudar && pv.estructura + pv.global > plan.presupuestoUsd) {
+    // Sin estructura ni ficha global no hay comprensión que valga: mejor no empezar que gastar a medias.
+    throw new Error(`${PRESUPUESTO_INSUFICIENTE}: con un tope de ${usd(plan.presupuestoUsd)} USD no llegan ni la estructura ni la ficha global, que costarían unos ${usd(pv.estructura + pv.global)} USD${economico ? '' : ' (en modo económico, menos)'}. No se ha gastado nada.`);
+  }
   if (reanudar) {
-    await actualizarEstado(ctx.sql, documento, { estado: 'en_marcha', error: undefined }, t);
+    await actualizarEstado(ctx.sql, documento, { estado: 'en_marcha', error: undefined, cancelada: undefined }, t);
   } else if (previo && mismaVersion && !o.forzar && previo.estado !== 'sin_modelo') {
     // Misma versión con otro material (la transcripción se reparó, llegó la percepción) o tras un
     // error: se rehace por partes. Lo que no ha cambiado (la estructura de un medio con la misma
@@ -329,8 +387,19 @@ export async function pasoFichas(ctx: ContextoComprension, plan: PlanComprension
   const ids = lotes[lote];
   if (!ids?.length) return { fichas: 0 };
   const yaGastado = await gastado(ctx.sql, doc);
-  if (yaGastado > plan.presupuestoUsd) {
-    await apuntarPaso(ctx.sql, doc, paso, usoVacio(), 0, ahoraDe(ctx), { fichas: 0 }, [`Presupuesto agotado (${yaGastado.toFixed(2)} USD): quedan segmentos sin ficha propia.`]);
+  // Con un tope pedido, la tanda no empieza si lo pasaría: cuenta lo que cuesta (la media de las ya
+  // hechas o, en la primera, la previsión) y lo que hay que guardar para las entidades y la global.
+  let previsto = 0;
+  if (plan.tope) {
+    const pv = prevision(ctx, plan, lotes.length);
+    previsto = ((await costeMedioTandas(ctx.sql, doc)) ?? pv.porTanda) + await reservaPara(ctx, doc, pv, ['entidades', 'global']);
+  }
+  if (yaGastado > plan.presupuestoUsd || yaGastado + previsto > plan.presupuestoUsd) {
+    await apuntarPaso(ctx.sql, doc, paso, usoVacio(), 0, ahoraDe(ctx), { fichas: 0, sinPresupuesto: ids.length }, [
+      plan.tope
+        ? `La tanda ${lote + 1} de fichas no cabía en el tope de ${usd(plan.presupuestoUsd)} USD (gastado: ${usd(yaGastado)}): sus segmentos se quedan sin ficha propia.`
+        : `Presupuesto agotado (${yaGastado.toFixed(2)} USD): quedan segmentos sin ficha propia.`,
+    ]);
     await vaciar(ctx);
     return { fichas: 0 };
   }
@@ -386,8 +455,16 @@ export async function pasoEntidades(ctx: ContextoComprension, plan: PlanComprens
   const avisos: string[] = [];
   const conocidas = await parte(ctx, doc, paso, 'conocidas', () => conocidasEnBiblioteca(ctx.sql, doc));
   const calidad = await calidadDelPaso(ctx, doc, paso, plan.calidades.entidades);
-  const delModelo = await conRegistroDePlazo(ctx, doc, paso, () => extraerEntidadesDelModelo(m, l, modeloDe(ctx, doc, paso), acumulado, {
-    largo: plan.largo, calidad, maxCaracteres: Math.min(plan.opciones.maxCaracteresContexto ?? MAX_CONTEXTO, 1_200_000), percepcion, conocidas,
+  // Con un tope pedido: si las entidades y la global no caben juntas, la global va primero.
+  let cabe = true;
+  if (plan.tope) {
+    const pv = prevision(ctx, plan);
+    const ya = await gastado(ctx.sql, doc);
+    cabe = ya + pv.entidades + await reservaPara(ctx, doc, pv, ['global']) <= plan.presupuestoUsd;
+    if (!cabe) avisos.push(`Las entidades no cabían en el tope de ${usd(plan.presupuestoUsd)} USD (gastado: ${usd(ya)}): la obra queda sin personajes, lugares ni motivos reconocidos.`);
+  }
+  const delModelo = !cabe ? [] : await conRegistroDePlazo(ctx, doc, paso, () => extraerEntidadesDelModelo(m, l, modeloDe(ctx, doc, paso), acumulado, {
+    largo: plan.largo, calidad, maxCaracteres: Math.min(plan.opciones.maxCaracteresContexto ?? MAX_CONTEXTO, CONTEXTO_ENTIDADES), percepcion, conocidas,
   }));
   const ents = await parte(ctx, doc, paso, 'resolver', () => resolverEntidades(ctx.sql, delModelo), (r) => ({ entidades: r.length }));
   const apariciones = await parte(ctx, doc, paso, 'apariciones', async () => {
@@ -444,8 +521,22 @@ export async function pasoPersonajes(ctx: ContextoComprension, plan: PlanCompren
   const acumulado = { uso: usoVacio() };
   const ents = datos.entidades as EntidadResuelta[];
   const calidad = await calidadDelPaso(ctx, doc, paso, plan.calidades.entidades);
-  const analisis = await conRegistroDePlazo(ctx, doc, paso, () => analizarEntidades(m, l, principalesDe(ents), modeloDe(ctx, doc, paso), acumulado, {
-    largo: plan.largo, calidad, maxCaracteres: Math.min(plan.opciones.maxCaracteresContexto ?? MAX_CONTEXTO, 1_200_000), percepcion,
+  // Cada llamada del análisis lee la obra entera: con un tope pedido, solo las que caben dejando la global.
+  let principales = principalesDe(ents);
+  const avisos: string[] = [];
+  if (plan.tope && principales.length) {
+    const pv = prevision(ctx, plan);
+    const ya = await gastado(ctx.sql, doc);
+    const llamadas = Math.max(0, Math.floor((plan.presupuestoUsd - ya - await reservaPara(ctx, doc, pv, ['global'])) / pv.porAnalisis));
+    if (llamadas * ANALISIS_POR_LLAMADA < principales.length) {
+      principales = principales.slice(0, llamadas * ANALISIS_POR_LLAMADA);
+      avisos.push(principales.length
+        ? `Con el tope de ${usd(plan.presupuestoUsd)} USD solo se analizan las ${principales.length} entidades más importantes.`
+        : `El análisis de los personajes y los motivos no cabía en el tope de ${usd(plan.presupuestoUsd)} USD: quedan sus datos y sus apariciones.`);
+    }
+  }
+  const analisis: Awaited<ReturnType<typeof analizarEntidades>> = !principales.length ? new Map() : await conRegistroDePlazo(ctx, doc, paso, () => analizarEntidades(m, l, principales, modeloDe(ctx, doc, paso), acumulado, {
+    largo: plan.largo, calidad, maxCaracteres: Math.min(plan.opciones.maxCaracteresContexto ?? MAX_CONTEXTO, CONTEXTO_ENTIDADES), percepcion,
   }));
   const conAnalisis = ents.map((e) => {
     const a = analisis.get(e.nombre);
@@ -464,7 +555,7 @@ export async function pasoPersonajes(ctx: ContextoComprension, plan: PlanCompren
     }
     await escribirFichas(ctx.sql, fe.fichas);
   });
-  await apuntarPaso(ctx.sql, doc, paso, acumulado.uso, Date.now() - inicio, ahoraDe(ctx), { fichas: fe.fichas.length, analizadas: analisis.size, citasDescartadas: fe.descartadas, ...regiones });
+  await apuntarPaso(ctx.sql, doc, paso, acumulado.uso, Date.now() - inicio, ahoraDe(ctx), { fichas: fe.fichas.length, analizadas: analisis.size, citasDescartadas: fe.descartadas, ...regiones }, avisos);
   await vaciar(ctx);
   return { fichas: fe.fichas.length };
 }
@@ -483,7 +574,19 @@ export async function pasoGlobal(ctx: ContextoComprension, plan: PlanComprension
   const segmentos = await leerSegmentos(ctx.sql, doc);
   const fichasSegmento = await leerFichas(ctx.sql, { documento: doc, objetivo: 'segmento' });
   const acumulado = { uso: usoVacio() };
-  const calidad = (await gastado(ctx.sql, doc)) > plan.presupuestoUsd ? 'rapida' : await calidadDelPaso(ctx, doc, 'global', plan.calidades.global);
+  const ya = await gastado(ctx.sql, doc);
+  let calidad = ya > plan.presupuestoUsd ? 'rapida' : await calidadDelPaso(ctx, doc, 'global', plan.calidades.global);
+  if (plan.tope) {
+    // Con un tope pedido: si con el mejor modelo no cabe, el rápido; si tampoco, no se escribe.
+    const coste = (c: 'alta' | 'rapida') => prevision(ctx, { ...plan, calidades: { ...plan.calidades, global: c } }).global;
+    if (calidad === 'alta' && ya + coste('alta') > plan.presupuestoUsd) calidad = 'rapida';
+    if (ya + coste(calidad) > plan.presupuestoUsd) {
+      await apuntarPaso(ctx.sql, doc, 'global', usoVacio(), Date.now() - inicio, ahoraDe(ctx), { fichas: 0, temas: 0, sinPresupuesto: 1 },
+        [`La ficha global no cabía en el tope de ${usd(plan.presupuestoUsd)} USD (gastado: ${usd(ya)}).`]);
+      await vaciar(ctx);
+      return { fichas: 0, temas: 0 };
+    }
+  }
   await ctx.sql.ejecutar('DELETE FROM apariciones WHERE documento = ? AND id LIKE ?', doc, `${doc}:ap:t:%`);
   // Fichas de segmentos que ya no existen (la estructura cambió al rehacer): fuera, también del índice.
   const vigentes = new Set(segmentos.map((s) => s.id));

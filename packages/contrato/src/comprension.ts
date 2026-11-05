@@ -26,9 +26,20 @@ export interface EstadoComprensionVista {
   llamadas: number;
   avisos: string[];
   error?: string;
+  /** La paró quien la pidió: al pedirla otra vez sigue donde quedó, sin repetir lo pagado. */
+  cancelada?: boolean;
   modelo?: string;
   iniciado: string;
   actualizado: string;
+}
+
+/** Respuesta de parar una comprensión (`POST /documentos/:id/comprension/cancelar`). */
+export interface ComprensionCancelada {
+  documento: string;
+  estado: EstadoComprensionValorVista | null;
+  error?: string;
+  /** Lo gastado hasta ahí. */
+  usd: number;
 }
 
 /** El mapa de un documento: su estructura (sin los planos), su ficha global y cuánto hay. */
@@ -56,8 +67,9 @@ export interface PedirComprension {
   /** Solo el modelo rápido. */
   economico?: boolean;
   /**
-   * Tope de gasto de esta comprensión en dólares. Al llegar a él no se hacen más fichas de partes, y la
-   * estructura, las entidades y la ficha global se terminan con el modelo rápido.
+   * Tope estricto de gasto de esta comprensión, en dólares. Antes de cada paso se suma lo que costará y
+   * se guarda lo de la ficha global: lo que no cabe no se hace (con aviso). Si ni la estructura ni la
+   * global caben, no empieza ni gasta nada. Sin él rige un tope blando de 4 USD.
    */
   presupuestoUsd?: number;
   /** Rehacer solo estos pasos de una comprensión ya hecha (p. ej. «global»), sin repetir ni pagar los demás. */

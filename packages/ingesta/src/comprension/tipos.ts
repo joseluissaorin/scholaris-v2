@@ -186,6 +186,11 @@ export interface PlanComprension {
   conPercepcion: boolean;
   plazos: PlazosComprension;
   presupuestoUsd: number;
+  /**
+   * El tope lo pidió quien lanzó la comprensión: no se pasa. Antes de cada paso de pago se suma lo
+   * que costará (no solo lo gastado) y se reserva lo de la ficha global; lo que no cabe, no se hace.
+   */
+  tope?: boolean;
   estimacionUsd: number;
   economico: boolean;
   /** Calidad del modelo en cada paso (el económico lo pone todo en «rapida»). */
@@ -225,6 +230,8 @@ export interface EstadoComprension {
   /** Ya se entregó al orquestador (las pendientes sin lanzar esperan su turno en la cola). */
   lanzada?: boolean;
   relanzamientos?: number;
+  /** La paró quien la pidió: el vigilante no la relanza y, al pedirla otra vez, sigue donde quedó. */
+  cancelada?: boolean;
   modelo?: string;
   iniciado: string;
   actualizado: string;

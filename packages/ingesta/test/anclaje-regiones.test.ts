@@ -10,7 +10,8 @@ import { aplicarEsquemaFunciones } from '@scholaris/funciones';
 import { escribirDocumento, escribirUnidades, leerFichas, type UnidadSpdf } from '@scholaris/spdf';
 import { describe, expect, it } from 'vitest';
 import {
-  anclarMaterial, comprenderDocumento, leerEstadoComprension, leerMaterial, regionesDeFichas,
+  anclarMaterial, cerrarComprension, comprenderDocumento, leerEstadoComprension, leerMaterial, pasoEntidades, pasoFichas, pasoGlobal, pasoIndexado, pasoPersonajes,
+  pasoSegmentos, planificarComprension, regionesDeFichas,
   type AlmacenTrabajo, type AnclajeMaterialDocumento, type ContextoComprension, type ModeloComprension, type PeticionComprension,
 } from '../src/index.js';
 import { baseReal, embebedorFalso } from './fakes.js';
@@ -151,7 +152,17 @@ describe('comprensión: regiones de las pruebas', () => {
   it('sin presupuesto no se mira; si el anclaje falla, las fichas se guardan con sus caracteres', async () => {
     const { sql, cerrar } = await cuento();
     const pobre = anclajePercepcion(sql);
-    const e = await comprenderDocumento(contexto(sql, { anclajeMaterial: pobre.fabrica }), 'cuento', { presupuestoUsd: 0.015 });
+    // El tope blando de siempre, casi agotado (uno pedido, estricto, ni dejaría empezar): los pasos se
+    // hacen, pero la visión no se pregunta.
+    const ctx = contexto(sql, { anclajeMaterial: pobre.fabrica });
+    const plan = { ...(await planificarComprension(ctx, 'cuento')), presupuestoUsd: 0.015 };
+    const { lotes } = await pasoSegmentos(ctx, plan);
+    for (let i = 0; i < lotes; i++) await pasoFichas(ctx, plan, i);
+    await pasoEntidades(ctx, plan);
+    await pasoPersonajes(ctx, plan);
+    await pasoGlobal(ctx, plan);
+    await pasoIndexado(ctx, plan);
+    const e = await cerrarComprension(ctx, plan, { ok: true });
     expect(e.estado).toBe('hecho');
     expect(pobre.vistas).toHaveLength(0);
     expect(regiones(await leerFichas(sql, { documento: 'cuento' })).every((r) => r === undefined)).toBe(true);

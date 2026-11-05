@@ -18,7 +18,7 @@
 import { WorkflowEntrypoint, type WorkflowEvent, type WorkflowStep } from 'cloudflare:workers';
 import { NonRetryableError } from 'cloudflare:workflows';
 import { enParalelo } from '@scholaris/nucleo';
-import type { PlanComprension, ResultadoTransmedia } from '@scholaris/ingesta';
+import { PRESUPUESTO_INSUFICIENTE, type PlanComprension, type ResultadoTransmedia } from '@scholaris/ingesta';
 import type { ParamsComprension } from '../compartido/comprension.js';
 import type { Env } from './env.js';
 import { conLatidoAcotado } from '../compartido/latido.js';
@@ -41,8 +41,16 @@ export class FlujoComprension extends WorkflowEntrypoint<Env, ParamsComprension>
     const conLatido = <T>(segundos: number, fn: () => Promise<T>): Promise<T> => conLatidoAcotado(vivo, segundos, fn);
     const opciones = (segundos: number) => ({ retries: REINTENTOS, timeout: `${Math.max(120, Math.round(segundos))} seconds` as const });
     // Los resultados de los pasos son JSON pequeño (el plan, unos contadores).
+    // Un tope que no alcanza no se arregla reintentando: el error sube tal cual.
     const paso = async (nombre: string, segundos: number, fn: () => Promise<unknown>): Promise<unknown> =>
-      step.do(nombre, opciones(segundos), async () => JSON.parse(JSON.stringify(await conLatido(segundos, fn) ?? null)) as Record<string, never>);
+      step.do(nombre, opciones(segundos), async () => {
+        try {
+          return JSON.parse(JSON.stringify(await conLatido(segundos, fn) ?? null)) as Record<string, never>;
+        } catch (e) {
+          if (e instanceof Error && e.message.startsWith(PRESUPUESTO_INSUFICIENTE)) throw new NonRetryableError(e.message);
+          throw e;
+        }
+      });
 
     // Transmedia: detección (barata) y alineación de cada relación en su propio paso y su propio Trabajador.
     const transmedia = async (): Promise<{ relaciones: number; alineadas: number }> => {
@@ -70,14 +78,24 @@ export class FlujoComprension extends WorkflowEntrypoint<Env, ParamsComprension>
       if (!plan.hecha) {
         const pl = plan;
         const { lotes } = (await paso('estructura', pl.plazos.estructura, () => trabajador('estructura').comprensionPaso(p, pl, 'estructura'))) as { lotes: number };
-        await Promise.all([
-          enParalelo(Array.from({ length: lotes }, (_, i) => i), TANDAS_A_LA_VEZ, (i) =>
-            paso(`fichas-${i}`, pl.plazos.fichas, () => trabajador(`fichas-${i}`).comprensionPaso(p, pl, 'fichas', i))),
-          (async () => {
-            await paso('entidades', pl.plazos.entidades, () => trabajador('entidades').comprensionPaso(p, pl, 'entidades'));
-            // El análisis de las principales, aparte: tandas pequeñas y a la vez (un plan de antes no trae su plazo).
-            await paso('personajes', pl.plazos.personajes ?? pl.plazos.entidades, () => trabajador('personajes').comprensionPaso(p, pl, 'personajes'));
-          })(),
+        // Con un tope de gasto pedido, todo en fila: cada tanda mira lo gastado de verdad antes de empezar.
+        // A la vez, las seis tandas arrancaban por debajo del tope y lo pasaban juntas (Mil mesetas: 3,53 $ con un tope de 0,70).
+        const conTope = p.presupuestoUsd !== undefined;
+        const tanda = (i: number) => paso(`fichas-${i}`, pl.plazos.fichas, () => trabajador(`fichas-${i}`).comprensionPaso(p, pl, 'fichas', i));
+        // Sin tope, la primera tanda va sola: deja la obra en la caché del proveedor y las demás, que empiezan
+        // igual, la leen a una décima parte del precio. Todas a la vez desde el principio no la encontraban.
+        const fichas = async () => {
+          await tanda(0);
+          await enParalelo(Array.from({ length: Math.max(0, lotes - 1) }, (_, i) => i + 1), conTope ? 1 : TANDAS_A_LA_VEZ, tanda);
+        };
+        const entidades = async () => {
+          await paso('entidades', pl.plazos.entidades, () => trabajador('entidades').comprensionPaso(p, pl, 'entidades'));
+          // El análisis de las principales, aparte: tandas pequeñas y a la vez (un plan de antes no trae su plazo).
+          await paso('personajes', pl.plazos.personajes ?? pl.plazos.entidades, () => trabajador('personajes').comprensionPaso(p, pl, 'personajes'));
+        };
+        await Promise.all(conTope ? [(async () => { await fichas(); await entidades(); })()] : [
+          fichas(),
+          entidades(),
         ]);
         await paso('global', pl.plazos.global, () => trabajador('global').comprensionPaso(p, pl, 'global'));
         await paso('indexado', pl.plazos.indexado, () => trabajador('indexado').comprensionPaso(p, pl, 'indexado'));

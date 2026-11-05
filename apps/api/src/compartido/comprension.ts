@@ -126,6 +126,11 @@ export async function lanzarComprension(
   const previo = await leerEstadoComprension(p.sql, documento);
   const viva = previo && (previo.estado === 'en_marcha' || previo.estado === 'pendiente') && previo.instancia && Date.now() - Date.parse(previo.actualizado) < 30 * 60_000;
   if (viva && !o.forzar) return { instancia: previo!.instancia ?? null, estado: previo!.estado };
+  // Una cancelada sigue con lo que se pidió entonces (lentes, modo económico, tope), salvo lo que se cambie ahora.
+  if (previo?.cancelada && !o.forzar && previo.params) {
+    const a = previo.params as Partial<ParamsComprension>;
+    o = { ...(a.lentes?.length ? { lentes: a.lentes } : {}), ...(a.economico ? { economico: true } : {}), ...(a.presupuestoUsd !== undefined ? { presupuestoUsd: a.presupuestoUsd } : {}), ...o };
+  }
   const instancia = instanciaComprension(documento);
   const params: ParamsComprension = {
     usuario: p.usuario.id, plan: p.usuario.plan, documento, instancia,
@@ -150,6 +155,22 @@ export async function lanzarComprension(
   await actualizarEstado(p.sql, documento, { lanzada: true }, ahora());
   await p.orquestador.lanzarComprension(params);
   return { instancia, estado };
+}
+
+/**
+ * Para la comprensión de un documento. Terminar el Workflow a mano no bastaba: el vigilante la veía
+ * muerta y la relanzaba (Mil mesetas, 5-11-2026). Queda en «error» con la marca de cancelada, que el
+ * vigilante respeta; al pedirla otra vez sigue donde quedó. Lo que ya se estaba pidiendo al modelo
+ * termina y se cobra: eso no se puede recoger.
+ */
+export async function cancelarComprension(p: PuertosUsuario, documento: string): Promise<EstadoComprension | null> {
+  const previo = await leerEstadoComprension(p.sql, documento);
+  if (!previo || (previo.estado !== 'en_marcha' && previo.estado !== 'pendiente')) return previo;
+  if (previo.instancia && p.orquestador.cancelarComprension) await p.orquestador.cancelarComprension(previo.instancia);
+  return actualizarEstado(p.sql, documento, {
+    estado: 'error', cancelada: true, lanzada: false,
+    error: `Cancelada a petición (${previo.usd.toFixed(2).replace('.', ',')} USD gastados). Lo hecho se conserva: si la pides otra vez, sigue donde se quedó.`,
+  }, ahora());
 }
 
 /** Documentos con la comprensión pendiente (sin lanzar) o en marcha. */

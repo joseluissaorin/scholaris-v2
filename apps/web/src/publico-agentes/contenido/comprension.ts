@@ -54,7 +54,9 @@ En un banco de 36 preguntas difíciles sobre una película y el cuento que adapt
 
 ## Cuánto cuesta y quién decide
 
-Comprender usa modelos de pago, así que **no se lanza sola**: se pide con «Comprender» en cada documento, que antes dice lo que costará aproximadamente. Como orientación, con el mejor modelo un libro cuesta del orden de un dólar y una película de dos horas unos tres; el modo económico, con el modelo rápido, cuesta en torno a un tercio. Se puede poner un tope de gasto por documento: al llegar a él no se hacen más fichas de partes y lo demás se termina con el modelo rápido. Una investigación cuesta unos céntimos de dólar.
+Comprender usa modelos de pago, así que **no se lanza sola**: se pide con «Comprender» en cada documento, que antes dice lo que costará aproximadamente. Casi todos los pasos leen la obra entera, de modo que el coste crece con la extensión. Como orientación, un ensayo de unas trescientas páginas cuesta entre medio dólar y ochenta céntimos en el modo económico, que usa el modelo rápido. Un libro de quinientas páginas densas cuesta unos tres dólares y medio, y con el mejor modelo, cerca del triple.
+
+Se puede poner un **tope estricto** por documento. Antes de cada paso se suma lo que costará y se guarda lo necesario para la ficha global, y lo que no cabe no se hace y queda dicho. Si no llega ni para la estructura y la ficha global, la comprensión no empieza y no gasta nada. Una comprensión en marcha se puede **parar**: lo hecho se conserva y, al pedirla otra vez, sigue donde se quedó sin volver a pagarlo. Una investigación cuesta unos céntimos de dólar.
 
 ## En el fichero abierto
 
@@ -110,7 +112,9 @@ On a bench of 36 hard questions about a film and the story it adapts (in four la
 
 ## What it costs and who decides
 
-Understanding uses paid models, so **it never starts on its own**: you ask for it with «Comprender» on each document, which first tells you roughly what it will cost. As a guide, with the best model a book costs about a dollar and a two-hour film about three; economy mode, with the fast model, costs around a third. A spending cap can be set per document: once reached, no more part cards are written and the rest is finished with the fast model. An investigation costs a few cents.
+Understanding uses paid models, so **it never starts on its own**: you ask for it with «Comprender» on each document, which first tells you roughly what it will cost. Almost every step reads the whole work, so the cost grows with its length. As a guide, a three-hundred-page essay costs between half a dollar and eighty cents in economy mode, which uses the fast model. A dense five-hundred-page book costs about three and a half dollars, and with the best model, close to three times that.
+
+A **strict cap** can be set per document. Before each step, what it will cost is added up and enough is kept for the global card; whatever does not fit is skipped and reported. If the cap does not cover even the structure and the global card, understanding does not start and nothing is spent. A running understanding can be **stopped**: what is done is kept and, when you ask again, it resumes where it left off without paying for it twice. An investigation costs a few cents.
 
 ## In the open file
 

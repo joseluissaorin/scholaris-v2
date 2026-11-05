@@ -29,10 +29,13 @@ export function EstadoComprension({ documento, mapa, listo, compacto, className 
   className?: string;
 }) {
   const vivo = useAvanceVivo(documento);
-  const { pedir, pidiendo } = useComprender(documento);
+  const { pedir, pidiendo, parar, parando } = useComprender(documento);
   const { data: doc } = useQuery(q.documento(documento));
   const [confirmar, setConfirmar] = useState<'primera' | 'rehacer' | null>(null);
   const [economico, setEconomico] = useState(false);
+  /** Tope estricto en dólares (vacío: el tope blando de siempre). */
+  const [tope, setTope] = useState('');
+  const idTope = useId();
   const [verPasos, setVerPasos] = useState(false);
   const idPasos = useId();
   const e = mapa?.estado ?? null;
@@ -45,19 +48,31 @@ export function EstadoComprension({ documento, mapa, listo, compacto, className 
   const lanzar = async (forzar: boolean) => {
     setConfirmar(null);
     try {
-      await pedir({ ...(forzar ? { forzar: true } : {}), ...(economico ? { economico: true } : {}) });
-      avisar(forzar ? 'Se vuelve a comprender el documento.' : 'Empieza la comprensión del documento.', { tono: 'exito' });
+      const usd = Number(tope.replace(',', '.'));
+      await pedir({ ...(forzar ? { forzar: true } : {}), ...(economico ? { economico: true } : {}), ...(tope.trim() && Number.isFinite(usd) && usd > 0 ? { presupuestoUsd: usd } : {}) });
+      avisar(forzar ? 'Se vuelve a comprender el documento.' : cancelada ? 'La comprensión sigue donde se quedó.' : 'Empieza la comprensión del documento.', { tono: 'exito' });
     } catch (err) {
       avisar(err instanceof Error && err.message ? err.message : 'No se pudo pedir la comprensión.', { tono: 'error' });
     }
   };
 
+  const pararla = async () => {
+    try {
+      const r = await parar();
+      avisar(`Comprensión parada. Lo hecho se conserva${r.usd ? ` (${costeLegible(r.usd)})` : ''}.`, { tono: 'exito' });
+    } catch (err) {
+      avisar(err instanceof Error && err.message ? err.message : 'No se pudo parar la comprensión.', { tono: 'error' });
+    }
+  };
+  // Una cancelada sigue donde quedó (sin «forzar»); otro error se rehace.
+  const cancelada = valor === 'error' && !!e?.cancelada;
+
   const lentes = mapa?.lentes.length ? mapa.lentes : e?.lentes ?? [];
   return (
     <section aria-label="Estado de la comprensión" className={cx('relative rounded-2xl border border-cream-400 bg-cream-50 shadow-[var(--levantado)]', compacto ? 'p-3.5' : 'p-4 sm:p-5', className)}>
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-        <span aria-hidden className={cx('h-2.5 w-2.5 shrink-0', valor === 'hecho' ? 'rounded-full bg-azul' : enMarcha ? 'rounded-full bg-rojo anim-pulso' : valor === 'error' ? 'bg-rojo' : 'rotate-45 bg-amarillo')} />
-        <p role="status" className="text-[0.9375rem] font-semibold text-coffee-800">{enMarcha ? NOMBRE_ESTADO.en_marcha : NOMBRE_ESTADO[valor]}</p>
+        <span aria-hidden className={cx('h-2.5 w-2.5 shrink-0', valor === 'hecho' ? 'rounded-full bg-azul' : enMarcha ? 'rounded-full bg-rojo anim-pulso' : valor === 'error' && !cancelada ? 'bg-rojo' : 'rotate-45 bg-amarillo')} />
+        <p role="status" className="text-[0.9375rem] font-semibold text-coffee-800">{enMarcha ? NOMBRE_ESTADO.en_marcha : cancelada ? 'Parada a medias' : NOMBRE_ESTADO[valor]}</p>
         {lentes.length ? (
           <span className="flex flex-wrap items-center gap-1.5 text-[0.8125rem] text-coffee-600">
             <span className="sr-only">Lentes:</span>
@@ -71,10 +86,16 @@ export function EstadoComprension({ documento, mapa, listo, compacto, className 
         <div className="ml-auto flex items-center gap-2">
           {valor === 'hecho' && !enMarcha ? (
             <Boton variante="fantasma" tam="p" icono="rayo" onClick={() => setConfirmar('rehacer')} disabled={pidiendo}>Volver a comprender</Boton>
-          ) : !enMarcha && valor !== 'sin_modelo' ? (
-            <Boton variante="tinta" tam="p" icono="chispa" cargando={pidiendo} disabled={!listo || pidiendo} onClick={() => (valor === 'error' ? void lanzar(true) : setConfirmar('primera'))}
+          ) : enMarcha ? (
+            <Boton variante="fantasma" tam="p" cargando={parando} disabled={parando} onClick={() => void pararla()}
+              title="Lo que se esté pidiendo al modelo en este momento termina y se cobra; lo demás no se hace">
+              Parar
+            </Boton>
+          ) : valor !== 'sin_modelo' ? (
+            <Boton variante="tinta" tam="p" icono="chispa" cargando={pidiendo} disabled={!listo || pidiendo}
+              onClick={() => (cancelada ? void lanzar(false) : valor === 'error' ? void lanzar(true) : setConfirmar('primera'))}
               title={listo ? undefined : 'La comprensión empieza cuando termina la lectura del documento'}>
-              {valor === 'error' ? 'Reintentar' : 'Comprender'}
+              {cancelada ? 'Seguir' : valor === 'error' ? 'Reintentar' : 'Comprender'}
             </Boton>
           ) : null}
         </div>
@@ -98,7 +119,7 @@ export function EstadoComprension({ documento, mapa, listo, compacto, className 
       ) : valor === 'sin_modelo' ? (
         <p className="mt-2 text-[0.875rem] text-coffee-600">Esta instalación no tiene un modelo de comprensión configurado. Añade una clave propia de Gemini en Ajustes para comprender los documentos.</p>
       ) : valor === 'error' ? (
-        <p role="alert" className="mt-2 text-[0.875rem] text-rojo">{e?.error ?? 'La comprensión se detuvo con un error.'}</p>
+        <p role={cancelada ? 'status' : 'alert'} className={cx('mt-2 text-[0.875rem]', cancelada ? 'text-coffee-600' : 'text-rojo')}>{e?.error ?? 'La comprensión se detuvo con un error.'}</p>
       ) : null}
 
       {e && valor === 'hecho' && !compacto ? (
@@ -136,6 +157,12 @@ export function EstadoComprension({ documento, mapa, listo, compacto, className 
             <input type="checkbox" checked={economico} onChange={(x) => setEconomico(x.target.checked)} className="mt-0.5 h-4 w-4 accent-[var(--s-coffee-800)]" />
             <span>Solo con el modelo rápido: cuesta bastante menos y las fichas salen algo menos finas.</span>
           </label>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[0.875rem]">
+            <label htmlFor={idTope}>Tope estricto, en dólares (opcional)</label>
+            <input id={idTope} type="text" inputMode="decimal" value={tope} onChange={(x) => setTope(x.target.value)} placeholder="1,50"
+              className="dato w-20 rounded-lg border border-cream-400 bg-cream-50 px-2 py-1 text-[0.875rem] text-coffee-800 shadow-[var(--hundido)]" />
+            <span className="basis-full text-[0.8125rem] text-apagado">Antes de cada paso se cuenta lo que costará y lo que no cabe no se hace. Si no llega ni para lo esencial, no empieza.</span>
+          </div>
         </div>
       </Dialogo>
     </section>

@@ -794,7 +794,7 @@ export function registrarComprension(h: Ayudas): void {
       espera += ms;
       setTimeout(() => {
         const x = estados.get(id);
-        if (!x) return;
+        if (!x || x.estado.cancelada) return;
         const n = Object.keys(x.estado.pasos).filter((k) => k.startsWith('fichas')).length;
         const clave = paso === 'fichas' ? `fichas:${n}` : paso;
         x.estado = { ...x.estado, pasos: { ...x.estado.pasos, [clave]: { hecho: new Date().toISOString(), ms, usd: 0.004, ...(paso === 'estructura' ? { detalle: { lotes: 2 } } : {}) } }, actualizado: new Date().toISOString() };
@@ -804,7 +804,7 @@ export function registrarComprension(h: Ayudas): void {
     }
     setTimeout(() => {
       const x = estados.get(id);
-      if (!x) return;
+      if (!x || x.estado.cancelada) return;
       if (inventada) { x.estado = { ...guardado!.estado, actualizado: new Date().toISOString() }; x.fichas = guardado!.fichas; }
       else {
         const s = estructuraSimulada(d, lente); x.segmentos = s.segmentos; x.fichas = s.fichas;
@@ -819,6 +819,14 @@ export function registrarComprension(h: Ayudas): void {
     // Como la API: unos pocos a la vez; el resto, en cola (aquí, escalonados).
     ids.forEach((id, i) => setTimeout(() => comprender(id, c), Math.floor(i / 2) * 9000));
     return json({ encolados: ids.length, lanzados: Math.min(2, ids.length) }, 200, 202);
+  });
+  ruta('POST', '/documentos/:id/comprension/cancelar', (m) => {
+    const x = estados.get(m[1]!);
+    if (!x) return error(404, 'no_encontrado', 'El documento no existe.');
+    if (x.estado.estado === 'en_marcha') {
+      x.estado = { ...x.estado, estado: 'error', cancelada: true, error: 'Cancelada a petición. Lo hecho se conserva: si la pides otra vez, sigue donde se quedó.', actualizado: new Date().toISOString() };
+    }
+    return json({ documento: m[1], estado: x.estado.estado, ...(x.estado.error ? { error: x.estado.error } : {}), usd: x.estado.usd });
   });
   ruta('POST', '/documentos/:id/comprender', (m, c: { forzar?: boolean; lentes?: Lente[] }) => {
     const r = comprender(m[1]!, c);
